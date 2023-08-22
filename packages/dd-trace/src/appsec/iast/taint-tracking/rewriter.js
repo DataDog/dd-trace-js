@@ -15,9 +15,9 @@ let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) 
   return { path, line, column }
 }
 
-function isEnableSourceMapsFlagPresent () {
-  return process.execArgv &&
-    process.execArgv.some(arg => arg.includes('--enable-source-maps'))
+function isFlagPresent (flag) {
+  return process.env.NODE_OPTIONS?.includes(flag) ||
+    process.execArgv?.some(arg => arg.includes(flag))
 }
 
 function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
@@ -43,7 +43,7 @@ function getRewriter (telemetryVerbosity) {
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
 
-      const chainSourceMap = isEnableSourceMapsFlagPresent()
+      const chainSourceMap = isFlagPresent('--enable-source-maps')
       const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
       if (getOriginalPathAndLineFromSourceMap) {
         getRewriterOriginalPathAndLineFromSourceMap =

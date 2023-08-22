@@ -97,5 +97,24 @@ describe('IAST Rewriter', () => {
 
       expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
     })
+
+    it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps as NODE_OPTION', () => {
+      sinon.stub(process, 'execArgv').value(argvs)
+
+      const origNodeOptions = process.env.NODE_OPTIONS
+
+      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS
+        ? process.env.NODE_OPTIONS + ' --enable-source-maps'
+        : '--enable-source-maps'
+
+      rewriter.enableRewriter()
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+
+      process.env.NODE_OPTIONS = origNodeOptions
+    })
   })
 })
