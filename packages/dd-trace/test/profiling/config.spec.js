@@ -44,6 +44,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
+    expect(config.v8ProfilerBugWorkaroundEnabled).true
   })
 
   it('should support configuration options', () => {
@@ -132,7 +133,8 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1'
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1',
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
     }
     const options = {
       logger: {
@@ -149,6 +151,7 @@ describe('config', () => {
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.v8ProfilerBugWorkaroundEnabled).false
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {

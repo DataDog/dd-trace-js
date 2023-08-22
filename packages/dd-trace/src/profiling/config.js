@@ -31,6 +31,7 @@ class Config {
       DD_PROFILING_UPLOAD_PERIOD,
       DD_PROFILING_PPROF_PREFIX,
       DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
@@ -76,7 +77,8 @@ class Config {
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = endpointCollectionEnabled
     this.pprofPrefix = pprofPrefix
-
+    this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND, true))
     const hostname = coalesce(options.hostname, DD_AGENT_HOST) || 'localhost'
     const port = coalesce(options.port, DD_TRACE_AGENT_PORT) || 8126
     this.url = new URL(coalesce(options.url, DD_TRACE_AGENT_URL, format({
