@@ -158,7 +158,7 @@ class FakeAgent extends EventEmitter {
 }
 
 function spawnProc (filename, options = {}, stdioHandler) {
-  const proc = fork(filename, options)
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -172,11 +172,19 @@ function spawnProc (filename, options = {}, stdioHandler) {
         }
         resolve()
       })
-    if (stdioHandler) {
-      proc.stdout.on('data', (data) => {
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
         stdioHandler(data)
-      })
-    }
+      }
+      // eslint-disable-next-line no-console
+      console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      // eslint-disable-next-line no-console
+      console.error(data.toString())
+    })
   })
 }
 
@@ -276,8 +284,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env,
-    stdio: stdioHandler ? 'pipe' : 'inherit'
+    env
   }, stdioHandler)
 }
 

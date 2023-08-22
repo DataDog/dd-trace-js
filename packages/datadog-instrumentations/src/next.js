@@ -199,34 +199,23 @@ function finish (ctx, result, err) {
   return result
 }
 
-// transpiled functions in newer next.js versions can't be shimmed
-// because they're read-only, so we re-define the property needed here
-function wrapObjectProperty (module, func, wrapper) {
-  const exported = Object.getOwnPropertyDescriptors(module)
-  const original = exported[func].get()
-  return Object.defineProperty(exported, func, {
-    enumerable: true,
-    get: function () { return wrapper(original) }
-  })
-}
-
 addHook({
   name: 'next',
   versions: ['>=13.4.13'],
   file: 'dist/server/lib/router-utils/resolve-routes.js'
-}, resolveRoutesModule => wrapObjectProperty(resolveRoutesModule, 'getResolveRoutes', wrapGetResolveRoutes))
+}, resolveRoutesModule => shimmer.wrap(resolveRoutesModule, 'getResolveRoutes', wrapGetResolveRoutes))
 
 addHook({
   name: 'next',
   versions: ['13.4.13'],
   file: 'dist/server/lib/setup-server-worker.js'
-}, setupServerWorker => wrapObjectProperty(setupServerWorker, 'initializeServerWorker', wrapSetupServerWorker))
+}, setupServerWorker => shimmer.wrap(setupServerWorker, 'initializeServerWorker', wrapSetupServerWorker))
 
 addHook({
   name: 'next',
   versions: ['>=13.4.15'],
   file: 'dist/server/lib/router-server.js'
-}, routerServer => wrapObjectProperty(routerServer, 'initialize', wrapInitialize))
+}, routerServer => shimmer.wrap(routerServer, 'initialize', wrapInitialize))
 
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
