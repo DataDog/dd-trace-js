@@ -330,6 +330,10 @@ class Config {
       ) : {}
     )
 
+    const DD_TRACE_RAW_PEER_SERVICE_MAPPING = coalesce(process.env.DD_TRACE_PEER_SERVICE_MAPPING,
+      options.peerServiceMapping ? Object.entries(options.peerServiceMapping).map(([key, value]) => `${key}=${value}`).join(',') : ""
+    )
+
     const peerServiceSet = (
       options.hasOwnProperty('spanComputePeerService') ||
       process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
@@ -577,6 +581,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+    this.rawPeerServiceMapping = DD_TRACE_RAW_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
