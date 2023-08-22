@@ -1049,6 +1049,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
+  # tedious is incompatible with node v14
   tedious:
     runs-on: ubuntu-latest
     services:
@@ -1068,7 +1069,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/14
+      - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/16

@@ -33,7 +33,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [14, 16, 18, latest]
+        version: [16, 18, latest] # playwright incompatible with node v14
         framework: [cucumber, playwright]
     runs-on: ubuntu-latest
     env:
