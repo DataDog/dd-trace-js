@@ -16,6 +16,7 @@ describe('profilers/native/wall', () => {
       time: {
         start: sinon.stub(),
         stop: sinon.stub().returns('profile'),
+        v8ProfilerStuckEventLoopDetected: sinon.stub().returns(false),
         constants: {
           kSampleCount: 0
         }
@@ -53,7 +54,8 @@ describe('profilers/native/wall', () => {
         durationMillis: 60000,
         sourceMapper: undefined,
         withContexts: false,
-        lineNumbers: false
+        lineNumbers: false,
+        workaroundV8Bug: false
       })
   })
 
@@ -70,7 +72,8 @@ describe('profilers/native/wall', () => {
         durationMillis: 60000,
         sourceMapper: undefined,
         withContexts: false,
-        lineNumbers: false
+        lineNumbers: false,
+        workaroundV8Bug: false
       })
   })
 
@@ -143,7 +146,8 @@ describe('profilers/native/wall', () => {
         durationMillis: 60000,
         sourceMapper: mapper,
         withContexts: false,
-        lineNumbers: false
+        lineNumbers: false,
+        workaroundV8Bug: false
       })
   })
 })

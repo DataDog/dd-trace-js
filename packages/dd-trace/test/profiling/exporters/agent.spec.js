@@ -38,6 +38,8 @@ async function createProfile (periodType) {
     logger: {
       error (err) {
         throw err
+      },
+      warn (err) {
       }
     }
   })
