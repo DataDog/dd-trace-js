@@ -262,6 +262,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -450,6 +452,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -469,6 +473,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -743,6 +749,8 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
@@ -757,7 +765,7 @@ jobs:
   next:
     strategy:
       matrix:
-        node-version: [16]
+        node-version: [14, 16]
         range: ['>=9.5 <11.1', '>=11.1 <13.2']
         include:
           - node-version: 18
@@ -1060,6 +1068,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/16
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
