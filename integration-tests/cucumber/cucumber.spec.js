@@ -46,7 +46,8 @@ const moduleType = [
     type: 'esm',
     runTestsCommand: `node --loader=${hookFile} ./node_modules/.bin/cucumber-js ci-visibility/features-esm/*.feature`,
     runTestsWithCoverageCommand:
-      `./node_modules/nyc/bin/nyc.js -r=text-summary node --loader=@istanbuljs/esm-loader-hook ` +
+      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
+      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
       `--loader=${hookFile} ./node_modules/.bin/cucumber-js ci-visibility/features-esm/*.feature`,
     parallelModeCommand:
       `node --loader=${hookFile} ./node_modules/.bin/cucumber-js ` +
@@ -61,7 +62,6 @@ versions.forEach(version => {
     type,
     runTestsCommand,
     runTestsWithCoverageCommand,
-    runTestsWithCoverageCommandOutput,
     parallelModeCommand,
     featuresPath,
     fileExtension
@@ -74,7 +74,8 @@ versions.forEach(version => {
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
       before(async () => {
-        sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
+        sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert',
+          'nyc', '@istanbuljs/esm-loader-hook'], true)
         cwd = sandbox.folder
       })
 

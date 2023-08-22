@@ -33,7 +33,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 const isOldNode = semver.satisfies(process.version, '<=12')
 
 const mochaCommonOptions = {
-  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
+  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
@@ -74,7 +74,8 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand:
-      `./node_modules/nyc/bin/nyc.js -r=text-summary node --loader=@istanbuljs/esm-loader-hook ` +
+      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
+      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
       `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
     coverageMessage: 'Lines        : 78.57%',
     type: 'esm'
