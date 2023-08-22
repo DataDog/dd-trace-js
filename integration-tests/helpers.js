@@ -158,7 +158,7 @@ class FakeAgent extends EventEmitter {
 }
 
 function spawnProc (filename, options = {}, stdioHandler) {
-  const proc = fork(filename, options)
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -284,8 +284,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env,
-    stdio: 'pipe'
+    env
   }, stdioHandler)
 }
 
