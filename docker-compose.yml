@@ -79,7 +79,7 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: ridedott/pubsub-emulator
+    image: ghcr.io/ridedott/pubsub-emulator
     ports:
       - "127.0.0.1:8081:8081"
   localstack:
