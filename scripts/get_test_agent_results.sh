@@ -13,9 +13,9 @@ if [[ $RESPONSE_CODE -eq 200 ]]; then
   cat summary_response.txt | jq '.'
 else
   echo "APM Test Agent Check Traces failed with response code: $RESPONSE_CODE"
-  echo "Failures:"
-  cat response.txt
   echo "APM Test Agent Check Traces Summary Results:"
   cat summary_response.txt | jq '.'
+  echo "Failures:"
+  cat response.txt
   exit 1
 fi

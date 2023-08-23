@@ -9,13 +9,15 @@ runs:
   steps:
     - uses: actions/checkout@v2
     - run: |
+        bash ./scripts/get_test_agent_results.sh
+      shell: bash
+    - run: |
         if [ -n "${{inputs.container-id}}" ]; then
           docker logs ${{inputs.container-id}}
         else
           docker-compose logs testagent
         fi
       shell: bash
-    - uses: actions/checkout@v2
-    - run: |
-        bash ./scripts/get_test_agent_failures.sh
-      shell: bash
+    # - run: |
+    #     bash ./scripts/get_test_agent_failures.sh
+    #   shell: bash
