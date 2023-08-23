@@ -15,15 +15,14 @@ const consumerStartCh = channel('apm:kafkajs:consume:start')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
-addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
-  class Kafka extends obj.Kafka {
+addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
+  class Kafka extends BaseKafka {
     constructor (options) {
       super(options)
       this._brokers = (options.brokers && typeof options.brokers !== 'function')
         ? options.brokers.join(',') : undefined
     }
   }
-  obj.Kafka = Kafka
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
@@ -117,5 +116,5 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
     }
     return consumer
   })
-  return obj
+  return Kafka
 })
