@@ -7,15 +7,15 @@ SUMMARY_RESPONSE=$(curl -s -w "\n%{http_code}" -o summary_response.txt http://12
 SUMMARY_RESPONSE_CODE=$(echo "$SUMMARY_RESPONSE" | awk 'END {print $NF}')
 
 if [[ $RESPONSE_CODE -eq 200 ]]; then
-  echo "All APM Test Agent Check Traces returned successful! (HTTP 200)"
+  echo $"All APM Test Agent Check Traces returned successful! (HTTP 200)\n"
   cat response.txt
-  echo "APM Test Agent Check Traces Summary Results:"
+  echo $"APM Test Agent Check Traces Summary Results:\n"
   cat summary_response.txt | jq '.'
 else
   echo "APM Test Agent Check Traces failed with response code: $RESPONSE_CODE"
-  echo "APM Test Agent Check Traces Summary Results:"
+  echo $"APM Test Agent Check Traces Summary Results:\n"
   cat summary_response.txt | jq '.'
-  echo "Failures:"
+  echo $"Failures:\n"
   cat response.txt
   exit 1
 fi

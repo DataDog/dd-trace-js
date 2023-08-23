@@ -1,9 +1,20 @@
-name: "Get APM Test Agent Trace Check Results"
-description: "Get the APM Test Agent results from the test run."
+name: "Get APM Test Agent Trace Check Results and Logs"
+description: "Get the APM Test Agent results and logs from the test run."
+inputs:
+  container-id:
+    description: "ID of the Docker Container to get logs from (optional)"
+    required: false
 runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
     - run: |
         bash ./scripts/get_test_agent_results.sh
+      shell: bash
+    - run: |
+        if [ -n "${{inputs.container-id}}" ]; then
+          docker logs ${{inputs.container-id}}
+        else
+          docker-compose logs testagent
+        fi
       shell: bash
