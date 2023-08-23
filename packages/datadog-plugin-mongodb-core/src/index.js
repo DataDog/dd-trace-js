@@ -36,10 +36,14 @@ class MongodbCorePlugin extends DatabasePlugin {
   }
 }
 
+function sanitizeBigInt (data) {
+  return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
+}
+
 function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
-  if (cmd.query) return JSON.stringify(limitDepth(cmd.query))
-  if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
+  if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
+  if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
 }
 
 function getResource (plugin, ns, query, operationName) {
