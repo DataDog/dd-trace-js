@@ -331,7 +331,9 @@ class Config {
     )
 
     const DD_TRACE_RAW_PEER_SERVICE_MAPPING = coalesce(process.env.DD_TRACE_PEER_SERVICE_MAPPING,
-      options.peerServiceMapping ? Object.entries(options.peerServiceMapping).map(([key, value]) => `${key}=${value}`).join(',') : ""
+      options.peerServiceMapping
+        ? Object.entries(options.peerServiceMapping).map(([key, value]) => `${key}=${value}`).join(',')
+        : ''
     )
 
     const peerServiceSet = (
