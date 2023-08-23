@@ -205,6 +205,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
 
   integrationTestsPaths.forEach(async (path) => {
     await exec(`cp -R ${path} ${folder}`)
+    await exec(`sync ${folder}`)
   })
 
   if (isGitRepo) {
