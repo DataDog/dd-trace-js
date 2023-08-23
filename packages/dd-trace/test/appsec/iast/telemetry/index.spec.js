@@ -72,15 +72,15 @@ describe('Telemetry', () => {
           '../../../telemetry/metrics': telemetryMetrics
         })
 
-        const telemetryConfig = { enabled: true, metrics: true }
-        iastTelemetry.configure({
-          telemetry: telemetryConfig
-        }, 'OFF')
+        const config = {
+          telemetry: { enabled: true, metrics: true }
+        }
+        iastTelemetry.configure(config, 'OFF')
 
         expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
         expect(telemetryMetrics.manager.set).to.not.be.called
-        expect(telemetryLogs.start).to.be.calledOnce
+        expect(telemetryLogs.start).to.be.calledOnceWithExactly(config)
       })
 
       it('should enable telemetry if metrics not enabled but DD_TELEMETRY_METRICS_ENABLED is undefined', () => {

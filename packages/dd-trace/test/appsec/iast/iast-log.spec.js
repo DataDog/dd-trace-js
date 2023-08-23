@@ -7,54 +7,36 @@ const EOL = '\n'
 
 describe('IAST log', () => {
   const telemetryDefaultConfig = {
-    config: {
-      telemetry: {
-        logCollection: true
-      }
+    telemetry: {
+      enabled: true,
+      logCollection: true
     }
   }
 
   let iastLog
-  let telemetryStartChannel
   let telemetryLogs
-  let onTelemetryStart
   let log
+  let createAppObject
+  let createHostObject
 
   beforeEach(() => {
-    let subs = 0
-    telemetryStartChannel = {
-      get hasSubscribers () {
-        return subs > 0
-      },
-      subscribe: (onTelemetryStartHandler) => {
-        onTelemetryStart = onTelemetryStartHandler
-        subs++
-      },
-      unsubscribe: () => {
-        subs--
-      },
-      publish: sinon.stub()
-    }
-
-    const telemetryStopChannel = {
-      subscribe: () => {},
-      unsubscribe: () => {}
-    }
-
     log = {
       debug: sinon.stub(),
       info: sinon.stub(),
       warn: sinon.stub(),
       error: sinon.stub()
     }
+    createAppObject = sinon.stub()
+    createHostObject = sinon.stub()
+
     telemetryLogs = proxyquire('../../../src/appsec/iast/telemetry/log', {
-      '../../../../../../diagnostics_channel': {
-        channel: (name) => name === 'datadog:telemetry:start' ? telemetryStartChannel : telemetryStopChannel
+      '../../../../telemetry': {
+        createAppObject, createHostObject
       }
     })
     sinon.stub(telemetryLogs, 'publish')
 
-    telemetryLogs.start()
+    telemetryLogs.start(telemetryDefaultConfig)
 
     iastLog = proxyquire('../../../src/appsec/iast/iast-log', {
       './telemetry/log': telemetryLogs,
@@ -75,8 +57,6 @@ describe('IAST log', () => {
     })
 
     it('should call log.warn and publish msg via telemetry', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       iastLog.warnAndPublish('warn')
 
       expect(log.warn).to.be.calledOnceWith('warn')
@@ -84,8 +64,6 @@ describe('IAST log', () => {
     })
 
     it('should chain multiple warn calls', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       iastLog.warn('warn').warnAndPublish('warnAndPublish').warn('warn2')
 
       expect(log.warn).to.be.calledThrice
@@ -104,8 +82,6 @@ describe('IAST log', () => {
     })
 
     it('should call log.error and publish msg via telemetry', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       iastLog.errorAndPublish('error')
 
       expect(log.error).to.be.calledOnceWith('error')
@@ -113,8 +89,6 @@ describe('IAST log', () => {
     })
 
     it('should chain multiple error calls', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       iastLog.error('error').errorAndPublish('errorAndPublish').error('error2')
 
       expect(log.error).to.be.calledThrice
@@ -125,8 +99,6 @@ describe('IAST log', () => {
     })
 
     it('should include original message and dd frames', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log_collector.spec.js:29:21)`
       const stack = new Error('Error 1')
         .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
@@ -152,8 +124,6 @@ describe('IAST log', () => {
     })
 
     it('should not include original message if first frame is not a dd frame', () => {
-      onTelemetryStart(telemetryDefaultConfig)
-
       const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
         at T (${ddBasePath}packages/dd-trace/test/appsec/iast/telemetry/log_collector.spec.js:29:21)`
       const stack = new Error('Error 1')

@@ -1,17 +1,14 @@
-const { expect } = require('chai')
 const { match } = require('sinon')
 const proxyquire = require('proxyquire')
 
 describe('telemetry logs', () => {
-  let defaultConfig
-  let onTelemetryStartMsg
-  let telemetryStartChannel
-  let telemetryStopChannel
-  let onTelemetryStart
-  let onTelemetryStop
-  let dc
+  let defaultConfig, application, host
+  let telemetry
 
   beforeEach(() => {
+    application = {}
+    host = {}
+
     defaultConfig = {
       telemetry: {
         enabled: true,
@@ -20,54 +17,44 @@ describe('telemetry logs', () => {
       }
     }
 
-    onTelemetryStartMsg = { config: defaultConfig, application: {}, host: {}, heartbeatInterval: 60000 }
-
-    telemetryStartChannel = {
-      get hasSubscribers () {
-        return this.subscribe.callCount > 0
-      },
-      subscribe: sinon.stub(),
-      unsubscribe: sinon.stub()
+    telemetry = {
+      createAppObject: sinon.stub().returns(application),
+      createHostObject: sinon.stub().returns(host)
     }
-
-    telemetryStopChannel = {
-      get hasSubscribers () {
-        return this.subscribe.callCount > 0
-      },
-      subscribe: sinon.stub(),
-      unsubscribe: sinon.stub()
-    }
-
-    dc = {
-      channel: (name) => name === 'datadog:telemetry:start' ? telemetryStartChannel : telemetryStopChannel
-    }
-
-    onTelemetryStart = () => telemetryStartChannel.subscribe.getCall(0).args[0]
-    onTelemetryStop = () => telemetryStopChannel.subscribe.getCall(0).args[0]
   })
 
   describe('start', () => {
-    it('should be enabled by default and subscribe', () => {
+    it('should be enabled if telemetry.enabled = true && telemetry.logCollection = true', () => {
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc
+        '../../../../telemetry': telemetry
       })
-      logs.start()
-      defaultConfig.telemetry.logCollection = true
+      logs.start(defaultConfig)
 
-      expect(onTelemetryStart()({ config: defaultConfig })).to.be.true
-      expect(telemetryStartChannel.subscribe).to.have.been.calledOnce
-      expect(telemetryStopChannel.subscribe).to.have.been.calledOnce
+      expect(telemetry.createAppObject).to.be.calledOnceWith(defaultConfig)
+      expect(telemetry.createHostObject).to.be.calledOnce
     })
 
-    it('should be disabled and not subscribe if DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
+    it('should not be enabled if telemetry.enabled = false && telemetry.logCollection = true', () => {
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc
+        '../../../../telemetry': telemetry
       })
-      logs.start()
 
+      defaultConfig.telemetry.enabled = false
+      logs.start(defaultConfig)
+
+      expect(telemetry.createAppObject).to.not.be.called
+      expect(telemetry.createHostObject).to.not.be.called
+    })
+
+    it('should be disabled if logCollection = false', () => {
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../telemetry': telemetry
+      })
       defaultConfig.telemetry.logCollection = false
+      logs.start(defaultConfig)
 
-      expect(onTelemetryStart()({ config: defaultConfig })).to.be.false
+      expect(telemetry.createAppObject).to.not.be.called
+      expect(telemetry.createHostObject).to.not.be.called
     })
 
     it('should call sendData periodically', () => {
@@ -76,8 +63,8 @@ describe('telemetry logs', () => {
 
       let logCollectorCalled = 0
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc,
         '../../../../telemetry/send-data': { sendData },
+        '../../../../telemetry': telemetry,
         './log-collector': {
           drain: () => {
             logCollectorCalled++
@@ -85,48 +72,60 @@ describe('telemetry logs', () => {
           }
         }
       })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+
+      defaultConfig.telemetry.heartbeatInterval = 60000
+      logs.start(defaultConfig)
 
       clock.tick(60000)
       clock.tick(60000)
 
       expect(logCollectorCalled).to.be.eq(2)
       expect(sendData).to.have.been.calledTwice
-      expect(sendData).to.have.been.calledWith(onTelemetryStartMsg.config,
-        onTelemetryStartMsg.application,
-        onTelemetryStartMsg.host,
+      expect(sendData).to.have.been.calledWith(defaultConfig,
+        application,
+        host,
         'logs'
       )
+
       clock.restore()
     })
   })
 
   describe('stop', () => {
-    it('should unsubscribe configured listeners', () => {
-      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc
-      })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+    it('should clear interval configured listeners', () => {
+      const clock = sinon.useFakeTimers()
+      const sendData = sinon.stub()
 
+      let logCollectorCalled = 0
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        '../../../../telemetry/send-data': { sendData },
+        '../../../../telemetry': telemetry,
+        './log-collector': {
+          drain: () => {
+            logCollectorCalled++
+            return { message: 'Error 1', level: 'ERROR' }
+          }
+        }
+      })
+
+      defaultConfig.telemetry.heartbeatInterval = 60000
+      logs.start(defaultConfig)
+
+      clock.tick(60000)
+
+      expect(logCollectorCalled).to.be.eq(1)
+
+      // stop clears the interval and logCollector is no longer called
       logs.stop()
 
-      expect(telemetryStartChannel.unsubscribe).to.have.been.calledOnce
-      expect(telemetryStopChannel.unsubscribe).to.have.been.calledOnce
-    })
+      clock.tick(60000)
+      clock.tick(60000)
+      clock.tick(60000)
+      clock.tick(60000)
 
-    it('should unsubscribe configured listeners when datadog:telemetry:stop is received', () => {
-      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc
-      })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+      expect(logCollectorCalled).to.be.eq(1)
 
-      onTelemetryStop()()
-
-      expect(telemetryStartChannel.unsubscribe).to.have.been.calledOnce
-      expect(telemetryStopChannel.unsubscribe).to.have.been.calledOnce
+      clock.restore()
     })
   })
 
@@ -134,29 +133,39 @@ describe('telemetry logs', () => {
     it('should be not called with DEBUG level', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc,
         './log-collector': {
           add: logCollectorAdd
         }
       })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+      logs.start(defaultConfig)
 
       logs.publish({ message: 'message', level: 'DEBUG' })
 
       expect(logCollectorAdd).to.not.be.called
     })
 
-    it('should be called with WARN level', () => {
+    it('should be called with DEBUG level if DEBUG level is enabled', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc,
         './log-collector': {
           add: logCollectorAdd
         }
       })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+      logs.start(defaultConfig, true)
+
+      logs.publish({ message: 'message', level: 'DEBUG' })
+
+      expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'DEBUG' }))
+    })
+
+    it('should be called with WARN level', () => {
+      const logCollectorAdd = sinon.stub()
+      const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
+        './log-collector': {
+          add: logCollectorAdd
+        }
+      })
+      logs.start(defaultConfig)
 
       logs.publish({ message: 'message', level: 'WARN' })
 
@@ -166,13 +175,11 @@ describe('telemetry logs', () => {
     it('should be called with ERROR level', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc,
         './log-collector': {
           add: logCollectorAdd
         }
       })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+      logs.start(defaultConfig)
 
       logs.publish({ message: 'message', level: 'ERROR' })
 
@@ -182,13 +189,11 @@ describe('telemetry logs', () => {
     it('should be called with ERROR level and stack_trace', () => {
       const logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../../../src/appsec/iast/telemetry/log', {
-        '../../../../../../diagnostics_channel': dc,
         './log-collector': {
           add: logCollectorAdd
         }
       })
-      logs.start()
-      onTelemetryStart()(onTelemetryStartMsg)
+      logs.start(defaultConfig)
 
       const error = new Error('message')
       const stack = error.stack

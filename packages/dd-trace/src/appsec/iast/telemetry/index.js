@@ -24,7 +24,7 @@ class Telemetry {
       telemetryMetrics.manager.set('iast', globalNamespace)
     }
 
-    telemetryLogs.start()
+    telemetryLogs.start(config)
   }
 
   stop () {

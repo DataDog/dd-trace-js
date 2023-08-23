@@ -183,6 +183,8 @@ function updateConfig (changes, config) {
 }
 
 module.exports = {
+  createAppObject,
+  createHostObject,
   start,
   stop,
   updateIntegrations,
