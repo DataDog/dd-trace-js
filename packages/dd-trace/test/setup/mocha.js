@@ -17,11 +17,6 @@ global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
-global.testAgent = {
-  expectedServiceName: null,
-  schemaVersionName: null,
-  sessionToken: null
-}
 
 const packageVersionFailures = Object.create({})
 

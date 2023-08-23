@@ -9,9 +9,7 @@ const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
-const sinon = require('sinon')
-const writer = require('../../src/exporters/agent/writer.js')
-const tracingPlugin = require('../../src/plugins/tracing.js')
+const { stubStartSpan, stubSendPayload, unstubMethods, checkAgentStatus } = require('./testAgent')
 
 const handlers = new Set()
 let sockets = []
@@ -19,11 +17,6 @@ let agent = null
 let listener = null
 let tracer = null
 let plugins = []
-let useTestAgent = false
-const stubs = {
-  originalMethods: {},
-  stubbedMethods: {}
-}
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -39,104 +32,6 @@ function ciVisRequestHandler (request, response) {
     const spans = events.map(event => event.content)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
-    }
-  })
-}
-
-// create stub on the writer class method to update headers at time of trace send
-const sendPayloadMock = function (data, count, done) {
-  const thisValue = stubs.stubbedMethods._sendPayload.lastCall.thisValue
-  if (useTestAgent) {
-    // Update the headers with additional values
-    const headers = stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers
-    addEnvironmentVariablesToHeaders(headers).then(async (reqHeaders) => {
-      stubs.stubbedMethods._sendPayload.lastCall.thisValue._headers = reqHeaders
-      // call original method
-      stubs.originalMethods._sendPayload.call(thisValue, data, count, done)
-    })
-  } else {
-    stubs.originalMethods._sendPayload.call(thisValue, data, count, done)
-  }
-}
-
-// create stub on the startSpan method to inject schema version and other tags
-const startSpanMock = function (name, { childOf, kind, meta, metrics, service, resource, type } = {}, enter = true) {
-  if (useTestAgent) {
-    // Update the headers with additional values
-    try {
-      meta = meta ?? {}
-      meta['_schema_version'] = global.testAgent.schemaVersionName ?? 'v0'
-      if (typeof global.testAgent.expectedServiceName === 'string') {
-        meta['_expected_service_name'] = global.testAgent.expectedServiceName
-      } else if (typeof global.testAgent.expectedServiceName === 'function') {
-        meta['_expected_service_name'] = global.testAgent.expectedServiceName()
-      }
-      if (global.testAgent.sessionToken) {
-        meta['_session_token'] = global.testAgent.sessionToken
-      }
-    } catch (e) {
-      // do something
-    }
-  }
-  const thisValue = stubs.stubbedMethods.startSpan.lastCall.thisValue
-  return stubs.originalMethods.startSpan.call(
-    thisValue, name, { childOf, kind, meta, metrics, service, resource, type }, enter
-  )
-}
-
-function stubStartSpan () {
-  stubs.originalMethods.startSpan = tracingPlugin.prototype.startSpan
-  stubs.stubbedMethods.startSpan = sinon.stub(tracingPlugin.prototype, 'startSpan')
-    .callsFake((name, { childOf, kind, meta, metrics, service, resource, type }, enter) => {
-      return startSpanMock(name, { childOf, kind, meta, metrics, service, resource, type }, enter)
-    })
-}
-
-function stubSendPayload () {
-  stubs.originalMethods._sendPayload = writer.prototype._sendPayload
-  stubs.stubbedMethods._sendPayload = sinon.stub(writer.prototype, '_sendPayload').callsFake((data, count, any) => {
-    sendPayloadMock(data, count, any)
-  })
-}
-
-function unstubMethods () {
-  if (stubs.stubbedMethods._sendPayload) {
-    stubs.stubbedMethods._sendPayload.restore()
-    stubs.stubbedMethods.startSpan.restore()
-    delete stubs.stubbedMethods['_sendPayload']
-    delete stubs.stubbedMethods['startSpan']
-  }
-}
-
-function addEnvironmentVariablesToHeaders (headers) {
-  return new Promise((resolve, reject) => {
-    // get all environment variables that start with 'DD_'
-    headers = headers ?? {}
-    delete headers['X-Datadog-Trace-Env-Variables']
-    const ddEnvVars = new Map(
-      Object.entries(process.env)
-        .filter(([key]) => key.startsWith('DD_'))
-    )
-    for (const pluginName of plugins) {
-      // check for plugin level service name configuration
-      const pluginConfig = tracer._pluginManager._configsByName[pluginName]
-      if (pluginConfig && pluginConfig.service) {
-        if (typeof pluginConfig.service !== 'function') {
-          ddEnvVars.set(`DD_${pluginName.toUpperCase()}_SERVICE`, pluginConfig.service)
-        }
-      }
-    }
-
-    // serialize the DD environment variables into a string of k=v pairs separated by comma
-    const serializedEnvVars = Array.from(ddEnvVars.entries())
-      .map(([key, value]) => `${key}=${value}`)
-      .join(',')
-
-    // add the serialized DD environment variables to the header
-    // to send with trace to the final agent destination
-    if (headers) {
-      headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
-      resolve(headers)
     }
   })
 }
@@ -172,6 +67,16 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
       req.headers['X-Datadog-Test-Session-Token'] = global.testAgent.sessionToken
     }
 
+    for (const pluginName of plugins) {
+      // check for plugin level service name configuration
+      const pluginConfig = tracer._pluginManager._configsByName[pluginName]
+      if (pluginConfig && pluginConfig.service) {
+        if (typeof pluginConfig.service !== 'function') {
+          traceEnvHeader += `,DD_${pluginName.toUpperCase()}_SERVICE=${pluginConfig.service}`
+        }
+      }
+    }
+
     // remove incorrect headers
     delete req.headers['host']
     delete req.headers['content-type']
@@ -200,26 +105,6 @@ async function handleTraceRequest (req, res, sendToTestAgent) {
   })
 }
 
-function checkAgentStatus () {
-  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-
-  return new Promise((resolve, reject) => {
-    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
-      if (response.statusCode === 200) {
-        resolve(true)
-      } else {
-        resolve(false)
-      }
-    })
-
-    request.on('error', error => {
-      reject(error)
-    })
-
-    request.end()
-  })
-}
-
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
@@ -238,15 +123,15 @@ module.exports = {
       next()
     })
 
-    if (!stubs.stubbedMethods._sendPayload) {
-      stubSendPayload()
-      stubStartSpan()
+    if (!global.testAgent.stubs.stubbedMethods._sendPayload) {
+      stubSendPayload(global.testAgent.stubs)
+      stubStartSpan(global.testAgent.stubs)
     }
 
     try {
-      useTestAgent = await checkAgentStatus()
+      global.testAgent.useTestAgent = await checkAgentStatus()
     } catch (error) {
-      useTestAgent = false
+      global.testAgent.useTestAgent = false
     }
 
     agent.get('/info', (req, res) => {
@@ -260,7 +145,7 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', async (req, res) => {
-      await handleTraceRequest(req, res, useTestAgent)
+      await handleTraceRequest(req, res, global.testAgent.useTestAgent)
     })
 
     // CI Visibility Agentless intake
@@ -391,7 +276,7 @@ module.exports = {
   // Stop the mock agent, reset all expectations and wipe the require cache.
   close (opts = {}) {
     const { ritmReset, wipe } = opts
-    unstubMethods()
+    unstubMethods(global.testAgent.stubs)
     listener.close()
     listener = null
     sockets.forEach(socket => socket.end())
