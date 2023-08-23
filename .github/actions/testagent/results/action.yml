@@ -4,5 +4,6 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - run: ./scripts/get_test_agent_results.sh
+    - run: |
+        bash ./scripts/get_test_agent_results.sh
       shell: bash

@@ -16,5 +16,6 @@ runs:
         fi
       shell: bash
     - uses: actions/checkout@v2
-    - run: ./scripts/get_test_agent_failures.sh
+    - run: |
+        bash ./scripts/get_test_agent_failures.sh
       shell: bash
