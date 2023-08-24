@@ -111,13 +111,11 @@ function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
 
-const heartbeats = []
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     sendData(config, application, host, 'app-heartbeat')
     heartbeat(config, application, host)
-  }, heartbeatInterval)
-  heartbeats.push(heartbeatTimeout)
+  }, heartbeatInterval).unref()
   return heartbeatTimeout
 }
 
