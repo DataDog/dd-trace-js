@@ -23,8 +23,8 @@ try {
     `
   });
 
-  const result = await connection.execute(dbQuery);
-  console.log('Query result:', result.rows);
+  await connection.execute(dbQuery);
+  console.log('Ran');
 
 } catch (error) {
   console.error('Error:', error);
