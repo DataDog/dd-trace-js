@@ -26,17 +26,33 @@ const {
   TEST_ITR_SKIPPING_COUNT
 } = require('../packages/dd-trace/src/plugins/util/test')
 
+const hookFile = 'dd-trace/loader-hook.mjs'
+
 // TODO: remove when 2.x support is removed.
 // This is done because newest versions of mocha and jest do not support node@12
 const isOldNode = semver.satisfies(process.version, '<=12')
 
+const mochaCommonOptions = {
+  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+  expectedStdout: '2 passing',
+  extraStdout: 'end event: can add event listeners to mocha'
+}
+
+const jestCommonOptions = {
+  dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
+  expectedStdout: 'Test Suites: 2 passed',
+  expectedCoverageFiles: [
+    'ci-visibility/test/sum.js',
+    'ci-visibility/test/ci-visibility-test.js',
+    'ci-visibility/test/ci-visibility-test-2.js'
+  ]
+}
+
 const testFrameworks = [
   {
+    ...mochaCommonOptions,
     name: 'mocha',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
-    expectedStdout: '2 passing',
-    extraStdout: 'end event: can add event listeners to mocha',
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -44,19 +60,39 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    coverageMessage: 'Lines        : 80%'
+    coverageMessage: 'Lines        : 80%',
+    type: 'commonJS'
   },
   {
-    name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
-    testFile: 'ci-visibility/run-jest.js',
-    expectedStdout: 'Test Suites: 2 passed',
+    ...mochaCommonOptions,
+    name: 'mocha',
+    testFile: 'ci-visibility/run-mocha.mjs',
     expectedCoverageFiles: [
+      'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js'
+    runTestsWithCoverageCommand:
+      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
+      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
+      `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
+    coverageMessage: 'Lines        : 78.57%',
+    type: 'esm'
+  },
+  {
+    ...jestCommonOptions,
+    name: 'jest',
+    testFile: 'ci-visibility/run-jest.js',
+    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
+    type: 'commonJS'
+  },
+  {
+    ...jestCommonOptions,
+    name: 'jest',
+    testFile: 'ci-visibility/run-jest.mjs',
+    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
+    type: 'esm'
   }
 ]
 
@@ -68,9 +104,10 @@ testFrameworks.forEach(({
   extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand,
-  coverageMessage
+  coverageMessage,
+  type
 }) => {
-  describe(name, () => {
+  describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
@@ -106,7 +143,7 @@ testFrameworks.forEach(({
           done(error)
         }, ({ url }) => url === '/api/v2/citestcycle')
 
-        childProcess = fork('ci-visibility/run-mocha.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -232,7 +269,7 @@ testFrameworks.forEach(({
         })
       })
       it('does not crash when jest uses jest-jasmine2', (done) => {
-        childProcess = fork('ci-visibility/run-jest.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -256,7 +293,7 @@ testFrameworks.forEach(({
       describe('when jest is using workers to run tests in parallel', () => {
         it('reports tests when using the agent', (done) => {
           receiver.setInfoResponse({ endpoints: [] })
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               DD_TRACE_AGENT_PORT: receiver.port,
@@ -277,7 +314,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
         it('reports tests when using agentless', (done) => {
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
@@ -296,7 +333,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
         it('reports tests when using evp proxy', (done) => {
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
@@ -317,7 +354,7 @@ testFrameworks.forEach(({
         })
       })
       it('reports timeout error message', (done) => {
-        childProcess = fork('ci-visibility/run-jest.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -352,12 +389,16 @@ testFrameworks.forEach(({
             'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
           ]
         )
+
         const areAllTestSpans = testSpans.every(span => span.name === `${name}.test`)
         assert.isTrue(areAllTestSpans)
+
         assert.include(testOutput, expectedStdout)
+
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
+
         done()
       })
 
@@ -365,7 +406,7 @@ testFrameworks.forEach(({
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: '-r dd-trace/ci/init'
+          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init'
         },
         stdio: 'pipe'
       })
