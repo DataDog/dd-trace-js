@@ -27,11 +27,11 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans } = this._config
+    const { flushMinSpans, partialFlushEnabled } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (started.length === finished.length || finished.length >= flushMinSpans) {
+    if (started.length === finished.length || (partialFlushEnabled && finished.length >= flushMinSpans)) {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
       this._gitMetadataTagger.tagGitMetadata(spanContext)

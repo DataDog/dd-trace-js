@@ -253,6 +253,11 @@ class Config {
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
       '0.4'
     )
+    const DD_TRACE_PARTIAL_FLUSH_ENABLED = coalesce(
+      options.partialFlushEnabled,
+      process.env.DD_TRACE_PARTIAL_FLUSH_ENABLED && isTrue(process.env.DD_TRACE_PARTIAL_FLUSH_ENABLED),
+      true
+    )
     const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
       parseInt(options.flushMinSpans),
       parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
@@ -543,6 +548,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    this.partialFlushEnabled = DD_TRACE_PARTIAL_FLUSH_ENABLED
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
