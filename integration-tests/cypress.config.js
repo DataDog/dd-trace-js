@@ -5,5 +5,6 @@ module.exports = {
       require('dd-trace/ci/cypress/plugin')(on, config)
     }
   },
-  video: false
+  video: false,
+  quiet: true
 }
