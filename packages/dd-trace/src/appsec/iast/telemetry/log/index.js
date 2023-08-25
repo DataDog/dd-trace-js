@@ -32,9 +32,7 @@ function isLevelEnabled (level) {
 }
 
 function isLogCollectionEnabled (config) {
-  return config?.telemetry &&
-    config.telemetry.enabled &&
-    config.telemetry.logCollection
+  return config?.telemetry?.enabled && config.telemetry.logCollection
 }
 
 function start (aConfig, debug = false) {
