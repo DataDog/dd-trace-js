@@ -2,6 +2,7 @@ import 'dd-trace/init.js'
 import oracledb from 'oracledb'
 
 const hostname = process.env.CI ? 'oracledb' : 'localhost'
+console.log(13213123, hostname)
 const config = {
   user: 'test',
   password: 'Oracle18',
