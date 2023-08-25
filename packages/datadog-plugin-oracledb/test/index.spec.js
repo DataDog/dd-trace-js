@@ -14,10 +14,6 @@ const expectedPeerService = new URL('http://' + config.connectString).pathname.s
 
 const dbQuery = 'select current_timestamp from dual'
 
-for (const key in process.env) {
-  console.log(`${key}: ${process.env[key]}`)
-}
-
 describe('Plugin', () => {
   let oracledb
   let connection
