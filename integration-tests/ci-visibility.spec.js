@@ -33,7 +33,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 const isOldNode = semver.satisfies(process.version, '<=12')
 
 const mochaCommonOptions = {
-  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
@@ -67,6 +67,7 @@ const testFrameworks = [
     ...mochaCommonOptions,
     name: 'mocha',
     testFile: 'ci-visibility/run-mocha.mjs',
+    dependencies: ['@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -107,6 +108,10 @@ testFrameworks.forEach(({
   coverageMessage,
   type
 }) => {
+  // skip esm tests in node versions < 16
+  if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16')) {
+    return
+  }
   describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
