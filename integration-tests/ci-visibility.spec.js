@@ -109,7 +109,7 @@ testFrameworks.forEach(({
   type
 }) => {
   // skip esm tests in node versions < 16
-  if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16')) {
+  if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
     return
   }
   describe(`${name} ${type}`, () => {
