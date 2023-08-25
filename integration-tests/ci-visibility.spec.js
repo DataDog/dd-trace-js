@@ -108,7 +108,8 @@ testFrameworks.forEach(({
   coverageMessage,
   type
 }) => {
-  // skip esm tests in node versions < 16
+  // to avoid this error: @istanbuljs/esm-loader-hook@0.2.0: The engine "node"
+  // is incompatible with this module. Expected version ">=16.12.0". Got "14.21.3"
   if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
     return
   }
