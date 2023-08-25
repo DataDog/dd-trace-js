@@ -37,3 +37,13 @@ RUN mkdir -p /usr/local/nvm \
 	&& nvm install --no-progress 20.4.0 \
 	&& nvm alias default 18 \
 	&& nvm use 18
+
+RUN mkdir /opt/insecure-bank-js
+RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecure-bank-js
+
+WORKDIR /opt/insecure-bank-js
+RUN . $NVM_DIR/nvm.sh \
+    && npm ci \
+    && npm cache clean --force
+
+WORKDIR /app
