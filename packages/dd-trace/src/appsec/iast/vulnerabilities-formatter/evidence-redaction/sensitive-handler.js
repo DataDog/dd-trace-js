@@ -76,7 +76,18 @@ class SensitiveHandler {
         while (nextSensitive != null && contains(nextTainted, nextSensitive)) {
           const redactionStart = nextSensitive.start - nextTainted.start
           const redactionEnd = nextSensitive.end - nextTainted.start
-          this.redactSource(sources, redactedSources, redactedSourcesContext, sourceIndex, redactionStart, redactionEnd)
+          if (redactionStart === redactionEnd) {
+            this.writeRedactedValuePart(valueParts, 0)
+          } else {
+            this.redactSource(
+              sources,
+              redactedSources,
+              redactedSourcesContext,
+              sourceIndex,
+              redactionStart,
+              redactionEnd
+            )
+          }
           nextSensitive = sensitive.shift()
         }
 
