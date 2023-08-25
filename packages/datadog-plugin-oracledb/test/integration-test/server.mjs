@@ -1,7 +1,8 @@
 import 'dd-trace/init.js'
 import oracledb from 'oracledb'
 
-const hostname = process.env.CI ? 'oracledb' : 'localhost'
+// hardcode it to oracledb since sandbox doesn't have the PROCESS.ENV.CI flag set
+const hostname = 'oracledb'
 console.log(13213123, hostname)
 const config = {
   user: 'test',
