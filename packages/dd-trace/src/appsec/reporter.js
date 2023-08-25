@@ -69,16 +69,16 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportWafInit (wafVersion, rulesInfo) {
+function reportWafInit (wafVersion, rulesVersion, rulesInfo = {}) {
   metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
-  metricsQueue.set('_dd.appsec.event_rules.loaded', rulesInfo.loaded)
-  metricsQueue.set('_dd.appsec.event_rules.error_count', rulesInfo.failed)
-  if (rulesInfo.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(rulesInfo.errors))
+  metricsQueue.set('_dd.appsec.event_rules.loaded', rulesInfo.loaded?.length || 0)
+  metricsQueue.set('_dd.appsec.event_rules.error_count', rulesInfo.failed?.length || 0)
+  if (rulesInfo.failed?.length) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(rulesInfo.errors))
 
   metricsQueue.set('manual.keep', 'true')
 
-  incrementWafInitMetric(wafVersion, rulesInfo.version)
+  incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
 function reportMetrics (metrics) {
