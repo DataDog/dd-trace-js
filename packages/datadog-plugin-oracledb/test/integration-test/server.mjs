@@ -13,16 +13,16 @@ const dbQuery = 'select current_timestamp from dual';
 let connection;
 
 try {
-  connection = await oracledb.getConnection({
-    ...config,
-    connectString: `
-      (DESCRIPTION=
-        (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
-        (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
-      )
-    `
-  });
-
+  // connection = await oracledb.getConnection({
+  //   ...config,
+  //   connectString: `
+  //     (DESCRIPTION=
+  //       (ADDRESS=(PROTOCOL=TCP)(HOST=${hostname})(PORT=1521))
+  //       (CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=xepdb1))
+  //     )
+  //   `
+  // });
+  connection = await oracledb.getConnection(config)
   await connection.execute(dbQuery);
   console.log('Ran');
 
