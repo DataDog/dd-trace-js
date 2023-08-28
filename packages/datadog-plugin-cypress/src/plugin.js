@@ -25,6 +25,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
+const NoopTracer = require('../../dd-trace/src/noop/tracer')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -119,10 +120,32 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
   })
 }
 
+const noopTask = {
+  'dd:testSuiteStart': () => {
+    return null
+  },
+  'dd:beforeEach': () => {
+    return {}
+  },
+  'dd:afterEach': () => {
+    return null
+  },
+  'dd:addTags': () => {
+    return null
+  }
+}
+
 module.exports = (on, config) => {
   let isTestsSkipped = false
   const skippedTests = []
   const tracer = require('../../dd-trace')
+
+  // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
+  if (tracer._tracer instanceof NoopTracer) {
+    // We still need to register these tasks or the support file will fail
+    return on('task', noopTask)
+  }
+
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const {
@@ -328,12 +351,16 @@ module.exports = (on, config) => {
     }
 
     return new Promise(resolve => {
-      if (tracer._tracer._exporter.flush) {
-        tracer._tracer._exporter.flush(() => {
+      const exporter = tracer._tracer._exporter
+      if (!exporter) {
+        return resolve(null)
+      }
+      if (exporter.flush) {
+        exporter.flush(() => {
           resolve(null)
         })
-      } else {
-        tracer._tracer._exporter._writer.flush(() => {
+      } else if (exporter._writer) {
+        exporter._writer.flush(() => {
           resolve(null)
         })
       }
@@ -375,7 +402,7 @@ module.exports = (on, config) => {
     'dd:afterEach': ({ test, coverage }) => {
       const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
       if (activeSpan) {
-        if (coverage && tracer._tracer._exporter.exportCoverage && isCodeCoverageEnabled) {
+        if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
           const { _traceId, _spanId } = testSuiteSpan.context()
