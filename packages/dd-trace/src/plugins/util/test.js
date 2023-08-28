@@ -139,13 +139,13 @@ function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
         return filteredTags
       }
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
         return filteredTags
       }
     }
