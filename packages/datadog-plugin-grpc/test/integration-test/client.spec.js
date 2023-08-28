@@ -38,7 +38,7 @@ describe('esm', () => {
         console.log(44, headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'grpc.server'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
       })
 
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.js', agent.port)
