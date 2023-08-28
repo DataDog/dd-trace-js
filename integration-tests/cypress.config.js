@@ -6,5 +6,5 @@ module.exports = {
     }
   },
   video: false,
-  quiet: true
+  screenshotOnRunFailure: false
 }
