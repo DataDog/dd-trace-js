@@ -7,8 +7,7 @@ const getPort = require('get-port')
 console.log(1312312, 'commonJS');
 
 (async () => {
-  const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
-  const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
+  const parentDirectoryPath = path.resolve(__dirname, '..')
 
   console.log('Parent Directory Path:', parentDirectoryPath)
 
