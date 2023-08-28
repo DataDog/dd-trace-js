@@ -38,6 +38,7 @@ describe('esm', () => {
         console.log(headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
+        console.log(12312321, checkSpansForServiceName(payload, 'grpc.client'))
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
       })
 
