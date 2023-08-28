@@ -137,11 +137,44 @@ testFrameworks.forEach(({
     })
 
     if (name === 'mocha') {
+      it('does not change mocha config if CI Visibility fails to init', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report tests')
+          done(error)
+        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
+
+        const { DD_CIVISIBILITY_AGENTLESS_URL, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+        // `runMocha` is only executed when using the CLI, which is where we modify mocha config
+        // if CI Visibility is init
+        childProcess = exec('mocha ./ci-visibility/test/ci-visibility-test.js', {
+          cwd,
+          env: {
+            ...restEnvVars,
+            DD_TRACE_DEBUG: 1,
+            DD_TRACE_LOG_LEVEL: 'error',
+            DD_SITE: '= invalid = url'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          assert.include(testOutput, 'Invalid URL')
+          assert.include(testOutput, '1 passing') // we only run one file here
+          done()
+        })
+      })
+
       it('does not init CI Visibility when running in parallel mode', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('it should not report tests')
           done(error)
-        }, ({ url }) => url === '/api/v2/citestcycle')
+        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
 
         childProcess = fork(testFile, {
           cwd,
@@ -424,7 +457,7 @@ testFrameworks.forEach(({
         it('does not report spans but still runs tests', (done) => {
           receiver.assertMessageReceived(() => {
             done(new Error('Should not create spans'))
-          })
+          }).catch(() => {})
 
           childProcess = fork(startupTestFile, {
             cwd,
@@ -477,7 +510,8 @@ testFrameworks.forEach(({
       it('does not init if DD_API_KEY is not set', (done) => {
         receiver.assertMessageReceived(() => {
           done(new Error('Should not create spans'))
-        })
+        }).catch(() => {})
+
         childProcess = fork(startupTestFile, {
           cwd,
           env: {
@@ -704,7 +738,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'dd-api-key', '1')
@@ -750,7 +784,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'dd-api-key', '1')
@@ -816,19 +850,19 @@ testFrameworks.forEach(({
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request search_commits')
             done(error)
-          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request search_commits')
             done(error)
-          }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+          }, ({ url }) => url === '/api/v2/git/repository/search_commits').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request setting')
             done(error)
-          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request setting')
             done(error)
-          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting').catch(() => {})
 
           receiver.assertPayloadReceived(({ payload }) => {
             const testSpans = payload.flatMap(trace => trace)
@@ -1041,7 +1075,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.notProperty(headers, 'dd-api-key')
@@ -1077,7 +1111,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.notProperty(headers, 'dd-api-key')
