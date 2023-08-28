@@ -97,6 +97,45 @@ moduleType.forEach(({
       await receiver.stop()
     })
 
+    it('does not crash if badly init', (done) => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        DD_CIVISIBILITY_AGENTLESS_URL,
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      receiver.assertPayloadReceived(() => {
+        const error = new Error('it should not report test events')
+        done(error)
+      }, ({ url }) => url.endsWith('/api/v2/citestcycle')).catch(() => {})
+
+      let testOutput
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_SITE: '= invalid = url'
+          },
+          stdio: 'pipe'
+        }
+      )
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', () => {
+        assert.notInclude(testOutput, 'TypeError')
+        assert.include(testOutput, '3 of 4 failed')
+        done()
+      })
+    })
+
     it('catches errors in hooks', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
