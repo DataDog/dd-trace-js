@@ -53,10 +53,10 @@ import getPort from 'get-port';
 
   client.getUnary({ first: 'foobar' }, () => {})
 
-  client.close()
-
   if (server) {
+    console.log('got inside')
     server.forceShutdown()
+    client.close()
   }
 })()
 console.log(1231, 'gonna exit')
