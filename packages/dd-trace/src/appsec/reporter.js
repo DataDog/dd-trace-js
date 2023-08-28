@@ -3,7 +3,12 @@
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
-const { incWafInitMetric, updateWafRequestsTag, incWafUpdatesMetric, incWafRequestsMetric } = require('./telemetry')
+const {
+  incrementWafInitMetric,
+  updateWafRequestsTag,
+  incrementWafUpdatesMetric,
+  incrementWafRequestsMetric
+} = require('./telemetry')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -73,7 +78,7 @@ function reportInitMetrics ({ wafVersion, eventRules }) {
 
   metricsQueue.set('manual.keep', 'true')
 
-  incWafInitMetric(wafVersion, eventRules.version)
+  incrementWafInitMetric(wafVersion, eventRules.version)
 }
 
 function reportMetrics (metrics) {
@@ -142,7 +147,7 @@ function reportBlock (req) {
 }
 
 function reportUpdateRuleData (wafVersion, eventRulesVersion) {
-  incWafUpdatesMetric(wafVersion, eventRulesVersion)
+  incrementWafUpdatesMetric(wafVersion, eventRulesVersion)
 }
 
 function finishRequest (req, res) {
@@ -155,7 +160,7 @@ function finishRequest (req, res) {
     metricsQueue.clear()
   }
 
-  incWafRequestsMetric(req)
+  incrementWafRequestsMetric(req)
 
   if (!rootSpan.context()._tags['appsec.event']) return
 

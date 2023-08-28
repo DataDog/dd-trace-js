@@ -23,10 +23,10 @@ describe('reporter', () => {
     }
 
     telemetry = {
-      incWafInitMetric: sinon.stub(),
+      incrementWafInitMetric: sinon.stub(),
       updateWafRequestsTag: sinon.stub(),
-      incWafUpdatesMetric: sinon.stub(),
-      incWafRequestsMetric: sinon.stub()
+      incrementWafUpdatesMetric: sinon.stub(),
+      incrementWafRequestsMetric: sinon.stub()
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
@@ -101,13 +101,13 @@ describe('reporter', () => {
       expect(Reporter.metricsQueue.get('manual.keep')).to.be.eq('true')
     })
 
-    it('should call incWafInitMetric', () => {
+    it('should call incrementWafInitMetric', () => {
       Reporter.reportInitMetrics({
         wafVersion,
         eventRules
       })
 
-      expect(telemetry.incWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, eventRules.version)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, eventRules.version)
     })
   })
 
@@ -274,10 +274,10 @@ describe('reporter', () => {
   })
 
   describe('reportUpdateRuleData', () => {
-    it('should call incWafUpdatesMetric', () => {
+    it('should call incrementWafUpdatesMetric', () => {
       Reporter.reportUpdateRuleData('0.0.1', '0.0.2')
 
-      expect(telemetry.incWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
+      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
     })
   })
 
@@ -375,12 +375,12 @@ describe('reporter', () => {
       })
     })
 
-    it('should call incWafRequestsMetric', () => {
+    it('should call incrementWafRequestsMetric', () => {
       const req = {}
       const res = {}
       Reporter.finishRequest(req, res)
 
-      expect(telemetry.incWafRequestsMetric).to.be.calledOnceWithExactly(req)
+      expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })

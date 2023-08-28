@@ -92,7 +92,7 @@ function trackWafDurations (metrics) {
   }
 }
 
-function incWafInitMetric (wafVersion, rulesVersion) {
+function incrementWafInitMetric (wafVersion, rulesVersion) {
   if (!enabled) return
 
   const tag = getVersionsTag(wafVersion, rulesVersion)
@@ -100,7 +100,7 @@ function incWafInitMetric (wafVersion, rulesVersion) {
   appsecMetrics.count('waf.init', tag).inc()
 }
 
-function incWafUpdatesMetric (wafVersion, rulesVersion) {
+function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
   if (!enabled) return
 
   const tag = getVersionsTag(wafVersion, rulesVersion)
@@ -108,7 +108,7 @@ function incWafUpdatesMetric (wafVersion, rulesVersion) {
   appsecMetrics.count('waf.updates', tag).inc()
 }
 
-function incWafRequestsMetric (req) {
+function incrementWafRequestsMetric (req) {
   if (!req || !enabled) return
 
   const store = getStore(req)
@@ -126,7 +126,7 @@ module.exports = {
   disable,
 
   updateWafRequestsTag,
-  incWafInitMetric,
-  incWafUpdatesMetric,
-  incWafRequestsMetric
+  incrementWafInitMetric,
+  incrementWafUpdatesMetric,
+  incrementWafRequestsMetric
 }
