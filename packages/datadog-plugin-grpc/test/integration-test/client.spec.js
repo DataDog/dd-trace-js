@@ -41,13 +41,13 @@ describe('esm', () => {
         console.log(12312321, checkSpansForServiceName(payload, 'grpc.client') === true)
         console.log(12312321, headers.host === `127.0.0.1:${agent.port}`)
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
+        console.log(1, 'check something')
       })
-
+      console.log(2, 'check something')
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
-
+      console.log(3, 'check something')
       await res
-
-      console.log('check something')
+      console.log(4, 'check something')
     }).timeout(50000)
   })
 })
