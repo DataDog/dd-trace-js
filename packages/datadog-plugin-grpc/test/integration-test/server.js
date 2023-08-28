@@ -4,7 +4,14 @@ const protoLoader = require('@grpc/proto-loader')
 const path = require('path')
 const getPort = require('get-port')
 
-console.log(1312312, 'commonJS');
+let port
+
+getPort().then(newPort => {
+  port = newPort
+})
+
+console.log(1312312, 'commonJS')
+console.log(1312312, 'port ', port);
 
 (async () => {
   const parentDirectoryPath = path.resolve(__dirname, '..')
@@ -12,7 +19,6 @@ console.log(1312312, 'commonJS');
   console.log('Parent Directory Path:', parentDirectoryPath)
 
   let server
-  const port = await getPort()
 
   function buildClient (service, callback) {
     service = Object.assign(
