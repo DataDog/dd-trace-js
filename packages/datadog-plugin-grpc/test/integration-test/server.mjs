@@ -56,7 +56,10 @@ import getPort from 'get-port';
   if (server) {
     console.log('got inside')
     server.forceShutdown()
-    client.cancel()
+    // client.cancel()
   }
+
+  console.log(1231, 'gonna exit')
+  process.exit(0)
 })()
 console.log(1231, 'gonna exit')
