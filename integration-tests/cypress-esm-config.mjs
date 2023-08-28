@@ -12,9 +12,9 @@ async function runCypress () {
           })
         }
       },
-      video: false
-    },
-    quiet: true
+      video: false,
+      screenshotOnRunFailure: false
+    }
   })
 }
 
