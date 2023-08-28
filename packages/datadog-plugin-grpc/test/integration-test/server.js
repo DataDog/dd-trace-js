@@ -6,10 +6,12 @@ const getPort = require('get-port')
 
 let port
 
-getPort().then(newPort => {
-  port = newPort
-})
+// getPort().then(newPort => {
+//   port = newPort
+// })
 
+
+port = await getPort()
 console.log(1312312, 'commonJS')
 console.log(1312312, 'port ', port);
 
