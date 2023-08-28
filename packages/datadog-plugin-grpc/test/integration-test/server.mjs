@@ -57,3 +57,5 @@ import getPort from 'get-port';
     server.forceShutdown()
   }
 })()
+console.log(1231, 'gonna exit')
+process.exit(0)
