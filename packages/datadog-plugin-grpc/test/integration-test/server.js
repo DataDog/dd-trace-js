@@ -6,12 +6,26 @@ const getPort = require('get-port')
 
 let port
 
-// getPort().then(newPort => {
-//   port = newPort
-// })
+function assignPort (callback) {
+  getPort().then(newPort => {
+    // Assign the newPort value to the global 'port' variable
+    port = newPort
+    callback()
+  }).catch(error => {
+    console.error('Error finding an available port:', error)
+    callback(error)
+  })
+}
 
+assignPort(() => {
+  // This callback will be executed after port is assigned
+  console.log(`Port assigned: ${port}`)
 
-port = await getPort()
+  // Continue with the rest of your code that depends on 'port'
+  // ... rest of your code ...
+})
+
+// port = await getPort()
 console.log(1312312, 'commonJS')
 console.log(1312312, 'port ', port);
 
