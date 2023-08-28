@@ -25,6 +25,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
+const NoopTracer = require('../../dd-trace/src/noop/tracer')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -119,10 +120,32 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
   })
 }
 
+const noopTask = {
+  'dd:testSuiteStart': () => {
+    return null
+  },
+  'dd:beforeEach': () => {
+    return {}
+  },
+  'dd:afterEach': () => {
+    return null
+  },
+  'dd:addTags': () => {
+    return null
+  }
+}
+
 module.exports = (on, config) => {
   let isTestsSkipped = false
   const skippedTests = []
   const tracer = require('../../dd-trace')
+
+  // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
+  if (tracer._tracer instanceof NoopTracer) {
+    // We still need to register these tasks or the support file will fail
+    return on('task', noopTask)
+  }
+
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const {
