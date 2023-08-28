@@ -188,6 +188,14 @@ function spawnProc (filename, options = {}, stdioHandler) {
   })
 }
 
+async function createSandboxForNext (dependencies = [],
+  isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
+  const sandbox = await createSandbox(dependencies, isGitRepo, integrationTestsPaths)
+  const { NODE_OPTIONS, ...restOfEnv } = process.env
+  await exec(`yarn exec next build`, { cwd: sandbox.folder, env: restOfEnv })
+  return sandbox
+}
+
 async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
@@ -293,6 +301,7 @@ module.exports = {
   FakeAgent,
   spawnProc,
   createSandbox,
+  createSandboxForNext,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,

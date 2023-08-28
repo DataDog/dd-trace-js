@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandbox,
+  createSandboxForNext,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -16,7 +16,8 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['next', 'react', 'react-dom'], false, ['./packages/datadog-plugin-next/test/*'])
+    sandbox = await createSandboxForNext(['next', 'react', 'react-dom'],
+      false, ['./packages/datadog-plugin-next/test/integration-test/*'])
   })
 
   after(async () => {
@@ -34,7 +35,7 @@ describe('esm', () => {
 
   context('next', () => {
     it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
