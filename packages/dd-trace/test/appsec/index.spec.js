@@ -551,18 +551,22 @@ describe('AppSec Index', () => {
       })
 
       it('Should call waf if resolvers is well formatted', () => {
-        const resolvers = { user: [ { id: '1234' } ] }
+        const context = {
+          resolvers: {
+            user: [ { id: '1234' } ]
+          }
+        }
         const rootSpan = {}
 
         sinon.stub(waf, 'run')
         sinon.stub(storage, 'getStore').returns({ req: {} })
         web.root.returns(rootSpan)
 
-        graphqlFinishExecute.publish({ resolvers })
+        graphqlFinishExecute.publish({ context })
 
         expect(waf.run).to.have.been.calledOnceWithExactly(
           {
-            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers
+            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: context.resolvers
           },
           {}
         )

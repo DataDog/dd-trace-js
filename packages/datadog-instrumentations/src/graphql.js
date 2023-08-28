@@ -175,7 +175,7 @@ function wrapExecute (execute) {
           docSource: documentSources.get(document)
         })
 
-        const context = { source, asyncResource, fields: {}, resolvers: {} }
+        const context = { source, asyncResource, fields: {} }
 
         contexts.set(contextValue, context)
 
@@ -188,31 +188,9 @@ function wrapExecute (execute) {
             executeErrorCh.publish(error)
           }
 
-          finishExecuteCh.publish({ res, args, resolvers: context.resolvers })
+          finishExecuteCh.publish({ res, args, context })
         })
       })
-    }
-  }
-}
-
-function addResolver (resolvers, info, args) {
-  if (!resolvers || !info) {
-    return
-  }
-
-  if (info.rootValue && !info.rootValue[info.fieldName]) {
-    return
-  }
-
-  if (!resolvers[info.fieldName]) {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName] = [args]
-    } else {
-      resolvers[info.fieldName] = []
-    }
-  } else {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName].push(args)
     }
   }
 }
@@ -227,11 +205,7 @@ function wrapResolve (resolve) {
 
     if (!context) return resolve.apply(this, arguments)
 
-    const resolvers = context.resolvers
-
-    addResolver(resolvers, info, args)
-
-    const field = assertField(context, info)
+    const field = assertField(context, info, args)
 
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
@@ -276,7 +250,7 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info) {
+function assertField (context, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
@@ -298,7 +272,8 @@ function assertField (context, info) {
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context
+          context,
+          args
         })
       })
 

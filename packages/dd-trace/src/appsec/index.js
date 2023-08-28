@@ -160,11 +160,13 @@ function onPassportVerify ({ credentials, user }) {
   passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
-function onGraphqlFinishExecute ({ resolvers }) {
+function onGraphqlFinishExecute ({ context }) {
   const store = storage.getStore()
-  const req = store && store.req
+  const req = store?.req
 
   if (!req) return
+
+  const resolvers = context?.resolvers
 
   if (!resolvers || typeof resolvers !== 'object') return
 
