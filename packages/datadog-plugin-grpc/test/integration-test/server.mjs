@@ -5,9 +5,8 @@ import * as protoLoader from '@grpc/proto-loader'
 import path from 'path'
 import getPort from 'get-port'
 
-tracer.init()
-
 (async () => {
+  tracer.init()
   const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
   const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
 
