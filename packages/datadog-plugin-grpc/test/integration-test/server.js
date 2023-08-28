@@ -1,4 +1,4 @@
-require('dd-trace').init()
+require('../../dd-trace').init()
 const grpc = require('@grpc/grpc-js')
 const protoLoader = require('@grpc/proto-loader')
 const path = require('path')
