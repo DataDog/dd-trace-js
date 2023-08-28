@@ -57,5 +57,5 @@ if (server) {
 }
 
 // this is to gracefully exit the process and flush the traces to agent which doesn't happen using process.exit()
-// and when manually closing the client
+// or when manually closing the client and letting the process finish by itself
 process.send({ port })
