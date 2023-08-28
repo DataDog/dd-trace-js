@@ -35,13 +35,12 @@ describe('esm', () => {
   context('grpc', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
-        console.log(44, headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.js', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
       await res
     }).timeout(20000)
