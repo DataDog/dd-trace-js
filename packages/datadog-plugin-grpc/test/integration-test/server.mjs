@@ -28,20 +28,20 @@ function buildClient (service, callback) {
 
   return new Promise((resolve, reject) => {
     if (server.bindAsync) {
-      server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+      server.bindAsync(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
         if (err) return reject(err)
 
         server.addService(TestService.service, service)
         server.start()
 
-        resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        resolve(new TestService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
       })
     } else {
-      server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
+      server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
       server.addService(TestService.service, service)
       server.start()
 
-      resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+      resolve(new TestService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
     }
   })
 }
@@ -56,6 +56,6 @@ if (server) {
   await server.forceShutdown()
 }
 
-// this is to gracefully exit the process and flush the traces to agent which doesn't happen using process.exit()
+// this is to gracefully exit the process and flush the traces to the agent which doesn't happen using process.exit()
 // or when manually closing the client and letting the process finish by itself
 process.send({ port })
