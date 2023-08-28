@@ -28,27 +28,22 @@ import getPort from 'get-port';
     server = new grpc.Server()
 
     return new Promise((resolve, reject) => {
-      // if (server.bindAsync) {
-      //   server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
-      //     if (err) return reject(err)
+      if (server.bindAsync) {
+        server.bindAsync(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure(), (err) => {
+          if (err) return reject(err)
 
-      //     server.addService(TestService.service, service)
-      //     server.start()
+          server.addService(TestService.service, service)
+          server.start()
 
-      //     resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-      //   })
-      // } else {
-      //   server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
-      //   server.addService(TestService.service, service)
-      //   server.start()
+          resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        })
+      } else {
+        server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
+        server.addService(TestService.service, service)
+        server.start()
 
-      //   resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-      // }
-      server.bind(`0.0.0.0:${port}`, grpc.ServerCredentials.createInsecure())
-      server.addService(TestService.service, service)
-      server.start()
-
-      resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+      }
     })
   }
 
