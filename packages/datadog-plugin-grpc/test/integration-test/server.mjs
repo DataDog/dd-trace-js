@@ -58,4 +58,3 @@ import getPort from 'get-port';
   }
 })()
 console.log(1231, 'gonna exit')
-process.exit(0)

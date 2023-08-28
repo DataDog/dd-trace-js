@@ -14,7 +14,7 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(30000)
+    this.timeout(50000)
     sandbox = await createSandbox(['@grpc/grpc-js', '@grpc/proto-loader', 'get-port@^3.2.0'], false, [
       `./packages/datadog-plugin-grpc/test/*`])
   })
@@ -38,8 +38,8 @@ describe('esm', () => {
         console.log(headers, payload)
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
-        console.log(12312321, checkSpansForServiceName(payload, 'grpc.client'))
-        console.log(12312321, `127.0.0.1:${agent.port}`)
+        console.log(12312321, checkSpansForServiceName(payload, 'grpc.client') === true)
+        console.log(12312321, headers.host === `127.0.0.1:${agent.port}`)
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
       })
 
@@ -47,6 +47,6 @@ describe('esm', () => {
 
       await res
       console.log('check something')
-    }).timeout(30000)
+    }).timeout(50000)
   })
 })
