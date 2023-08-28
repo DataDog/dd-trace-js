@@ -33,7 +33,6 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 const isOldNode = semver.satisfies(process.version, '<=12')
 
 const mochaCommonOptions = {
-  dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
@@ -53,6 +52,7 @@ const testFrameworks = [
     ...mochaCommonOptions,
     name: 'mocha',
     testFile: 'ci-visibility/run-mocha.js',
+    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -67,6 +67,7 @@ const testFrameworks = [
     ...mochaCommonOptions,
     name: 'mocha',
     testFile: 'ci-visibility/run-mocha.mjs',
+    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -107,6 +108,11 @@ testFrameworks.forEach(({
   coverageMessage,
   type
 }) => {
+  // to avoid this error: @istanbuljs/esm-loader-hook@0.2.0: The engine "node"
+  // is incompatible with this module. Expected version ">=16.12.0". Got "14.21.3"
+  if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
+    return
+  }
   describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
