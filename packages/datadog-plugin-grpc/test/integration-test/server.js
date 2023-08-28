@@ -1,8 +1,9 @@
-import 'dd-trace/init.js'
-import * as grpc from '@grpc/grpc-js'
-import * as protoLoader from '@grpc/proto-loader'
-import path from 'path'
-import getPort from 'get-port';
+const grpc = require('@grpc/grpc-js')
+const protoLoader = require('@grpc/proto-loader')
+const path = require('path')
+const getPort = require('get-port')
+
+console.log(1312312, 'commonJS');
 
 (async () => {
   const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
