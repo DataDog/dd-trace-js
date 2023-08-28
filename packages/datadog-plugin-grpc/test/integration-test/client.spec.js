@@ -32,7 +32,7 @@ describe('esm', () => {
     await agent.stop()
   })
 
-  context('graphql', () => {
+  context('grpc', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         console.log(44, headers, payload)
