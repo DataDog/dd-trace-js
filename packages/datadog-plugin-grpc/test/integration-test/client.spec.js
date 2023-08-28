@@ -15,7 +15,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['@grpc/grpc-js', '@grpc/proto-loader', 'get-port'], false, [
+    sandbox = await createSandbox(['@grpc/grpc-js', '@grpc/proto-loader'], false, [
       `./packages/datadog-plugin-grpc/test/*`])
   })
 
