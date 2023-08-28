@@ -41,7 +41,7 @@ describe('esm', () => {
         assert.strictEqual(checkSpansForServiceName(payload, 'grpc.server'), true)
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.js', agent.port)
 
       await res
     }).timeout(20000)
