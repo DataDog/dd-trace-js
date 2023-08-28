@@ -46,6 +46,7 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
       await res
+
       console.log('check something')
     }).timeout(50000)
   })
