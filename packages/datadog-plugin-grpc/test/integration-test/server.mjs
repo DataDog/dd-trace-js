@@ -54,8 +54,8 @@ client.getUnary({ first: 'foobar' }, () => {})
 
 if (server) {
   await server.forceShutdown()
-  await client.close()
 }
 
-// this is to gracefully exit the process which doesn't happen with using process.exit()
-// process.send({ port })
+// this is to gracefully exit the process and flush the traces to agent which doesn't happen using process.exit()
+// and when manually closing the client
+process.send({ port })
