@@ -54,8 +54,7 @@ function start (aConfig, debug = false) {
 
   const heartbeatInterval = config.telemetry.heartbeatInterval
   if (heartbeatInterval) {
-    interval = setInterval(sendLogs, heartbeatInterval)
-    interval.unref()
+    interval = setInterval(sendLogs, heartbeatInterval).unref()
   }
 }
 
