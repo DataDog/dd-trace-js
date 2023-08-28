@@ -1,8 +1,11 @@
-import 'dd-trace/init.js'
+// import 'dd-trace/init.js'
+import tracer from 'dd-trace'
 import * as grpc from '@grpc/grpc-js'
 import * as protoLoader from '@grpc/proto-loader'
 import path from 'path'
-import getPort from 'get-port';
+import getPort from 'get-port'
+
+tracer.init()
 
 (async () => {
   const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
@@ -58,6 +61,8 @@ import getPort from 'get-port';
     server.forceShutdown()
     // client.cancel()
   }
+
+  await tracer.flush()
 
   console.log(1231, 'gonna exit')
   process.exit(0)
