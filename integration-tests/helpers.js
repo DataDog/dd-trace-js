@@ -167,7 +167,6 @@ function spawnProc (filename, options = {}, stdioHandler) {
       })
       .on('error', reject)
       .on('exit', code => {
-        console.log('on exit code: ', code)
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
