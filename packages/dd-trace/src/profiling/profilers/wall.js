@@ -170,6 +170,16 @@ class NativeWallProfiler {
     }
   }
 
+  _reportV8bug (maybeBug) {
+    const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
+    const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
+    this._logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    // report as runtime metric (can be removed in the future when telemetry is mature)
+    runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
+    // report as telemetry metric
+    profilerTelemetryMetrics.count(metric, [tag]).inc()
+  }
+
   _stop (restart) {
     if (!this._started) return
     if (this._codeHotspotsEnabled) {
@@ -181,18 +191,7 @@ class NativeWallProfiler {
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
-        const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
-        if (v8BugDetected === 1) {
-          const metric = 'v8_cpu_profiler_maybe_stuck_event_loop'
-          this._logger?.warn('Wall profiler: possible v8 profiler stuck event loop detected.')
-          runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
-          profilerTelemetryMetrics.count(metric, [tag]).inc()
-        } else if (v8BugDetected === 2) {
-          const metric = 'profiler.v8_cpu_profiler_stuck_event_loop'
-          this._logger?.warn('Wall profiler: v8 profiler stuck event loop detected.')
-          runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
-          profilerTelemetryMetrics.count(metric, [tag]).inc()
-        }
+        this._reportV8bug(v8BugDetected === 1)
       }
     }
     return profile
