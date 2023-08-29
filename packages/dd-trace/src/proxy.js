@@ -2,13 +2,14 @@
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const Config = require('./config')
-const metrics = require('./metrics')
+const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
+const dogstatsd = require('./dogstatsd')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -16,6 +17,7 @@ class Tracer extends NoopProxy {
 
     this._initialized = false
     this._pluginManager = new PluginManager(this)
+    this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
   }
 
   init (options) {
@@ -24,14 +26,46 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
-      const config = new Config(options) // TODO: support dynamic config
+      const config = new Config(options) // TODO: support dynamic code config
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        remoteConfig.enable(config)
+      if (config.dogstatsd) {
+        // Custom Metrics
+        this.dogstatsd = new dogstatsd.CustomMetrics({
+          host: config.dogstatsd.hostname,
+          port: config.dogstatsd.port,
+          tags: [
+            // these are the Runtime Metrics default tags
+            // Python also uses these as default Custom Metrics tags
+            `service:${config.tags.service}`,
+            `env:${config.tags.env}`,
+            `version:${config.tags.version}`
+          ]
+        })
+
+        setInterval(() => {
+          this.dogstatsd.flush()
+        }, 10 * 1000).unref()
       }
 
-      if (config.isGCPFunction) {
-        require('./serverless').maybeStartServerlessMiniAgent()
+      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+        const rc = remoteConfig.enable(config)
+
+        rc.on('APM_TRACING', (action, conf) => {
+          if (action === 'unapply') {
+            config.configure({}, true)
+          } else {
+            config.configure(conf.lib_config, true)
+          }
+
+          if (config.tracing) {
+            this._tracer.configure(config)
+            this._pluginManager.configure(config)
+          }
+        })
+      }
+
+      if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {
+        require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
       if (config.profiling.enabled) {
@@ -45,10 +79,13 @@ class Tracer extends NoopProxy {
       }
 
       if (config.runtimeMetrics) {
-        metrics.start(config)
+        runtimeMetrics.start(config)
       }
 
       if (config.tracing) {
+        // TODO: This should probably not require tracing to be enabled.
+        telemetry.start(config, this._pluginManager)
+
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
           require('./appsec').enable(config)
@@ -63,7 +100,6 @@ class Tracer extends NoopProxy {
 
         this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
-        telemetry.start(config, this._pluginManager)
 
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')

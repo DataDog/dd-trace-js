@@ -90,7 +90,7 @@ describe('plugins/util/web', () => {
         }
       })
 
-      expect(config.headers).to.include('test')
+      expect(config.headers).to.deep.equal([['test', undefined]])
       expect(config.validateStatus(200)).to.equal(false)
       expect(config).to.have.property('hooks')
       expect(config.hooks.request()).to.equal('test')
@@ -250,7 +250,10 @@ describe('plugins/util/web', () => {
       })
 
       it('should add configured headers to the span tags', () => {
-        config.headers = ['host', 'server']
+        req.headers['req'] = 'incoming'
+        req.headers['res'] = 'outgoing'
+        config.headers = ['host', 'req:http.req', 'server', 'res:http.res']
+        config = web.normalizeConfig(config)
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
           const tags = span.context()._tags
@@ -259,7 +262,9 @@ describe('plugins/util/web', () => {
 
           expect(tags).to.include({
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
-            [`${HTTP_RESPONSE_HEADERS}.server`]: 'test'
+            'http.req': 'incoming',
+            [`${HTTP_RESPONSE_HEADERS}.server`]: 'test',
+            'http.res': 'outgoing'
           })
         })
       })

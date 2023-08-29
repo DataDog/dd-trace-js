@@ -3,6 +3,9 @@
 const { storage } = require('../../../../datadog-core')
 
 const dc = require('../../../../diagnostics_channel')
+const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
+const { WEB } = require('../../../../../ext/types')
+const runtimeMetrics = require('../../runtime_metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -41,13 +44,13 @@ function getSpanContextTags (span) {
 }
 
 function isWebServerSpan (tags) {
-  return tags['span.type'] === 'web'
+  return tags[SPAN_TYPE] === WEB
 }
 
 function endpointNameFromTags (tags) {
-  return tags['resource.name'] || [
-    tags['http.method'],
-    tags['http.route']
+  return tags[RESOURCE_NAME] || [
+    tags[HTTP_METHOD],
+    tags[HTTP_ROUTE]
   ].filter(v => v).join(' ')
 }
 
@@ -81,6 +84,7 @@ class NativeWallProfiler {
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
+    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -99,7 +103,7 @@ class NativeWallProfiler {
 
     if (this._codeHotspotsEnabled && !this._emittedFFMessage && this._logger) {
       this._logger.debug(
-        `Wall profiler: Enable config_trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
+        `Wall profiler: Enable trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
       this._emittedFFMessage = true
     }
 
@@ -120,7 +124,8 @@ class NativeWallProfiler {
       durationMillis: this._flushIntervalMillis,
       sourceMapper: this._mapper,
       withContexts: this._codeHotspotsEnabled,
-      lineNumbers: false
+      lineNumbers: false,
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
     })
 
     if (this._codeHotspotsEnabled) {
@@ -170,7 +175,18 @@ class NativeWallProfiler {
       this._enter()
       this._lastSampleCount = 0
     }
-    return this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
+    const profile = this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
+    if (restart) {
+      const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
+      if (v8BugDetected === 1) {
+        this._logger?.warn('Wall profiler: possible v8 profiler stuck event loop detected.')
+        runtimeMetrics.increment('runtime.node.profiler.v8_cpu_profiler_maybe_stuck_event_loop', undefined, true)
+      } else if (v8BugDetected === 2) {
+        this._logger?.warn('Wall profiler: v8 profiler stuck event loop detected.')
+        runtimeMetrics.increment('runtime.node.profiler.v8_cpu_profiler_stuck_event_loop', undefined, true)
+      }
+    }
+    return profile
   }
 
   profile () {

@@ -5,7 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -40,8 +40,8 @@ describe('Plugin', () => {
         describe('producer', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.send.opName,
-              service: namingSchema.send.serviceName,
+              name: expectedSchema.send.opName,
+              service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs'
@@ -67,7 +67,7 @@ describe('Plugin', () => {
 
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
-            const resourceName = namingSchema.send.opName
+            const resourceName = expectedSchema.send.opName
 
             let error
 
@@ -76,7 +76,7 @@ describe('Plugin', () => {
 
               expect(span).to.include({
                 name: resourceName,
-                service: namingSchema.send.serviceName,
+                service: expectedSchema.send.serviceName,
                 resource: resourceName,
                 error: 1
               })
@@ -121,9 +121,7 @@ describe('Plugin', () => {
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.send
           )
         })
         describe('consumer (eachMessage)', () => {
@@ -140,8 +138,8 @@ describe('Plugin', () => {
 
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs'
@@ -167,7 +165,7 @@ describe('Plugin', () => {
 
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
+                expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -202,8 +200,8 @@ describe('Plugin', () => {
           it('should be instrumented w/ error', async () => {
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
               meta: {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
@@ -232,9 +230,7 @@ describe('Plugin', () => {
               await consumer.run({ eachMessage: () => {} })
               await sendMessages(kafka, testTopic, messages)
             },
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.receive
           )
         })
         describe('consumer (eachBatch)', () => {
@@ -390,7 +386,8 @@ describe('Plugin', () => {
             await consumer.run({
               eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
                 expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
-              } })
+              }
+            })
             setDataStreamsContextSpy.restore()
           })
 

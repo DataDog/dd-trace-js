@@ -18,6 +18,8 @@ const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
 
+const hookFile = 'dd-trace/loader-hook.mjs'
+
 class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
@@ -155,8 +157,8 @@ class FakeAgent extends EventEmitter {
   }
 }
 
-function spawnProc (filename, options = {}) {
-  const proc = fork(filename, options)
+function spawnProc (filename, options = {}, stdioHandler) {
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -168,11 +170,25 @@ function spawnProc (filename, options = {}) {
         if (code !== 0) {
           reject(new Error(`Process exited with status code ${code}.`))
         }
+        resolve()
       })
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
+        stdioHandler(data)
+      }
+      // eslint-disable-next-line no-console
+      console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      // eslint-disable-next-line no-console
+      console.error(data.toString())
+    })
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false) {
+async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -186,7 +202,12 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   await mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
-  await exec(`cp -R ./integration-tests/* ${folder}`)
+
+  integrationTestsPaths.forEach(async (path) => {
+    await exec(`cp -R ${path} ${folder}`)
+    await exec(`sync ${folder}`)
+  })
+
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
     await exec('echo "node_modules/" > .gitignore', { cwd: folder })
@@ -194,7 +215,7 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
+      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
       { cwd: folder }
     )
   }
@@ -205,13 +226,14 @@ async function createSandbox (dependencies = [], isGitRepo = false) {
   }
 }
 
-async function curl (url) {
+async function curl (url, useHttp2 = false) {
   if (typeof url === 'object') {
     if (url.then) {
       return curl(await url)
     }
     url = url.url
   }
+
   return new Promise((resolve, reject) => {
     http.get(url, res => {
       const bufs = []
@@ -251,6 +273,22 @@ function getCiVisEvpProxyConfig (port) {
   }
 }
 
+function checkSpansForServiceName (spans, name) {
+  return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
+}
+
+async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
+  let env = {
+    NODE_OPTIONS: `--loader=${hookFile}`,
+    DD_TRACE_AGENT_PORT: agentPort
+  }
+  env = { ...env, ...additionalEnvArgs }
+  return spawnProc(path.join(cwd, serverFile), {
+    cwd,
+    env
+  }, stdioHandler)
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -258,5 +296,7 @@ module.exports = {
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
-  getCiVisEvpProxyConfig
+  getCiVisEvpProxyConfig,
+  checkSpansForServiceName,
+  spawnPluginIntegrationTestProc
 }

@@ -4,6 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const web = require('../../dd-trace/src/plugins/util/web')
 
 class NextPlugin extends ServerPlugin {
   static get id () {
@@ -16,14 +17,14 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  start ({ req, res }) {
+  bindStart ({ req, res }) {
     const store = storage.getStore()
     const childOf = store ? store.span : store
-    const span = this.tracer.startSpan('next.request', {
+    const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.tracer._service,
+        'service.name': this.config.service || this.serviceName(),
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
@@ -33,9 +34,13 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    this.enter(span, store)
-
     this._requests.set(span, req)
+
+    return { ...store, span }
+  }
+
+  error ({ span, error }) {
+    this.addError(error, span)
   }
 
   finish ({ req, res }) {
@@ -45,6 +50,7 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = span.context()._tags['error']
+    const page = span.context()._tags['next.page']
 
     if (!this.config.validateStatus(res.statusCode) && !error) {
       span.setTag('error', true)
@@ -53,6 +59,8 @@ class NextPlugin extends ServerPlugin {
     span.addTags({
       'http.status_code': res.statusCode
     })
+
+    if (page) web.setRoute(req, page)
 
     this.config.hooks.request(span, req, res)
 

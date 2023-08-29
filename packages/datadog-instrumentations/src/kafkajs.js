@@ -19,15 +19,14 @@ const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
 const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
-addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
-  class Kafka extends obj.Kafka {
+addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
+  class Kafka extends BaseKafka {
     constructor (options) {
       super(options)
       this._brokers = (options.brokers && typeof options.brokers !== 'function')
         ? options.brokers.join(',') : undefined
     }
   }
-  obj.Kafka = Kafka
 
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
@@ -161,5 +160,6 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
         return consumer
       }
   )
-  return obj
+
+  return Kafka
 })

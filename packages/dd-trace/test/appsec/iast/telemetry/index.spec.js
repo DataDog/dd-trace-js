@@ -66,36 +66,46 @@ describe('Telemetry', () => {
         expect(telemetryLogs.start).to.be.calledOnce
       })
 
-      it('should set OFF verbosity if not enabled', () => {
-        defaultConfig.telemetry.enabled = false
-        iastTelemetry.configure(defaultConfig)
-
-        expect(iastTelemetry.enabled).to.be.false
-        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
-        expect(telemetryLogs.start).to.be.called
-      })
-
-      it('should init metrics even if verbosity is OFF', () => {
+      it('should NOT enable telemetry if verbosity is OFF', () => {
         const iastTelemetry = proxyquire('../../../../src/appsec/iast/telemetry', {
           './log': telemetryLogs,
-          '../../../telemetry/metrics': telemetryMetrics,
-          './verbosity': {
-            getVerbosity: () => Verbosity.OFF
-          }
+          '../../../telemetry/metrics': telemetryMetrics
         })
 
         const telemetryConfig = { enabled: true, metrics: true }
         iastTelemetry.configure({
           telemetry: telemetryConfig
-        })
+        }, 'OFF')
 
-        expect(iastTelemetry.enabled).to.be.true
+        expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
-        expect(telemetryMetrics.manager.set).to.be.calledOnce
+        expect(telemetryMetrics.manager.set).to.not.be.called
         expect(telemetryLogs.start).to.be.calledOnce
       })
 
-      it('should not init metrics if metrics not enabled', () => {
+      it('should enable telemetry if metrics not enabled but DD_TELEMETRY_METRICS_ENABLED is undefined', () => {
+        const origTelemetryMetricsEnabled = process.env.DD_TELEMETRY_METRICS_ENABLED
+
+        delete process.env.DD_TELEMETRY_METRICS_ENABLED
+
+        const telemetryConfig = { enabled: true, metrics: false }
+        iastTelemetry.configure({
+          telemetry: telemetryConfig
+        })
+
+        expect(iastTelemetry.enabled).to.be.true
+        expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
+        expect(telemetryMetrics.manager.set).to.be.calledOnce
+        expect(telemetryLogs.start).to.be.calledOnce
+
+        process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabled
+      })
+
+      it('should not enable telemetry if metrics not enabled but DD_TELEMETRY_METRICS_ENABLED is defined', () => {
+        const origTelemetryMetricsEnabled = process.env.DD_TELEMETRY_METRICS_ENABLED
+
+        process.env.DD_TELEMETRY_METRICS_ENABLED = 'false'
+
         const telemetryConfig = { enabled: true, metrics: false }
         iastTelemetry.configure({
           telemetry: telemetryConfig
@@ -105,6 +115,8 @@ describe('Telemetry', () => {
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
         expect(telemetryMetrics.manager.set).to.not.be.called
         expect(telemetryLogs.start).to.be.calledOnce
+
+        process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabled
       })
     })
 

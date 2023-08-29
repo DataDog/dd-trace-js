@@ -11,8 +11,6 @@ const { DD_MAJOR } = require('../../../version')
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
-const namingSchema = require('./naming')
-
 describe('Plugin', () => {
   let grpc
   let port
@@ -98,22 +96,39 @@ describe('Plugin', () => {
               return agent.close({ ritmReset: false })
             })
 
+            withPeerService(
+              () => tracer,
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              'test.TestService', 'rpc.service')
+
+            withNamingSchema(
+              async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+                client.getUnary({ first: 'foobar' }, () => {})
+              },
+              {
+                v0: {
+                  opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.client',
+                  serviceName: 'test'
+                },
+                v1: {
+                  opName: 'grpc.client.request',
+                  serviceName: 'test'
+                }
+              }
+            )
+
             it('should handle `unary` calls', async () => {
               const client = await buildClient({
                 getUnary: (_, callback) => callback()
               })
-
-              withPeerService(
-                () => tracer,
-                (done) => client.getUnary({ first: 'foobar' }, () => done()),
-                'test.TestService', 'rpc.service')
-
-              withNamingSchema(
-                (done) => client.getUnary({ first: 'foobar' }, () => done()),
-                () => namingSchema.client.opName,
-                () => namingSchema.client.serviceName,
-                'test'
-              )
 
               client.getUnary({ first: 'foobar' }, () => {})
               return agent

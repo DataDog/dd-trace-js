@@ -9,7 +9,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const nodeMajor = parseInt(process.versions.node.split('.')[0])
 const pkgs = nodeMajor > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
-const namingSchema = require('./naming')
+const { DD_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let grpc
@@ -78,17 +78,30 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withNamingSchema(
+          async () => {
+            const client = await buildClient({
+              getUnary: (_, callback) => callback()
+            })
+
+            client.getUnary({ first: 'foobar' }, () => {})
+          },
+          {
+            v0: {
+              opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
+              serviceName: 'test'
+            },
+            v1: {
+              opName: 'grpc.server.request',
+              serviceName: 'test'
+            }
+          }
+        )
+
         it('should handle `unary` calls', async () => {
           const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
-
-          withNamingSchema(
-            (done) => client.getUnary({ first: 'foobar' }, () => done()),
-            () => namingSchema.server.opName,
-            () => namingSchema.server.serviceName,
-            'test'
-          )
 
           client.getUnary({ first: 'foobar' }, () => {})
 

@@ -3,6 +3,7 @@
 const JSZip = require('jszip')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { rawExpectedSchema } = require('./lambda-naming')
 
 const zip = new JSZip()
 
@@ -59,6 +60,26 @@ describe('Plugin', () => {
             agent.close({ ritmReset: false }).then(() => done(err), done)
           })
         })
+
+        withNamingSchema(
+          (done) => lambda.invoke({
+            FunctionName: 'ironmaiden',
+            Payload: '{}',
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+          }, (err) => err && done(err)),
+          rawExpectedSchema.invoke,
+          {
+            desc: 'invoke'
+          }
+        )
+
+        withNamingSchema(
+          (done) => lambda.listFunctions({}, (err) => err && done(err)),
+          rawExpectedSchema.client,
+          {
+            desc: 'client'
+          }
+        )
 
         it('should propagate the tracing context with existing ClientContext and `custom` key', (done) => {
           let receivedContext

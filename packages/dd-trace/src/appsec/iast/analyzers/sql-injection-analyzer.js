@@ -8,7 +8,7 @@ const { getIastContext } = require('../iast-context')
 const { addVulnerability } = require('../vulnerability-reporter')
 const { getNodeModulesPaths } = require('../path-line')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('mysql2', 'sequelize')
+const EXCLUDED_PATHS = getNodeModulesPaths('mysql2', 'sequelize', 'pg-pool')
 
 class SqlInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -23,7 +23,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:sequelize:query:start', ({ sql, dialect }) => {
       const parentStore = storage.getStore()
       if (parentStore) {
-        this.analyze(sql, dialect.toUpperCase())
+        this.analyze(sql, dialect.toUpperCase(), parentStore)
 
         storage.enterWith({ ...parentStore, sqlAnalyzed: true, sequelizeParentStore: parentStore })
       }
@@ -35,6 +35,22 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
         storage.enterWith(store.sequelizeParentStore)
       }
     })
+
+    this.addSub('datadog:pg:pool:query:start', ({ query }) => {
+      const parentStore = storage.getStore()
+      if (parentStore) {
+        this.analyze(query.text, 'POSTGRES', parentStore)
+
+        storage.enterWith({ ...parentStore, sqlAnalyzed: true, pgPoolParentStore: parentStore })
+      }
+    })
+
+    this.addSub('datadog:pg:pool:query:finish', () => {
+      const store = storage.getStore()
+      if (store && store.pgPoolParentStore) {
+        storage.enterWith(store.pgPoolParentStore)
+      }
+    })
   }
 
   _getEvidence (value, iastContext, dialect) {
@@ -42,8 +58,7 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     return { value, ranges, dialect }
   }
 
-  analyze (value, dialect) {
-    const store = storage.getStore()
+  analyze (value, dialect, store = storage.getStore()) {
     if (!(store && store.sqlAnalyzed)) {
       const iastContext = getIastContext(store)
       if (this._isInvalidContext(store, iastContext)) return
