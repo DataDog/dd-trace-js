@@ -15,7 +15,8 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    // next builds slower in the CI, match timeout with unit tests
+    this.timeout(120 * 1000)
     sandbox = await createSandboxForNext(['next', 'react', 'react-dom'],
       false, ['./packages/datadog-plugin-next/test/integration-test/*'])
   })
@@ -42,6 +43,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
       })
-    }).timeout(20000)
+    }).timeout(120 * 1000)
   })
 })
