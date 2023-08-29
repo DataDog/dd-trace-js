@@ -19,7 +19,7 @@ describe('esm', () => {
       `./packages/datadog-plugin-graphql/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
     await sandbox.remove()
   })
 

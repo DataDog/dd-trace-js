@@ -73,7 +73,7 @@ versions.forEach(version => {
 
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
-      before(async () => {
+      before(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)
 
@@ -82,7 +82,7 @@ versions.forEach(version => {
         cwd = sandbox.folder
       })
 
-      after(async () => {
+      after(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)
 
@@ -126,7 +126,7 @@ versions.forEach(version => {
           assert.equal(code, 0)
           done()
         })
-      })
+      }).tim
 
       reportMethods.forEach((reportMethod) => {
         context(`reporting via ${reportMethod}`, () => {

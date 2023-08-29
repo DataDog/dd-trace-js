@@ -17,7 +17,7 @@ describe('esm', () => {
     sandbox = await createSandbox(['winston'], false, [`./packages/datadog-plugin-winston/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
     this.timeout(50000)
     await sandbox.remove()
   })

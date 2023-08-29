@@ -20,7 +20,7 @@ describe('esm', () => {
       `./packages/datadog-plugin-fetch/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
     this.timeout(50000)
     await sandbox.remove()
   })

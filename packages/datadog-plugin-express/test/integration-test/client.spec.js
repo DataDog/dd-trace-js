@@ -18,7 +18,7 @@ describe('esm', () => {
     sandbox = await createSandbox(['express'], false, [`./packages/datadog-plugin-express/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
     this.timeout(50000)
     await sandbox.remove()
   })
