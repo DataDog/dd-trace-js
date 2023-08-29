@@ -323,7 +323,7 @@ describe('dogstatsd', () => {
 
   describe('CustomMetrics', () => {
     it('.gauge()', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.gauge('test.avg', 10, { foo: 'bar' })
       client.flush()
@@ -333,7 +333,7 @@ describe('dogstatsd', () => {
     })
 
     it('.increment()', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count', 10)
       client.flush()
@@ -343,7 +343,7 @@ describe('dogstatsd', () => {
     })
 
     it('.increment() with default', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.increment('test.count')
       client.flush()
@@ -353,7 +353,7 @@ describe('dogstatsd', () => {
     })
 
     it('.decrement()', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count', 10)
       client.flush()
@@ -363,7 +363,7 @@ describe('dogstatsd', () => {
     })
 
     it('.decrement() with default', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.decrement('test.count')
       client.flush()
@@ -373,7 +373,7 @@ describe('dogstatsd', () => {
     })
 
     it('.distribution()', () => {
-      client = new CustomMetrics()
+      client = new CustomMetrics({ dogstatsd: {} })
 
       client.distribution('test.dist', 10)
       client.flush()
