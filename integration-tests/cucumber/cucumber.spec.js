@@ -126,7 +126,7 @@ versions.forEach(version => {
           assert.equal(code, 0)
           done()
         })
-      }).tim
+      }).timeout(50000)
 
       reportMethods.forEach((reportMethod) => {
         context(`reporting via ${reportMethod}`, () => {
