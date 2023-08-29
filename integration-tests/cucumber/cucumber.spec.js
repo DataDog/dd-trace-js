@@ -74,12 +74,18 @@ versions.forEach(version => {
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
       before(async () => {
+        // add an explicit timeout to make tests less flaky
+        this.timeout(50000)
+
         sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert',
           'nyc', '@istanbuljs/esm-loader-hook'], true)
         cwd = sandbox.folder
       })
 
       after(async () => {
+        // add an explicit timeout to make tests less flaky
+        this.timeout(50000)
+
         await sandbox.remove()
       })
 
