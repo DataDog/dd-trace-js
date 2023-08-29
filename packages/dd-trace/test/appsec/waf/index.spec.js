@@ -39,7 +39,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
-    sinon.stub(Reporter, 'reportUpdateRuleData')
+    sinon.stub(Reporter, 'reportWafUpdate')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -89,6 +89,7 @@ describe('WAF Manager', () => {
 
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
+      DDWAF.prototype.constructor.version.returns('4.5.6')
       waf.init(rules, config.appsec)
     })
 
@@ -99,8 +100,6 @@ describe('WAF Manager', () => {
     })
 
     it('should pass waf version when invoking ddwaf.createContext', () => {
-      DDWAF.prototype.constructor.version.returns('4.5.6')
-
       const req = {}
       const context = waf.wafManager.getWAFContext(req)
       expect(context.wafVersion).to.be.eq('4.5.6')
@@ -108,7 +107,11 @@ describe('WAF Manager', () => {
   })
 
   describe('wafManager.update', () => {
+    const wafVersion = '2.3.4'
+
     beforeEach(() => {
+      DDWAF.prototype.constructor.version.returns(wafVersion)
+
       waf.init(rules, config.appsec)
     })
 
@@ -133,7 +136,7 @@ describe('WAF Manager', () => {
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
     })
 
-    it('should call Reporter.reportUpdateRuleData', () => {
+    it('should call Reporter.reportWafUpdate', () => {
       const rules = {
         'rules_data': [
           {
@@ -149,11 +152,9 @@ describe('WAF Manager', () => {
         ]
       }
 
-      const wafVersion = '2.3.4'
-      DDWAF.prototype.constructor.version.returns(wafVersion)
       waf.update(rules)
 
-      expect(Reporter.reportUpdateRuleData).to.be.calledOnceWithExactly(wafVersion, DDWAF.prototype.rulesInfo.version)
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, DDWAF.prototype.rulesInfo.version)
     })
   })
 

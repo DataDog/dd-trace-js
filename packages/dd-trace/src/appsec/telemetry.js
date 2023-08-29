@@ -6,7 +6,7 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAG = Symbol('_dd.appsec.telemetry.waf.result.tag')
 
-const TAG = {
+const tags = {
   REQUEST_BLOCKED: 'request_blocked',
   RULE_TRIGGERED: 'rule_triggered',
   WAF_TIMEOUT: 'waf_timeout',
@@ -19,7 +19,7 @@ const metricsStoreMap = new WeakMap()
 let enabled = false
 
 function enable (telemetryConfig) {
-  enabled = telemetryConfig && telemetryConfig.enabled && telemetryConfig.metrics
+  enabled = telemetryConfig?.enabled && telemetryConfig.metrics
 }
 
 function disable () {
@@ -37,8 +37,8 @@ function getStore (req) {
 
 function getVersionsTag (wafVersion, rulesVersion) {
   return {
-    [TAG.WAF_VERSION]: wafVersion,
-    [TAG.EVENT_RULES_VERSION]: rulesVersion
+    [tags.WAF_VERSION]: wafVersion,
+    [tags.EVENT_RULES_VERSION]: rulesVersion
   }
 }
 
@@ -48,9 +48,9 @@ function getOrCreateMetricTag ({ wafVersion, rulesVersion }, req) {
   let tag = store[DD_TELEMETRY_WAF_RESULT_TAG]
   if (!tag) {
     tag = {
-      [TAG.REQUEST_BLOCKED]: false,
-      [TAG.RULE_TRIGGERED]: false,
-      [TAG.WAF_TIMEOUT]: false,
+      [tags.REQUEST_BLOCKED]: false,
+      [tags.RULE_TRIGGERED]: false,
+      [tags.WAF_TIMEOUT]: false,
 
       ...getVersionsTag(wafVersion, rulesVersion)
     }
@@ -69,13 +69,13 @@ function updateWafRequestsTag (metrics, req) {
   const { requestBlocked, ruleTriggered, wafTimeout } = metrics
 
   if (requestBlocked) {
-    tag[TAG.REQUEST_BLOCKED] = requestBlocked
+    tag[tags.REQUEST_BLOCKED] = requestBlocked
   }
   if (ruleTriggered) {
-    tag[TAG.RULE_TRIGGERED] = ruleTriggered
+    tag[tags.RULE_TRIGGERED] = ruleTriggered
   }
   if (wafTimeout) {
-    tag[TAG.WAF_TIMEOUT] = wafTimeout
+    tag[tags.WAF_TIMEOUT] = wafTimeout
   }
 
   return tag

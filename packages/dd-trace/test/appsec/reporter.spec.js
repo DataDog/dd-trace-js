@@ -81,7 +81,7 @@ describe('reporter', () => {
 
   describe('reportInitMetrics', () => {
     const wafVersion = '0.0.1'
-    const eventRules = {
+    const rulesInfo = {
       loaded: 42,
       failed: 1,
       errors: { error: 'error parsing rule 2' },
@@ -89,25 +89,19 @@ describe('reporter', () => {
     }
 
     it('should add some entries to metricsQueue', () => {
-      Reporter.reportInitMetrics({
-        wafVersion,
-        eventRules
-      })
+      Reporter.reportInitMetrics(wafVersion, rulesInfo)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(42)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors')).to.be.eq(JSON.stringify(eventRules.errors))
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors')).to.be.eq(JSON.stringify(rulesInfo.errors))
       expect(Reporter.metricsQueue.get('manual.keep')).to.be.eq('true')
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportInitMetrics({
-        wafVersion,
-        eventRules
-      })
+      Reporter.reportInitMetrics(wafVersion, rulesInfo)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, eventRules.version)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesInfo.version)
     })
   })
 
@@ -273,9 +267,9 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportUpdateRuleData', () => {
+  describe('reportWafUpdate', () => {
     it('should call incrementWafUpdatesMetric', () => {
-      Reporter.reportUpdateRuleData('0.0.1', '0.0.2')
+      Reporter.reportWafUpdate('0.0.1', '0.0.2')
 
       expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
     })

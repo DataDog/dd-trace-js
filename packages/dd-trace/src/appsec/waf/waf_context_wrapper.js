@@ -8,8 +8,7 @@ class WAFContextWrapper {
     this.ddwafContext = ddwafContext
     this.requiredAddresses = requiredAddresses
     this.wafTimeout = wafTimeout
-    this.rulesInfo = rulesInfo
-    this.rulesVersion = this.rulesInfo.version
+    this.rulesVersion = rulesInfo.version
     this.wafVersion = wafVersion
   }
 

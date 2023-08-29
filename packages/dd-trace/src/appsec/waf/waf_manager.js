@@ -11,7 +11,9 @@ class WAFManager {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
-    this._reportMetrics()
+    this.ddwafVersion = this.ddwaf.constructor.version()
+
+    Reporter.reportInitMetrics(this.ddwafVersion, this.ddwaf.rulesInfo)
   }
 
   _loadDDWAF (rules) {
@@ -28,10 +30,6 @@ class WAFManager {
     }
   }
 
-  _reportMetrics () {
-    Reporter.reportInitMetrics({ wafVersion: this.getWAFVersion(), eventRules: this.ddwaf.rulesInfo })
-  }
-
   getWAFContext (req) {
     let wafContext = contexts.get(req)
 
@@ -41,7 +39,7 @@ class WAFManager {
         this.ddwaf.requiredAddresses,
         this.wafTimeout,
         this.ddwaf.rulesInfo,
-        this.getWAFVersion()
+        this.ddwafVersion
       )
       contexts.set(req, wafContext)
     }
@@ -49,14 +47,10 @@ class WAFManager {
     return wafContext
   }
 
-  getWAFVersion () {
-    return this.ddwaf.constructor.version()
-  }
-
   update (newRules) {
     this.ddwaf.update(newRules)
 
-    Reporter.reportUpdateRuleData(this.getWAFVersion(), this.ddwaf.rulesInfo.version)
+    Reporter.reportWafUpdate(this.ddwafVersion, this.ddwaf.rulesInfo.version)
   }
 
   destroy () {

@@ -69,16 +69,16 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportInitMetrics ({ wafVersion, eventRules }) {
+function reportInitMetrics (wafVersion, rulesInfo) {
   metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
-  metricsQueue.set('_dd.appsec.event_rules.loaded', eventRules.loaded)
-  metricsQueue.set('_dd.appsec.event_rules.error_count', eventRules.failed)
-  if (eventRules.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(eventRules.errors))
+  metricsQueue.set('_dd.appsec.event_rules.loaded', rulesInfo.loaded)
+  metricsQueue.set('_dd.appsec.event_rules.error_count', rulesInfo.failed)
+  if (rulesInfo.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(rulesInfo.errors))
 
   metricsQueue.set('manual.keep', 'true')
 
-  incrementWafInitMetric(wafVersion, eventRules.version)
+  incrementWafInitMetric(wafVersion, rulesInfo.version)
 }
 
 function reportMetrics (metrics) {
@@ -146,7 +146,7 @@ function reportBlock (req) {
   updateWafRequestsTag({ requestBlocked: true }, req)
 }
 
-function reportUpdateRuleData (wafVersion, eventRulesVersion) {
+function reportWafUpdate (wafVersion, eventRulesVersion) {
   incrementWafUpdatesMetric(wafVersion, eventRulesVersion)
 }
 
@@ -185,7 +185,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportBlock,
-  reportUpdateRuleData,
+  reportWafUpdate,
   finishRequest,
   setRateLimit
 }
