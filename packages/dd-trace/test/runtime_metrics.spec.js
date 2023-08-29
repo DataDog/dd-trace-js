@@ -1,6 +1,7 @@
 'use strict'
 
 require('./setup/tap')
+const { DogStatsDClient } = require('../src/dogstatsd')
 
 const os = require('os')
 
@@ -19,6 +20,8 @@ suiteDescribe('runtimeMetrics', () => {
     Client = sinon.spy(function () {
       return client
     })
+
+    Client.generateClientConfig = DogStatsDClient.generateClientConfig
 
     client = {
       gauge: sinon.spy(),
