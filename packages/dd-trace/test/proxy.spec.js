@@ -288,7 +288,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(noopDogStatsD._config().host).to.equal('localhost')
+        expect(noopDogStatsD._config().dogstatsd.hostname).to.equal('localhost')
 
         proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
         const incs = noopDogStatsD._increments()

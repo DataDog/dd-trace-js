@@ -2,7 +2,6 @@
 
 // TODO: capture every second and flush every 10 seconds
 
-const { URL, format } = require('url')
 const v8 = require('v8')
 const os = require('os')
 const { DogStatsDClient } = require('./dogstatsd')
@@ -27,21 +26,7 @@ reset()
 
 module.exports = {
   start (config) {
-    const tags = []
-
-    Object.keys(config.tags)
-      .filter(key => typeof config.tags[key] === 'string')
-      .filter(key => {
-        // Skip runtime-id unless enabled as cardinality may be too high
-        if (key !== 'runtime-id') return true
-        return (config.experimental && config.experimental.runtimeId)
-      })
-      .forEach(key => {
-        // https://docs.datadoghq.com/tagging/#defining-tags
-        const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
-
-        tags.push(`${key}:${value}`)
-      })
+    const clientConfig = DogStatsDClient.generateClientConfig(config)
 
     try {
       nativeMetrics = require('@datadog/native-metrics')
@@ -49,22 +34,6 @@ module.exports = {
     } catch (e) {
       log.error(e)
       nativeMetrics = null
-    }
-
-    const clientConfig = {
-      host: config.dogstatsd.hostname,
-      port: config.dogstatsd.port,
-      tags
-    }
-
-    if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
-    } else if (config.port) {
-      clientConfig.metricsProxyUrl = new URL(format({
-        protocol: 'http:',
-        hostname: config.hostname || 'localhost',
-        port: config.port
-      }))
     }
 
     client = new DogStatsDClient(clientConfig)
