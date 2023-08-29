@@ -649,7 +649,7 @@ export declare interface DogStatsD {
    * Increments a metric by the specified value, optionally specifying tags.
    * @param {string} stat The dot-separated metric name.
    * @param {number} value The amount to increment the stat by.
-   * @param {[tag:string]:string|number} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
   increment(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
 
@@ -657,7 +657,7 @@ export declare interface DogStatsD {
    * Decrements a metric by the specified value, optionally specifying tags.
    * @param {string} stat The dot-separated metric name.
    * @param {number} value The amount to decrement the stat by.
-   * @param {[tag:string]:string|number} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
   decrement(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
 
@@ -665,7 +665,7 @@ export declare interface DogStatsD {
    * Sets a distribution value, optionally specifying tags.
    * @param {string} stat The dot-separated metric name.
    * @param {number} value The amount to increment the stat by.
-   * @param {[tag:string]:string|number} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
   distribution(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
 
@@ -673,7 +673,7 @@ export declare interface DogStatsD {
    * Sets a gauge value, optionally specifying tags.
    * @param {string} stat The dot-separated metric name.
    * @param {number} value The amount to increment the stat by.
-   * @param {[tag:string]:string|number} tags Tags to pass along, such as `[ 'foo:bar' ]`. Values are combined with config.tags.
+   * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
   gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
 
