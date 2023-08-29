@@ -26,21 +26,10 @@ const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_SKIPPING_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { NODE_MAJOR } = require('../../version')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const semver = require('semver')
 
-function getCypressVersion () {
-  const version = process.env.CYPRESS_VERSION
-  // TODO: remove when 2.x support is removed.
-  // This is done because from cypress@>11.2.0 node 12 is not supported
-  if (version === 'latest' && NODE_MAJOR <= 12) {
-    return '11.2.0'
-  }
-  return version
-}
-
-const version = getCypressVersion()
+const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 const moduleType = [
