@@ -51,6 +51,7 @@ describe('express-mongo-sanitize', () => {
           expect(requestBody).to.be.calledOnce
           expect(requestBody.firstCall.args[0].query.param).to.be.equal('paramvalue')
         })
+
         it('it continues working with sanitization request', async () => {
           expect(sanitizeMiddlewareFinished.hasSubscribers).to.be.false
 

@@ -20,6 +20,7 @@ const collectionMethodsWithFilter = [
   'findOneAndReplace',
   'replaceOne'
 ] // findOne is ignored because it calls to find
+
 const collectionMethodsWithTwoFilters = [
   'findOneAndUpdate',
   'updateMany',

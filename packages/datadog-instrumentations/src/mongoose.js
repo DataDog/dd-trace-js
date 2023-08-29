@@ -101,8 +101,9 @@ addHook({
             })
 
             const res = method.apply(this, arguments)
+
+            // if it is not callback, wrap exec method and its then
             if (!callbackWrapped) {
-              // if it is not callback, wrap exec method and its then
               const originalExec = res.exec
 
               res.exec = shimmer.wrap(originalExec, function () {

@@ -27,6 +27,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
   const ranges = []
   const sensitiveRanges = []
   objRanges = objRanges || {}
+
   if (objRanges || loadSensitiveRanges) {
     const cloneObj = Array.isArray(obj) ? [] : {}
     let counter = 0
@@ -85,7 +86,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
           const current = counter++
           const id = `${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_${current}_`
 
-          // this is special, in the final string we should modify "key_value_null|false|true..."
+          // this is special, in the final string we should modify "key_value_[null|false|true]..."
           // by null|false|..... ignoring the beginning and ending quotes
           currentLevelClone[key] = id + val
         } else {

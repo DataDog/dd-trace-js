@@ -37,7 +37,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:mongodb:collection:filter:start', ({ filters }) => {
       const store = storage.getStore()
-      if (store && !store.nosqlAnalyzed && filters && filters.length) {
+      if (store && !store.nosqlAnalyzed && filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
         })
@@ -46,7 +46,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:mongoose:model:filter:start', ({ filters }) => {
       const store = storage.getStore()
-      if (filters && filters.length) {
+      if (filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
         })
@@ -55,9 +55,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       storage.enterWith({ ...store, nosqlAnalyzed: true, mongooseParentStore: store })
     })
 
-    this.addSub('datadog:mongoose:model:filter:finish', ({ filters }) => {
+    this.addSub('datadog:mongoose:model:filter:finish', () => {
       const store = storage.getStore()
-      if (store && store.mongooseParentStore) {
+      if (store?.mongooseParentStore) {
         storage.enterWith(store.mongooseParentStore)
       }
     })
@@ -111,7 +111,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   }
 
   _isVulnerable (value, iastContext) {
-    if (value && value.filter && iastContext) {
+    if (value?.filter && iastContext) {
       let isVulnerable = false
 
       if (this.sanitizedObjects.has(value.filter)) {
@@ -123,7 +123,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
       iterateObjectStrings(value.filter, function (val, nextLevelKeys) {
         const ranges = getRanges(iastContext, val)
-        if (ranges && ranges.length) {
+        if (ranges?.length) {
           const filteredRanges = []
 
           for (let i = 0; i < ranges.length; i++) {
@@ -140,7 +140,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
             }
           }
         }
-      })
+      }, [], 4)
 
       if (isVulnerable) {
         value.rangesToApply = rangesByKey
