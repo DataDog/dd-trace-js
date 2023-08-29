@@ -30,17 +30,7 @@ class Tracer extends NoopProxy {
 
       if (config.dogstatsd) {
         // Custom Metrics
-        this.dogstatsd = new dogstatsd.CustomMetrics({
-          host: config.dogstatsd.hostname,
-          port: config.dogstatsd.port,
-          tags: [
-            // these are the Runtime Metrics default tags
-            // Python also uses these as default Custom Metrics tags
-            `service:${config.tags.service}`,
-            `env:${config.tags.env}`,
-            `version:${config.tags.version}`
-          ]
-        })
+        this.dogstatsd = new dogstatsd.CustomMetrics(config)
 
         setInterval(() => {
           this.dogstatsd.flush()
