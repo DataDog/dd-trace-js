@@ -270,7 +270,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
   })
 }
 
-function prepareTestServerForIastInExpress (description, expressVersion, loadMiddlewares, tests) {
+function prepareTestServerForIastInExpress (description, expressVersion, loadMiddlewares, tests, iastConfig) {
   if (arguments.length === 3) {
     tests = loadMiddlewares
     loadMiddlewares = undefined
@@ -308,7 +308,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
       })
     })
 
-    beforeEachIastTest()
+    beforeEachIastTest(iastConfig)
 
     afterEach(() => {
       iast.disable()

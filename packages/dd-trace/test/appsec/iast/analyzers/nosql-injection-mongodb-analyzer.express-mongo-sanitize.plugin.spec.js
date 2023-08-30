@@ -46,6 +46,17 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            },
+            cb: function (vulnerabilities) {
+              const vulnerability = vulnerabilities[0]
+              let someRedacted = false
+              vulnerability.evidence.valueParts.forEach(valuePart => {
+                if (valuePart.redacted) {
+                  someRedacted = true
+                }
+              })
+
+              expect(someRedacted).to.be.true
             }
           })
 
@@ -79,6 +90,39 @@ describe('nosql injection detection in mongodb - whole feature', () => {
 
             res.end()
           }, 'NOSQL_MONGODB_INJECTION')
+        })
+
+      prepareTestServerForIastInExpress('Test without sanitization middlewares and without redaction', expressVersion,
+        undefined, (testThatRequestHasVulnerability) => {
+          testThatRequestHasVulnerability({
+            fn: async (req, res) => {
+              await collection.find({
+                key: req.query.key
+              })
+              res.end()
+            },
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+            },
+            cb: function (vulnerabilities) {
+              const vulnerability = vulnerabilities[0]
+              let someRedacted = false
+              vulnerability.evidence.valueParts.forEach(valuePart => {
+                if (valuePart.redacted) {
+                  someRedacted = true
+                }
+              })
+
+              expect(someRedacted).to.be.false
+            }
+          })
+        }, {
+          enabled: true,
+          requestSampling: 100,
+          maxConcurrentRequests: 100,
+          maxContextOperations: 100,
+          redactionEnabled: false
         })
 
       withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
