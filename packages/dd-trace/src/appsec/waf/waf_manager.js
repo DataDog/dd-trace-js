@@ -13,7 +13,7 @@ class WAFManager {
     this.ddwaf = this._loadDDWAF(rules)
     this.ddwafVersion = this.ddwaf.constructor.version()
 
-    Reporter.reportInitMetrics(this.ddwafVersion, this.ddwaf.rulesInfo)
+    Reporter.reportWafInit(this.ddwafVersion, this.ddwaf.rulesInfo)
   }
 
   _loadDDWAF (rules) {

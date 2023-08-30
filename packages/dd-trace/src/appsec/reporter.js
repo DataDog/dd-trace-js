@@ -69,7 +69,7 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
-function reportInitMetrics (wafVersion, rulesInfo) {
+function reportWafInit (wafVersion, rulesInfo) {
   metricsQueue.set('_dd.appsec.waf.version', wafVersion)
 
   metricsQueue.set('_dd.appsec.event_rules.loaded', rulesInfo.loaded)
@@ -181,7 +181,7 @@ module.exports = {
   metricsQueue,
   filterHeaders,
   formatHeaderName,
-  reportInitMetrics,
+  reportWafInit,
   reportMetrics,
   reportAttack,
   reportBlock,

@@ -79,7 +79,7 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportInitMetrics', () => {
+  describe('reportWafInit', () => {
     const wafVersion = '0.0.1'
     const rulesInfo = {
       loaded: 42,
@@ -89,7 +89,7 @@ describe('reporter', () => {
     }
 
     it('should add some entries to metricsQueue', () => {
-      Reporter.reportInitMetrics(wafVersion, rulesInfo)
+      Reporter.reportWafInit(wafVersion, rulesInfo)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(42)
@@ -99,7 +99,7 @@ describe('reporter', () => {
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportInitMetrics(wafVersion, rulesInfo)
+      Reporter.reportWafInit(wafVersion, rulesInfo)
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesInfo.version)
     })
