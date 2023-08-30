@@ -14,7 +14,6 @@ describe('mongoose instrumentations', () => {
   iterationRanges.forEach(range => {
     describe(range, () => {
       withVersions('mongoose', ['mongoose'], range, (version) => {
-        // withVersions('mongoose', ['mongoose'], '>=6.0.0 <7', (version) => {
         let Test, dbName, id, mongoose
 
         function connect () {

@@ -135,6 +135,7 @@ describe('express-mongo-sanitize', () => {
       describe('without subscriptions', () => {
         it('it works as expected without modifications', () => {
           expect(sanitizeFinished.hasSubscribers).to.be.false
+
           const objectToSanitize = {
             safeKey: 'safeValue'
           }
@@ -146,6 +147,7 @@ describe('express-mongo-sanitize', () => {
 
         it('it works as expected with modifications', () => {
           expect(sanitizeFinished.hasSubscribers).to.be.false
+
           const objectToSanitize = {
             unsafeKey: {
               '$ne': 'test'
@@ -162,6 +164,7 @@ describe('express-mongo-sanitize', () => {
 
       describe('with subscriptions', () => {
         let subscription
+
         beforeEach(() => {
           subscription = sinon.stub()
           sanitizeFinished.subscribe(subscription)
@@ -174,6 +177,7 @@ describe('express-mongo-sanitize', () => {
 
         it('it works as expected without modifications', () => {
           expect(sanitizeFinished.hasSubscribers).to.be.true
+
           const objectToSanitize = {
             safeKey: 'safeValue'
           }
@@ -186,6 +190,7 @@ describe('express-mongo-sanitize', () => {
 
         it('it works as expected with modifications', () => {
           expect(sanitizeFinished.hasSubscribers).to.be.true
+
           const objectToSanitize = {
             unsafeKey: {
               '$ne': 'test'
