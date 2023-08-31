@@ -6,7 +6,8 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const childProcessChannel = channel('datadog:child_process:execution:start')
+const childProcessChannelStart = channel('datadog:child_process:execution:start')
+const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
 const execMethods = ['exec', 'execFile', 'fork', 'spawn', 'execFileSync', 'execSync', 'spawnSync']
 const names = ['child_process', 'node:child_process']
 names.forEach(name => {
@@ -19,11 +20,25 @@ names.forEach(name => {
 function wrapChildProcessMethod () {
   function wrapMethod (childProcessMethod) {
     return function () {
-      if (childProcessChannel.hasSubscribers && arguments.length > 0) {
+      if (childProcessChannelStart.hasSubscribers && arguments.length > 0) {
         const command = arguments[0]
-        childProcessChannel.publish({ command })
+        childProcessChannelStart.publish({ command })
       }
-      return childProcessMethod.apply(this, arguments)
+
+      let error
+      let ret
+
+      try {
+        ret = childProcessMethod.apply(this, arguments)
+      } catch (err) {
+        error = err
+        throw err
+      } finally {
+        if (childProcessChannelFinish.hasSubscribers && arguments.length > 0) {
+          childProcessChannelFinish.publish({ ret, error })
+        }
+      }
+      return ret
     }
   }
   return wrapMethod

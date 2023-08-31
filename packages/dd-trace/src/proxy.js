@@ -77,12 +77,12 @@ class Tracer extends NoopProxy {
         telemetry.start(config, this._pluginManager)
 
         // dirty require for now so zero appsec code is executed unless explicitly enabled
-        if (config.appsec.enabled) {
-          require('./appsec').enable(config)
-        }
-
         this._tracer = new DatadogTracer(config)
         this.appsec = new AppsecSdk(this._tracer, config)
+
+        if (config.appsec.enabled) {
+          require('./appsec').enable(config, this._tracer)
+        }
 
         if (config.iast.enabled) {
           require('./appsec/iast').enable(config, this._tracer)
