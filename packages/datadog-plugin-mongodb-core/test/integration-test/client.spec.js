@@ -25,7 +25,7 @@ describe('esm', () => {
       `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
     await sandbox.remove()
   })
 
