@@ -4,9 +4,10 @@ const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
 const {
+  bodyParser,
+  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
-  bodyParser,
   passportVerify,
   queryParser
 } = require('./channels')
@@ -39,6 +40,7 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
+    graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -158,6 +160,20 @@ function onPassportVerify ({ credentials, user }) {
   passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
+function onGraphqlFinishExecute ({ context }) {
+  const store = storage.getStore()
+  const req = store?.req
+
+  if (!req) return
+
+  const resolvers = context?.resolvers
+
+  if (!resolvers || typeof resolvers !== 'object') return
+
+  // Don't collect blocking result because it only works in monitor mode.
+  waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers }, req)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
@@ -175,9 +191,10 @@ function disable () {
   remoteConfig.disableWafUpdate()
 
   // Channel#unsubscribe() is undefined for non active channels
+  if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
+  if (graphqlFinishExecute.hasSubscribers) graphqlFinishExecute.unsubscribe(onGraphqlFinishExecute)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
-  if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
