@@ -18,7 +18,7 @@
     "test:appsec": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
     "test:appsec:ci": "nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" -- npm run test:appsec",
     "test:appsec:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\"",
-    "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\" -- npm run test:appsec:plugins",
+    "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
     "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:instrumentations": "mocha --colors -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
