@@ -77,6 +77,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', '127.0.0.1')
     expect(config).to.have.nested.property('dogstatsd.port', '8125')
     expect(config).to.have.property('flushInterval', 2000)
+    expect(config).to.have.property('partialFlushEnabled', true)
     expect(config).to.have.property('flushMinSpans', 1000)
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
@@ -389,6 +390,7 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      partialFlushEnabled: true,
       flushMinSpans: 500,
       runtimeMetrics: true,
       reportHostname: true,
@@ -440,6 +442,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpEnabled', true)
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('partialFlushEnabled', true)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
@@ -504,6 +507,7 @@ describe('Config', () => {
       logger,
       tags,
       flushInterval: 5000,
+      partialFlushEnabled: true,
       flushMinSpans: 500,
       plugins: false
     })
@@ -518,6 +522,7 @@ describe('Config', () => {
     expect(config).to.have.property('logger', logger)
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config).to.have.property('flushInterval', 5000)
+    expect(config).to.have.property('partialFlushEnabled', true)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('plugins', false)
   })
@@ -614,6 +619,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
+    process.env.DD_TRACE_PARTIAL_FLUSH_ENABLED = true
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
@@ -664,6 +670,7 @@ describe('Config', () => {
       runtimeMetrics: false,
       reportHostname: false,
       flushMinSpans: 500,
+      partialFlushEnabled: false,
       service: 'test',
       version: '1.0.0',
       env: 'development',
@@ -724,6 +731,7 @@ describe('Config', () => {
     expect(config).to.have.property('site', 'datadoghq.com')
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config).to.have.property('reportHostname', false)
+    expect(config).to.have.property('partialFlushEnabled', false)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
