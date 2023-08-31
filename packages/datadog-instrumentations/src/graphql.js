@@ -188,7 +188,7 @@ function wrapExecute (execute) {
             executeErrorCh.publish(error)
           }
 
-          finishExecuteCh.publish({ res, args })
+          finishExecuteCh.publish({ res, args, context })
         })
       })
     }
@@ -205,7 +205,7 @@ function wrapResolve (resolve) {
 
     if (!context) return resolve.apply(this, arguments)
 
-    const field = assertField(context, info)
+    const field = assertField(context, info, args)
 
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
@@ -250,7 +250,7 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function assertField (context, info) {
+function assertField (context, info, args) {
   const pathInfo = info && info.path
 
   const path = pathToArray(pathInfo)
@@ -272,7 +272,8 @@ function assertField (context, info) {
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context
+          context,
+          args
         })
       })
 
