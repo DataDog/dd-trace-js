@@ -369,7 +369,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       pubsub:
-        image: ridedott/pubsub-emulator
+        image: ghcr.io/ridedott/pubsub-emulator
         ports:
           - 8081:8081
     env:

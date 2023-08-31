@@ -33,8 +33,8 @@ describe('getJestSuitesToRun', () => {
     ]
     const rootDir = '/workspace/dd-trace-js'
 
-    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(filteredSuites).to.eql([{ path: '/workspace/dd-trace-js/src/e2e.spec.js' }])
+    const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(suitesToRun).to.eql([{ path: '/workspace/dd-trace-js/src/e2e.spec.js' }])
   })
 
   it('returns filtered suites when paths are windows like', () => {
@@ -49,8 +49,8 @@ describe('getJestSuitesToRun', () => {
     ]
     const rootDir = `C:${path.sep}temp${path.sep}dd-trace-js`
 
-    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(filteredSuites).to.eql([
+    const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(suitesToRun).to.eql([
       { path: `C:${path.sep}temp${path.sep}dd-trace-js${path.sep}src${path.sep}e2e.spec.js` }
     ])
   })
@@ -67,9 +67,29 @@ describe('getJestSuitesToRun', () => {
     ]
     const rootDir = '/workspace/dd-trace-js/config/root-config'
 
-    const filteredSuites = getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(filteredSuites).to.eql([
+    const { suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(suitesToRun).to.eql([
       { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
+    ])
+  })
+
+  it('returns the list of skipped suites', () => {
+    const skippableSuites = [
+      'src/unit.spec.js',
+      'src/integration.spec.js',
+      'src/not-in-the-repo-so-will-not-show-up-in-skipped-suites.js'
+    ]
+    const tests = [
+      { path: '/workspace/dd-trace-js/src/unit.spec.js' },
+      { path: '/workspace/dd-trace-js/src/integration.spec.js' },
+      { path: '/workspace/dd-trace-js/src/e2e.spec.js' }
+    ]
+    const rootDir = '/workspace/dd-trace-js'
+
+    const { skippedSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(skippedSuites).to.eql([
+      'src/unit.spec.js',
+      'src/integration.spec.js'
     ])
   })
 })

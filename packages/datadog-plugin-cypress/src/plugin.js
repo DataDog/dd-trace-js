@@ -20,10 +20,12 @@ const {
   finishAllTraceSpans,
   getCoveredFilenamesFromCoverage,
   getTestSuitePath,
-  addIntelligentTestRunnerSpanTags
+  addIntelligentTestRunnerSpanTags,
+  TEST_SKIPPED_BY_ITR
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
+const NoopTracer = require('../../dd-trace/src/noop/tracer')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -118,9 +120,32 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
   })
 }
 
+const noopTask = {
+  'dd:testSuiteStart': () => {
+    return null
+  },
+  'dd:beforeEach': () => {
+    return {}
+  },
+  'dd:afterEach': () => {
+    return null
+  },
+  'dd:addTags': () => {
+    return null
+  }
+}
+
 module.exports = (on, config) => {
   let isTestsSkipped = false
+  const skippedTests = []
   const tracer = require('../../dd-trace')
+
+  // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
+  if (tracer._tracer instanceof NoopTracer) {
+    // We still need to register these tasks or the support file will fail
+    return on('task', noopTask)
+  }
+
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const {
@@ -248,19 +273,23 @@ module.exports = (on, config) => {
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
-    // Get tests that didn't go through `dd:afterEach` and haven't been skipped by ITR
+    // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
     cypressTests.filter(({ title }) => {
+      const cypressTestName = title.join(' ')
+      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+
+      return !isTestFinished
+    }).forEach(({ title }) => {
       const cypressTestName = title.join(' ')
       const isSkippedByItr = testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
-
-      return !isSkippedByItr && !isTestFinished
-    }).forEach(({ title }) => {
-      const skippedTestSpan = getTestSpan(title.join(' '), spec.relative)
+      const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
+      if (isSkippedByItr) {
+        skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
+      }
       skippedTestSpan.finish()
     })
 
@@ -309,7 +338,9 @@ module.exports = (on, config) => {
         {
           isSuitesSkipped: isTestsSkipped,
           isSuitesSkippingEnabled,
-          isCodeCoverageEnabled
+          isCodeCoverageEnabled,
+          skippingType: 'test',
+          skippingCount: skippedTests.length
         }
       )
 
@@ -320,12 +351,16 @@ module.exports = (on, config) => {
     }
 
     return new Promise(resolve => {
-      if (tracer._tracer._exporter.flush) {
-        tracer._tracer._exporter.flush(() => {
+      const exporter = tracer._tracer._exporter
+      if (!exporter) {
+        return resolve(null)
+      }
+      if (exporter.flush) {
+        exporter.flush(() => {
           resolve(null)
         })
-      } else {
-        tracer._tracer._exporter._writer.flush(() => {
+      } else if (exporter._writer) {
+        exporter._writer.flush(() => {
           resolve(null)
         })
       }
@@ -353,6 +388,7 @@ module.exports = (on, config) => {
       if (testsToSkip.find(test => {
         return testName === test.name && testSuite === test.suite
       })) {
+        skippedTests.push(test)
         isTestsSkipped = true
         return { shouldSkip: true }
       }
@@ -366,7 +402,7 @@ module.exports = (on, config) => {
     'dd:afterEach': ({ test, coverage }) => {
       const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
       if (activeSpan) {
-        if (coverage && tracer._tracer._exporter.exportCoverage && isCodeCoverageEnabled) {
+        if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
           const { _traceId, _spanId } = testSuiteSpan.context()

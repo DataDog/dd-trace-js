@@ -78,24 +78,30 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
+        withNamingSchema(
+          async () => {
+            const client = await buildClient({
+              getUnary: (_, callback) => callback()
+            })
+
+            client.getUnary({ first: 'foobar' }, () => {})
+          },
+          {
+            v0: {
+              opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
+              serviceName: 'test'
+            },
+            v1: {
+              opName: 'grpc.server.request',
+              serviceName: 'test'
+            }
+          }
+        )
+
         it('should handle `unary` calls', async () => {
           const client = await buildClient({
             getUnary: (_, callback) => callback()
           })
-
-          withNamingSchema(
-            (done) => client.getUnary({ first: 'foobar' }, () => done()),
-            {
-              v0: {
-                opName: DD_MAJOR <= 2 ? 'grpc.request' : 'grpc.server',
-                serviceName: 'test'
-              },
-              v1: {
-                opName: 'grpc.server.request',
-                serviceName: 'test'
-              }
-            }
-          )
 
           client.getUnary({ first: 'foobar' }, () => {})
 

@@ -17,6 +17,7 @@ let pluginManager
 let application
 let host
 let interval
+let heartbeatTimeout
 let heartbeatInterval
 let integrations
 const sentIntegrations = new Set()
@@ -153,19 +154,21 @@ function getTelemetryData () {
 //   }
 // }
 
-function heartbeat () {
-  return setTimeout(() => {
-    metricsManager.send(config, application, host)
-    sendData(config, application, host, 'app-heartbeat')
-    heartbeat()
-  }, heartbeatInterval)
-}
-
 function extendedHeartbeat () {
   return setInterval(() => {
     sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
   }, 1000 * 60 * 60 * 24)
 }
+
+function heartbeat (config, application, host) {
+  heartbeatTimeout = setTimeout(() => {
+    metricsManager.send(config, application, host)
+    sendData(config, application, host, 'app-heartbeat')
+    heartbeat(config, application, host)
+  }, heartbeatInterval).unref()
+  return heartbeatTimeout
+}
+
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
     return
@@ -194,6 +197,7 @@ function stop () {
     return
   }
   clearInterval(interval)
+  clearTimeout(heartbeatTimeout)
   process.removeListener('beforeExit', onBeforeExit)
 
   telemetryStopChannel.publish(getTelemetryData())

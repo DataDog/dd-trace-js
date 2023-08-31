@@ -1,6 +1,6 @@
 * @DataDog/dd-trace-js
-/packages/dd-trace/src/appsec/ @DataDog/appsec-js
-/packages/dd-trace/test/appsec/ @DataDog/appsec-js
+/packages/dd-trace/src/appsec/ @DataDog/asm-js
+/packages/dd-trace/test/appsec/ @DataDog/asm-js
 
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js

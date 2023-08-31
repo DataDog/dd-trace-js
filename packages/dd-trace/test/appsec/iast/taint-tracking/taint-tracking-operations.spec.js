@@ -131,6 +131,12 @@ describe('IAST TaintTracking Operations', () => {
       const iastContext = {}
       const transactionId = 'id'
       taintTrackingOperations.createTransaction(transactionId, iastContext)
+      const expected = {
+        value: 'parent',
+        child: {
+          value: 'child'
+        }
+      }
       const obj = {
         value: 'parent',
         child: {
@@ -144,7 +150,7 @@ describe('IAST TaintTracking Operations', () => {
         .calledWithExactly(transactionId, 'child', 'child.value', null)
       expect(taintedUtilsMock.newTaintedString.secondCall).to.have.been
         .calledWithExactly(transactionId, 'parent', 'value', null)
-      expect(result).to.equal(obj)
+      expect(result).to.be.deep.equal(expected)
     })
 
     it('Should call newTaintedString in object keys when keyTainting is true', () => {
