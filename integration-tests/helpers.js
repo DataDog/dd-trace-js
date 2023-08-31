@@ -205,6 +205,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
 
   integrationTestsPaths.forEach(async (path) => {
     await exec(`cp -R ${path} ${folder}`)
+    await exec(`sync ${folder}`)
   })
 
   if (isGitRepo) {
@@ -214,7 +215,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
+      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
       { cwd: folder }
     )
   }

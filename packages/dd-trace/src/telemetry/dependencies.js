@@ -15,6 +15,7 @@ const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host
+let isFirstModule = true
 
 function waitAndSend (config, application, host) {
   if (!immediate) {
@@ -36,7 +37,21 @@ function waitAndSend (config, application, host) {
   }
 }
 
+function loadAllTheLoadedModules () {
+  if (require.cache) {
+    const filenames = Object.keys(require.cache)
+    filenames.forEach(filename => {
+      onModuleLoad({ filename })
+    })
+  }
+}
+
 function onModuleLoad (data) {
+  if (isFirstModule) {
+    isFirstModule = false
+    loadAllTheLoadedModules()
+  }
+
   if (data) {
     let filename = data.filename
     if (filename && filename.startsWith(FILE_URI_START)) {

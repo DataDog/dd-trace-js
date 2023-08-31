@@ -6,9 +6,11 @@ const dc = require('../../../../diagnostics_channel')
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
+const telemetryMetrics = require('../../telemetry/metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 let kSampleCount
 
@@ -168,6 +170,16 @@ class NativeWallProfiler {
     }
   }
 
+  _reportV8bug (maybeBug) {
+    const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
+    const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
+    this._logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    // report as runtime metric (can be removed in the future when telemetry is mature)
+    runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
+    // report as telemetry metric
+    profilerTelemetryMetrics.count(metric, [tag]).inc()
+  }
+
   _stop (restart) {
     if (!this._started) return
     if (this._codeHotspotsEnabled) {
@@ -178,12 +190,8 @@ class NativeWallProfiler {
     const profile = this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
-      if (v8BugDetected === 1) {
-        this._logger?.warn('Wall profiler: possible v8 profiler stuck event loop detected.')
-        runtimeMetrics.increment('runtime.node.profiler.v8_cpu_profiler_maybe_stuck_event_loop', undefined, true)
-      } else if (v8BugDetected === 2) {
-        this._logger?.warn('Wall profiler: v8 profiler stuck event loop detected.')
-        runtimeMetrics.increment('runtime.node.profiler.v8_cpu_profiler_stuck_event_loop', undefined, true)
+      if (v8BugDetected !== 0) {
+        this._reportV8bug(v8BugDetected === 1)
       }
     }
     return profile

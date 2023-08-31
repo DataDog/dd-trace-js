@@ -133,6 +133,39 @@ describe('Plugin', () => {
             }, () => {})
           })
 
+          it('should serialize BigInt without erroring', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection}`
+                const query = `{"_id":"9999999999999999999999"}`
+
+                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
+              })
+              .then(done)
+              .catch(done)
+
+            try {
+              server.command(`test.${collection}`, {
+                find: `test.${collection}`,
+                query: {
+                  _id: 9999999999999999999999n
+                }
+              }, () => {})
+            } catch (err) {
+              // It appears that most versions of MongodDB are happy to use a BigInt instance.
+              // For example, 2.0.0, 3.2.0, 3.1.10, etc.
+              // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
+              if (err.message.includes('Decimal128')) {
+                // eslint-disable-next-line no-console
+                console.log('This version of mongodb-core does not accept BigInt instances')
+                return done()
+              }
+              done(err)
+            }
+          })
+
           it('should stringify BSON objects', done => {
             const BSON = require(`../../../versions/bson@4.0.0`).get()
             const id = '123456781234567812345678'

@@ -5,6 +5,7 @@ const request = require('./exporters/common/request')
 const dgram = require('dgram')
 const isIP = require('net').isIP
 const log = require('./log')
+const { URL, format } = require('url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -13,9 +14,7 @@ const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
 
 class DogStatsDClient {
-  constructor (options) {
-    options = options || {}
-
+  constructor (options = {}) {
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         url: options.metricsProxyUrl.toString(),
@@ -49,6 +48,8 @@ class DogStatsDClient {
 
   flush () {
     const queue = this._enqueue()
+
+    log.debug(`Flushing ${queue.length} metrics via ${this._httpOptions ? 'HTTP' : 'UDP'}`)
 
     if (this._queue.length === 0) return
 
@@ -141,6 +142,44 @@ class DogStatsDClient {
 
     return socket
   }
+
+  static generateClientConfig (config = {}) {
+    const tags = []
+
+    if (config.tags) {
+      Object.keys(config.tags)
+        .filter(key => typeof config.tags[key] === 'string')
+        .filter(key => {
+          // Skip runtime-id unless enabled as cardinality may be too high
+          if (key !== 'runtime-id') return true
+          return (config.experimental && config.experimental.runtimeId)
+        })
+        .forEach(key => {
+          // https://docs.datadoghq.com/tagging/#defining-tags
+          const value = config.tags[key].replace(/[^a-z0-9_:./-]/ig, '_')
+
+          tags.push(`${key}:${value}`)
+        })
+    }
+
+    const clientConfig = {
+      host: config.dogstatsd.hostname,
+      port: config.dogstatsd.port,
+      tags
+    }
+
+    if (config.url) {
+      clientConfig.metricsProxyUrl = config.url
+    } else if (config.port) {
+      clientConfig.metricsProxyUrl = new URL(format({
+        protocol: 'http:',
+        hostname: config.hostname || 'localhost',
+        port: config.port
+      }))
+    }
+
+    return clientConfig
+  }
 }
 
 class NoopDogStatsDClient {
@@ -155,8 +194,9 @@ class NoopDogStatsDClient {
 
 // This is a simplified user-facing proxy to the underlying DogStatsDClient instance
 class CustomMetrics {
-  constructor (options) {
-    this.dogstatsd = new DogStatsDClient(options)
+  constructor (config) {
+    const clientConfig = DogStatsDClient.generateClientConfig(config)
+    this.dogstatsd = new DogStatsDClient(clientConfig)
   }
 
   increment (stat, value = 1, tags) {

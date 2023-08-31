@@ -5,8 +5,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
-  const isOldNode = semver.satisfies(process.version, '<=12')
-  const range = isOldNode ? '>=2 <5' : '>=2' // TODO: remove when 2.x support is removed.
+  const isOldNode = semver.satisfies(process.version, '<=14')
+  const range = isOldNode ? '>=2 <6' : '>=2' // TODO: remove when 3.x support is removed.
   withVersions('mongodb-core', 'mongodb', range, (version, moduleName) => {
     describe('using the default topology', () => {
       fn(async () => {
