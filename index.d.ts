@@ -354,7 +354,15 @@ export declare interface TracerOptions {
   flushInterval?: number;
 
   /**
-   *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
+   * Enables or disables large payloads being sent to APM.
+   * This prevents keeping all the spans in memory for very large traces.
+   * @default true
+   */
+  partialFlushEnabled?: boolean
+
+  /**
+   * Number of spans before partially exporting a trace. 
+   * Ignored if partial flushing is disabled.
    * @default 1000
    */
   flushMinSpans?: number;

@@ -43,6 +43,7 @@ describe('SpanProcessor', () => {
     }
     config = {
       flushMinSpans: 3,
+      partialFlushEnabled: true,
       stats: {
         enabled: false
       }
