@@ -1,5 +1,9 @@
 'use strict'
 
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
@@ -161,6 +165,55 @@ describe('ldap-injection-analyzer with ldapjs', () => {
               }
             })
           })
+        }, 'LDAP_INJECTION')
+      })
+    })
+  })
+
+  withVersions('ldapjs', 'ldapjs-promise', promiseVersion => {
+    prepareTestServerForIast('ldapjs-promise', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+      const srcFilePath = path.join(__dirname, 'resources', 'ldap-injection-methods.js')
+      const dstFilePath = path.join(os.tmpdir(), 'ldap-injection-methods.js')
+      let ldapMethods
+
+      beforeEach(async () => {
+        await agent.load('ldapjs')
+        vulnerabilityReporter.clearCache()
+        const ldapjs = require(`../../../../../../versions/ldapjs-promise@${promiseVersion}`).get()
+        client = ldapjs.createClient({
+          url: 'ldap://localhost:1389'
+        })
+
+        fs.copyFileSync(srcFilePath, dstFilePath)
+        ldapMethods = require(dstFilePath)
+
+        return client.bind(`cn=admin,${base}`, 'adminpassword')
+      })
+
+      afterEach(async () => {
+        fs.unlinkSync(dstFilePath)
+        await client.unbind()
+      })
+
+      describe('has vulnerability', () => {
+        testThatRequestHasVulnerability(() => {
+          const store = storage.getStore()
+          const iastCtx = iastContextFunctions.getIastContext(store)
+
+          let filter = '(objectClass=*)'
+          filter = newTaintedString(iastCtx, filter, 'param', 'Request')
+
+          return ldapMethods.executeSearch(client, base, filter)
+        }, 'LDAP_INJECTION', {
+          occurrences: 1,
+          location: { path: 'ldap-injection-methods.js' }
+        })
+      })
+
+      describe('has no vulnerability', () => {
+        testThatRequestHasNoVulnerability(() => {
+          const filter = '(objectClass=*)'
+          return ldapMethods.executeSearch(client, base, filter)
         }, 'LDAP_INJECTION')
       })
     })
