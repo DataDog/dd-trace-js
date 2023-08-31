@@ -258,15 +258,6 @@ describe('reporter', () => {
     })
   })
 
-  describe('reportBlock', () => {
-    it('should call updateWafRequestsTag', () => {
-      const req = {}
-      Reporter.reportBlock(req)
-
-      expect(telemetry.updateWafRequestsTag).to.have.been.calledOnceWithExactly({ requestBlocked: true }, req)
-    })
-  })
-
   describe('reportWafUpdate', () => {
     it('should call incrementWafUpdatesMetric', () => {
       Reporter.reportWafUpdate('0.0.1', '0.0.2')

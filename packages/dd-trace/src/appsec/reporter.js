@@ -142,10 +142,6 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
-function reportBlock (req) {
-  updateWafRequestsTag({ requestBlocked: true }, req)
-}
-
 function reportWafUpdate (wafVersion, eventRulesVersion) {
   incrementWafUpdatesMetric(wafVersion, eventRulesVersion)
 }
@@ -184,7 +180,6 @@ module.exports = {
   reportWafInit,
   reportMetrics,
   reportAttack,
-  reportBlock,
   reportWafUpdate,
   finishRequest,
   setRateLimit

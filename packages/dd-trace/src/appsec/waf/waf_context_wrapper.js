@@ -34,12 +34,14 @@ class WAFContextWrapper {
       const end = process.hrtime.bigint()
 
       const ruleTriggered = !!result.data && result.data !== '[]'
+      const requestBlocked = result.actions?.includes('block')
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
         durationExt: parseInt(end - start) / 1e3,
         rulesVersion: this.rulesVersion,
         ruleTriggered,
+        requestBlocked,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
       })

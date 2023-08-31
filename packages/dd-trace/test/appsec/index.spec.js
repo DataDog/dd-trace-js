@@ -533,47 +533,6 @@ describe('AppSec Index', () => {
       })
     })
   })
-
-  describe('handleResults', () => {
-    const req = {
-      headers: []
-    }
-    const res = {
-      setHeader: () => {},
-      end: () => {}
-    }
-    const rootSpan = {}
-    const abortController = {
-      abort: () => {}
-    }
-
-    beforeEach(() => {
-      AppSec.enable(config)
-
-      const rootSpan = {
-        addTags: sinon.stub()
-      }
-      web.root.returns(rootSpan)
-
-      sinon.stub(Reporter, 'reportBlock')
-    })
-
-    it('should call reportBlock if waf blocked the req', () => {
-      sinon.stub(waf, 'run').returns('block')
-
-      AppSec.incomingHttpStartTranslator({ req, res, abortController })
-
-      expect(Reporter.reportBlock).to.have.been.calledOnceWithExactly(req)
-    })
-
-    it('should not call reportBlock if waf did not block the req', () => {
-      sinon.stub(waf, 'run').returns('pass')
-
-      AppSec.incomingHttpStartTranslator({ req, res, rootSpan, abortController })
-
-      expect(Reporter.reportBlock).to.not.have.been.called
-    })
-  })
 })
 
 describe('IP blocking', () => {

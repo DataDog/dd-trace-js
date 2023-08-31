@@ -166,9 +166,6 @@ function handleResults (actions, req, res, rootSpan, abortController) {
 
   if (actions.includes('block')) {
     block(req, res, rootSpan, abortController)
-
-    // NOTE: should we report only if the call to block has been successful?
-    Reporter.reportBlock(req)
   }
 }
 
