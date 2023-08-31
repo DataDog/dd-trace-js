@@ -9,10 +9,8 @@ const tagsChannel = channel('datadog:tracing:span:tags')
 const errorChannel = channel('datadog:tracing:span:error')
 
 class CollectorExporter {
-  constructor ({ url, flushInterval }) {
-    const host = url ? url.origin : 'http://localhost:8126'
-
-    this._encoder = new Encoder({ host, flushInterval })
+  constructor (config) {
+    this._encoder = new Encoder(config)
 
     this._onSpanStart = event => this._encoder.encodeSpanStart(event)
     this._onSpanFinish = event => this._encoder.encodeSpanFinish(event)
@@ -35,7 +33,7 @@ class CollectorExporter {
   }
 
   setUrl (url) {
-    this._encoder.setHost(url)
+    this._encoder.setUrl(url)
   }
 }
 

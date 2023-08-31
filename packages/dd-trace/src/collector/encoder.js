@@ -3,9 +3,11 @@
 // TODO: Get correlation IDs from the context and not from the event.
 
 // const collector = require('../../../../../dd-trace-collector/node/index.node')
-const collector = require('./index.node')
+const collector = require('dd-trace-collector/index.node')
 const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
 const { zeroId } = require('../id')
+const { format } = require('url')
+const tracerVersion = require('../../../../package.json').version
 
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -18,7 +20,8 @@ const eventTypes = {
   ADD_TAGS: 6,
   STRINGS: 7,
   MYSQL_START_SPAN: 8,
-  CONFIG: 9
+  CONFIG: 9,
+  PROCESS_INFO: 10
 }
 
 const float64Array = new Float64Array(1)
@@ -29,7 +32,9 @@ float64Array[0] = -1
 const bigEndian = uInt8Float64Array[7] === 0
 
 class Encoder {
-  constructor ({ limit = SOFT_LIMIT, host, flushInterval }) {
+  constructor (config) {
+    const { url, hostname, port, limit = SOFT_LIMIT, flushInterval } = config
+
     this._flushInterval = flushInterval
     this._limit = limit
     this._metadataBytes = new Chunk(1024)
@@ -37,9 +42,11 @@ class Encoder {
     this._stringBytes = new Chunk()
     this._reset()
 
-    this.setHost(host)
-
-    collector.init()
+    this.setUrl(url || new URL(format({
+      protocol: 'http:',
+      hostname: hostname || 'localhost',
+      port
+    })))
 
     process.once('beforeExit', () => this.flush())
   }
@@ -48,7 +55,9 @@ class Encoder {
     return this._eventCount
   }
 
-  setHost (host) {
+  setUrl (url) {
+    const host = new URL(url).origin // TODO: Rename and cleanup.
+
     this.encodeConfig({ host })
   }
 
@@ -57,6 +66,18 @@ class Encoder {
 
     this._encodeShort(bytes, eventTypes.CONFIG)
     this._encodeMap(bytes, options)
+  }
+
+  encodeProcessInfo () {
+    const bytes = this._eventBytes
+
+    this._encodeShort(bytes, eventTypes.PROCESS_INFO)
+    this._encodeMap(bytes, {
+      tracer_version: tracerVersion,
+      language: 'nodejs',
+      language_interpreter: process.jsEngine || 'v8',
+      language_version: process.version
+    })
   }
 
   encodeSpanStart (event) {
@@ -190,6 +211,8 @@ class Encoder {
     this._stringMap = {
       '': 0
     }
+
+    this.encodeProcessInfo()
   }
 
   _encodeFixArray (bytes, size = 0) {
@@ -389,7 +412,7 @@ class Encoder {
     this._encodeMapPrefix(bytes, validKeys.length)
 
     for (const key of validKeys) {
-      this._encodeString(bytes, key)
+      this._encodeRawString(bytes, key)
       this._encodeValue(bytes, value[key])
     }
   }
@@ -397,7 +420,7 @@ class Encoder {
   _encodeValue (bytes, value) {
     switch (typeof value) {
       case 'string':
-        this._encodeString(bytes, value)
+        this._encodeRawString(bytes, value)
         break
       case 'number':
         this._encodeFloat(bytes, value)
@@ -415,6 +438,11 @@ class Encoder {
   _encodeString (bytes, value = '') {
     this._cacheString(value)
     this._encodeUnsigned(bytes, this._stringMap[value])
+  }
+
+  // TODO: Use an extension for string table instead and make this the default.
+  _encodeRawString (bytes, value = '') {
+    bytes.write(value)
   }
 
   _encodeFloat (bytes, value) {
