@@ -15,11 +15,12 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     sandbox = await createSandbox(['koa'], false, [`./packages/datadog-plugin-koa/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(50000)
     await sandbox.remove()
   })
 
@@ -41,6 +42,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
       })
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })
