@@ -117,13 +117,17 @@ testFrameworks.forEach(({
     let startupTestFile
     let testOutput = ''
 
-    before(async () => {
+    before(async function () {
+      // add an explicit timeout to make esm tests less flaky
+      this.timeout(50000)
       sandbox = await createSandbox(dependencies, true)
       cwd = sandbox.folder
       startupTestFile = path.join(cwd, testFile)
     })
 
-    after(async () => {
+    after(async function () {
+      // add an explicit timeout to make esm tests less flaky
+      this.timeout(50000)
       await sandbox.remove()
     })
 
@@ -170,7 +174,7 @@ testFrameworks.forEach(({
           assert.include(testOutput, '1 passing') // we only run one file here
           done()
         })
-      })
+      }).timeout(50000)
 
       it('does not init CI Visibility when running in parallel mode', (done) => {
         receiver.assertPayloadReceived(() => {
