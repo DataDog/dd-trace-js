@@ -142,10 +142,6 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
-function reportWafUpdate (wafVersion, eventRulesVersion) {
-  incrementWafUpdatesMetric(wafVersion, eventRulesVersion)
-}
-
 function finishRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -180,7 +176,7 @@ module.exports = {
   reportWafInit,
   reportMetrics,
   reportAttack,
-  reportWafUpdate,
+  reportWafUpdate: incrementWafUpdatesMetric,
   finishRequest,
   setRateLimit
 }
