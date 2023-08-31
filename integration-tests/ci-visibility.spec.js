@@ -26,17 +26,29 @@ const {
   TEST_ITR_SKIPPING_COUNT
 } = require('../packages/dd-trace/src/plugins/util/test')
 
-// TODO: remove when 2.x support is removed.
-// This is done because newest versions of mocha and jest do not support node@12
-const isOldNode = semver.satisfies(process.version, '<=12')
+const hookFile = 'dd-trace/loader-hook.mjs'
+
+const mochaCommonOptions = {
+  expectedStdout: '2 passing',
+  extraStdout: 'end event: can add event listeners to mocha'
+}
+
+const jestCommonOptions = {
+  dependencies: ['jest', 'chai', 'jest-jasmine2'],
+  expectedStdout: 'Test Suites: 2 passed',
+  expectedCoverageFiles: [
+    'ci-visibility/test/sum.js',
+    'ci-visibility/test/ci-visibility-test.js',
+    'ci-visibility/test/ci-visibility-test-2.js'
+  ]
+}
 
 const testFrameworks = [
   {
+    ...mochaCommonOptions,
     name: 'mocha',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
     testFile: 'ci-visibility/run-mocha.js',
-    expectedStdout: '2 passing',
-    extraStdout: 'end event: can add event listeners to mocha',
+    dependencies: ['mocha', 'chai', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -44,19 +56,40 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    coverageMessage: 'Lines        : 80%'
+    coverageMessage: 'Lines        : 80%',
+    type: 'commonJS'
   },
   {
-    name: 'jest',
-    dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
-    testFile: 'ci-visibility/run-jest.js',
-    expectedStdout: 'Test Suites: 2 passed',
+    ...mochaCommonOptions,
+    name: 'mocha',
+    testFile: 'ci-visibility/run-mocha.mjs',
+    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
+      'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
       'ci-visibility/test/ci-visibility-test.js',
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
-    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js'
+    runTestsWithCoverageCommand:
+      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
+      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
+      `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
+    coverageMessage: 'Lines        : 78.57%',
+    type: 'esm'
+  },
+  {
+    ...jestCommonOptions,
+    name: 'jest',
+    testFile: 'ci-visibility/run-jest.js',
+    runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
+    type: 'commonJS'
+  },
+  {
+    ...jestCommonOptions,
+    name: 'jest',
+    testFile: 'ci-visibility/run-jest.mjs',
+    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
+    type: 'esm'
   }
 ]
 
@@ -68,9 +101,15 @@ testFrameworks.forEach(({
   extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand,
-  coverageMessage
+  coverageMessage,
+  type
 }) => {
-  describe(name, () => {
+  // to avoid this error: @istanbuljs/esm-loader-hook@0.2.0: The engine "node"
+  // is incompatible with this module. Expected version ">=16.12.0". Got "14.21.3"
+  if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
+    return
+  }
+  describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
@@ -100,13 +139,46 @@ testFrameworks.forEach(({
     })
 
     if (name === 'mocha') {
+      it('does not change mocha config if CI Visibility fails to init', (done) => {
+        receiver.assertPayloadReceived(() => {
+          const error = new Error('it should not report tests')
+          done(error)
+        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
+
+        const { DD_CIVISIBILITY_AGENTLESS_URL, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+        // `runMocha` is only executed when using the CLI, which is where we modify mocha config
+        // if CI Visibility is init
+        childProcess = exec('mocha ./ci-visibility/test/ci-visibility-test.js', {
+          cwd,
+          env: {
+            ...restEnvVars,
+            DD_TRACE_DEBUG: 1,
+            DD_TRACE_LOG_LEVEL: 'error',
+            DD_SITE: '= invalid = url'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          assert.include(testOutput, 'Invalid URL')
+          assert.include(testOutput, '1 passing') // we only run one file here
+          done()
+        })
+      })
+
       it('does not init CI Visibility when running in parallel mode', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('it should not report tests')
           done(error)
-        }, ({ url }) => url === '/api/v2/citestcycle')
+        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
 
-        childProcess = fork('ci-visibility/run-mocha.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -232,7 +304,7 @@ testFrameworks.forEach(({
         })
       })
       it('does not crash when jest uses jest-jasmine2', (done) => {
-        childProcess = fork('ci-visibility/run-jest.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -256,7 +328,7 @@ testFrameworks.forEach(({
       describe('when jest is using workers to run tests in parallel', () => {
         it('reports tests when using the agent', (done) => {
           receiver.setInfoResponse({ endpoints: [] })
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               DD_TRACE_AGENT_PORT: receiver.port,
@@ -277,7 +349,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
         it('reports tests when using agentless', (done) => {
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
@@ -296,7 +368,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
         it('reports tests when using evp proxy', (done) => {
-          childProcess = fork('ci-visibility/run-jest.js', {
+          childProcess = fork(testFile, {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
@@ -317,7 +389,7 @@ testFrameworks.forEach(({
         })
       })
       it('reports timeout error message', (done) => {
-        childProcess = fork('ci-visibility/run-jest.js', {
+        childProcess = fork(testFile, {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
@@ -352,12 +424,16 @@ testFrameworks.forEach(({
             'ci-visibility/test/ci-visibility-test-2.js.ci visibility 2 can report tests 2'
           ]
         )
+
         const areAllTestSpans = testSpans.every(span => span.name === `${name}.test`)
         assert.isTrue(areAllTestSpans)
+
         assert.include(testOutput, expectedStdout)
+
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
+
         done()
       })
 
@@ -365,7 +441,7 @@ testFrameworks.forEach(({
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: '-r dd-trace/ci/init'
+          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init'
         },
         stdio: 'pipe'
       })
@@ -383,7 +459,7 @@ testFrameworks.forEach(({
         it('does not report spans but still runs tests', (done) => {
           receiver.assertMessageReceived(() => {
             done(new Error('Should not create spans'))
-          })
+          }).catch(() => {})
 
           childProcess = fork(startupTestFile, {
             cwd,
@@ -436,7 +512,8 @@ testFrameworks.forEach(({
       it('does not init if DD_API_KEY is not set', (done) => {
         receiver.assertMessageReceived(() => {
           done(new Error('Should not create spans'))
-        })
+        }).catch(() => {})
+
         childProcess = fork(startupTestFile, {
           cwd,
           env: {
@@ -663,7 +740,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'dd-api-key', '1')
@@ -709,7 +786,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.propertyVal(headers, 'dd-api-key', '1')
@@ -775,19 +852,19 @@ testFrameworks.forEach(({
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request search_commits')
             done(error)
-          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits')
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request search_commits')
             done(error)
-          }, ({ url }) => url === '/api/v2/git/repository/search_commits')
+          }, ({ url }) => url === '/api/v2/git/repository/search_commits').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request setting')
             done(error)
-          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting')
+          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting').catch(() => {})
           receiver.assertPayloadReceived(() => {
             const error = new Error('should not request setting')
             done(error)
-          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting')
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting').catch(() => {})
 
           receiver.assertPayloadReceived(({ payload }) => {
             const testSpans = payload.flatMap(trace => trace)
@@ -1000,7 +1077,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.notProperty(headers, 'dd-api-key')
@@ -1036,7 +1113,7 @@ testFrameworks.forEach(({
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
           done(error)
-        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable')
+        }, ({ url }) => url === '/evp_proxy/v2/api/v2/ci/tests/skippable').catch(() => {})
 
         receiver.assertPayloadReceived(({ headers, payload }) => {
           assert.notProperty(headers, 'dd-api-key')
