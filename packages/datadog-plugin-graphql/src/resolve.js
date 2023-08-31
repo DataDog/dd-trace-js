@@ -8,12 +8,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'resolve' }
 
-  start ({ info, context }) {
+  start ({ info, context, args }) {
     const path = getPath(info, this.config)
 
     if (!shouldInstrument(this.config, path)) return
-
     const computedPathString = path.join('.')
+
+    addResolver(context, info, args)
 
     if (this.config.collapse) {
       if (!context[collapsedPathSym]) {
@@ -105,6 +106,30 @@ function withCollapse (responsePathAsArray) {
   return function () {
     return responsePathAsArray.apply(this, arguments)
       .map(segment => typeof segment === 'number' ? '*' : segment)
+  }
+}
+
+function addResolver (context, info, args) {
+  if (info.rootValue && !info.rootValue[info.fieldName]) {
+    return
+  }
+
+  if (!context.resolvers) {
+    context.resolvers = {}
+  }
+
+  const resolvers = context.resolvers
+
+  if (!resolvers[info.fieldName]) {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName] = [args]
+    } else {
+      resolvers[info.fieldName] = []
+    }
+  } else {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName].push(args)
+    }
   }
 }
 
