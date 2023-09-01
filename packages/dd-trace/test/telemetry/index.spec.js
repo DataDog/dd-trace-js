@@ -18,7 +18,14 @@ describe('telemetry', () => {
   let pluginsByName
 
   before(done => {
- 
+    origSetInterval = setInterval
+
+    global.setInterval = (fn, interval) => {
+      expect(interval).to.equal(HEARTBEAT_INTERVAL * 60 * 24)
+      // we only want one of these
+      return setTimeout(fn, 100)
+    }
+
     // I'm not sure how, but some other test in some other file keeps context
     // alive after it's done, meaning this test here runs in its async context.
     // If we don't no-op the server inside it, it will trace it, which will
@@ -178,10 +185,10 @@ describe('telemetry', () => {
 })
 
 describe('telemetry app-heartbeat', () => {
-  const HEARTBEAT_INTERVAL = 1000
+  const HEARTBEAT_INTERVAL = 60
   let telemetry
   let pluginsByName
-  
+
   before(done => {
     storage.run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
@@ -239,30 +246,38 @@ describe('telemetry app-heartbeat', () => {
     setTimeout(() => {
       telemetry.stop()
       traceAgent.close()
-      clearTimeout()
-    }, 3000)
+    }, HEARTBEAT_INTERVAL * 3)
   })
 
-  it('should send app-heartbeat at uniform intervals', () => {
+  it('should send app-heartbeat at uniform intervals', (done) => {
     // TODO: switch to clock.tick
     setTimeout(() => {
-      const heartbeats = []
-      const reqCount = traceAgent.reqs.length
-      for (let i = 0; i < reqCount; i++) {
-        const req = traceAgent.reqs[i]
-        if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
-          heartbeats.push(req.body.tracer_time)
-        }
-      }
-      expect(heartbeats.length).to.be.greaterThanOrEqual(2)
-      for (let k = 0; k < heartbeats.length - 1; k++) {
-        expect(heartbeats[k + 1] - heartbeats[k]).to.be.equal(1)
-      }
-
-    }, HEARTBEAT_INTERVAL * 3)
-
+      expect(getHeartbeatCount()).to.be.equal(0)
+    }, HEARTBEAT_INTERVAL * 0.75)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.2)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.9)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(2)
+      done()
+    }, HEARTBEAT_INTERVAL * 2.1)
   })
 })
+
+function getHeartbeatCount () {
+  let heartbeatCount = 0
+  const reqCount = traceAgent.reqs.length
+  for (let i = 0; i < reqCount; i++) {
+    const req = traceAgent.reqs[i]
+    if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+      heartbeatCount++
+    }
+  }
+  return heartbeatCount
+}
 
 // deleted this test for now since the global interval is now used for app-extended heartbeat
 // which is not supposed to be configurable
