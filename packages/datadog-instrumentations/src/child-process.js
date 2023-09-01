@@ -28,16 +28,25 @@ function wrapChildProcessMethod () {
       }
 
       let ret
+      let status
+      let error
 
       // TODO: exec, execFile, fork, spawn promise or callback
       try {
         ret = childProcessMethod.apply(this, arguments)
       } catch (err) {
         childProcessChannelError.publish(err?.status)
+        error = err
         throw err
       } finally {
         if (childProcessChannelFinish.hasSubscribers && arguments.length > 0) {
-          childProcessChannelFinish.publish({ exitCode: ret })
+          if (error) {
+            status = error.status
+          } else {
+            status = 0
+          }
+
+          childProcessChannelFinish.publish({ exitCode: status })
         }
       }
       return ret
