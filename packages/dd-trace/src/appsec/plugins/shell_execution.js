@@ -12,6 +12,10 @@ class ChildProcessPlugin extends TracingPlugin {
   }
 
   start ({ command }) {
+    if (typeof command !== 'string') {
+      return
+    }
+
     const cmdFields = command.split(' ')
 
     this.startSpan('command_execution', {
