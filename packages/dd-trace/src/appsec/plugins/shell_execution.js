@@ -1,10 +1,10 @@
 'use strict'
 
 const TracingPlugin = require('../../plugins/tracing')
+const scrubChildProcessCmd = require('./scrub_cmd_params')
 
-class ShellExecutionPlugin extends TracingPlugin {
+class ChildProcessPlugin extends TracingPlugin {
   static get id () { return 'subprocess' }
-  static get operation () { return 'resolve' }
   static get prefix () { return 'datadog:child_process:execution' }
 
   get tracer () {
@@ -19,21 +19,16 @@ class ShellExecutionPlugin extends TracingPlugin {
       resource: cmdFields[0],
       type: 'system',
       meta: {
-        component: 'subprocess',
+        'component': 'subprocess',
         'cmd.exec': cmdFields
       }
     })
   }
 
-  finish ({ ret, error }) {
-    let exitCode = 0
-    if (error) {
-      exitCode = error.status
-      this.addError(exitCode)
-    }
-    this.activeSpan.addTags({ 'cmd.exit_code': `${exitCode}` })
+  finish ({ exitCode }) {
+    this.activeSpan.setTag('cmd.exit_code', `${exitCode}`)
     super.finish()
   }
 }
 
-module.exports = ShellExecutionPlugin
+module.exports = ChildProcessPlugin

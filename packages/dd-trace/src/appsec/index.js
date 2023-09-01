@@ -25,11 +25,9 @@ const { block, setTemplates } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const { enablePlugins, disablePlugins } = require('./plugins')
-const ShellExecutionPlugin = require('./plugins/shell_execution')
 
 let isEnabled = false
 let config
-let shellExecutionPlugin
 
 function enable (_config, _tracer) {
   if (isEnabled) return
@@ -59,9 +57,6 @@ function enable (_config, _tracer) {
     }
 
     enablePlugins(_tracer, _config)
-    // shellExecutionPlugin = new ShellExecutionPlugin(_tracer, _config)
-    // shellExecutionPlugin.configure({ enabled: true })
-
     isEnabled = true
     config = _config
   } catch (err) {

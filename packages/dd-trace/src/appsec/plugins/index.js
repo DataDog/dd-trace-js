@@ -1,9 +1,12 @@
+'use strict'
+
 const plugins = require('./plugins')
 
 const enabled = []
 
 function enablePlugins (tracer, config) {
-  for (const Plugin in plugins) {
+  for (const plugin in plugins) {
+    const Plugin = plugins[plugin]
     const obj = new Plugin(tracer, config)
     obj.configure({ enabled: true })
     enabled.push(obj)
