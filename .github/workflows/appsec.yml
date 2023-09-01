@@ -80,7 +80,7 @@ jobs:
           - 5432:5432
     env:
       PG_TEST_NATIVE: 'true'
-      PLUGINS: pg
+      PLUGINS: pg|knex
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
