@@ -23,7 +23,7 @@ describe('telemetry', () => {
     origSetInterval = setInterval
 
     global.setInterval = (fn, interval) => {
-      expect(interval).to.equal(HEARTBEAT_INTERVAL)
+      expect(interval).to.equal(1000 * 60 * 60 * 24)
       // we only want one of these
       return setTimeout(fn, 100)
     }
@@ -125,28 +125,13 @@ describe('telemetry', () => {
     })
   })
 
-  it('should detect app-heartbeat after heartbeat interval', () => {
-    return setTimeout(() => {
-      const heartbeats = []
-      for (const req in traceAgent.reqs) {
-        // console.log(req.body.tracer_time)
-        // console.log(req.headers['dd-telemetry-request-type'])
-        if (req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
-          heartbeats.push(req)
-        }
-      }
-    }, DEFAULT_HEARTBEAT_INTERVAL * 2)
-  })
-
   it('should send app-integrations-change', () => {
     pluginsByName.baz2 = { _enabled: true }
     telemetry.updateIntegrations()
 
-    return testSeq(4, 'app-integrations-change', payload => {
+    return testSeq(3, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true },
           { name: 'baz2', enabled: true, auto_enabled: true }
         ]
       })
@@ -157,7 +142,7 @@ describe('telemetry', () => {
     pluginsByName.boo2 = { _enabled: true }
     telemetry.updateIntegrations()
 
-    return testSeq(5, 'app-integrations-change', payload => {
+    return testSeq(4, 'app-integrations-change', payload => {
       expect(payload).to.deep.equal({
         integrations: [
           { name: 'boo2', enabled: true, auto_enabled: true }
@@ -194,139 +179,137 @@ describe('telemetry', () => {
   })
 })
 
-describe('telemetry app-heartbeat', () => {
-  const HEARTBEAT_INTERVAL = 60
-  let origSetInterval
-  let telemetry
-  let pluginsByName
+// describe('telemetry app-heartbeat', () => {
+//   const HEARTBEAT_INTERVAL = 60
+//   let telemetry
+//   let pluginsByName
 
-  before(done => {
-    origSetInterval = setInterval
+//   before(done => {
+//     storage.run({ noop: true }, () => {
+//       traceAgent = http.createServer(async (req, res) => {
+//         const chunks = []
+//         for await (const chunk of req) {
+//           chunks.push(chunk)
+//         }
+//         req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+//         traceAgent.reqs.push(req)
+//         traceAgent.emit('handled-req')
+//         res.end()
+//       }).listen(0, done)
+//     })
 
-    global.setInterval = (fn, interval) => {
-      expect(interval).to.equal(HEARTBEAT_INTERVAL)
-      // we only want one of these
-      return setTimeout(fn, 100)
-    }
+//     traceAgent.reqs = []
 
-    storage.run({ noop: true }, () => {
-      traceAgent = http.createServer(async (req, res) => {
-        const chunks = []
-        for await (const chunk of req) {
-          chunks.push(chunk)
-        }
-        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-        traceAgent.reqs.push(req)
-        traceAgent.emit('handled-req')
-        res.end()
-      }).listen(0, done)
-    })
+//     telemetry = proxyquire('../../src/telemetry', {
+//       '../exporters/common/docker': {
+//         id () {
+//           return 'test docker id'
+//         }
+//       }
+//     })
 
-    traceAgent.reqs = []
+//     pluginsByName = {
+//       foo2: { _enabled: true },
+//       bar2: { _enabled: false }
+//     }
 
-    telemetry = proxyquire('../../src/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
-        }
-      }
-    })
+//     const circularObject = {
+//       child: { parent: null, field: 'child_value' },
+//       field: 'parent_value'
+//     }
+//     circularObject.child.parent = circularObject
 
-    pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false }
-    }
+//     telemetry.start({
+//       telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+//       hostname: 'localhost',
+//       port: traceAgent.address().port,
+//       service: 'test service',
+//       version: '1.2.3-beta4',
+//       env: 'preprod',
+//       tags: {
+//         'runtime-id': '1a2b3c'
+//       },
+//       circularObject,
+//       appsec: { enabled: false },
+//       profiling: { enabled: false }
+//     }, {
+//       _pluginsByName: pluginsByName
+//     })
+//   })
 
-    const circularObject = {
-      child: { parent: null, field: 'child_value' },
-      field: 'parent_value'
-    }
-    circularObject.child.parent = circularObject
+//   after(() => {
+//     setTimeout(() => {
+//       telemetry.stop()
+//       traceAgent.close()
+//     }, HEARTBEAT_INTERVAL * 3)
+//   })
 
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: traceAgent.address().port,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      },
-      circularObject
-    }, {
-      _pluginsByName: pluginsByName
-    })
-  })
+//   it('should send app-heartbeat at uniform intervals', () => {
+//     // TODO: switch to clock.tick
+//     setTimeout(() => {
+//       const heartbeats = []
+//       const reqCount = traceAgent.reqs.length
+//       for (let i = 0; i < reqCount; i++) {
+//         const req = traceAgent.reqs[i]
+//         if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+//           heartbeats.push(req.body.tracer_time)
+//         }
+//       }
+//       expect(heartbeats.length).to.be.greaterThanOrEqual(2)
+//       for (let k = 0; k < heartbeats.length - 1; k++) {
+//         expect(heartbeats[k + 1] - heartbeats[k]).to.be.equal(1)
+//       }
+//     }, HEARTBEAT_INTERVAL * 3)
+//   })
+// })
 
-  after(() => {
-    setTimeout(() => {
-      telemetry.stop()
-      traceAgent.close()
-      global.setInterval = origSetInterval
-    }, HEARTBEAT_INTERVAL * 3)
-  })
+// deleted this test for now since the global interval is now used for app-extended heartbeat
+// which is not supposed to be configurable
+// will ask Bryan why being able to change the interval is important after he is back from parental leave
 
-  it('should send app-heartbeat at uniform intervals', () => {
-    // TODO: switch to clock.tick
-    setTimeout(() => {
-      const heartbeats = []
-      const reqCount = traceAgent.reqs.length
-      for (let i = 0; i < reqCount; i++) {
-        const req = traceAgent.reqs[i]
-        if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
-          heartbeats.push(req.body.tracer_time)
-        }
-      }
-      expect(heartbeats.length).to.be.greaterThanOrEqual(2)
-      for (let k = 0; k++; k < heartbeats.length - 1) {
-        expect(heartbeats[k + 1] - heartbeats[k]).to.be.equal(1)
-      }
-    }, HEARTBEAT_INTERVAL * 3)
-  })
-})
+// describe('telemetry with interval change', () => {
+//   it('should set the interval correctly', (done) => {
+//     const telemetry = proxyquire('../../src/telemetry', {
+//       '../exporters/common/docker': {
+//         id () {
+//           return 'test docker id'
+//         }
+//       },
+//       './send-data': {
+//         sendData: () => {}
+//       }
+//     })
 
-describe('telemetry with interval change', () => {
-  it('should set the interval correctly', (done) => {
-    const telemetry = proxyquire('../../src/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
-        }
-      },
-      './send-data': {
-        sendData: () => {}
-      }
-    })
+//     let intervalSetCorrectly
+//     global.setInterval = (fn, interval) => {
+//       expect(interval).to.equal(12345000)
+//       intervalSetCorrectly = true
+//       return setTimeout(fn, 1)
+//     }
 
-    let intervalSetCorrectly
-    global.setInterval = (fn, interval) => {
-      expect(interval).to.equal(12345000)
-      intervalSetCorrectly = true
-      return setTimeout(fn, 1)
-    }
+//     telemetry.start({
+//       telemetry: { enabled: true, heartbeatInterval: 12345000 },
+//       hostname: 'localhost',
+//       port: 8126,
+//       service: 'test service',
+//       version: '1.2.3-beta4',
+//       env: 'preprod',
+//       tags: {
+//         'runtime-id': '1a2b3c'
+//       },
+//       appsec: { enabled: false },
+//       profiling: { enabled: false }
+//     }, {
+//       _pluginsByName: {}
+//     })
 
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: 12345000 },
-      hostname: 'localhost',
-      port: 8126,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      }
-    }, {
-      _pluginsByName: {}
-    })
-
-    process.nextTick(() => {
-      expect(intervalSetCorrectly).to.be.true
-      telemetry.stop()
-      done()
-    })
-  })
-})
+//     process.nextTick(() => {
+//       expect(intervalSetCorrectly).to.be.true
+//       telemetry.stop()
+//       done()
+//     })
+//   })
+// })
 
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {

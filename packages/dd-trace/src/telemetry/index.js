@@ -154,7 +154,7 @@ function getTelemetryData () {
 //   }
 // }
 
-function extendedHeartbeat () {
+function extendedHeartbeat (config) {
   return setInterval(() => {
     sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
   }, 1000 * 60 * 60 * 24)
@@ -185,9 +185,9 @@ function start (aConfig, thePluginManager) {
   sendData(config, application, host, 'app-started', appStarted(config))
   sendData(config, application, host, 'app-integrations-change', { integrations })
 
-  heartbeat()
+  heartbeat(config, application, host)
 
-  extendedHeartbeat()
+  extendedHeartbeat(config)
   process.on('beforeExit', onBeforeExit)
   telemetryStartChannel.publish(getTelemetryData())
 }
