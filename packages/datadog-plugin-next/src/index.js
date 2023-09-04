@@ -4,6 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const web = require('../../dd-trace/src/plugins/util/web')
 
 class NextPlugin extends ServerPlugin {
   static get id () {
@@ -49,6 +50,7 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = span.context()._tags['error']
+    const page = span.context()._tags['next.page']
 
     if (!this.config.validateStatus(res.statusCode) && !error) {
       span.setTag('error', true)
@@ -57,6 +59,8 @@ class NextPlugin extends ServerPlugin {
     span.addTags({
       'http.status_code': res.statusCode
     })
+
+    if (page) web.setRoute(req, page)
 
     this.config.hooks.request(span, req, res)
 

@@ -66,7 +66,7 @@ function globMatch (pattern, subject) {
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
-  return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
+  return dirSteps.slice(0, packagesIndex + 1).join(path.sep) + path.sep
 }
 
 module.exports = {

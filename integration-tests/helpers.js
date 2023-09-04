@@ -17,7 +17,6 @@ const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
-const version = require('../version.js')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -159,7 +158,7 @@ class FakeAgent extends EventEmitter {
 }
 
 function spawnProc (filename, options = {}, stdioHandler) {
-  const proc = fork(filename, options)
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -173,11 +172,19 @@ function spawnProc (filename, options = {}, stdioHandler) {
         }
         resolve()
       })
-    if (stdioHandler) {
-      proc.stdout.on('data', (data) => {
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
         stdioHandler(data)
-      })
-    }
+      }
+      // eslint-disable-next-line no-console
+      console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      // eslint-disable-next-line no-console
+      console.error(data.toString())
+    })
   })
 }
 
@@ -198,6 +205,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
 
   integrationTestsPaths.forEach(async (path) => {
     await exec(`cp -R ${path} ${folder}`)
+    await exec(`sync ${folder}`)
   })
 
   if (isGitRepo) {
@@ -207,7 +215,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
+      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
       { cwd: folder }
     )
   }
@@ -269,13 +277,6 @@ function checkSpansForServiceName (spans, name) {
   return spans.some((span) => span.some((nestedSpan) => nestedSpan.name === name))
 }
 
-// TODO: add ESM support for Node 20 in import-in-the-middle
-function esmTestSkipper () {
-  return version.NODE_MAJOR >= 20
-    ? global.describe.skip
-    : global.describe
-}
-
 async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
@@ -284,8 +285,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env,
-    stdio: stdioHandler ? 'pipe' : 'inherit'
+    env
   }, stdioHandler)
 }
 
@@ -298,6 +298,5 @@ module.exports = {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 }

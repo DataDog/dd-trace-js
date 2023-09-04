@@ -4,12 +4,9 @@ const {
   FakeAgent,
   createSandbox,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-
-const describe = esmTestSkipper()
 
 describe('esm', () => {
   let agent
@@ -18,7 +15,7 @@ describe('esm', () => {
 
   before(async function () {
     this.timeout(20000)
-    sandbox = await createSandbox(['openai', 'nock'], false, [
+    sandbox = await createSandbox(['openai@3', 'nock'], false, [
       `./packages/datadog-plugin-openai/test/integration-test/*`])
   })
 

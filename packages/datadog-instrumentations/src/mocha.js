@@ -441,6 +441,9 @@ addHook({
   file: 'lib/cli/run-helpers.js'
 }, (run) => {
   shimmer.wrap(run, 'runMocha', runMocha => async function () {
+    if (!testStartCh.hasSubscribers) {
+      return runMocha.apply(this, arguments)
+    }
     const mocha = arguments[0]
     /**
      * This attaches `run` to the global context, which we'll call after
