@@ -160,9 +160,11 @@ addHook({
   return shimmer.wrap(sanitizeFilter, function () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
-    sanitizeFilterFinishCh.publish({
-      sanitizedObject
-    })
+    if (sanitizeFilterFinishCh.hasSubscribers) {
+      sanitizeFilterFinishCh.publish({
+        sanitizedObject
+      })
+    }
 
     return sanitizedObject
   })

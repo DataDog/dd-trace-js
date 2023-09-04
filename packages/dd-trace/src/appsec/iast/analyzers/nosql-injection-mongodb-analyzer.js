@@ -11,16 +11,16 @@ const { getIastContext } = require('../iast-context')
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 
-function iterateObjectStrings (target, fn, levelKeys = [], depth = 50) {
+function iterateObjectStrings (target, fn, levelKeys = [], depth = 50, visited = new Set()) {
   if (target && typeof target === 'object') {
     Object.keys(target).forEach((key) => {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
-
       if (typeof val === 'string') {
         fn(val, nextLevelKeys, target, key)
-      } else if (depth > 0) {
-        iterateObjectStrings(val, fn, nextLevelKeys, depth - 1)
+      } else if (depth > 0 && !visited.has(val)) {
+        iterateObjectStrings(val, fn, nextLevelKeys, depth - 1, visited)
+        visited.add(val)
       }
     })
   }
@@ -46,6 +46,8 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:mongoose:model:filter:start', ({ filters }) => {
       const store = storage.getStore()
+      if (!store) return
+
       if (filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)

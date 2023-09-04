@@ -15,7 +15,9 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
   shimmer.wrap(expressMongoSanitize, 'sanitize', sanitize => function () {
     const sanitizedObject = sanitize.apply(this, arguments)
 
-    sanitizeMethodFinished.publish({ sanitizedObject })
+    if (sanitizeMethodFinished.hasSubscribers) {
+      sanitizeMethodFinished.publish({ sanitizedObject })
+    }
 
     return sanitizedObject
   })

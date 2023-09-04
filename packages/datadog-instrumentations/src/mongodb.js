@@ -58,7 +58,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3'] }, mongodb => {
         }
       })
     } catch (e) {
-      // do nothing if the method wrap fail
+      // do nothing if the method wrap fails
     }
   })
   return mongodb
