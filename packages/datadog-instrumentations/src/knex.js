@@ -58,20 +58,20 @@ addHook({
   return Knex
 })
 
-function wrapThenRaw (origThen, onFinish, ar) {
+function wrapThenRaw (origThen, onFinish, asyncResource) {
   return function then (onFulfilled, onRejected) {
-    arguments[0] = wrapCallback(ar, onFulfilled, onFinish)
-    arguments[1] = wrapCallback(ar, onRejected, onFinish)
+    arguments[0] = wrapCallback(asyncResource, onFulfilled, onFinish)
+    arguments[1] = wrapCallback(asyncResource, onRejected, onFinish)
 
     return origThen.apply(this, arguments)
   }
 }
 
-function wrapCallback (ar, callback, onFinish) {
+function wrapCallback (asyncResource, callback, onFinish) {
   if (typeof callback !== 'function') return callback
 
   return function () {
-    return ar.runInAsyncScope(() => {
+    return asyncResource.runInAsyncScope(() => {
       onFinish()
       return callback.apply(this, arguments)
     })
