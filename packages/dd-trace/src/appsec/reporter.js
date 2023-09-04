@@ -3,6 +3,12 @@
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
+const {
+  incrementWafInitMetric,
+  updateWafRequestsMetricTags,
+  incrementWafUpdatesMetric,
+  incrementWafRequestsMetric
+} = require('./telemetry')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -63,6 +69,18 @@ function formatHeaderName (name) {
     .toLowerCase()
 }
 
+function reportWafInit (wafVersion, rulesInfo) {
+  metricsQueue.set('_dd.appsec.waf.version', wafVersion)
+
+  metricsQueue.set('_dd.appsec.event_rules.loaded', rulesInfo.loaded)
+  metricsQueue.set('_dd.appsec.event_rules.error_count', rulesInfo.failed)
+  if (rulesInfo.failed) metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(rulesInfo.errors))
+
+  metricsQueue.set('manual.keep', 'true')
+
+  incrementWafInitMetric(wafVersion, rulesInfo.version)
+}
+
 function reportMetrics (metrics) {
   // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
@@ -80,6 +98,8 @@ function reportMetrics (metrics) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
+
+  updateWafRequestsMetricTags(metrics, store.req)
 }
 
 function reportAttack (attackData) {
@@ -132,6 +152,8 @@ function finishRequest (req, res) {
     metricsQueue.clear()
   }
 
+  incrementWafRequestsMetric(req)
+
   if (!rootSpan.context()._tags['appsec.event']) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
@@ -151,8 +173,10 @@ module.exports = {
   metricsQueue,
   filterHeaders,
   formatHeaderName,
+  reportWafInit,
   reportMetrics,
   reportAttack,
+  reportWafUpdate: incrementWafUpdatesMetric,
   finishRequest,
   setRateLimit
 }
