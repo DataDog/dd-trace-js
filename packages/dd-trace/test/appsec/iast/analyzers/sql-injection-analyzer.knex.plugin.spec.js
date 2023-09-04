@@ -13,6 +13,7 @@ const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability
 describe('sql-injection-analyzer with knex', () => {
   withVersions('knex', 'knex', knexVersion => {
     if (!semver.satisfies(knexVersion, '>=2')) return
+
     withVersions('pg', 'pg', pgVersion => {
       let knex
 
