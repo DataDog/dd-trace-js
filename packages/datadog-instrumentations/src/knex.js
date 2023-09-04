@@ -59,14 +59,9 @@ addHook({
 })
 
 function wrapThenRaw (origThen, onFinish, ar) {
-  return function then (onFulfilled, onRejected, onProgress) {
+  return function then (onFulfilled, onRejected) {
     arguments[0] = wrapCallback(ar, onFulfilled, onFinish)
     arguments[1] = wrapCallback(ar, onRejected, onFinish)
-
-    // not standard but sometimes supported
-    if (onProgress) {
-      arguments[2] = wrapCallback(ar, onProgress, onFinish)
-    }
 
     return origThen.apply(this, arguments)
   }
