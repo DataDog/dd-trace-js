@@ -42,6 +42,17 @@ function getVersionsTag (wafVersion, rulesVersion) {
   }
 }
 
+function trackWafDurations (metrics) {
+  const tag = getVersionsTag(metrics.wafVersion, metrics.rulesVersion)
+
+  if (metrics.duration) {
+    appsecMetrics.distribution('waf.duration', tag).track(metrics.duration)
+  }
+  if (metrics.durationExt) {
+    appsecMetrics.distribution('waf.duration_ext', tag).track(metrics.durationExt)
+  }
+}
+
 function getOrCreateMetricTag ({ wafVersion, rulesVersion }, req) {
   const store = getStore(req)
 
@@ -79,17 +90,6 @@ function updateWafRequestsTag (metrics, req) {
   }
 
   return tag
-}
-
-function trackWafDurations (metrics) {
-  const tag = getVersionsTag(metrics.wafVersion, metrics.rulesVersion)
-
-  if (metrics.duration) {
-    appsecMetrics.distribution('waf.duration', tag).track(metrics.duration)
-  }
-  if (metrics.durationExt) {
-    appsecMetrics.distribution('waf.duration_ext', tag).track(metrics.durationExt)
-  }
 }
 
 function incrementWafInitMetric (wafVersion, rulesVersion) {
