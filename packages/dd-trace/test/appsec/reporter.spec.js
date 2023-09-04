@@ -24,7 +24,7 @@ describe('reporter', () => {
 
     telemetry = {
       incrementWafInitMetric: sinon.stub(),
-      updateWafRequestsTag: sinon.stub(),
+      updateWafRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub()
     }
@@ -146,13 +146,13 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
     })
 
-    it('should call updateWafRequestsTag', () => {
+    it('should call updateWafRequestsMetricTags', () => {
       const metrics = { rulesVersion: '1.2.3' }
       const store = storage.getStore()
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsTag).to.have.been.calledOnceWithExactly(metrics, store.req)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
     })
   })
 

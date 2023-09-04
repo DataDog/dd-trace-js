@@ -5,7 +5,7 @@ const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const {
   incrementWafInitMetric,
-  updateWafRequestsTag,
+  updateWafRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric
 } = require('./telemetry')
@@ -99,7 +99,7 @@ function reportMetrics (metrics) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
 
-  updateWafRequestsTag(metrics, store.req)
+  updateWafRequestsMetricTags(metrics, store.req)
 }
 
 function reportAttack (attackData) {

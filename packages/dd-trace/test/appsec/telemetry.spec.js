@@ -37,20 +37,20 @@ describe('Appsec Telemetry metrics', () => {
       })
     })
 
-    describe('updateWafRequestsTag', () => {
+    describe('updateWafRequestsMetricTags', () => {
       const metrics = {
         wafVersion,
         rulesVersion
       }
 
       it('should skip update if no request is provided', () => {
-        const result = appsecTelemetry.updateWafRequestsTag(metrics)
+        const result = appsecTelemetry.updateWafRequestsMetricTags(metrics)
 
         expect(result).to.be.undefined
       })
 
       it('should create a default tag', () => {
-        const result = appsecTelemetry.updateWafRequestsTag(metrics, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
 
         expect(result).to.be.deep.eq({
           waf_version: wafVersion,
@@ -62,8 +62,8 @@ describe('Appsec Telemetry metrics', () => {
       })
 
       it('should create a tag with custom values', () => {
-        const result = appsecTelemetry.updateWafRequestsTag({
-          requestBlocked: true,
+        const result = appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
           ...metrics
@@ -79,9 +79,9 @@ describe('Appsec Telemetry metrics', () => {
       })
 
       it('should update existing tag ', () => {
-        const result = appsecTelemetry.updateWafRequestsTag(metrics, req)
+        const result = appsecTelemetry.updateWafRequestsMetricTags(metrics, req)
 
-        const result2 = appsecTelemetry.updateWafRequestsTag({
+        const result2 = appsecTelemetry.updateWafRequestsMetricTags({
           ruleTriggered: true,
           ...metrics
         }, req)
@@ -98,16 +98,16 @@ describe('Appsec Telemetry metrics', () => {
       })
 
       it('should handle different requests tags ', () => {
-        const result = appsecTelemetry.updateWafRequestsTag({
-          requestBlocked: true,
+        const result = appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: true,
           ruleTriggered: true,
           wafTimeout: true,
           ...metrics
         }, req)
 
         const req2 = {}
-        const result2 = appsecTelemetry.updateWafRequestsTag({
-          requestBlocked: false,
+        const result2 = appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: false,
           ruleTriggered: false,
           wafTimeout: false,
           ...metrics
@@ -125,7 +125,7 @@ describe('Appsec Telemetry metrics', () => {
       })
 
       it('should call trackWafDurations', () => {
-        appsecTelemetry.updateWafRequestsTag({
+        appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
           durationExt: 52,
           ...metrics
@@ -202,8 +202,8 @@ describe('Appsec Telemetry metrics', () => {
 
     describe('incWafRequestsMetric', () => {
       it('should increment waf.requests metric', () => {
-        appsecTelemetry.updateWafRequestsTag({
-          requestBlocked: false,
+        appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: false,
           ruleTriggered: false,
           wafTimeout: true,
           wafVersion,

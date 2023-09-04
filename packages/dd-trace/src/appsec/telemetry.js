@@ -4,7 +4,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
-const DD_TELEMETRY_WAF_RESULT_TAG = Symbol('_dd.appsec.telemetry.waf.result.tag')
+const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
 const tags = {
   REQUEST_BLOCKED: 'request_blocked',
@@ -35,77 +35,77 @@ function getStore (req) {
   return store
 }
 
-function getVersionsTag (wafVersion, rulesVersion) {
+function getVersionsTags (wafVersion, rulesVersion) {
   return {
     [tags.WAF_VERSION]: wafVersion,
     [tags.EVENT_RULES_VERSION]: rulesVersion
   }
 }
 
-function trackWafDurations (metrics) {
-  const tag = getVersionsTag(metrics.wafVersion, metrics.rulesVersion)
-
+function trackWafDurations (metrics, versionsTags) {
   if (metrics.duration) {
-    appsecMetrics.distribution('waf.duration', tag).track(metrics.duration)
+    appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
   }
   if (metrics.durationExt) {
-    appsecMetrics.distribution('waf.duration_ext', tag).track(metrics.durationExt)
+    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
   }
 }
 
-function getOrCreateMetricTag ({ wafVersion, rulesVersion }, req) {
+function getOrCreateMetricTags ({ wafVersion, rulesVersion }, req, versionsTags) {
   const store = getStore(req)
 
-  let tag = store[DD_TELEMETRY_WAF_RESULT_TAG]
-  if (!tag) {
-    tag = {
+  let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
+  if (!metricTags) {
+    metricTags = {
       [tags.REQUEST_BLOCKED]: false,
       [tags.RULE_TRIGGERED]: false,
       [tags.WAF_TIMEOUT]: false,
 
-      ...getVersionsTag(wafVersion, rulesVersion)
+      ...versionsTags
     }
-    store[DD_TELEMETRY_WAF_RESULT_TAG] = tag
+    store[DD_TELEMETRY_WAF_RESULT_TAGS] = metricTags
   }
-  return tag
+  return metricTags
 }
 
-function updateWafRequestsTag (metrics, req) {
+function updateWafRequestsMetricTags (metrics, req) {
   if (!req || !enabled) return
 
-  trackWafDurations(metrics)
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
-  const tag = getOrCreateMetricTag(metrics, req)
+  trackWafDurations(metrics, versionsTags)
 
-  const { requestBlocked, ruleTriggered, wafTimeout } = metrics
+  const metricTags = getOrCreateMetricTags(metrics, req, versionsTags)
 
-  if (requestBlocked) {
-    tag[tags.REQUEST_BLOCKED] = requestBlocked
+  const { blockTriggered, ruleTriggered, wafTimeout } = metrics
+
+  if (blockTriggered) {
+    metricTags[tags.REQUEST_BLOCKED] = blockTriggered
   }
   if (ruleTriggered) {
-    tag[tags.RULE_TRIGGERED] = ruleTriggered
+    metricTags[tags.RULE_TRIGGERED] = ruleTriggered
   }
   if (wafTimeout) {
-    tag[tags.WAF_TIMEOUT] = wafTimeout
+    metricTags[tags.WAF_TIMEOUT] = wafTimeout
   }
 
-  return tag
+  return metricTags
 }
 
 function incrementWafInitMetric (wafVersion, rulesVersion) {
   if (!enabled) return
 
-  const tag = getVersionsTag(wafVersion, rulesVersion)
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
-  appsecMetrics.count('waf.init', tag).inc()
+  appsecMetrics.count('waf.init', versionsTags).inc()
 }
 
 function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
   if (!enabled) return
 
-  const tag = getVersionsTag(wafVersion, rulesVersion)
+  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
-  appsecMetrics.count('waf.updates', tag).inc()
+  appsecMetrics.count('waf.updates', versionsTags).inc()
 }
 
 function incrementWafRequestsMetric (req) {
@@ -113,9 +113,9 @@ function incrementWafRequestsMetric (req) {
 
   const store = getStore(req)
 
-  const tag = store[DD_TELEMETRY_WAF_RESULT_TAG]
-  if (tag) {
-    appsecMetrics.count('waf.requests', tag).inc()
+  const metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
+  if (metricTags) {
+    appsecMetrics.count('waf.requests', metricTags).inc()
   }
 
   metricsStoreMap.delete(req)
@@ -125,7 +125,7 @@ module.exports = {
   enable,
   disable,
 
-  updateWafRequestsTag,
+  updateWafRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric
