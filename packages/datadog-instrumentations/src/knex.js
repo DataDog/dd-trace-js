@@ -59,21 +59,31 @@ addHook({
 })
 
 function wrapThenRaw (origThen, onFinish, asyncResource) {
-  return function then (onFulfilled, onRejected) {
-    arguments[0] = wrapCallback(asyncResource, onFulfilled, onFinish)
-    arguments[1] = wrapCallback(asyncResource, onRejected, onFinish)
+  return function () {
+    const onFulfilled = arguments[0]
+    const onRejected = arguments[1]
+
+    // not using shimmer here because resolve/reject could be empty
+    arguments[0] = function () {
+      asyncResource.runInAsyncScope(() => {
+        onFinish()
+
+        if (onFulfilled) {
+          onFulfilled.apply(this, arguments)
+        }
+      })
+    }
+
+    arguments[1] = function () {
+      asyncResource.runInAsyncScope(() => {
+        onFinish()
+
+        if (onRejected) {
+          onRejected.apply(this, arguments)
+        }
+      })
+    }
 
     return origThen.apply(this, arguments)
-  }
-}
-
-function wrapCallback (asyncResource, callback, onFinish) {
-  if (typeof callback !== 'function') return callback
-
-  return function () {
-    return asyncResource.runInAsyncScope(() => {
-      onFinish()
-      return callback.apply(this, arguments)
-    })
   }
 }
