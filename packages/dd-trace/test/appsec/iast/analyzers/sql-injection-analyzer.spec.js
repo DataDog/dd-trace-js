@@ -164,4 +164,29 @@ describe('sql-injection-analyzer', () => {
       expect(analyze).to.be.calledOnceWith('SELECT 1')
     })
   })
+
+  describe('knex dialects', () => {
+    const sqlInjectionAnalyzer = require('../../../../src/appsec/iast/analyzers/sql-injection-analyzer')
+
+    const knexDialects = {
+      'mssql': 'MSSQL',
+      'oracle': 'ORACLE',
+      'mysql': 'MYSQL',
+      'redshift': 'REDSHIFT',
+      'postgresql': 'POSTGRES',
+      'sqlite3': 'SQLITE'
+    }
+
+    Object.keys(knexDialects).forEach((knexDialect) => {
+      it(`should normalize knex dialect ${knexDialect} to uppercase`, () => {
+        const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect(knexDialect)
+        expect(normalizedDialect).to.equals(knexDialects[knexDialect])
+      })
+    })
+
+    it('should not fail when normalizing a non string knex dialect', () => {
+      const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect()
+      expect(normalizedDialect).to.be.undefined
+    })
+  })
 })

@@ -32,7 +32,10 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:mysql:pool:query:start', ({ sql }) => this.getStoreAndAnalyze(sql, 'MYSQL'))
     this.addSub('datadog:mysql:pool:query:finish', () => this.returnToParentStore())
 
-    this.addSub('datadog:knex:raw:start', ({ sql }) => this.getStoreAndAnalyze(sql, 'KNEX'))
+    this.addSub('datadog:knex:raw:start', ({ sql, dialect: knexDialect }) => {
+      const dialect = this.normalizeKnexDialect(knexDialect)
+      this.getStoreAndAnalyze(sql, dialect)
+    })
     this.addSub('datadog:knex:raw:finish', () => this.returnToParentStore())
   }
 
@@ -85,6 +88,20 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
 
   _getExcludedPaths () {
     return EXCLUDED_PATHS
+  }
+
+  normalizeKnexDialect (knexDialect) {
+    if (knexDialect === 'postgresql') {
+      return 'POSTGRES'
+    }
+
+    if (knexDialect === 'sqlite3') {
+      return 'SQLITE'
+    }
+
+    if (typeof knexDialect === 'string') {
+      return knexDialect.toUpperCase()
+    }
   }
 }
 

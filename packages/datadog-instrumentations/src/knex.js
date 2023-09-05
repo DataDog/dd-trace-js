@@ -48,7 +48,7 @@ addHook({
       }, this).apply(this)
     }
 
-    startRawQueryCh.publish({ sql })
+    startRawQueryCh.publish({ sql, dialect: this.dialect })
 
     const rawResult = raw.apply(this, arguments)
     wrapThenRaw(rawResult.then, onFinish, asyncResource)
