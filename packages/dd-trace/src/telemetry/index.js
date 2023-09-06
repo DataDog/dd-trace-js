@@ -65,9 +65,9 @@ function appStarted () {
 function formatConfig (config) {
   // format peerServiceMapping from an object to a string map in order for
   // telemetry intake to accept the configuration
-  config.peerServiceMapping = Object.entries(config.peerServiceMapping).map(
-    ([key, value]) => `${key}:${value}`
-  ).join(',')
+  config.peerServiceMapping = config.peerServiceMapping
+    ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
   return config
 }
 
