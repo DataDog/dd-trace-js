@@ -39,7 +39,7 @@ function update (newRules) {
   if (!waf.wafManager) throw new Error('Cannot update disabled WAF')
 
   try {
-    waf.wafManager.ddwaf.update(newRules)
+    waf.wafManager.update(newRules)
   } catch (err) {
     log.error('Could not apply rules from remote config')
     throw err

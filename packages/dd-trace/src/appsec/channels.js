@@ -5,6 +5,7 @@ const dc = require('../../../diagnostics_channel')
 // TODO: use TBD naming convention
 module.exports = {
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
+  graphqlFinishExecute: dc.channel('apm:graphql:execute:finish'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),

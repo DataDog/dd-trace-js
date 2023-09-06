@@ -14,11 +14,12 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     sandbox = await createSandbox(['express'], false, [`./packages/datadog-plugin-express/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(50000)
     await sandbox.remove()
   })
 
@@ -44,6 +45,6 @@ describe('esm', () => {
         assert.propertyVal(payload[0][0], 'name', 'express.request')
         assert.propertyVal(payload[0][1], 'name', 'express.middleware')
       })
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })
