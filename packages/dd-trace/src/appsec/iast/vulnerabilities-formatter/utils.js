@@ -7,6 +7,10 @@ const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
 const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 
+// eslint-disable-next-line max-len
+const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(`(?:"(${STRINGIFY_RANGE_KEY}_\\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\\d+_(\\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\\d+_([\\s0-9.a-zA-Z]*)")`, 'gm')
+const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
+
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 50) {
@@ -104,11 +108,11 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
     if (counter > 0) {
       let keysRegex
       if (loadSensitiveRanges) {
-        // eslint-disable-next-line max-len
-        keysRegex = new RegExp(`(?:"(${STRINGIFY_RANGE_KEY}_\\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\\d+_(\\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\\d+_([\\s0-9.a-zA-Z]*)")`, 'gm')
+        keysRegex = KEYS_REGEX_WITH_SENSITIVE_RANGES
       } else {
-        keysRegex = new RegExp(`"(${STRINGIFY_RANGE_KEY}_\\d+_)`, 'gm')
+        keysRegex = KEYS_REGEX_WITHOUT_SENSITIVE_RANGES
       }
+      keysRegex.lastIndex = 0
 
       let regexRes = keysRegex.exec(value)
       while (regexRes) {
