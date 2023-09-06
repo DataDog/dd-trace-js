@@ -19,8 +19,8 @@ describe('sql-injection-analyzer with knex', () => {
 
       prepareTestServerForIast('knex + pg',
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-          const srcFilePath = path.join(__dirname, 'resources', 'sql-injection-methods.js')
-          const dstFilePath = path.join(os.tmpdir(), 'sql-injection-methods.js')
+          const srcFilePath = path.join(__dirname, 'resources', 'knex-sql-injection-methods.js')
+          const dstFilePath = path.join(os.tmpdir(), 'knex-sql-injection-methods.js')
           let queryMethods
 
           beforeEach(() => {
@@ -46,25 +46,115 @@ describe('sql-injection-analyzer with knex', () => {
             fs.unlinkSync(dstFilePath)
           })
 
-          testThatRequestHasVulnerability(() => {
-            const store = storage.getStore()
-            const iastCtx = iastContextFunctions.getIastContext(store)
+          describe('simple raw query', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage.getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
 
-            let sql = 'SELECT 1'
-            sql = newTaintedString(iastCtx, sql, 'param', 'Request')
+              let sql = 'SELECT 1'
+              sql = newTaintedString(iastCtx, sql, 'param', 'Request')
 
-            return queryMethods.executeKnexRawQuery(knex, sql)
-          }, 'SQL_INJECTION', {
-            occurrences: 1,
-            location: {
-              path: 'sql-injection-methods.js',
-              line: 12
-            }
+              return queryMethods.executeKnexRawQuery(knex, sql)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 4
+              }
+            })
+
+            testThatRequestHasNoVulnerability(() => {
+              return knex.raw('SELECT 1')
+            }, 'SQL_INJECTION')
           })
 
-          testThatRequestHasNoVulnerability(() => {
-            return knex.raw('SELECT 1')
-          }, 'SQL_INJECTION')
+          describe('nested raw query', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage.getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
+
+              let taintedSql = 'SELECT 1'
+              taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+              const notTaintedSql = 'SELECT 1'
+
+              return queryMethods.executeKnexNestedRawQuery(knex, taintedSql, notTaintedSql)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 9
+              }
+            })
+          })
+
+          describe('nested raw query - onRejected as then argument', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage.getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
+
+              let taintedSql = 'SELECT 1'
+              taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+              const sqlToFail = 'SELECT * FROM NON_EXISTSING_TABLE'
+
+              return queryMethods.executeKnexNestedRawQueryOnRejectedInThen(knex, taintedSql, sqlToFail)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 17
+              }
+            })
+          })
+
+          describe('nested raw query - with catch', () => {
+            testThatRequestHasVulnerability(() => {
+              const store = storage.getStore()
+              const iastCtx = iastContextFunctions.getIastContext(store)
+
+              let taintedSql = 'SELECT 1'
+              taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+              const sqlToFail = 'SELECT * FROM NON_EXISTSING_TABLE'
+
+              return queryMethods.executeKnexNestedRawQueryWitCatch(knex, taintedSql, sqlToFail)
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 28
+              }
+            })
+          })
+
+          describe('nested raw query - asCallback', () => {
+            testThatRequestHasVulnerability(() => {
+              return new Promise((resolve, reject) => {
+                const store = storage.getStore()
+                const iastCtx = iastContextFunctions.getIastContext(store)
+
+                let taintedSql = 'SELECT 1'
+                taintedSql = newTaintedString(iastCtx, taintedSql, 'param', 'Request')
+
+                const sqlToFail = 'SELECT * FROM NON_EXISTSING_TABLE'
+
+                queryMethods.executeKnexNestedRawQueryAsCallback(knex, taintedSql, sqlToFail, (err, result) => {
+                  if (err) {
+                    reject(err)
+                  } else {
+                    resolve(result)
+                  }
+                })
+              })
+            }, 'SQL_INJECTION', {
+              occurrences: 1,
+              location: {
+                path: 'knex-sql-injection-methods.js',
+                line: 34
+              }
+            })
+          })
         })
     })
   })

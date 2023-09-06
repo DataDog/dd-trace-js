@@ -1,6 +1,5 @@
 'use strict'
 
-const { AsyncResource } = require('async_hooks')
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
 const shimmer = require('../../datadog-shimmer')
@@ -40,50 +39,43 @@ addHook({
       return raw.apply(this, arguments)
     }
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    function onFinish () {
-      asyncResource.bind(function () {
-        finishRawQueryCh.publish()
-      }, this).apply(this)
+    function finish () {
+      finishRawQueryCh.publish()
     }
 
     startRawQueryCh.publish({ sql, dialect: this.dialect })
 
     const rawResult = raw.apply(this, arguments)
-    wrapThenRaw(rawResult.then, onFinish, asyncResource)
+
+    shimmer.wrap(rawResult, 'then', originalThen => function () {
+      arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
+      arguments[1] = wrapCallbackWithFinish(arguments[1], finish)
+
+      const originalThenResult = originalThen.apply(this, arguments)
+
+      shimmer.wrap(originalThenResult, 'catch', originalCatch => function () {
+        arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
+        return originalCatch.apply(this, arguments)
+      })
+
+      return originalThenResult
+    })
+
+    shimmer.wrap(rawResult, 'asCallback', originalAsCallback => function () {
+      arguments[0] = wrapCallbackWithFinish(arguments[0], finish)
+      return originalAsCallback.apply(this, arguments)
+    })
 
     return rawResult
   })
   return Knex
 })
 
-function wrapThenRaw (origThen, onFinish, asyncResource) {
+function wrapCallbackWithFinish (callback, finish) {
+  if (typeof callback !== 'function') return callback
+
   return function () {
-    const onFulfilled = arguments[0]
-    const onRejected = arguments[1]
-
-    // not using shimmer here because resolve/reject could be empty
-    arguments[0] = function () {
-      asyncResource.runInAsyncScope(() => {
-        onFinish()
-
-        if (onFulfilled) {
-          onFulfilled.apply(this, arguments)
-        }
-      })
-    }
-
-    arguments[1] = function () {
-      asyncResource.runInAsyncScope(() => {
-        onFinish()
-
-        if (onRejected) {
-          onRejected.apply(this, arguments)
-        }
-      })
-    }
-
-    return origThen.apply(this, arguments)
+    finish()
+    callback.apply(this, arguments)
   }
 }

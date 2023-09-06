@@ -8,8 +8,7 @@ function executeQueryWithCallback (sql, clientOrPool, cb) {
   return clientOrPool.query(sql, cb)
 }
 
-function executeKnexRawQuery (knex, sql) {
-  return knex.raw(sql)
+module.exports = {
+  executeQuery,
+  executeQueryWithCallback
 }
-
-module.exports = { executeQuery, executeQueryWithCallback, executeKnexRawQuery }
