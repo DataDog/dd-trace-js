@@ -25,7 +25,7 @@ class CallSiteMock {
 }
 
 describe('path-line', function () {
-  const PATH_LINE_PATH = path.join('packages', 'dd-trace', 'src', 'appsec', 'iast', 'path-line.js')
+  const PATH_LINE_PATH = path.join('dd-trace', 'src', 'appsec', 'iast', 'path-line.js')
 
   const tmpdir = os.tmpdir()
   const firstSep = tmpdir.indexOf(path.sep)
@@ -54,19 +54,20 @@ describe('path-line', function () {
 
   describe('calculateDDBasePath', () => {
     it('/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'node_modules', 'dd-trace', path.sep)
+      const basePath = path.join(rootPath, 'node_modules', 'dd-trace', 'packages', path.sep)
       const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
       expect(result).to.be.equals(basePath)
     })
 
     it('/packages/project/path/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'packages', 'project', 'path', 'node_modules', 'dd-trace', path.sep)
+      const basePath =
+        path.join(rootPath, 'packages', 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
       const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
       expect(result).to.be.equals(basePath)
     })
 
     it('/project/path/node_modules/dd-trace', () => {
-      const basePath = path.join(rootPath, 'project', 'path', 'node_modules', 'dd-trace', path.sep)
+      const basePath = path.join(rootPath, 'project', 'path', 'node_modules', 'dd-trace', 'packages', path.sep)
       const result = pathLine.calculateDDBasePath(path.join(basePath, PATH_LINE_PATH))
       expect(result).to.be.equals(basePath)
     })

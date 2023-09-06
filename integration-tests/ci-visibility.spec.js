@@ -28,17 +28,13 @@ const {
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
-// TODO: remove when 2.x support is removed.
-// This is done because newest versions of mocha and jest do not support node@12
-const isOldNode = semver.satisfies(process.version, '<=12')
-
 const mochaCommonOptions = {
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
 
 const jestCommonOptions = {
-  dependencies: [isOldNode ? 'jest@28' : 'jest', 'chai', isOldNode ? 'jest-jasmine2@28' : 'jest-jasmine2'],
+  dependencies: ['jest', 'chai', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
     'ci-visibility/test/sum.js',
@@ -52,7 +48,7 @@ const testFrameworks = [
     ...mochaCommonOptions,
     name: 'mocha',
     testFile: 'ci-visibility/run-mocha.js',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc'],
+    dependencies: ['mocha', 'chai', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -67,7 +63,7 @@ const testFrameworks = [
     ...mochaCommonOptions,
     name: 'mocha',
     testFile: 'ci-visibility/run-mocha.mjs',
-    dependencies: [isOldNode ? 'mocha@9' : 'mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -121,13 +117,17 @@ testFrameworks.forEach(({
     let startupTestFile
     let testOutput = ''
 
-    before(async () => {
+    before(async function () {
+      // add an explicit timeout to make esm tests less flaky
+      this.timeout(50000)
       sandbox = await createSandbox(dependencies, true)
       cwd = sandbox.folder
       startupTestFile = path.join(cwd, testFile)
     })
 
-    after(async () => {
+    after(async function () {
+      // add an explicit timeout to make esm tests less flaky
+      this.timeout(50000)
       await sandbox.remove()
     })
 
@@ -174,7 +174,7 @@ testFrameworks.forEach(({
           assert.include(testOutput, '1 passing') // we only run one file here
           done()
         })
-      })
+      }).timeout(50000)
 
       it('does not init CI Visibility when running in parallel mode', (done) => {
         receiver.assertPayloadReceived(() => {

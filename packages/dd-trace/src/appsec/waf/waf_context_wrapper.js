@@ -4,11 +4,12 @@ const log = require('../../log')
 const Reporter = require('../reporter')
 
 class WAFContextWrapper {
-  constructor (ddwafContext, requiredAddresses, wafTimeout, rulesInfo) {
+  constructor (ddwafContext, requiredAddresses, wafTimeout, rulesInfo, wafVersion) {
     this.ddwafContext = ddwafContext
     this.requiredAddresses = requiredAddresses
     this.wafTimeout = wafTimeout
-    this.rulesInfo = rulesInfo
+    this.rulesVersion = rulesInfo.version
+    this.wafVersion = wafVersion
   }
 
   run (params) {
@@ -32,13 +33,20 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
+      const ruleTriggered = !!result.data && result.data !== '[]'
+      const blockTriggered = result.actions?.includes('block')
+
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
         durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesInfo.version
+        rulesVersion: this.rulesVersion,
+        ruleTriggered,
+        blockTriggered,
+        wafVersion: this.wafVersion,
+        wafTimeout: result.timeout
       })
 
-      if (result.data && result.data !== '[]') {
+      if (ruleTriggered) {
         Reporter.reportAttack(result.data)
       }
 

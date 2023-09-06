@@ -127,6 +127,16 @@
       "versions": ["6.1.0"]
     }
   ],
+  "ldapjs": [
+    {
+      "name": "ldapjs",
+      "versions": [">= 2"]
+    },
+    {
+      "name": "ldapjs-promise",
+      "versions": [">=2"]
+    }
+  ],
   "mariadb": [
     {
       "name": "mariadb",

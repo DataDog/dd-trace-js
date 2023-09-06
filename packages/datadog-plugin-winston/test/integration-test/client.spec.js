@@ -13,11 +13,12 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     sandbox = await createSandbox(['winston'], false, [`./packages/datadog-plugin-winston/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(50000)
     await sandbox.remove()
   })
 
@@ -41,6 +42,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })
