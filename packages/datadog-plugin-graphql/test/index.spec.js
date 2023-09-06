@@ -5,6 +5,8 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const axios = require('axios')
+const http = require('http')
 
 describe('Plugin', () => {
   let tracer
@@ -1535,91 +1537,166 @@ describe('Plugin', () => {
             })
         })
       })
+      if (semver.satisfies(version, '<15.2.0')) {
+        withVersions('graphql', 'apollo-server-core', apolloVersion => {
+          let runQuery
+          let mergeSchemas
+          let makeExecutableSchema
 
-      withVersions('graphql', 'apollo-server-core', apolloVersion => {
-        let runQuery
-        let mergeSchemas
-        let makeExecutableSchema
+          before(() => {
+            tracer = require('../../dd-trace')
 
-        before(() => {
-          tracer = require('../../dd-trace')
+            return agent.load('graphql')
+              .then(() => {
+                graphql = require(`../../../versions/graphql@${version}`).get()
 
-          return agent.load('graphql')
-            .then(() => {
-              graphql = require(`../../../versions/graphql@${version}`).get()
+                const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
+                const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
 
-              const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
-              const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
+                runQuery = apolloCore.runQuery
+                mergeSchemas = graphqlTools.mergeSchemas
+                makeExecutableSchema = graphqlTools.makeExecutableSchema
+              })
+          })
 
-              runQuery = apolloCore.runQuery
-              mergeSchemas = graphqlTools.mergeSchemas
-              makeExecutableSchema = graphqlTools.makeExecutableSchema
-            })
-        })
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
-        })
+          it('should support apollo-server schema stitching', done => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
 
-        it('should support apollo-server schema stitching', done => {
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
+                expect(spans).to.have.length(3)
 
-              expect(spans).to.have.length(3)
+                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
+                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
+                expect(spans[0].meta).to.not.have.property('graphql.source')
 
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
-              expect(spans[0].meta).to.not.have.property('graphql.source')
+                expect(spans[1]).to.have.property('name', 'graphql.resolve')
+                expect(spans[1]).to.have.property('resource', 'hello:String')
 
-              expect(spans[1]).to.have.property('name', 'graphql.resolve')
-              expect(spans[1]).to.have.property('resource', 'hello:String')
+                expect(spans[2]).to.have.property('name', 'graphql.validate')
+                expect(spans[2].meta).to.not.have.property('graphql.source')
+              })
+              .then(done)
+              .catch(done)
 
-              expect(spans[2]).to.have.property('name', 'graphql.validate')
-              expect(spans[2].meta).to.not.have.property('graphql.source')
-            })
-            .then(done)
-            .catch(done)
-
-          schema = mergeSchemas({
-            schemas: [
-              makeExecutableSchema({
-                typeDefs: `
+            schema = mergeSchemas({
+              schemas: [
+                makeExecutableSchema({
+                  typeDefs: `
                   type Query {
                     hello: String
                   }
                 `,
-                resolvers: {
-                  Query: {
-                    hello: () => 'Hello world!'
+                  resolvers: {
+                    Query: {
+                      hello: () => 'Hello world!'
+                    }
                   }
-                }
-              }),
-              makeExecutableSchema({
-                typeDefs: `
+                }),
+                makeExecutableSchema({
+                  typeDefs: `
                   type Query {
                     world: String
                   }
                 `,
-                resolvers: {
-                  Query: {
-                    world: () => 'Hello world!'
+                  resolvers: {
+                    Query: {
+                      world: () => 'Hello world!'
+                    }
                   }
-                }
-              })
-            ]
+                })
+              ]
+            })
+
+            const params = {
+              schema,
+              query: 'query MyQuery { hello }',
+              operationName: 'MyQuery'
+            }
+
+            runQuery(params)
+              .catch(done)
           })
-
-          const params = {
-            schema,
-            query: 'query MyQuery { hello }',
-            operationName: 'MyQuery'
-          }
-
-          runQuery(params)
-            .catch(done)
         })
-      })
+      }
+
+      // graphql-yoga@^3.6.0 requires graphql@>=15.2.0
+      if (semver.satisfies(version, '>=15.2.0')) {
+        describe('graphql-yoga', () => {
+          withVersions('graphql', 'graphql-yoga', version => {
+            let graphqlYoga
+            let server
+
+            before(() => {
+              tracer = require('../../dd-trace')
+              return agent.load('graphql')
+                .then(() => {
+                  graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
+
+                  const typeDefs = `
+                    type Query {
+                      hello(name: String): String
+                    }
+                  `
+
+                  const resolvers = {
+                    Query: {
+                      hello: (_, { name }) => {
+                        return `Hello, ${name || 'world'}!`
+                      }
+                    }
+                  }
+
+                  const schema = graphqlYoga.createSchema({
+                    typeDefs, resolvers
+                  })
+
+                  const yoga = graphqlYoga.createYoga({ schema })
+
+                  server = http.createServer(yoga)
+                  server.listen(4000)
+                })
+            })
+
+            after(() => {
+              server.close()
+              return agent.close({ ritmReset: false })
+            })
+
+            it('should instrument graphql-yoga execution', done => {
+              agent
+                .use(traces => {
+                  const spans = sort(traces[0])
+
+                  expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
+                  expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
+                  expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+                  expect(spans[0]).to.have.property('type', 'graphql')
+                  expect(spans[0]).to.have.property('error', 0)
+                  expect(spans[0].meta).to.not.have.property('graphql.source')
+                  expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+                  expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
+                  expect(spans[0].meta).to.have.property('component', 'graphql')
+                })
+                .then(done)
+
+              const query = `
+                query MyQuery {
+                  hello(name: "world")
+                }
+              `
+
+              axios.post('http://localhost:4000/graphql', {
+                query
+              }).catch(done)
+            })
+          })
+        })
+      }
     })
   })
 })

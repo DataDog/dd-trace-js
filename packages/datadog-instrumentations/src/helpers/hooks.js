@@ -43,6 +43,7 @@ module.exports = {
   'node:fs': () => require('../fs'),
   'generic-pool': () => require('../generic-pool'),
   'graphql': () => require('../graphql'),
+  '@graphql-tools/executor': () => require('../graphql'),
   'grpc': () => require('../grpc'),
   'hapi': () => require('../hapi'),
   'http': () => require('../http'),
