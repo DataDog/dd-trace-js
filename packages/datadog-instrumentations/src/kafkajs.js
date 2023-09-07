@@ -15,11 +15,19 @@ const consumerStartCh = channel('apm:kafkajs:consume:start')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
-addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
-  const Kafka = obj.Kafka
+addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
+  class Kafka extends BaseKafka {
+    constructor (options) {
+      super(options)
+      this._brokers = (options.brokers && typeof options.brokers !== 'function')
+        ? options.brokers.join(',') : undefined
+    }
+  }
+
   shimmer.wrap(Kafka.prototype, 'producer', createProducer => function () {
     const producer = createProducer.apply(this, arguments)
     const send = producer.send
+    const bootstrapServers = this._brokers
 
     producer.send = function () {
       const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -36,7 +44,7 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
               message.headers = message.headers || {}
             }
           }
-          producerStartCh.publish({ topic, messages })
+          producerStartCh.publish({ topic, messages, bootstrapServers })
 
           const result = send.apply(this, arguments)
 
@@ -108,5 +116,5 @@ addHook({ name: 'kafkajs', versions: ['>=1.4'] }, (obj) => {
     }
     return consumer
   })
-  return obj
+  return Kafka
 })

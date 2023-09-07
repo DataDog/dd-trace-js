@@ -4,8 +4,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const Nomenclature = require('../../dd-trace/src/service-naming')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let Redis
@@ -33,8 +32,8 @@ describe('Plugin', () => {
           agent.use(() => {}) // wait for initial info command
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('component', 'ioredis')
@@ -87,8 +86,8 @@ describe('Plugin', () => {
           agent.use(() => {}) // wait for initial info command
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
@@ -109,9 +108,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => redis.get('foo').catch(done),
-          () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName,
-          'test'
+          rawExpectedSchema.outbound
         )
       })
 
@@ -148,12 +145,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => redis.get('foo').catch(done),
-          () => namingSchema.outbound.opName,
-          () => {
-            if (Nomenclature.version === 'v0') return 'custom-test'
-            return 'custom'
-          },
-          'custom'
+          {
+            v0: {
+              opName: 'redis.command',
+              serviceName: 'custom-test'
+            },
+            v1: {
+              opName: 'redis.command',
+              serviceName: 'custom'
+            }
+          }
         )
       })
 

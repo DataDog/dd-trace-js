@@ -12,7 +12,7 @@ class MongodbCorePlugin extends DatabasePlugin {
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
     this.startSpan(this.operationName(), {
-      service: this.serviceName(this.config),
+      service: this.serviceName({ pluginConfig: this.config }),
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -36,10 +36,14 @@ class MongodbCorePlugin extends DatabasePlugin {
   }
 }
 
+function sanitizeBigInt (data) {
+  return JSON.stringify(data, (_key, value) => typeof value === 'bigint' ? value.toString() : value)
+}
+
 function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
-  if (cmd.query) return JSON.stringify(limitDepth(cmd.query))
-  if (cmd.filter) return JSON.stringify(limitDepth(cmd.filter))
+  if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
+  if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
 }
 
 function getResource (plugin, ns, query, operationName) {
@@ -57,7 +61,7 @@ function truncate (input) {
 }
 
 function shouldSimplify (input) {
-  return !isObject(input)
+  return !isObject(input) || typeof input.toJSON === 'function'
 }
 
 function shouldHide (input) {

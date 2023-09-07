@@ -7,6 +7,8 @@ let tools
 class GraphQLExecutePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'execute' }
+  static get type () { return 'graphql' }
+  static get kind () { return 'server' }
 
   start ({ operation, args, docSource }) {
     const type = operation && operation.operation
@@ -14,11 +16,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const document = args.document
     const source = this.config.source && document && docSource
 
-    const span = this.startSpan('graphql.execute', {
-      service: this.config.service,
+    const span = this.startSpan(this.operationName(), {
+      service: this.config.service || this.serviceName(),
       resource: getSignature(document, name, type, this.config.signature),
-      kind: 'server',
-      type: 'graphql',
+      kind: this.constructor.kind,
+      type: this.constructor.type,
       meta: {
         'graphql.operation.type': type,
         'graphql.operation.name': name,

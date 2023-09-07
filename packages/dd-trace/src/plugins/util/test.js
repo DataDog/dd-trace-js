@@ -1,11 +1,13 @@
 const path = require('path')
 const fs = require('fs')
+const { URL } = require('url')
+const log = require('../../log')
 
 const istanbul = require('istanbul-lib-coverage')
 const ignore = require('ignore')
 
 const { getGitMetadata } = require('./git')
-const { getUserProviderGitMetadata } = require('./user-provided-git')
+const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const { getCIMetadata } = require('./ci')
 const { getRuntimeAndOSMetadata } = require('./env')
 const {
@@ -16,7 +18,8 @@ const {
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
   GIT_COMMIT_MESSAGE,
-  CI_WORKSPACE_PATH
+  CI_WORKSPACE_PATH,
+  CI_PIPELINE_URL
 } = require('./tags')
 const id = require('../../id')
 
@@ -44,6 +47,7 @@ const TEST_SESSION_ID = 'test_session_id'
 const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
+const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -51,6 +55,8 @@ const JEST_TEST_RUNNER = 'test.jest.test_runner'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
+const TEST_ITR_SKIPPING_TYPE = 'test.itr.tests_skipping.type'
+const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
@@ -77,6 +83,7 @@ module.exports = {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   TEST_SOURCE_START,
+  TEST_SKIPPED_BY_ITR,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -96,6 +103,8 @@ module.exports = {
   TEST_ITR_TESTS_SKIPPED,
   TEST_MODULE,
   TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_COVERAGE_LINES_PCT,
   addIntelligentTestRunnerSpanTags,
@@ -104,7 +113,8 @@ module.exports = {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestLineStart,
-  getCallSites
+  getCallSites,
+  removeInvalidMetadata
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -114,6 +124,39 @@ function getPkgManager () {
   } catch (e) {
     return ''
   }
+}
+
+function validateUrl (url) {
+  try {
+    const urlObject = new URL(url)
+    return (urlObject.protocol === 'https:' || urlObject.protocol === 'http:')
+  } catch (e) {
+    return false
+  }
+}
+
+function removeInvalidMetadata (metadata) {
+  return Object.keys(metadata).reduce((filteredTags, tag) => {
+    if (tag === GIT_REPOSITORY_URL) {
+      if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
+        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
+        return filteredTags
+      }
+    }
+    if (tag === GIT_COMMIT_SHA) {
+      if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
+        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
+        return filteredTags
+      }
+    }
+    if (tag === CI_PIPELINE_URL) {
+      if (!validateUrl(metadata[CI_PIPELINE_URL])) {
+        return filteredTags
+      }
+    }
+    filteredTags[tag] = metadata[tag]
+    return filteredTags
+  }, {})
 }
 
 function getTestEnvironmentMetadata (testFramework, config) {
@@ -155,7 +198,7 @@ function getTestEnvironmentMetadata (testFramework, config) {
   if (config && config.service) {
     metadata['service.name'] = config.service
   }
-  return metadata
+  return removeInvalidMetadata(metadata)
 }
 
 function getTestParametersString (parametersByTestName, testName) {
@@ -173,6 +216,13 @@ function getTestParametersString (parametersByTestName, testName) {
   }
 }
 
+function getTestTypeFromFramework (testFramework) {
+  if (testFramework === 'playwright' || testFramework === 'cypress') {
+    return 'browser'
+  }
+  return 'test'
+}
+
 function finishAllTraceSpans (span) {
   span.context()._trace.started.forEach(traceSpan => {
     if (traceSpan !== span) {
@@ -188,10 +238,10 @@ function getTestParentSpan (tracer) {
   })
 }
 
-function getTestCommonTags (name, suite, version) {
+function getTestCommonTags (name, suite, version, testFramework) {
   return {
     [SPAN_TYPE]: 'test',
-    [TEST_TYPE]: 'test',
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework),
     [SAMPLING_RULE_DECISION]: 1,
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
@@ -269,12 +319,12 @@ function getCodeOwnersForFilename (filename, entries) {
   return null
 }
 
-function getTestLevelCommonTags (command, testFrameworkVersion) {
+function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_TYPE]: 'test'
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework)
   }
 }
 
@@ -284,7 +334,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -293,7 +343,7 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
     [TEST_MODULE]: testFramework,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
@@ -303,21 +353,32 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
-    ...getTestLevelCommonTags(command, testFrameworkVersion)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
   }
 }
 
 function addIntelligentTestRunnerSpanTags (
   testSessionSpan,
   testModuleSpan,
-  { isSuitesSkipped, isSuitesSkippingEnabled, isCodeCoverageEnabled, testCodeCoverageLinesTotal }
+  {
+    isSuitesSkipped,
+    isSuitesSkippingEnabled,
+    isCodeCoverageEnabled,
+    testCodeCoverageLinesTotal,
+    skippingCount,
+    skippingType = 'suite'
+  }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
   testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
+  testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
   testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
+  testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
   // If suites have been skipped we don't want to report the total coverage, as it will be wrong

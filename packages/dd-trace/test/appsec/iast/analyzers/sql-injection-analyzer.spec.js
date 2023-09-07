@@ -26,13 +26,19 @@ describe('sql-injection-analyzer', () => {
     sinon.restore()
   })
 
+  sqlInjectionAnalyzer.configure(true)
+
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(5)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(9)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('apm:mysql2:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:sequelize:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:pg:pool:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:pg:pool:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[7]._channel.name).to.equals('datadog:mysql:pool:query:start')
+    expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:mysql:pool:query:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -97,5 +103,63 @@ describe('sql-injection-analyzer', () => {
     dc.channel('datadog:sequelize:query:finish').publish()
     sqlInjectionAnalyzer.configure(false)
     expect(iastLog.errorAndPublish).not.to.be.called
+  })
+
+  describe('analyze', () => {
+    let sqlInjectionAnalyzer, analyze
+
+    const store = {}
+    const iastContext = {}
+
+    beforeEach(() => {
+      const getStore = sinon.stub().returns(store)
+      const getIastContext = sinon.stub().returns(iastContext)
+
+      const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
+        '../../../../datadog-core': { storage: { getStore } },
+        './iast-context': { getIastContext }
+      })
+
+      const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
+        '../iast-plugin': iastPlugin,
+        '../overhead-controller': { hasQuota: () => true }
+      })
+      const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
+        '../taint-tracking/operations': TaintTrackingMock,
+        './vulnerability-analyzer': ProxyAnalyzer
+      })
+
+      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+        './injection-analyzer': InjectionAnalyzer
+      })
+      analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
+      sqlInjectionAnalyzer.configure(true)
+    })
+
+    afterEach(sinon.restore)
+
+    it('should call analyze on apm:mysql:query:start', () => {
+      const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onMysqlQueryStart({ sql: 'SELECT 1', name: 'apm:mysql:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
+
+    it('should call analyze on apm:mysql2:query:start', () => {
+      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onMysql2QueryStart({ sql: 'SELECT 1', name: 'apm:mysql2:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
+
+    it('should call analyze on apm:pg:query:start', () => {
+      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+
+      onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
+
+      expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
   })
 })

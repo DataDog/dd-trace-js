@@ -12,7 +12,10 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
-  TEST_MODULE
+  TEST_MODULE,
+  getTestSuiteCommonTags,
+  TEST_STATUS,
+  TEST_SKIPPED_BY_ITR
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -77,6 +80,24 @@ module.exports = class CiPlugin extends Plugin {
         }
       })
     })
+
+    this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
+      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      skippedSuites.forEach((testSuite) => {
+        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
+
+        this.tracer.startSpan(`${this.constructor.id}.test_suite`, {
+          childOf: this.testModuleSpan,
+          tags: {
+            [COMPONENT]: this.constructor.id,
+            ...this.testEnvironmentMetadata,
+            ...testSuiteMetadata,
+            [TEST_STATUS]: 'skip',
+            [TEST_SKIPPED_BY_ITR]: 'true'
+          }
+        }).finish()
+      })
+    })
   }
 
   configure (config) {
@@ -111,7 +132,12 @@ module.exports = class CiPlugin extends Plugin {
     const childOf = getTestParentSpan(this.tracer)
 
     let testTags = {
-      ...getTestCommonTags(testName, testSuite, this.frameworkVersion),
+      ...getTestCommonTags(
+        testName,
+        testSuite,
+        this.frameworkVersion,
+        this.constructor.id
+      ),
       [COMPONENT]: this.constructor.id,
       ...extraTags
     }

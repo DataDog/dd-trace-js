@@ -81,7 +81,7 @@ describe('Config', () => {
     expect(config).to.have.property('queryStringObfuscation').with.length(626)
     expect(config).to.have.property('clientIpEnabled', false)
     expect(config).to.have.property('clientIpHeader', null)
-    expect(config).to.have.property('sampleRate', 1)
+    expect(config).to.have.property('sampleRate', undefined)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.have.property('service', 'node')
     expect(config).to.have.property('plugins', true)
@@ -93,10 +93,10 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
-    expect(config).to.have.property('traceRemoveIntegrationServiceNamesEnabled', false)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['tracecontext', 'datadog'])
-    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['tracecontext', 'datadog'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
@@ -115,6 +115,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
   })
 
   it('should support logging', () => {
@@ -164,6 +165,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc, d:dd'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'true'
@@ -193,6 +195,8 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
@@ -211,6 +215,7 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -234,10 +239,12 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
-      sampleRate: '0.5',
+      sampleRate: 0.5,
       rateLimit: '-1',
       rules: [
         { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
@@ -255,6 +262,10 @@ describe('Config', () => {
     expect(config).to.have.deep.property('serviceMapping', {
       a: 'aa',
       b: 'bb'
+    })
+    expect(config).to.have.deep.property('peerServiceMapping', {
+      c: 'cc',
+      d: 'dd'
     })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
@@ -280,6 +291,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -364,6 +376,12 @@ describe('Config', () => {
         { service: 'mysql', sampleRate: 1.0 },
         { sampleRate: 0.1 }
       ],
+      spanAttributeSchema: 'v1',
+      spanComputePeerService: true,
+      spanRemoveIntegrationFromService: true,
+      peerServiceMapping: {
+        d: 'dd'
+      },
       serviceMapping: {
         a: 'aa',
         b: 'bb'
@@ -392,7 +410,8 @@ describe('Config', () => {
           maxConcurrentRequests: 4,
           maxContextOperations: 5,
           deduplicationEnabled: false,
-          redactionEnabled: false
+          redactionEnabled: false,
+          telemetryVerbosity: 'DEBUG'
         }
       },
       appsec: false,
@@ -428,6 +447,9 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.property('tags')
     expect(config.tags).to.have.property('foo', 'bar')
     expect(config.tags).to.have.property('runtime-id')
@@ -445,6 +467,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: 1000,
@@ -526,11 +549,50 @@ describe('Config', () => {
   it('should warn if defaulting to v0 span attribute schema', () => {
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'foo'
 
-    // eslint-disable-next-line no-new
     const config = new Config()
 
     expect(log.warn).to.have.been.calledWith('Unexpected input for config.spanAttributeSchema, picked default v0')
     expect(config).to.have.property('spanAttributeSchema', 'v0')
+  })
+
+  context('peer service tagging', () => {
+    it('should activate peer service only if explicitly true in v0', () => {
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+      let config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+    })
+
+    it('should activate peer service in v1 unless explicitly false', () => {
+      process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+      let config = new Config()
+      expect(config).to.have.property('spanComputePeerService', false)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'foo'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+
+      delete process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+      config = new Config()
+      expect(config).to.have.property('spanComputePeerService', true)
+    })
   })
 
   it('should give priority to the common agent environment variable', () => {
@@ -555,12 +617,16 @@ describe('Config', () => {
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
+    process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
     process.env.DD_API_KEY = '123'
     process.env.DD_APP_KEY = '456'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
+    process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_ENABLED = 'false'
     process.env.DD_TRACE_CLIENT_IP_HEADER = 'foo-bar-header'
     process.env.DD_TRACE_GLOBAL_TAGS = 'foo:bar,baz:qux'
@@ -608,6 +674,12 @@ describe('Config', () => {
       },
       serviceMapping: {
         b: 'bb'
+      },
+      spanAttributeSchema: 'v1',
+      spanComputePeerService: true,
+      spanRemoveIntegrationFromService: true,
+      peerServiceMapping: {
+        d: 'dd'
       },
       tracePropagationStyle: {
         inject: [],
@@ -663,6 +735,10 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
+    expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanRemoveIntegrationFromService', true)
+    expect(config).to.have.property('spanComputePeerService', true)
+    expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -778,7 +854,7 @@ describe('Config', () => {
   it('should sanitize the sample rate to be between 0 and 1', () => {
     expect(new Config({ sampleRate: -1 })).to.have.property('sampleRate', 0)
     expect(new Config({ sampleRate: 2 })).to.have.property('sampleRate', 1)
-    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', 1)
+    expect(new Config({ sampleRate: NaN })).to.have.property('sampleRate', undefined)
   })
 
   it('should ignore empty service names', () => {
@@ -841,6 +917,17 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
+  it('should not set DD_TRACE_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
+    // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.WEBSITE_SKU = 'Dynamic'
+
+    const config = new Config()
+
+    expect(config.telemetry.enabled).to.be.false
+  })
+
   it('should set telemetry default values', () => {
     const config = new Config()
 
@@ -849,6 +936,7 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
+    expect(config.telemetry.metrics).to.be.false
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -871,6 +959,17 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
 
     process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+  })
+
+  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+    const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.telemetry.metrics).to.be.true
+
+    process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
   it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
@@ -926,6 +1025,16 @@ describe('Config', () => {
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
+
+    const config = new Config()
+
+    expect(config.remoteConfig.enabled).to.be.false
+  })
+
+  it('should not set DD_REMOTE_CONFIGURATION_ENABLED if Azure Functions env vars are present', () => {
+    process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
+    process.env.FUNCTIONS_EXTENSION_VERSION = '4'
+    process.env.WEBSITE_SKU = 'Dynamic'
 
     const config = new Config()
 

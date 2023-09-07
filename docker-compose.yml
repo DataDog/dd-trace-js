@@ -1,7 +1,7 @@
 version: "2"
 services:
   couchbase:
-    image: sabrenner/couchbase-server-sandbox:latest
+    image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
       - "127.0.0.1:8091-8095:8091-8095"
       - "127.0.0.1:11210:11210"
@@ -79,7 +79,7 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: ridedott/pubsub-emulator
+    image: ghcr.io/ridedott/pubsub-emulator
     ports:
       - "127.0.0.1:8081:8081"
   localstack:

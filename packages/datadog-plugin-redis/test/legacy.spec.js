@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Legacy Plugin', () => {
   let redis
@@ -51,8 +51,8 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', namingSchema.outbound.serviceName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
               expect(traces[0][0]).to.have.property('resource', 'get')
               expect(traces[0][0]).to.have.property('type', 'redis')
               expect(traces[0][0].meta).to.have.property('db.name', '0')
@@ -112,7 +112,7 @@ describe('Legacy Plugin', () => {
         // Increasing the test timeout does not help.
         // Error will be set but span will not.
         // agent.use is called a dozen times per test in legacy.spec but once per test in client.spec
-        it('should handle errors', done => {
+        it.skip('should handle errors', done => {
           const assertError = () => {
             if (!error || !span) return
 
@@ -147,9 +147,7 @@ describe('Legacy Plugin', () => {
 
         withNamingSchema(
           () => client.get('foo', () => {}),
-          () => namingSchema.outbound.opName,
-          () => namingSchema.outbound.serviceName,
-          'test'
+          rawExpectedSchema.outbound
         )
       })
 
@@ -196,9 +194,16 @@ describe('Legacy Plugin', () => {
 
         withNamingSchema(
           () => client.get('foo', () => {}),
-          () => namingSchema.outbound.opName,
-          () => 'custom',
-          'custom'
+          {
+            v0: {
+              opName: 'redis.command',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'redis.command',
+              serviceName: 'custom'
+            }
+          }
         )
       })
 

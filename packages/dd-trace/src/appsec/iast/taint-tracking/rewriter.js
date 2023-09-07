@@ -5,16 +5,52 @@ const shimmer = require('../../../../../datadog-shimmer')
 const iastLog = require('../iast-log')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
+const { getName } = require('../telemetry/verbosity')
+const { getRewriteFunction } = require('./rewriter-telemetry')
 
 let rewriter
 let getPrepareStackTrace
-function getRewriter () {
+
+let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
+  return { path, line, column }
+}
+
+function isFlagPresent (flag) {
+  return process.env.NODE_OPTIONS?.includes(flag) ||
+    process.execArgv?.some(arg => arg.includes(flag))
+}
+
+function getGetOriginalPathAndLineFromSourceMapFunction (chainSourceMap, getOriginalPathAndLineFromSourceMap) {
+  if (chainSourceMap) {
+    return function (path, line, column) {
+      // if --enable-source-maps is present stacktraces of the rewritten files contain the original path, file and
+      // column because the sourcemap chaining is done during the rewriting process so we can skip it
+      if (isPrivateModule(path) && isNotLibraryFile(path)) {
+        return { path, line, column }
+      } else {
+        return getOriginalPathAndLineFromSourceMap(path, line, column)
+      }
+    }
+  } else {
+    return getOriginalPathAndLineFromSourceMap
+  }
+}
+
+function getRewriter (telemetryVerbosity) {
   if (!rewriter) {
     try {
       const iastRewriter = require('@datadog/native-iast-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
-      rewriter = new Rewriter({ csiMethods })
+
+      const chainSourceMap = isFlagPresent('--enable-source-maps')
+      const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
+      if (getOriginalPathAndLineFromSourceMap) {
+        getRewriterOriginalPathAndLineFromSourceMap =
+          getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
+      }
+
+      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -27,6 +63,7 @@ let originalPrepareStackTrace = Error.prepareStackTrace
 function getPrepareStackTraceAccessor () {
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
+    configurable: true,
     get () {
       return actual
     },
@@ -38,10 +75,11 @@ function getPrepareStackTraceAccessor () {
 }
 
 function getCompileMethodFn (compileMethod) {
+  const rewriteFn = getRewriteFunction(rewriter)
   return function (content, filename) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriter.rewrite(content, filename)
+        const rewritten = rewriteFn(content, filename)
         if (rewritten && rewritten.content) {
           return compileMethod.apply(this, [rewritten.content, filename])
         }
@@ -54,11 +92,19 @@ function getCompileMethodFn (compileMethod) {
   }
 }
 
-function enableRewriter () {
-  const rewriter = getRewriter()
-  if (rewriter) {
-    Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
-    shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+function enableRewriter (telemetryVerbosity) {
+  try {
+    const rewriter = getRewriter(telemetryVerbosity)
+    if (rewriter) {
+      const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
+      if (!pstDescriptor || pstDescriptor.configurable) {
+        Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+      }
+      shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+    }
+  } catch (e) {
+    iastLog.error('Error enabling TaintTracking Rewriter')
+      .errorAndPublish(e)
   }
 }
 
@@ -67,6 +113,10 @@ function disableRewriter () {
   Error.prepareStackTrace = originalPrepareStackTrace
 }
 
+function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
+  return getRewriterOriginalPathAndLineFromSourceMap(path, line, column)
+}
+
 module.exports = {
-  enableRewriter, disableRewriter
+  enableRewriter, disableRewriter, getOriginalPathAndLineFromSourceMap
 }

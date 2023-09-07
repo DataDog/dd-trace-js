@@ -21,7 +21,7 @@ describe('WAF Manager', () => {
     DDWAF.prototype.createContext = sinon.stub()
     DDWAF.prototype.update = sinon.stub()
     DDWAF.prototype.rulesInfo = {
-      loaded: true, failed: 0
+      loaded: true, failed: 0, version: '0.0.1'
     }
     DDWAF.prototype.requiredAddresses = new Map([
       ['server.request.headers.no_cookies', { 'header': 'value' }],
@@ -39,6 +39,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter.metricsQueue, 'set')
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
+    sinon.stub(Reporter, 'reportWafUpdate')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -88,6 +89,7 @@ describe('WAF Manager', () => {
 
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
+      DDWAF.prototype.constructor.version.returns('4.5.6')
       waf.init(rules, config.appsec)
     })
 
@@ -96,10 +98,20 @@ describe('WAF Manager', () => {
       waf.wafManager.getWAFContext(req)
       expect(waf.wafManager.ddwaf.createContext).to.have.been.calledOnce
     })
+
+    it('should pass waf version when invoking ddwaf.createContext', () => {
+      const req = {}
+      const context = waf.wafManager.getWAFContext(req)
+      expect(context.wafVersion).to.be.eq('4.5.6')
+    })
   })
 
   describe('wafManager.update', () => {
+    const wafVersion = '2.3.4'
+
     beforeEach(() => {
+      DDWAF.prototype.constructor.version.returns(wafVersion)
+
       waf.init(rules, config.appsec)
     })
 
@@ -122,6 +134,27 @@ describe('WAF Manager', () => {
       waf.update(rules)
 
       expect(DDWAF.prototype.update).to.be.calledOnceWithExactly(rules)
+    })
+
+    it('should call Reporter.reportWafUpdate', () => {
+      const rules = {
+        'rules_data': [
+          {
+            id: 'blocked_users',
+            type: 'data_with_expiration',
+            data: [
+              {
+                expiration: 9999999999,
+                value: 'user1'
+              }
+            ]
+          }
+        ]
+      }
+
+      waf.update(rules)
+
+      expect(Reporter.reportWafUpdate).to.be.calledOnceWithExactly(wafVersion, DDWAF.prototype.rulesInfo.version)
     })
   })
 
@@ -220,6 +253,26 @@ describe('WAF Manager', () => {
         wafContextWrapper.run(params)
 
         expect(Reporter.reportAttack).to.be.calledOnceWithExactly(result.data)
+      })
+
+      it('should report if rule is triggered', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          data: '[ruleTriggered]'
+        }
+
+        ddwafContext.run.returns(result)
+        const params = {
+          'server.request.headers.no_cookies': { 'header': 'value' }
+        }
+
+        wafContextWrapper.run(params)
+
+        expect(Reporter.reportMetrics).to.be.calledOnce
+
+        const reportMetricsArg = Reporter.reportMetrics.firstCall.args[0]
+        expect(reportMetricsArg.ruleTriggered).to.be.true
       })
 
       it('should not report attack when ddwafContext does not return data', () => {

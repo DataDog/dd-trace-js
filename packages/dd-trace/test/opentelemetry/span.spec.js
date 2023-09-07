@@ -11,6 +11,7 @@ const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../src/constants')
+const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 
 function makeSpan (...args) {
   const tracerProvider = new TracerProvider()
@@ -24,15 +25,13 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     const context = span._ddSpan.context()
-    expect(context._tags['service.name']).to.equal(tracer._tracer._service)
+    expect(context._tags[SERVICE_NAME]).to.equal(tracer._tracer._service)
     expect(context._hostname).to.equal(tracer._hostname)
   })
 
   it('should expose parent span id', () => {
     tracer.trace('outer', (outer) => {
-      global.hax = true
       const span = makeSpan('name', {})
-      global.hax = false
 
       expect(span.parentSpanId).to.equal(outer.context()._spanId.toString(16))
     })
@@ -42,6 +41,13 @@ describe('OTel Span', () => {
     const span = makeSpan('name')
 
     expect(span.name).to.equal('name')
+  })
+
+  it('should copy span name to resource.name', () => {
+    const span = makeSpan('name')
+
+    const context = span._ddSpan.context()
+    expect(context._tags[RESOURCE_NAME]).to.equal('name')
   })
 
   it('should expose span context', () => {

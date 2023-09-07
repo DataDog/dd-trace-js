@@ -3,7 +3,8 @@
 const {
   CLIENT_PORT_KEY,
   PEER_SERVICE_KEY,
-  PEER_SERVICE_SOURCE_KEY
+  PEER_SERVICE_SOURCE_KEY,
+  PEER_SERVICE_REMAP_KEY
 } = require('../constants')
 const TracingPlugin = require('./tracing')
 
@@ -34,9 +35,11 @@ class OutboundPlugin extends TracingPlugin {
      * - If `peer.service` was defined _before_ we compute it (for example in custom instrumentation),
      *   `_dd.peer.service.source`'s value is `peer.service`
      */
-
-    if (tags['peer.service'] !== undefined) {
-      return { [PEER_SERVICE_SOURCE_KEY]: 'peer.service' }
+    if (tags[PEER_SERVICE_KEY] !== undefined) {
+      return {
+        [PEER_SERVICE_KEY]: tags[PEER_SERVICE_KEY],
+        [PEER_SERVICE_SOURCE_KEY]: PEER_SERVICE_KEY
+      }
     }
 
     const sourceTags = [
@@ -52,23 +55,37 @@ class OutboundPlugin extends TracingPlugin {
         }
       }
     }
-    return {}
+    return undefined
   }
 
-  startSpan (name, options) {
-    const span = super.startSpan(name, options)
-    return span
+  getPeerServiceRemap (peerData) {
+    /**
+     * If DD_TRACE_PEER_SERVICE_MAPPING is matched, we need to override the existing
+     * peer service and add the value we overrode.
+     */
+    const peerService = peerData[PEER_SERVICE_KEY]
+    if (peerService && this.tracer._peerServiceMapping[peerService]) {
+      return {
+        ...peerData,
+        [PEER_SERVICE_KEY]: this.tracer._peerServiceMapping[peerService],
+        [PEER_SERVICE_REMAP_KEY]: peerService
+      }
+    }
+    return peerData
   }
 
   finish () {
-    const span = this.activeSpan
+    this.tagPeerService(this.activeSpan)
+    super.finish(...arguments)
+  }
+
+  tagPeerService (span) {
     if (this.tracer._computePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
-      if (peerData) {
-        span.addTags(peerData)
+      if (peerData !== undefined) {
+        span.addTags(this.getPeerServiceRemap(peerData))
       }
     }
-    super.finish(...arguments)
   }
 
   connect (url) {

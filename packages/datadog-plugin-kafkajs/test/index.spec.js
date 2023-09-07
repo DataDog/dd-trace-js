@@ -5,7 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -20,15 +20,15 @@ describe('Plugin', () => {
       const testTopic = 'test-topic'
       let kafka
       let tracer
+      let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
-          const {
-            Kafka
-          } = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = require(`../../../versions/kafkajs@${version}`).get().Kafka
+
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
             brokers: ['127.0.0.1:9092']
@@ -37,8 +37,8 @@ describe('Plugin', () => {
         describe('producer', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.send.opName,
-              service: namingSchema.send.serviceName,
+              name: expectedSchema.send.opName,
+              service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs'
@@ -56,9 +56,15 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
+          withPeerService(
+            () => tracer,
+            (done) => sendMessages(kafka, testTopic, messages).catch(done),
+            '127.0.0.1:9092',
+            'messaging.kafka.bootstrap.servers')
+
           it('should be instrumented w/ error', async () => {
             const producer = kafka.producer()
-            const resourceName = namingSchema.send.opName
+            const resourceName = expectedSchema.send.opName
 
             let error
 
@@ -67,7 +73,7 @@ describe('Plugin', () => {
 
               expect(span).to.include({
                 name: resourceName,
-                service: namingSchema.send.serviceName,
+                service: expectedSchema.send.serviceName,
                 resource: resourceName,
                 error: 1
               })
@@ -92,12 +98,27 @@ describe('Plugin', () => {
               return expectedSpanPromise
             }
           })
+          if (version !== '1.4.0') {
+            it('should not extract bootstrap servers when initialized with a function', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+                expect(span.meta).to.not.have.any.keys(['messaging.kafka.bootstrap.servers'])
+              })
+
+              kafka = new Kafka({
+                clientId: `kafkajs-test-${version}`,
+                brokers: () => ['127.0.0.1:9092']
+              })
+
+              await sendMessages(kafka, testTopic, messages)
+
+              return expectedSpanPromise
+            })
+          }
 
           withNamingSchema(
             async () => sendMessages(kafka, testTopic, messages),
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.send
           )
         })
         describe('consumer', () => {
@@ -114,8 +135,8 @@ describe('Plugin', () => {
 
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs'
@@ -141,7 +162,7 @@ describe('Plugin', () => {
 
               try {
                 expect(currentSpan).to.not.equal(firstSpan)
-                expect(currentSpan.context()._name).to.equal(namingSchema.receive.opName)
+                expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
                 done()
               } catch (e) {
                 done(e)
@@ -176,8 +197,8 @@ describe('Plugin', () => {
           it('should be instrumented w/ error', async () => {
             const fakeError = new Error('Oh No!')
             const expectedSpanPromise = expectSpanWithDefaults({
-              name: namingSchema.receive.opName,
-              service: namingSchema.receive.serviceName,
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
               meta: {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
@@ -229,9 +250,7 @@ describe('Plugin', () => {
               await consumer.run({ eachMessage: () => {} })
               await sendMessages(kafka, testTopic, messages)
             },
-            () => namingSchema.send.opName,
-            () => namingSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.receive
           )
         })
 
@@ -275,7 +294,8 @@ describe('Plugin', () => {
             await consumer.run({
               eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
                 expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
-              } })
+              }
+            })
             setDataStreamsContextSpy.restore()
           })
         })

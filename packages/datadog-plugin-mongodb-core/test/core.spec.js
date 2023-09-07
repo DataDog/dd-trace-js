@@ -3,7 +3,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const namingSchema = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -80,8 +80,8 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const resource = `insert test.${collection}`
 
-                expect(span).to.have.property('name', namingSchema.outbound.opName)
-                expect(span).to.have.property('service', namingSchema.outbound.serviceName)
+                expect(span).to.have.property('name', expectedSchema.outbound.opName)
+                expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
                 expect(span).to.have.property('resource', resource)
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('span.kind', 'client')
@@ -131,6 +131,39 @@ describe('Plugin', () => {
                 _id: Buffer.from('1234')
               }
             }, () => {})
+          })
+
+          it('should serialize BigInt without erroring', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = `find test.${collection}`
+                const query = `{"_id":"9999999999999999999999"}`
+
+                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
+              })
+              .then(done)
+              .catch(done)
+
+            try {
+              server.command(`test.${collection}`, {
+                find: `test.${collection}`,
+                query: {
+                  _id: 9999999999999999999999n
+                }
+              }, () => {})
+            } catch (err) {
+              // It appears that most versions of MongodDB are happy to use a BigInt instance.
+              // For example, 2.0.0, 3.2.0, 3.1.10, etc.
+              // However, version 3.1.9 throws a synchronous error that it wants a Decimal128 instead.
+              if (err.message.includes('Decimal128')) {
+                // eslint-disable-next-line no-console
+                console.log('This version of mongodb-core does not accept BigInt instances')
+                return done()
+              }
+              done(err)
+            }
           })
 
           it('should stringify BSON objects', done => {
@@ -309,9 +342,7 @@ describe('Plugin', () => {
 
           withNamingSchema(
             () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
-            () => namingSchema.outbound.opName,
-            () => namingSchema.outbound.serviceName,
-            'test'
+            rawExpectedSchema.outbound
           )
         })
       })
@@ -343,7 +374,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', namingSchema.outbound.opName)
+              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
@@ -354,9 +385,16 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => server.insert(`test.${collection}`, [{ a: 1 }], () => {}),
-          () => namingSchema.outbound.opName,
-          () => 'custom',
-          'custom'
+          {
+            v0: {
+              opName: 'mongodb.query',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'mongodb.query',
+              serviceName: 'custom'
+            }
+          }
         )
       })
     })
