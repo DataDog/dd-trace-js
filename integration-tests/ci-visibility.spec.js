@@ -4,7 +4,6 @@ const { fork, exec } = require('child_process')
 const path = require('path')
 
 const { assert } = require('chai')
-const semver = require('semver')
 const getPort = require('get-port')
 
 const {
