@@ -49,8 +49,8 @@ function addEnvironmentVariablesToHeaders (headers, traces) {
     //   ddEnvVars.set('DD_SERVICE', tracer.service)
     }
     if (global.schemaVersionName) {
-      console.log(global.testAgentServiceName)
-      console.log(traces[0][0].service)
+      console.log("Test Agent expected Service Name: " + global.testAgentServiceName + " with schema version: " + global.schemaVersionName)
+      console.log("Actual Span Service Name: " + traces[0][0].service)
     }
     ddEnvVars.set('DD_TRACE_SPAN_ATTRIBUTE_SCHEMA', global.schemaVersionName)
   
