@@ -63,7 +63,7 @@ function withNamingSchema (
   let fullConfig
 
   const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
-
+  var expectedSvcName = null
   describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
@@ -77,9 +77,10 @@ function withNamingSchema (
         })
 
         beforeEach(async () => {
-          global.testAgentServiceName  = typeof serviceName === 'function'
-            ? serviceName()
-            : serviceName
+          expectedSvcName = expected[versionName].serviceName
+          global.testAgentServiceName  = typeof expectedSvcName === 'function'
+            ? expectedSvcName()
+            : expectedSvcName
           global.schemaVersionName = versionName
         })
 
@@ -88,6 +89,7 @@ function withNamingSchema (
         })
 
         afterEach(async () => {
+          expectedSvcName = null
           global.testAgentServiceName = null
           global.schemaVersionName = null
         })
@@ -127,18 +129,20 @@ function withNamingSchema (
       })
 
       beforeEach(async () => {
-        global.testAgentServiceName = typeof serviceName === 'function'
-          ? serviceName()
-          : serviceName
-        global.schemaVersionName = "v0"
+        expectedSvcName = expected['v1'].serviceName
+        global.testAgentServiceName  = typeof expectedSvcName === 'function'
+          ? expectedSvcName()
+          : expectedSvcName
+        global.schemaVersionName = "v1"
       })
       after(() => {
         Nomenclature.configure(fullConfig)
       })
 
       afterEach(async () => {
+        expectedSvcName = null
         global.testAgentServiceName = null
-        global.schemaVersionName = "v0"
+        global.schemaVersionName = null
       })
       hooks('v0', true)
 
