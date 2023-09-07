@@ -37,15 +37,33 @@ function ciVisRequestHandler (request, response) {
 
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
-  const ddEnvVars = Object.entries(process.env)
-    .filter(([key]) => key.startsWith('DD_'))
-    .map(([key, value]) => `${key}=${value}`)
+  const ddEnvVars = new Map(
+    Object.entries(process.env)
+      .filter(([key]) => key.startsWith('DD_'))
+  )
+
+  // add plugin name and plugin version to headers, this is used for verifying tested
+  // integration version ranges
+  if (global.testAgent.plugin && global.testAgent.pluginVersion) {
+    ddEnvVars.set('DD_PLUGIN', global.testAgent.plugin)
+    ddEnvVars.set('DD_PLUGIN_VERSION', global.testAgent.pluginVersion)
+  }
 
   // add the DD environment variables to the header if any exist
   // to send with trace to final agent destination
   if (ddEnvVars.length > 0) {
     headers['X-Datadog-Trace-Env-Variables'] = ddEnvVars.join(',')
   }
+
+  // serialize the DD environment variables into a string of k=v pairs separated by comma
+  const serializedEnvVars = Array.from(ddEnvVars.entries())
+    .map(([key, value]) => `${key}=${value}`)
+    .join(',')
+
+  // add the serialized DD environment variables to the header
+  // to send with trace to the final agent destination
+  headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
+  return headers
 }
 
 function handleTraceRequest (req, res, sendToTestAgent) {
