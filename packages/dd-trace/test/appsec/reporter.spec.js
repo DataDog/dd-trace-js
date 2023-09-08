@@ -104,6 +104,19 @@ describe('reporter', () => {
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
     })
+
+    it('should not fail with undefined arguments', () => {
+      const wafVersion = undefined
+      const rulesVersion = undefined
+      const rulesInfo = undefined
+
+      Reporter.reportWafInit(wafVersion, rulesVersion, rulesInfo)
+
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
+
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+    })
   })
 
   describe('reportMetrics', () => {
