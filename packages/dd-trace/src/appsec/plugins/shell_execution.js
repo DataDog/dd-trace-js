@@ -16,7 +16,7 @@ class ChildProcessPlugin extends TracingPlugin {
       return
     }
 
-    const cmdFields = command.split(' ')
+    const cmdFields = scrubChildProcessCmd(command)
 
     this.startSpan('command_execution', {
       service: this.config.service,
@@ -24,7 +24,8 @@ class ChildProcessPlugin extends TracingPlugin {
       type: 'system',
       meta: {
         'component': 'subprocess',
-        'cmd.exec': cmdFields
+        'cmd.exec': cmdFields,
+        'customMeta': 15
       }
     })
   }

@@ -73,13 +73,12 @@ function wrapChildProcessAsyncMethod () {
 
         if (childProcess) {
           let errorExecuted = false
-
           childProcess.on('error', (e) => {
             errorExecuted = true
             childProcessChannelError.publish(e)
           })
 
-          childProcess.on('close', (code, ...args) => {
+          childProcess.on('close', (code) => {
             code = code || 0
             if (!errorExecuted && code !== 0) {
               childProcessChannelError.publish()

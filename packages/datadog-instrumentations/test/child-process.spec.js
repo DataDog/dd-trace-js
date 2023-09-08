@@ -61,6 +61,16 @@ describe('child process', () => {
                 done()
               })
             })
+
+            it('should execute error callback with `exit 1` command', (done) => {
+              const res = childProcess[methodName]('exit 1')
+              res.on('close', () => {
+                expect(start).to.have.been.calledOnceWith({ command: 'exit 1' })
+                expect(finish).to.have.been.calledOnce
+                expect(error).to.have.been.calledOnce
+                done()
+              })
+            })
           })
         })
       })
@@ -80,6 +90,16 @@ describe('child process', () => {
                 childProcess[methodName]('invalid_command_test')
               } catch (e) {
                 expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test' })
+                expect(finish).to.have.been.calledOnce
+                expect(error).to.have.been.calledOnce
+              }
+            })
+
+            it('should execute error callback with `exit 1` command', () => {
+              try {
+                childProcess[methodName]('exit 1')
+              } catch (e) {
+                expect(start).to.have.been.calledOnceWith({ command: 'exit 1' })
                 expect(finish).to.have.been.calledOnce
                 expect(error).to.have.been.calledOnce
               }
