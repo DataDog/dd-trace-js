@@ -171,6 +171,8 @@ describe('ldap-injection-analyzer with ldapjs', () => {
   })
 
   withVersions('ldapjs', 'ldapjs-promise', promiseVersion => {
+    if (isOldNode && promiseVersion !== '2.0.0') return
+
     prepareTestServerForIast('ldapjs-promise', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       const srcFilePath = path.join(__dirname, 'resources', 'ldap-injection-methods.js')
       const dstFilePath = path.join(os.tmpdir(), 'ldap-injection-methods.js')
