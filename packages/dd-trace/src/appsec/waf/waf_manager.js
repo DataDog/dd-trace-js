@@ -11,7 +11,9 @@ class WAFManager {
     this.config = config
     this.wafTimeout = config.wafTimeout
     this.ddwaf = this._loadDDWAF(rules)
-    this._reportMetrics()
+    this.ddwafVersion = this.ddwaf.constructor.version()
+
+    Reporter.reportWafInit(this.ddwafVersion, this.ddwaf.rulesInfo)
   }
 
   _loadDDWAF (rules) {
@@ -28,18 +30,6 @@ class WAFManager {
     }
   }
 
-  _reportMetrics () {
-    Reporter.metricsQueue.set('_dd.appsec.waf.version', this.ddwaf.constructor.version())
-
-    const { loaded, failed, errors } = this.ddwaf.rulesInfo
-
-    Reporter.metricsQueue.set('_dd.appsec.event_rules.loaded', loaded)
-    Reporter.metricsQueue.set('_dd.appsec.event_rules.error_count', failed)
-    if (failed) Reporter.metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(errors))
-
-    Reporter.metricsQueue.set('manual.keep', 'true')
-  }
-
   getWAFContext (req) {
     let wafContext = contexts.get(req)
 
@@ -48,12 +38,19 @@ class WAFManager {
         this.ddwaf.createContext(),
         this.ddwaf.requiredAddresses,
         this.wafTimeout,
-        this.ddwaf.rulesInfo
+        this.ddwaf.rulesInfo,
+        this.ddwafVersion
       )
       contexts.set(req, wafContext)
     }
 
     return wafContext
+  }
+
+  update (newRules) {
+    this.ddwaf.update(newRules)
+
+    Reporter.reportWafUpdate(this.ddwafVersion, this.ddwaf.rulesInfo.version)
   }
 
   destroy () {

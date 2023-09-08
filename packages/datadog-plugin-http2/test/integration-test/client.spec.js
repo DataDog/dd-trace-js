@@ -3,13 +3,10 @@
 const {
   FakeAgent,
   createSandbox,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const http2 = require('http2')
-
-const describe = esmTestSkipper()
 
 describe('esm', () => {
   let agent
@@ -17,12 +14,13 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
       `./packages/datadog-plugin-http2/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(50000)
     await sandbox.remove()
   })
 
@@ -49,7 +47,7 @@ describe('esm', () => {
       })
       await curl(proc)
       return resultPromise
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })
 

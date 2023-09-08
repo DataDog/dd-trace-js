@@ -7,7 +7,7 @@ const path = require('path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const slackReport = require('./slack-report')
-const metrics = require('../../src/metrics')
+const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
@@ -275,7 +275,7 @@ exports.mochaHooks = {
 
   afterEach () {
     agent.reset()
-    metrics.stop()
+    runtimeMetrics.stop()
     storage.enterWith(undefined)
   }
 }

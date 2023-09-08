@@ -5,12 +5,13 @@ const {
   createSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  esmTestSkipper,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
 
-const describe = esmTestSkipper()
+// TODO: update this to skip based on package version and tracer version
+const describe = NODE_MAJOR < 16 ? globalThis.describe.skip : globalThis.describe
 
 describe('esm', () => {
   let agent

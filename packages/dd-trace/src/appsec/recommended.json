@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.7.1"
+    "rules_version": "1.7.2"
   },
   "rules": [
     {
@@ -1743,7 +1743,10 @@
               "sys/hypervisor",
               "sys/kernel",
               "sys/module",
-              "sys/power"
+              "sys/power",
+              "windows\\win.ini",
+              "default\\ntuser.dat",
+              "/var/run/secrets/kubernetes.io/serviceaccount"
             ]
           },
           "operator": "phrase_match"
@@ -2312,7 +2315,8 @@
         }
       ],
       "transformers": [
-        "lowercase"
+        "lowercase",
+        "cmdLine"
       ]
     },
     {
@@ -2950,7 +2954,7 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "[\\s\\\"'`;\\/0-9=\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]on(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress)|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
+            "regex": "\\bon(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress|aste|ointer(?:cancel|down|enter|leave|move|out|over|rawupdate|up))|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t|uxclick|fterscriptexecute)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?|inish)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start|end)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
             "options": {
               "min_length": 8
             }
@@ -4637,6 +4641,46 @@
       "transformers": []
     },
     {
+      "id": "dog-913-008",
+      "name": "Netsparker OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Netsparker",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "\\b(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)r87(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)(?:me|com)\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-931-001",
       "name": "RFI: URL Payload to well known RFI target",
       "tags": {
@@ -4698,6 +4742,56 @@
         }
       ],
       "transformers": []
+    },
+    {
+      "id": "dog-941-001",
+      "name": "XSS in source property",
+      "tags": {
+        "type": "xss",
+        "category": "attack_attempt",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              },
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "referer"
+                ]
+              },
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              }
+            ],
+            "regex": "<(?:iframe|esi:include)(?:(?:\\s|/)*\\w+=[\"'\\w]+)*(?:\\s|/)*src(?:doc)?=[\"']?(?:data:|javascript:|http:|//)[^\\s'\"]+['\"]?",
+            "options": {
+              "min_length": 14
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": [
+        "removeNulls",
+        "urlDecodeUni"
+      ]
     },
     {
       "id": "dog-942-001",
@@ -5428,12 +5522,14 @@
                 "address": "grpc.server.request.message"
               }
             ],
-            "regex": "(?i)[&|]\\s*cat\\s+\\/etc\\/[\\w\\.\\/]*passwd\\s*[&|]"
+            "regex": "(?i)[&|]\\s*cat\\s*\\/etc\\/[\\w\\.\\/]*passwd\\s*[&|]"
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": []
+      "transformers": [
+        "cmdLine"
+      ]
     },
     {
       "id": "sqr-000-010",
@@ -7014,7 +7110,10 @@
                 ]
               }
             ],
-            "regex": "mozilla/4\\.0 \\(compatible(; msie 6\\.0; win32)?\\)"
+            "regex": "mozilla/4\\.0 \\(compatible(; msie (?:6\\.0; win32|4\\.0; Windows NT))?\\)",
+            "options": {
+              "case_sensitive": false
+            }
           },
           "operator": "match_regex"
         }
