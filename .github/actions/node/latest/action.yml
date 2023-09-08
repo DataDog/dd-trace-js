@@ -4,4 +4,5 @@ runs:
   steps:
     - uses: actions/setup-node@v3
       with:
-        node-version: 'latest'
+        ## this is a temporary solution until the next node release
+        node-version: '^20.5.0'

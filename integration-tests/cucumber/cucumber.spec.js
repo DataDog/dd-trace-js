@@ -355,7 +355,6 @@ versions.forEach(version => {
               })
               childProcess.on('exit', () => {
                 // check that reported coverage is still the same
-                console.log(123123123, testOutput)
                 assert.include(testOutput, 'Lines        : 100%')
                 done()
               })
