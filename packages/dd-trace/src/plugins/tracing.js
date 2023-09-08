@@ -55,7 +55,7 @@ class TracingPlugin extends Plugin {
   start () {} // implemented by individual plugins
 
   finish () {
-    this.activeSpan.finish()
+    this.activeSpan?.finish()
   }
 
   error (error) {
