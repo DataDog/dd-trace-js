@@ -9,14 +9,31 @@ const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
   describe('start', () => {
-    it('should subscribe', () => {
-      const subscribe = sinon.stub()
-      const dc = { channel () { return { subscribe } } }
-      const dependencies = proxyquire('../../src/telemetry/dependencies', {
-        '../../../diagnostics_channel': dc
+    let subscribe
+    let dependencies
+
+    beforeEach(() => {
+      subscribe = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        '../../../diagnostics_channel': {
+          channel () { return { subscribe } }
+        }
       })
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      subscribe.reset()
+    })
+
+    it('should subscribe', () => {
       dependencies.start()
       expect(subscribe).to.have.been.calledOnce
+    })
+
+    it('should not subscribe if dependencies collection set to false', () => {
+      dependencies.start({ telemetry: { dependencyCollection: false } })
+      expect(subscribe).to.not.have.been.called
     })
   })
 

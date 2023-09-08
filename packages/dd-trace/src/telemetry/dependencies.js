@@ -89,7 +89,9 @@ function onModuleLoad (data) {
     }
   }
 }
-function start (_config, _application, _host) {
+function start (_config = {}, _application, _host) {
+  if (_config.telemetry && !_config.telemetry.dependencyCollection) return
+
   config = _config
   application = _application
   host = _host
