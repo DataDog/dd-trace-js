@@ -19,7 +19,23 @@ describe('scrub cmds', () => {
 
   it('Should scrub md5 commands', () => {
     expect(scrubCmdParams('md5 -s pony')).to.be.deep.equal(['md5', '?', '?'])
-    expect(scrubCmdParams('cat passwords.txt | while read line; do; md5 -s $line; done')).to.be.deep.equal(['cat', 'passwords.txt', '|', 'while', 'read', 'line', ';', 'do', ';', 'md5', '?', '?', ';', 'done'])
+    expect(scrubCmdParams('cat passwords.txt | while read line; do; md5 -s $line; done')).to.be.deep
+      .equal([
+        'cat',
+        'passwords.txt',
+        '|',
+        'while',
+        'read',
+        'line',
+        ';',
+        'do',
+        ';',
+        'md5',
+        '?',
+        '?',
+        ';',
+        'done'
+      ])
   })
 
   it('Should not scrub md5sum commands', () => {
