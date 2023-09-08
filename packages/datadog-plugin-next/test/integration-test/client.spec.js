@@ -2,7 +2,7 @@
 
 const {
   FakeAgent,
-  createSandboxForNext,
+  createSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
@@ -17,8 +17,8 @@ describe('esm', () => {
   before(async function () {
     // next builds slower in the CI, match timeout with unit tests
     this.timeout(120 * 1000)
-    sandbox = await createSandboxForNext(['next', 'react', 'react-dom'],
-      false, ['./packages/datadog-plugin-next/test/integration-test/*'])
+    sandbox = await createSandbox(['next', 'react', 'react-dom'],
+      false, ['./packages/datadog-plugin-next/test/integration-test/*'], 'yarn exec next build')
   })
 
   after(async () => {
