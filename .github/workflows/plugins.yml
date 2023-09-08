@@ -182,6 +182,20 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
+  child-process:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: child-process
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
+
   couchbase:
     runs-on: ubuntu-latest
     services:

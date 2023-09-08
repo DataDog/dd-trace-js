@@ -2,54 +2,94 @@
 
 const {
   channel,
-  addHook
+  addHook, AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const childProcessChannelStart = channel('datadog:child_process:execution:start')
 const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
 const childProcessChannelError = channel('datadog:child_process:execution:error')
-const execMethods = ['exec', 'execFile', 'fork', 'spawn', 'execFileSync', 'execSync', 'spawnSync']
+
+// ignored exec method because it calls to execFile directly
+const execAsyncMethods = ['execFile', 'spawn', 'fork']
+const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
+
 const names = ['child_process', 'node:child_process']
 
+// child_process and node:child_process returns the same object, we only want to add hooks once
+let patched = false
 names.forEach(name => {
   addHook({ name }, childProcess => {
-    shimmer.massWrap(childProcess, execMethods, wrapChildProcessMethod())
+    if (!patched) {
+      patched = true
+      shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod())
+      shimmer.massWrap(childProcess, execSyncMethods, wrapChildProcessSyncMethod())
+    }
+
     return childProcess
   })
 })
 
-function wrapChildProcessMethod () {
+function wrapChildProcessSyncMethod () {
   function wrapMethod (childProcessMethod) {
     return function () {
-      if (childProcessChannelStart.hasSubscribers && arguments.length > 0) {
-        const command = arguments[0]
-        childProcessChannelStart.publish({ command })
+      if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
+        return childProcessMethod.apply(this, arguments)
       }
 
-      let ret
-      let status
-      let error
+      const command = arguments[0]
+      childProcessChannelStart.publish({ command })
 
-      // TODO: exec, execFile, fork, spawn promise or callback
+      let error
       try {
-        ret = childProcessMethod.apply(this, arguments)
+        return childProcessMethod.apply(this, arguments)
       } catch (err) {
         childProcessChannelError.publish(err?.status)
         error = err
         throw err
       } finally {
         if (childProcessChannelFinish.hasSubscribers && arguments.length > 0) {
-          if (error) {
-            status = error.status
-          } else {
-            status = 0
-          }
-
-          childProcessChannelFinish.publish({ exitCode: status })
+          childProcessChannelFinish.publish({ exitCode: error?.status || 0 })
         }
       }
-      return ret
+    }
+  }
+
+  return wrapMethod
+}
+
+function wrapChildProcessAsyncMethod () {
+  function wrapMethod (childProcessMethod) {
+    return function () {
+      if (!childProcessChannelStart.hasSubscribers) {
+        return childProcessMethod.apply(this, arguments)
+      }
+
+      const innerResource = new AsyncResource('bound-anonymous-fn')
+      const command = arguments[0]
+      return innerResource.runInAsyncScope(() => {
+        childProcessChannelStart.publish({ command })
+        const childProcess = childProcessMethod.apply(this, arguments)
+
+        if (childProcess) {
+          let errorExecuted = false
+
+          childProcess.on('error', (e) => {
+            errorExecuted = true
+            childProcessChannelError.publish(e)
+          })
+
+          childProcess.on('close', (code, ...args) => {
+            code = code || 0
+            if (!errorExecuted && code !== 0) {
+              childProcessChannelError.publish()
+            }
+            childProcessChannelFinish.publish({ exitCode: code })
+          })
+        }
+
+        return childProcess
+      })
     }
   }
   return wrapMethod
