@@ -2,7 +2,8 @@
 
 const ALLOWED_ENV_VARIABLES = ['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH']
 const PROCESS_DENYLIST = ['md5']
-const PARAM_PATTERN = `^-{0,2}(p(?:assw(?:or)?d)?|api_?key|secret|a(?:ccess|uth)_token|mysql_pwd|credentials|stripetoken)$`
+// eslint-disable-next-line max-len
+const PARAM_PATTERN = '^-{0,2}(p(?:assw(?:or)?d)?|api_?key|secret|a(?:ccess|uth)_token|mysql_pwd|credentials|stripetoken)$'
 const regexParam = new RegExp(PARAM_PATTERN, 'i')
 const ENV_PATTERN = '^(\\w+=\\w+;)*\\w+=\\w+;?$'
 const regexEnv = new RegExp(ENV_PATTERN)

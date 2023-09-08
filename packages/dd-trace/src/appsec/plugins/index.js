@@ -16,8 +16,8 @@ function enablePlugins (tracer, config) {
 function disablePlugins () {
   enabled.forEach((plugin, i) => {
     plugin.configure(false)
-    enabled[i] = undefined
   })
+  enabled.splice(0)
 }
 
 module.exports = {
