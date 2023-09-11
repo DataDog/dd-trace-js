@@ -1,9 +1,9 @@
 'use strict'
 
-const ChildProcessPlugin = require('./../../../src/appsec/plugins/shell_execution')
-const { storage } = require('../../../../datadog-core')
+const ChildProcessPlugin = require('../../../../src/appsec/plugins/child-process')
+const { storage } = require('../../../../../datadog-core')
 
-describe('Shell execution plugin', () => {
+describe('Child process plugin', () => {
   let tracerStub, configStub, spanStub
 
   beforeEach(() => {

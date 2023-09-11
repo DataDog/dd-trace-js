@@ -1,7 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('../../plugins/tracing')
-const scrubChildProcessCmd = require('./scrub_cmd_params')
+const TracingPlugin = require('../../../plugins/tracing')
+const scrubChildProcessCmd = require('./scrub-cmd-params')
 
 class ChildProcessPlugin extends TracingPlugin {
   static get id () { return 'subprocess' }

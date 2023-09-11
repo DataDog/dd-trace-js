@@ -1,5 +1,7 @@
 'use strict'
-const scrubCmdParams = require('./../../../src/appsec/plugins/scrub_cmd_params')
+
+const scrubCmdParams = require('../../../../src/appsec/plugins/child-process/scrub-cmd-params')
+
 describe('scrub cmds', () => {
   it('Should not scrub single command', () => {
     expect(scrubCmdParams('ls -la')).to.be.deep.equal(['ls', '-la'])
@@ -47,17 +49,16 @@ describe('scrub cmds', () => {
   })
 
   it('should scrub shell expressions', () => {
-    expect(scrubCmdParams('md5 -s secret ; mysqladmin -u root password 1234 | test api_key 4321'))
-      .to.be.deep.equal([
-        'md5', '?', '?', ';', 'mysqladmin', '-u', 'root', 'password', '?', '|', 'test', 'api_key', '?'
-      ])
+    expect(scrubCmdParams('md5 -s secret ; mysqladmin -u root password 1234 | test api_key 4321')).to.be.deep.equal([
+      'md5', '?', '?', ';', 'mysqladmin', '-u', 'root', 'password', '?', '|', 'test', 'api_key', '?'
+    ])
   })
 
   it('Should not scrub md5sum commands', () => {
     expect(scrubCmdParams('md5sum file')).to.be.deep.equal(['md5sum', 'file'])
   })
 
-  it('Should maintain varnames', () => {
+  it('Should maintain var names', () => {
     expect(scrubCmdParams('echo $something')).to.be.deep.equal(['echo', '$something'])
   })
 })
