@@ -44,8 +44,8 @@ function addEnvironmentVariablesToHeaders (headers) {
 
   // add plugin name and plugin version to headers, this is used for verifying tested
   // integration version ranges
-  if (global.testAgent.plugin && global.testAgent.pluginVersion) {
-    ddEnvVars.set('DD_PLUGIN', global.testAgent.plugin)
+  if (global.testAgent.pluginName && global.testAgent.pluginVersion) {
+    ddEnvVars.set('DD_PLUGIN', global.testAgent.pluginName)
     ddEnvVars.set('DD_PLUGIN_VERSION', global.testAgent.pluginVersion)
   }
 
