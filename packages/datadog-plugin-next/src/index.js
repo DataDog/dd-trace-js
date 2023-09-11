@@ -5,6 +5,7 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
+const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 
 class NextPlugin extends ServerPlugin {
   static get id () {
@@ -17,7 +18,14 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
+  bindStart (message) {
+    const { req, authority, options, headers = {} } = message
+    const sessionDetails = extractSessionDetails(authority, options)
+    const path = headers[HTTP2_HEADER_PATH] || '/'
+    const pathname = path.split(/[?#]/)[0]
+    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+    const allowed = this.config.filter(uri)
+
     const store = storage.getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
@@ -33,6 +41,11 @@ class NextPlugin extends ServerPlugin {
     })
 
     analyticsSampler.sample(span, this.config.measured, true)
+
+    // TODO: Figure out a better way to do this for any span.
+    if (!allowed) {
+      span._spanContext._trace.record = false
+    }
 
     this._requests.set(span, req)
 
@@ -98,8 +111,13 @@ function normalizeConfig (config) {
   const validateStatus = typeof config.validateStatus === 'function'
     ? config.validateStatus
     : code => code < 500
+  const filter = getFilter(config)
 
-  return Object.assign({}, config, { hooks, validateStatus })
+  return Object.assign({}, config, {
+    hooks,
+    filter,
+    validateStatus
+  })
 }
 
 function getHooks (config) {
@@ -107,6 +125,25 @@ function getHooks (config) {
   const request = (config.hooks && config.hooks.request) || noop
 
   return { request }
+}
+
+function getFilter (config) {
+  config = Object.assign({}, config, {
+    blocklist: config.blocklist || []
+  })
+
+  return urlFilter.getFilter(config)
+}
+
+function extractSessionDetails (options) {
+  if (typeof options === 'string') {
+    return new URL(options).host
+  }
+
+  const host = options.hostname || options.host || 'localhost'
+  const port = options.port
+
+  return { host, port }
 }
 
 module.exports = NextPlugin

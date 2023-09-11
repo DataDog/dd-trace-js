@@ -3,6 +3,7 @@ module.exports = require('../../..').init({
   flushInterval: 0,
   plugins: false
 }).use('next', process.env.WITH_CONFIG ? {
+  blocklist: ["/api/health"],
   validateStatus: code => false,
   hooks: {
     request: (span, req) => {

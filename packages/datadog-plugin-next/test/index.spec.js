@@ -409,6 +409,21 @@ describe('Plugin', function () {
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
+
+        it('should support URL filtering', done => {
+          agent
+            .use(traces => {
+              const spans = traces[0]
+
+              expect(spans).to.haveLength(0);
+            })
+            .then(done)
+            .catch(done)
+
+          axios
+            .get(`http://127.0.0.1:${port}/api/health`)
+            .catch(done)
+        })
       })
 
       if (satisfiesStandalone(pkg.version)) {
