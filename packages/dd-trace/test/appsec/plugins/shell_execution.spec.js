@@ -31,7 +31,7 @@ describe('Shell execution plugin', () => {
           'resource.name': 'ls',
           'span.kind': undefined,
           'span.type': 'system',
-          'cmd.exec': [ 'ls', '-l' ]
+          'cmd.exec': JSON.stringify([ 'ls', '-l' ])
         },
         integrationName: 'system'
       }

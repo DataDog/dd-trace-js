@@ -24,8 +24,7 @@ class ChildProcessPlugin extends TracingPlugin {
       type: 'system',
       meta: {
         'component': 'subprocess',
-        'cmd.exec': cmdFields,
-        'customMeta': 15
+        'cmd.exec': JSON.stringify(cmdFields)
       }
     })
   }
