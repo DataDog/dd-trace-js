@@ -57,6 +57,7 @@ function enable (_config, _tracer) {
     }
 
     enablePlugins(_tracer, _config)
+
     isEnabled = true
     config = _config
   } catch (err) {
@@ -226,6 +227,7 @@ function disable () {
   appsecTelemetry.disable()
 
   remoteConfig.disableWafUpdate()
+
   disablePlugins()
 
   // Channel#unsubscribe() is undefined for non active channels

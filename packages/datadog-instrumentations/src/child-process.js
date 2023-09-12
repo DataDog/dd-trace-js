@@ -2,7 +2,8 @@
 
 const {
   channel,
-  addHook, AsyncResource
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -16,7 +17,7 @@ const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
 
 const names = ['child_process', 'node:child_process']
 
-// child_process and node:child_process returns the same object, we only want to add hooks once
+// child_process and node:child_process returns the same object instance, we only want to add hooks once
 let patched = false
 names.forEach(name => {
   addHook({ name }, childProcess => {
@@ -48,9 +49,7 @@ function wrapChildProcessSyncMethod () {
         error = err
         throw err
       } finally {
-        if (childProcessChannelFinish.hasSubscribers && arguments.length > 0) {
-          childProcessChannelFinish.publish({ exitCode: error?.status || 0 })
-        }
+        childProcessChannelFinish.publish({ exitCode: error?.status || 0 })
       }
     }
   }
@@ -65,14 +64,15 @@ function wrapChildProcessAsyncMethod () {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const innerResource = new AsyncResource('bound-anonymous-fn')
       const command = arguments[0]
+      const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
         childProcessChannelStart.publish({ command })
-        const childProcess = childProcessMethod.apply(this, arguments)
 
+        const childProcess = childProcessMethod.apply(this, arguments)
         if (childProcess) {
           let errorExecuted = false
+
           childProcess.on('error', (e) => {
             errorExecuted = true
             childProcessChannelError.publish(e)

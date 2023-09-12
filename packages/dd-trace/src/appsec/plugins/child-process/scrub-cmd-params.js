@@ -65,10 +65,13 @@ function scrubChildProcessCmd (expression) {
       } else if (!foundBinary) {
         if (envvarRegex.test(token)) {
           const envSplit = token.split('=')
+
           if (!ALLOWED_ENV_VARIABLES.includes(envSplit[0])) {
             envSplit[1] = REDACTED
+
             const newToken = envSplit.join('=')
             expressionTokens[index] = newToken
+
             result.push(newToken)
           } else {
             result.push(token)
@@ -80,19 +83,18 @@ function scrubChildProcessCmd (expression) {
           if (PROCESS_DENYLIST.includes(token)) {
             for (index++; index < expressionTokens.length; index++) {
               const token = expressionTokens[index]
+
               if (token.op) {
                 result.push(token.op)
-                break
+              } else {
+                expressionTokens[index] = REDACTED
+                result.push(REDACTED)
               }
-
-              expressionTokens[index] = REDACTED
-              result.push(REDACTED)
             }
             break
           }
         }
       } else {
-        // Check argument
         const paramKeyValue = token.split('=')
         const paramKey = paramKeyValue[0]
 

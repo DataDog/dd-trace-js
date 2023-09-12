@@ -1,6 +1,8 @@
 'use strict'
+
 const { channel } = require('../src/helpers/instrument')
 const agent = require('../../dd-trace/test/plugins/agent')
+
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
   const execAsyncMethods = ['exec', 'execFile', 'spawn']
@@ -26,6 +28,7 @@ describe('child process', () => {
         start = sinon.stub()
         finish = sinon.stub()
         error = sinon.stub()
+
         childProcessChannelStart.subscribe(start)
         childProcessChannelFinish.subscribe(finish)
         childProcessChannelError.subscribe(error)
@@ -44,30 +47,36 @@ describe('child process', () => {
           describe(`method ${methodName}`, () => {
             it('should execute success callbacks', (done) => {
               const res = childProcess[methodName]('ls')
+
               res.on('close', () => {
                 expect(start).to.have.been.calledOnceWith({ command: 'ls' })
                 expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
                 expect(error).not.to.have.been.called
+
                 done()
               })
             })
 
             it('should execute error callback', (done) => {
               const res = childProcess[methodName]('invalid_command_test')
+
               res.on('close', () => {
                 expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test' })
                 expect(finish).to.have.been.calledOnce
                 expect(error).to.have.been.calledOnce
+
                 done()
               })
             })
 
             it('should execute error callback with `exit 1` command', (done) => {
               const res = childProcess[methodName]('exit 1')
+
               res.on('close', () => {
                 expect(start).to.have.been.calledOnceWith({ command: 'exit 1' })
                 expect(finish).to.have.been.calledOnce
                 expect(error).to.have.been.calledOnce
+
                 done()
               })
             })
@@ -80,6 +89,7 @@ describe('child process', () => {
           describe(`method ${methodName}`, () => {
             it('should execute success callbacks', () => {
               childProcess[methodName]('ls')
+
               expect(start).to.have.been.calledOnceWith({ command: 'ls' })
               expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
               expect(error).not.to.have.been.called

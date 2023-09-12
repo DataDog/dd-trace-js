@@ -21,6 +21,7 @@ describe('Child process plugin', () => {
     const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
     shellPlugin.start({ command: 'ls -l' })
+
     expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
       'command_execution',
       {
@@ -42,6 +43,7 @@ describe('Child process plugin', () => {
     const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
     shellPlugin.start({ command: undefined })
+
     expect(tracerStub.startSpan).not.to.have.been.called
   })
 
@@ -49,6 +51,7 @@ describe('Child process plugin', () => {
     const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
     shellPlugin.start({})
+
     expect(tracerStub.startSpan).not.to.have.been.called
   })
 
@@ -57,6 +60,7 @@ describe('Child process plugin', () => {
     const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
     shellPlugin.finish({ exitCode: 0 })
+
     expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
     expect(spanStub.finish).to.have.been.calledOnceWithExactly()
   })
