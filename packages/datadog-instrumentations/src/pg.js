@@ -39,28 +39,27 @@ function wrapQuery (query) {
       ? arguments[0]
       : { text: arguments[0] }
 
-    // The query objects passed in can be pretty complex. They can be instances of EventEmitter.
-    //   For this reason we can't make a shallow clone of the object.
-    // Some libraries, such as sql-template-tags, can provide a getter .text property.
-    //   For this reason we can't replace the .text property.
-    // Instead, we create a new object, and set the original query as the prototype.
-    // This allows any existing methods to still work and lets us easily provide a new query.
-    let newQuery = {
-      __ddInjectableQuery: '',
-      get text () {
-        return this.__ddInjectableQuery || Object.getPrototypeOf(this).text
-      }
+    const textProp = Object.getOwnPropertyDescriptor(pgQuery, 'text')
+
+    // Only alter `text` property if safe to do so.
+    if (!textProp || textProp.configurable) {
+      const originalText = pgQuery.text
+
+      Object.defineProperty(pgQuery, 'text', {
+        get () {
+          return this?.__ddInjectableQuery || originalText
+        }
+      })
     }
-    Object.setPrototypeOf(newQuery, pgQuery)
 
     return asyncResource.runInAsyncScope(() => {
       startCh.publish({
         params: this.connectionParameters,
-        query: newQuery,
+        query: pgQuery,
         processId
       })
 
-      arguments[0] = newQuery
+      arguments[0] = pgQuery
 
       const finish = asyncResource.bind(function (error) {
         if (error) {
@@ -73,7 +72,7 @@ function wrapQuery (query) {
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
 
-      newQuery = queryQueue[queryQueue.length - 1] || activeQuery
+      const newQuery = queryQueue[queryQueue.length - 1] || activeQuery
 
       if (!newQuery) {
         return retval
