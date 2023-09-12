@@ -74,7 +74,11 @@ describe('telemetry', () => {
       tags: {
         'runtime-id': '1a2b3c'
       },
-      circularObject
+      circularObject,
+      peerServiceMapping: {
+        'service_1': 'remapped_service_1',
+        'service_2': 'remapped_service_2'
+      }
     }, {
       _pluginsByName: pluginsByName
     })
@@ -103,7 +107,8 @@ describe('telemetry', () => {
         { name: 'env', value: 'preprod' },
         { name: 'tags.runtime-id', value: '1a2b3c' },
         { name: 'circularObject.field', value: 'parent_value' },
-        { name: 'circularObject.child.field', value: 'child_value' }
+        { name: 'circularObject.child.field', value: 'child_value' },
+        { name: 'peerServiceMapping', value: 'service_1:remapped_service_1,service_2:remapped_service_2' }
       ])
     })
   })

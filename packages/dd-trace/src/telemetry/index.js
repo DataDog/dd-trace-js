@@ -57,9 +57,18 @@ function appStarted () {
   return {
     integrations: getIntegrations(),
     dependencies: [],
-    configuration: flatten(config),
+    configuration: flatten(formatConfig(config)),
     additional_payload: []
   }
+}
+
+function formatConfig (config) {
+  // format peerServiceMapping from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  config.peerServiceMapping = config.peerServiceMapping
+    ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+  return config
 }
 
 function onBeforeExit () {
