@@ -1,7 +1,5 @@
 'use strict'
 
-const { version } = require('../../../../package.json')
-
 const { sendData } = require('./send-data')
 
 function getId (type, namespace, name, tags) {
@@ -35,10 +33,7 @@ class Metric {
     this.metric = common ? metric : `nodejs.${metric}`
     this.tags = tagArray(tags)
     if (common) {
-      this.tags.push('lib_language:nodejs')
       this.tags.push(`version:${process.version}`)
-    } else {
-      this.tags.push(`lib_version:${version}`)
     }
     this.common = common
 

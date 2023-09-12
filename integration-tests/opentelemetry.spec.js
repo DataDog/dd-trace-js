@@ -129,7 +129,6 @@ describe('opentelemetry', () => {
         assert.deepStrictEqual(series.tags, [
           'integration_name:otel',
           'otel_enabled:true',
-          'lib_language:nodejs',
           `version:${process.version}`
         ])
       }
