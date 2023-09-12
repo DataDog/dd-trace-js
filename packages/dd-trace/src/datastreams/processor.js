@@ -66,7 +66,9 @@ class DataStreamsProcessor {
     port,
     url,
     env,
-    tags
+    tags,
+    version,
+    service
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
@@ -79,7 +81,8 @@ class DataStreamsProcessor {
     this.enabled = dsmEnabled
     this.env = env
     this.tags = tags || {}
-    this.service = this.tags.service || 'unnamed-nodejs-service'
+    this.service = service || 'unnamed-nodejs-service'
+    this.version = version || ''
     this.sequence = 0
 
     if (this.enabled) {
@@ -96,6 +99,7 @@ class DataStreamsProcessor {
       Service: this.service,
       Stats: serialized,
       TracerVersion: pkg.version,
+      Version: this.version,
       Lang: 'javascript'
     }
     this.writer.flush(payload)
