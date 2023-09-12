@@ -109,6 +109,8 @@ describe('DataStreamsProcessor', () => {
     port: 8126,
     url: new URL('http://127.0.0.1:8126'),
     env: 'test',
+    version: 'v1',
+    service: 'service1',
     tags: { tag: 'some tag' }
   }
 
@@ -158,7 +160,8 @@ describe('DataStreamsProcessor', () => {
     processor.onInterval()
     expect(writer.flush).to.be.calledWith({
       Env: 'test',
-      Service: 'unnamed-nodejs-service',
+      Service: 'service1',
+      Version: 'v1',
       Stats: [{
         Start: new Uint64(1680000000000),
         Duration: new Uint64(10000000000),
