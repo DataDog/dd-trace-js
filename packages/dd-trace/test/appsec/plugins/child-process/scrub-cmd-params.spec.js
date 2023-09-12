@@ -7,6 +7,20 @@ describe('scrub cmds', () => {
     expect(scrubCmdParams('ls -la')).to.be.deep.equal(['ls', '-la'])
   })
 
+  it('Should split correctly comments', () => {
+    expect(scrubCmdParams('ls #comment')).to.be.deep.equal(['ls', '#comment'])
+    expect(scrubCmdParams('ls #comment with spaces')).to.be.deep.equal(['ls', '#comment with spaces'])
+  })
+
+  it('Should split globs', () => {
+    expect(scrubCmdParams('ls node_modules/*')).to.be.deep.equal(['ls', 'node_modules/*'])
+    expect(scrubCmdParams('ls *')).to.be.deep.equal(['ls', '*'])
+  })
+
+  it('Should split correctly texts', () => {
+    expect(scrubCmdParams('echo "Hello\\ text"')).to.be.deep.equal(['echo', 'Hello\\ text'])
+  })
+
   it('Should not scrub chained command', () => {
     expect(scrubCmdParams('ls -la|grep something')).to.be.deep.equal(['ls', '-la', '|', 'grep', 'something'])
   })

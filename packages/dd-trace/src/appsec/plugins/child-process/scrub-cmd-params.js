@@ -60,8 +60,14 @@ function scrubChildProcessCmd (expression) {
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
 
-      if (token.op) {
-        result.push(token.op)
+      if (typeof token === 'object') {
+        if (token.pattern) {
+          result.push(token.pattern)
+        } else if (token.op) {
+          result.push(token.op)
+        } else if (token.comment) {
+          result.push(`#${token.comment}`)
+        }
       } else if (!foundBinary) {
         if (envvarRegex.test(token)) {
           const envSplit = token.split('=')
