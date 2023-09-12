@@ -79,6 +79,10 @@ describe('telemetry', () => {
       circularObject,
       appsec: { enabled: true },
       profiling: { enabled: true }
+      peerServiceMapping: {
+        'service_1': 'remapped_service_1',
+        'service_2': 'remapped_service_2'
+      }
     }, {
       _pluginsByName: pluginsByName
     })
@@ -109,6 +113,8 @@ describe('telemetry', () => {
         { name: 'circularObject.field', value: 'parent_value' },
         { name: 'appsec.enabled', value: true },
         { name: 'profiling.enabled', value: true }
+        { name: 'circularObject.child.field', value: 'child_value' },
+        { name: 'peerServiceMapping', value: 'service_1:remapped_service_1,service_2:remapped_service_2' }
       ])
       expect(payload).to.have.property('additional_payload').that.deep.equal([])
     })

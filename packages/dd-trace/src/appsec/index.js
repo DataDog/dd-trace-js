@@ -14,6 +14,7 @@ const {
 const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
+const appsecTelemetry = require('./telemetry')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
@@ -35,6 +36,8 @@ function enable (_config) {
     remoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
+
+    appsecTelemetry.enable(_config.telemetry)
 
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -187,6 +190,8 @@ function disable () {
   config = null
 
   RuleManager.clearAllRules()
+
+  appsecTelemetry.disable()
 
   remoteConfig.disableWafUpdate()
 
