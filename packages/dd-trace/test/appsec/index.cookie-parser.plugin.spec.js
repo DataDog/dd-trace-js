@@ -61,9 +61,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       try {
         await axios.post(`http://localhost:${port}/`, {}, {
           headers: {
-            cookies: {
-              key: 'testattack'
-            }
+            Cookie: 'key=testattack'
           }
         })
 
