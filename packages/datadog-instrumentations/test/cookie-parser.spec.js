@@ -1,5 +1,6 @@
 'use strict'
 
+const { assert } = require('chai')
 const getPort = require('get-port')
 const dc = require('../../diagnostics_channel')
 const axios = require('axios')
@@ -30,7 +31,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       })
     })
     beforeEach(async () => {
-        middlewareProcessCookieStub = sinon.stub()
+      middlewareProcessCookieStub = sinon.stub()
     })
 
     after(() => {
