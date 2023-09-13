@@ -1614,92 +1614,99 @@ describe('Plugin', () => {
             })
         })
       })
-      // TODO: this is an outdated test, comeback to it to officially add support for
-      // apollo core server
-      // withVersions('graphql', 'apollo-server-core', apolloVersion => {
-      //   let runQuery
-      //   let mergeSchemas
-      //   let makeExecutableSchema
 
-      //   before(() => {
-      //     tracer = require('../../dd-trace')
+      withVersions('graphql', 'apollo-server-core', apolloVersion => {
+        // The precense of graphql@^15.2.0 in the /versions folder causes graphql-tools@3.1.1
+        // to break in the before() hook. This test tests a library that had it's last release occur 5 years ago
+        // updating the test would require using newer version of apollo-core which has a completely different syntax
+        // library name, and produce traces that are different then what is expected by this test
+        // TODO: this is an outdated test, comeback to it by officially adding support for the newer versions of
+        // apollo server
+        describe.skip('apollo-server-core', () => {
+          let runQuery
+          let mergeSchemas
+          let makeExecutableSchema
 
-      //     return agent.load('graphql')
-      //       .then(() => {
-      //         graphql = require(`../../../versions/graphql@${version}`).get()
+          before(() => {
+            tracer = require('../../dd-trace')
 
-      //         const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
-      //         const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
+            return agent.load('graphql')
+              .then(() => {
+                graphql = require(`../../../versions/graphql@${version}`).get()
 
-      //         runQuery = apolloCore.runQuery
-      //         mergeSchemas = graphqlTools.mergeSchemas
-      //         makeExecutableSchema = graphqlTools.makeExecutableSchema
-      //       })
-      //   })
+                const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
+                const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
 
-      //   after(() => {
-      //     return agent.close({ ritmReset: false })
-      //   })
+                runQuery = apolloCore.runQuery
+                mergeSchemas = graphqlTools.mergeSchemas
+                makeExecutableSchema = graphqlTools.makeExecutableSchema
+              })
+          })
 
-      //   it('should support apollo-server schema stitching', done => {
-      //     agent
-      //       .use(traces => {
-      //         const spans = sort(traces[0])
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
 
-      //         expect(spans).to.have.length(3)
+          it('should support apollo-server schema stitching', done => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
 
-      //         expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-      //         expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
-      //         expect(spans[0].meta).to.not.have.property('graphql.source')
+                expect(spans).to.have.length(3)
 
-      //         expect(spans[1]).to.have.property('name', 'graphql.resolve')
-      //         expect(spans[1]).to.have.property('resource', 'hello:String')
+                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
+                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello}')
+                expect(spans[0].meta).to.not.have.property('graphql.source')
 
-      //         expect(spans[2]).to.have.property('name', 'graphql.validate')
-      //         expect(spans[2].meta).to.not.have.property('graphql.source')
-      //       })
-      //       .then(done)
-      //       .catch(done)
+                expect(spans[1]).to.have.property('name', 'graphql.resolve')
+                expect(spans[1]).to.have.property('resource', 'hello:String')
 
-      //     schema = mergeSchemas({
-      //       schemas: [
-      //         makeExecutableSchema({
-      //           typeDefs: `
-      //           type Query {
-      //             hello: String
-      //           }
-      //         `,
-      //           resolvers: {
-      //             Query: {
-      //               hello: () => 'Hello world!'
-      //             }
-      //           }
-      //         }),
-      //         makeExecutableSchema({
-      //           typeDefs: `
-      //           type Query {
-      //             world: String
-      //           }
-      //         `,
-      //           resolvers: {
-      //             Query: {
-      //               world: () => 'Hello world!'
-      //             }
-      //           }
-      //         })
-      //       ]
-      //     })
+                expect(spans[2]).to.have.property('name', 'graphql.validate')
+                expect(spans[2].meta).to.not.have.property('graphql.source')
+              })
+              .then(done)
+              .catch(done)
 
-      //     const params = {
-      //       schema,
-      //       query: 'query MyQuery { hello }',
-      //       operationName: 'MyQuery'
-      //     }
+            schema = mergeSchemas({
+              schemas: [
+                makeExecutableSchema({
+                  typeDefs: `
+                type Query {
+                  hello: String
+                }
+              `,
+                  resolvers: {
+                    Query: {
+                      hello: () => 'Hello world!'
+                    }
+                  }
+                }),
+                makeExecutableSchema({
+                  typeDefs: `
+                type Query {
+                  world: String
+                }
+              `,
+                  resolvers: {
+                    Query: {
+                      world: () => 'Hello world!'
+                    }
+                  }
+                })
+              ]
+            })
 
-      //     runQuery(params)
-      //       .catch(done)
-      //   })
-      // })
+            const params = {
+              schema,
+              query: 'query MyQuery { hello }',
+              operationName: 'MyQuery'
+            }
+
+            runQuery(params)
+              .catch(done)
+          })
+        })
+      })
     })
   })
 })
