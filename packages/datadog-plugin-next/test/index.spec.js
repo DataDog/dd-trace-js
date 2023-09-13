@@ -350,10 +350,7 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('name', 'next.request')
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
-                expect(spans[1]).to.have.property('resource',
-                  satisfies(pkg.version, '>=13.4.13')
-                    ? 'GET /test.txt'
-                    : `GET ${__dirname}/public/test.txt`)
+                expect(spans[1]).to.have.property('resource', 'GET /test.txt')
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
@@ -442,10 +439,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt',
-              satisfies(pkg.version, '>=13.4.13')
-                ? 'GET /test.txt'
-                : `GET ${__dirname}/.next/standalone/public/test.txt`]
+            ['static files', '/test.txt', 'GET /test.txt']
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {

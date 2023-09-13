@@ -82,6 +82,13 @@ class NextPlugin extends ServerPlugin {
       return
     }
 
+    // This is for static files whose 'page' includes the whole file path
+    // For normal page matches, like /api/hello/[name] and a req.url like /api/hello/world,
+    // nothing should happen
+    // For page matches like /User/something/public/text.txt and req.url like /text.txt,
+    // it should disregard the extra absolute path Next.js sometimes sets
+    if (page.includes(req.url)) page = req.url
+
     span.addTags({
       [COMPONENT]: this.constructor.id,
       'resource.name': `${req.method} ${page}`.trim(),
