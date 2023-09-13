@@ -54,8 +54,11 @@ function sendData (config, application, host, reqType, payload = {}) {
     host
   })
 
-  request(data, options, () => {
-    // ignore errors
+  request(data, options, (err) => {
+    if (err && (reqType === 'app-started' || reqType === 'app-dependencies-loaded')) {
+      console.error(reqType + ' error!')
+      console.error(err)
+    }
   })
 }
 
