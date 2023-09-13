@@ -1617,8 +1617,8 @@ describe('Plugin', () => {
 
       withVersions('graphql', 'apollo-server-core', apolloVersion => {
         // The precense of graphql@^15.2.0 in the /versions folder causes graphql-tools@3.1.1
-        // to break in the before() hook. This test tests a library that had it's last release occur 5 years ago
-        // updating the test would require using newer version of apollo-core which has a completely different syntax
+        // to break in the before() hook. This test tests a library version that had its release occur 5 years ago
+        // updating the test would require using newer version of apollo-core which have a completely different syntax
         // library name, and produce traces that are different then what is expected by this test
         // TODO: this is an outdated test, comeback to it by officially adding support for the newer versions of
         // apollo server
