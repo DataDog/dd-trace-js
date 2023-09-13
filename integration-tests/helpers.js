@@ -188,7 +188,8 @@ function spawnProc (filename, options = {}, stdioHandler) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
+async function createSandbox (dependencies = [], isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -207,6 +208,10 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
     await exec(`cp -R ${path} ${folder}`)
     await exec(`sync ${folder}`)
   })
+
+  if (followUpCommand) {
+    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
+  }
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
