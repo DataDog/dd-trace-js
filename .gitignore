@@ -121,3 +121,4 @@ acmeair-nodejs
 packages/datadog-plugin-next/test/package.json
 packages/datadog-plugin-next/test/node_modules
 packages/datadog-plugin-next/test/yarn.lock
+packages/datadog-plugin-next/test/test.txt

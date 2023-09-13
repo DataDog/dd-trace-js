@@ -179,6 +179,10 @@
     {
       "name": "react-dom",
       "dep": true
+    },
+    {
+      "name": "next",
+      "versions": ["13.4.10", "13.4.13", "13.4.15"]
     }
   ],
    "passport-http": [

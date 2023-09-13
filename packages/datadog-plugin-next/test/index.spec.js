@@ -6,7 +6,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync } = require('fs')
+const { writeFileSync, readFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
@@ -351,7 +351,9 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
                 expect(spans[1]).to.have.property('resource',
-                  satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET')
+                  satisfies(pkg.version, '>=13.4.13')
+                    ? 'GET /test.txt'
+                    : `GET ${__dirname}/public/test.txt`)
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
@@ -383,9 +385,22 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
+        before(() => {
+          // choosing to write to an external file to see how many times the request hook is called
+          // throughout the multiple workers Next.js operates on
+          // any changes made to the instrumentation should not allow the number written to the file
+          // to exceed 1
+          const initialCount = '0'
+          writeFileSync(`${__dirname}/test.txt`, initialCount)
+        })
+
+        after(() => {
+          execSync(`rm test.txt`, { cwd: __dirname })
+        })
+
         startServer({ withConfig: true, standalone: false })
 
-        it('should execute the hook and validate the status', done => {
+        it('should execute the hook and validate the status only once', done => {
           agent
             .use(traces => {
               const spans = traces[0]
@@ -401,6 +416,10 @@ describe('Plugin', function () {
               expect(spans[1].meta).to.have.property('foo', 'bar')
               expect(spans[1].meta).to.have.property('req', 'IncomingMessage')
               expect(spans[1].meta).to.have.property('component', 'next')
+
+              // assert request hook was only called once
+              const times = Number(readFileSync(`${__dirname}/test.txt`).toString())
+              expect(times).to.equal(1)
             })
             .then(done)
             .catch(done)
@@ -411,7 +430,11 @@ describe('Plugin', function () {
         })
       })
 
-      if (satisfiesStandalone(pkg.version)) {
+      if (satisfiesStandalone(pkg.version) && satisfies(pkg.version, '<13.4.13 >=13.4.19')) {
+        // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
+        // which affects how the tracer is passed down through NODE_OPTIONS, making tests fail
+        // https://github.com/vercel/next.js/issues/53367
+        // TODO investigate this further - traces appear in the UI for a small test app
         describe('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
@@ -419,7 +442,10 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET']
+            ['static files', '/test.txt',
+              satisfies(pkg.version, '>=13.4.13')
+                ? 'GET /test.txt'
+                : `GET ${__dirname}/.next/standalone/public/test.txt`]
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {

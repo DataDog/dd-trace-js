@@ -60,6 +60,7 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode
     })
 
+    // TODO figure out why this doesn't seem to bubble up with static files in some versions
     if (page) web.setRoute(req, page)
 
     this.config.hooks.request(span, req, res)
