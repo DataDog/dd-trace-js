@@ -159,8 +159,14 @@ function finish (ctx, result, err) {
 
 addHook({
   name: 'next',
-  versions: ['>= 9.5'],
+  versions: ['>=11.1'],
   file: 'dist/server/serve-static.js'
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+
+addHook({
+  name: 'next',
+  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
