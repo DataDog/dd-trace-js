@@ -252,8 +252,8 @@ async function curl (url, useHttp2 = false) {
   })
 }
 
-async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
-  const resultPromise = agent.assertMessageReceived(fn, timeout)
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMessageCount) {
+  const resultPromise = agent.assertMessageReceived(fn, timeout, expectedMessageCount)
   await curl(procOrUrl)
   return resultPromise
 }

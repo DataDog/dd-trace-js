@@ -427,11 +427,11 @@ describe('Plugin', function () {
         })
       })
 
+      // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
+      // which affects how the tracer is passed down through NODE_OPTIONS, making tests fail
+      // https://github.com/vercel/next.js/issues/53367
+      // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && satisfies(pkg.version, '<13.4.13 >=13.4.19')) {
-        // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
-        // which affects how the tracer is passed down through NODE_OPTIONS, making tests fail
-        // https://github.com/vercel/next.js/issues/53367
-        // TODO investigate this further - traces appear in the UI for a small test app
         describe('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
