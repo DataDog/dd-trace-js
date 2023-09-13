@@ -110,7 +110,6 @@
     "chalk": "^5.3.0",
     "checksum": "^1.0.0",
     "cli-table3": "^0.6.3",
-    "cookie-parser": "^1.4.6",
     "dotenv": "16.3.1",
     "esbuild": "0.16.12",
     "eslint": "^8.23.0",

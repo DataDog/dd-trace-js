@@ -39,7 +39,6 @@ dev,chai,MIT,Copyright 2017 Chai.js Assertion Library
 dev,chalk,MIT,Copyright Sindre Sorhus
 dev,checksum,MIT,Copyright Daniel D. Shaw
 dev,cli-table3,MIT,Copyright 2014 James Talmage
-dev,cookie-parser,MIT,Copyright 2014 TJ Holowaychuk 2015 Douglas Christopher Wilson
 dev,dotenv,BSD-2-Clause,Copyright 2015 Scott Motte
 dev,esbuild,MIT,Copyright (c) 2020 Evan Wallace
 dev,eslint,MIT,Copyright JS Foundation and other contributors https://js.foundation
