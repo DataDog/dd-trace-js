@@ -49,6 +49,7 @@ describe('format', () => {
       tracer: sinon.stub().returns({
         _service: 'test'
       }),
+      setTag: sinon.stub(),
       _startTime: 1500000000000.123456,
       _duration: 100
     }
@@ -85,6 +86,24 @@ describe('format', () => {
       expect(trace.error).to.equal(0)
       expect(trace.start).to.equal(span._startTime * 1e6)
       expect(trace.duration).to.equal(span._duration * 1e6)
+    })
+
+    describe('_dd.base_service', () => {
+      it('should infer the tag when span service changes', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = format(span)
+
+        expect(span.setTag).to.have.been.calledWith('_dd.base_service', 'test')
+      })
+
+      it('should infer the tag when no changes occur', () => {
+        span.context()._tags['service.name'] = 'test'
+
+        trace = format(span)
+
+        expect(span.setTag).to.not.have.been.called
+      })
     })
 
     it('should extract Datadog specific tags', () => {
