@@ -19,6 +19,7 @@ describe('scrub cmds', () => {
 
   it('Should split correctly texts', () => {
     expect(scrubCmdParams('echo "Hello\\ text"')).to.be.deep.equal(['echo', 'Hello\\ text'])
+    expect(scrubCmdParams('node -e "process.exit(1)"')).to.be.deep.equal(['node', '-e', 'process.exit(1)'])
   })
 
   it('Should not scrub chained command', () => {

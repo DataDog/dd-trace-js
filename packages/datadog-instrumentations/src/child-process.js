@@ -1,5 +1,7 @@
 'use strict'
 
+const util = require('util')
+
 const {
   channel,
   addHook,
@@ -32,7 +34,7 @@ names.forEach(name => {
 })
 
 function wrapChildProcessSyncMethod () {
-  function wrapMethod (childProcessMethod) {
+  return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
         return childProcessMethod.apply(this, arguments)
@@ -53,13 +55,33 @@ function wrapChildProcessSyncMethod () {
       }
     }
   }
+}
 
-  return wrapMethod
+function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod) {
+  return function () {
+    if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
+      return customPromisifyMethod.apply(this, arguments)
+    }
+    const command = arguments[0]
+    childProcessChannelStart.publish({ command })
+
+    const promise = customPromisifyMethod.apply(this, arguments)
+    return promise.then((res) => {
+      childProcessChannelFinish.publish({ exitCode: 0 })
+
+      return res
+    }).catch((err) => {
+      childProcessChannelError.publish(err.status || err.code)
+      childProcessChannelFinish.publish({ exitCode: err.status || err.code || 0 })
+
+      return Promise.reject(err)
+    })
+  }
 }
 
 function wrapChildProcessAsyncMethod () {
-  function wrapMethod (childProcessMethod) {
-    return function () {
+  return function wrapMethod (childProcessMethod) {
+    function wrappedChildProcessMethod () {
       if (!childProcessChannelStart.hasSubscribers) {
         return childProcessMethod.apply(this, arguments)
       }
@@ -90,6 +112,21 @@ function wrapChildProcessAsyncMethod () {
         return childProcess
       })
     }
+
+    if (childProcessMethod[util.promisify.custom]) {
+      const wrapedChildProcessCustomPromisifyMethod =
+        shimmer.wrap(childProcessMethod[util.promisify.custom],
+          wrapChildProcessCustomPromisifyMethod(childProcessMethod[util.promisify.custom]))
+
+      // should do it in this way because the original property is readonly
+      const descriptor = Object.getOwnPropertyDescriptor(childProcessMethod, util.promisify.custom)
+      Object.defineProperty(wrappedChildProcessMethod,
+        util.promisify.custom,
+        {
+          ...descriptor,
+          value: wrapedChildProcessCustomPromisifyMethod
+        })
+    }
+    return wrappedChildProcessMethod
   }
-  return wrapMethod
 }
