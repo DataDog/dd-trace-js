@@ -51,7 +51,7 @@ function wrapChildProcessSyncMethod () {
         error = err
         throw err
       } finally {
-        childProcessChannelFinish.publish({ exitCode: error?.status || 0 })
+        childProcessChannelFinish.publish({ exitCode: error?.status || error?.code || 0 })
       }
     }
   }
@@ -62,6 +62,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod) {
     if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
       return customPromisifyMethod.apply(this, arguments)
     }
+
     const command = arguments[0]
     childProcessChannelStart.publish({ command })
 

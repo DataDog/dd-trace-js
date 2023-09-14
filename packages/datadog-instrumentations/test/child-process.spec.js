@@ -141,10 +141,10 @@ describe('child process', () => {
 
             it('should execute error callback with `exit 1` command', () => {
               try {
-                childProcess[methodName]('node -e "process.exit(1)"')
+                childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
               } catch (e) {
                 expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"' })
-                expect(finish).to.have.been.calledOnce
+                expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
                 expect(error).to.have.been.calledOnce
               }
             })
