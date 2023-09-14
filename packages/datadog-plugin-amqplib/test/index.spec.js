@@ -55,6 +55,7 @@ describe('Plugin', () => {
           describe('when sending commands', () => {
             withPeerService(
               () => tracer,
+              'amqplib',
               () => channel.assertQueue('test', {}, () => {}),
               'localhost',
               'out.host'
@@ -132,6 +133,7 @@ describe('Plugin', () => {
           describe('when publishing messages', () => {
             withPeerService(
               () => tracer,
+              'amqplib',
               () => channel.assertQueue('test', {}, () => {}),
               'localhost',
               'out.host'

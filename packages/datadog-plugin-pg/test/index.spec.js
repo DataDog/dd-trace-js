@@ -55,6 +55,7 @@ describe('Plugin', () => {
 
           withPeerService(
             () => tracer,
+            'pg',
             (done) => client.query('SELECT 1', (err, result) => {
               if (err) {
                 done()
