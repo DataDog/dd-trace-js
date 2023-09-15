@@ -22,19 +22,21 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(done => {
-          require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
-            .connect((err, conn) => {
-              connection = conn
+          agent.load('amqplib').then(() => {
+            require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
+              .connect((err, conn) => {
+                connection = conn
 
-              if (err != null) {
-                return done(err)
-              }
+                if (err != null) {
+                  return done(err)
+                }
 
-              conn.createChannel((err, ch) => {
-                channel = ch
-                done(err)
+                conn.createChannel((err, ch) => {
+                  channel = ch
+                  return done(err)
+                })
               })
-            })
+          })
         })
 
         describe('without plugin', () => {
@@ -301,28 +303,25 @@ describe('Plugin', () => {
       })
 
       describe('with configuration', () => {
-        before(() => {
-          return agent.load('amqplib', { service: 'test-custom-service' })
-        })
-
         after(() => {
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(done => {
-          require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
-            .connect((err, conn) => {
-              connection = conn
+          agent.load('amqplib', { service: 'test-custom-service' }).then(() => {
+            require(`../../../versions/amqplib@${version}`).get('amqplib/callback_api')
+              .connect((err, conn) => {
+                connection = conn
+                if (err != null) {
+                  return done(err)
+                }
 
-              if (err !== null) {
-                return done(err)
-              }
-
-              conn.createChannel((err, ch) => {
-                channel = ch
-                done(err)
+                conn.createChannel((err, ch) => {
+                  channel = ch
+                  return done(err)
+                })
               })
-            })
+          })
         })
 
         it('should be configured with the correct values', done => {
