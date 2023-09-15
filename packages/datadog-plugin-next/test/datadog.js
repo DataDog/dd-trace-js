@@ -1,6 +1,3 @@
-const { readFileSync, writeFileSync, existsSync } = require('fs')
-const FILENAME = `${__dirname}/test.txt`
-
 module.exports = require('../../..').init({
   service: 'test',
   flushInterval: 0,
@@ -10,11 +7,9 @@ module.exports = require('../../..').init({
   hooks: {
     request: (span, req) => {
       // to count the number of times this hook has run between all processes
-      if (existsSync(FILENAME)) {
-        let times = readFileSync(FILENAME)
-        times = Number(times.toString()) + 1
-        writeFileSync(FILENAME, String(times))
-      }
+      const times = Number(process.env.TIMES_HOOK_CALLED) + 1
+      process.env.TIMES_HOOK_CALLED = times + 1
+      span.setTag('times_hook_called', String(times))
 
       span.setTag('req', req.constructor.name)
       span.setTag('foo', 'bar')

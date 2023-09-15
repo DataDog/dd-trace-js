@@ -6,7 +6,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync, readFileSync } = require('fs')
+const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
@@ -46,7 +46,8 @@ describe('Plugin', function () {
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
-              HOSTNAME: '127.0.0.1'
+              HOSTNAME: '127.0.0.1',
+              TIMES_HOOK_CALLED: 0
             }
           })
 
@@ -363,6 +364,22 @@ describe('Plugin', function () {
               .get(`http://127.0.0.1:${port}/test.txt`)
               .catch(done)
           })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /test.txt')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/test.txt`)
+              .catch(done)
+          })
         })
 
         describe('when an error happens', () => {
@@ -382,19 +399,6 @@ describe('Plugin', function () {
       })
 
       describe('with configuration', () => {
-        before(() => {
-          // choosing to write to an external file to see how many times the request hook is called
-          // throughout the multiple workers Next.js operates on
-          // any changes made to the instrumentation should not allow the number written to the file
-          // to exceed 1
-          const initialCount = '0'
-          writeFileSync(`${__dirname}/test.txt`, initialCount)
-        })
-
-        after(() => {
-          execSync(`rm test.txt`, { cwd: __dirname })
-        })
-
         startServer({ withConfig: true, standalone: false })
 
         it('should execute the hook and validate the status only once', done => {
@@ -414,9 +418,8 @@ describe('Plugin', function () {
               expect(spans[1].meta).to.have.property('req', 'IncomingMessage')
               expect(spans[1].meta).to.have.property('component', 'next')
 
-              // assert request hook was only called once
-              const times = Number(readFileSync(`${__dirname}/test.txt`).toString())
-              expect(times).to.equal(1)
+              // assert request hook was only called once across the whole request
+              expect(spans[1].meta).to.have.property('times_hook_called', '1')
             })
             .then(done)
             .catch(done)
