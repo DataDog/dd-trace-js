@@ -30,6 +30,7 @@ module.exports = {
   'node:child_process': () => require('../child-process'),
   'connect': () => require('../connect'),
   'cookie': () => require('../cookie'),
+  'cookie-parser': () => require('../cookie-parser'),
   'couchbase': () => require('../couchbase'),
   'crypto': () => require('../crypto'),
   'cypress': () => require('../cypress'),
