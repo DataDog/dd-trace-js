@@ -5,6 +5,7 @@ const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
 const {
   bodyParser,
+  cookieParser,
   graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
@@ -43,6 +44,7 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
+    cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
 
     if (_config.appsec.eventTracking.enabled) {
@@ -110,12 +112,9 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
+  // we need to keep this to support other cookie parsers
   if (req.cookies && typeof req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = {}
-
-    for (const k of Object.keys(req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [req.cookies[k]]
-    }
+    payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   waf.run(payload, req)
@@ -146,6 +145,19 @@ function onRequestQueryParsed ({ req, res, abortController }) {
 
   const results = waf.run({
     [addresses.HTTP_INCOMING_QUERY]: req.query
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onRequestCookieParser ({ req, res, abortController, cookies }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (!cookies || typeof cookies !== 'object') return
+
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_COOKIES]: cookies
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
@@ -201,6 +213,7 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
+  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
 
