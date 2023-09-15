@@ -5,7 +5,7 @@ require('./setup/tap')
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
-const { getExtraServices } = require('../src/service-naming/extra')
+const { getExtraServices } = require('../src/service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED

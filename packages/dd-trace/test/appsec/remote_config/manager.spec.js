@@ -41,7 +41,7 @@ describe('RemoteConfigManager', () => {
       '../../../../../package.json': { version: '3.0.0' },
       '../../exporters/common/request': request,
       '../../log': log,
-      '../../service-naming/extra': {
+      '../../service-naming/extra-services': {
         getExtraServices: () => extraServices
       }
     })

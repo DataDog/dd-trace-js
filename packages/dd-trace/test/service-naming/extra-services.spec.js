@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const { registerService, getExtraServices, clear } = require('../../src/service-naming/extra')
+const { registerService, getExtraServices, clear } = require('../../src/service-naming/extra-services')
 
 describe('Extra services', () => {
   beforeEach(clear)
@@ -44,11 +44,11 @@ describe('Extra services', () => {
     it('should register automatically service names defined in DD_EXTRA_SERVICES env var', () => {
       const originalExtraServices = process.env.DD_EXTRA_SERVICES
 
-      delete require.cache[require.resolve('../../src/service-naming/extra')]
+      delete require.cache[require.resolve('../../src/service-naming/extra-services')]
 
       process.env.DD_EXTRA_SERVICES = 'service1,   service2, service3   ,, '
 
-      const { getExtraServices } = require('../../src/service-naming/extra')
+      const { getExtraServices } = require('../../src/service-naming/extra-services')
 
       expect(getExtraServices()).to.deep.equal(['service1', 'service2', 'service3'])
 

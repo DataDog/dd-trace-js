@@ -4,7 +4,7 @@ const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
-const { registerService } = require('./service-naming/extra')
+const { registerService } = require('./service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION

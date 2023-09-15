@@ -8,7 +8,7 @@ const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
-const { getExtraServices } = require('../../service-naming/extra')
+const { getExtraServices } = require('../../service-naming/extra-services')
 
 const clientId = uuid()
 
