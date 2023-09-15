@@ -4,6 +4,7 @@ const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
+const { registerService } = require('./service-naming/extra')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -76,6 +77,8 @@ function extractTags (trace, span) {
   const tracerService = span.tracer()._service.toLowerCase()
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
+
+    registerService(tags['service.name'])
   }
 
   for (const tag in tags) {

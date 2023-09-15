@@ -2,6 +2,7 @@
 
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
+const { expect } = require('chai')
 
 const noop = () => {}
 
@@ -11,6 +12,7 @@ describe('RemoteConfigManager', () => {
   let Scheduler
   let request
   let log
+  let extraServices
   let RemoteConfigManager
   let config
   let rc
@@ -31,12 +33,17 @@ describe('RemoteConfigManager', () => {
       error: sinon.spy()
     }
 
+    extraServices = []
+
     RemoteConfigManager = proxyquire('../src/appsec/remote_config/manager', {
       'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },
       '../../exporters/common/request': request,
-      '../../log': log
+      '../../log': log,
+      '../../service-naming/extra': {
+        getExtraServices: () => extraServices
+      }
     })
 
     config = {
@@ -95,7 +102,8 @@ describe('RemoteConfigManager', () => {
           tracer_version: '3.0.0',
           service: config.service,
           env: config.env,
-          app_version: config.version
+          app_version: config.version,
+          extra_services: []
         },
         capabilities: 'AA=='
       },
@@ -258,6 +266,21 @@ describe('RemoteConfigManager', () => {
         expect(request).to.have.been.calledOnceWith(payload, rc.requestOptions)
         expect(log.error).to.not.have.been.called
         expect(rc.parseConfig).to.not.have.been.called
+        cb()
+      })
+    })
+
+    it('should include extra_services in the payload', (cb) => {
+      request.yieldsRight(null, '{}', 200)
+
+      extraServices = ['test-service']
+
+      // getPayload includes the new extraServices that might be available
+      const payload = rc.getPayload()
+
+      rc.poll(() => {
+        expect(request).to.have.been.calledOnceWith(payload, rc.requestOptions)
+        expect(JSON.parse(payload).client.client_tracer.extra_services).to.deep.equal(extraServices)
         cb()
       })
     })
