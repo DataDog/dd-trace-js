@@ -16,7 +16,7 @@ function publishRequestBodyAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    next.apply(this, arguments)
+    return next.apply(this, arguments)
   }
 }
 
@@ -27,6 +27,6 @@ addHook({
 }, read => {
   return shimmer.wrap(read, function (req, res, next) {
     arguments[2] = publishRequestBodyAndNext(req, res, next)
-    read.apply(this, arguments)
+    return read.apply(this, arguments)
   })
 })
