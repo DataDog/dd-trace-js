@@ -385,10 +385,10 @@
   resolved "https://registry.yarnpkg.com/@colors/colors/-/colors-1.5.0.tgz#bb504579c1cae923e6576a4f5da43d25f97bdbd9"
   integrity sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==
 
-"@datadog/native-appsec@^3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-3.2.0.tgz#ddeca06cbaba9c6905903d09d18013f81eedc8c3"
-  integrity sha512-biAa7EFfuavjSWgSQaCit9CqGzr6Af5nhzfNNGJ38Y/Y387hDvLivAR374kK1z6XoxGZEOa+XPbVogmV/2Bcjw==
+"@datadog/native-appsec@^4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-4.0.0.tgz#ee08138b987dec557eac3650a43a972dac85b6a6"
+  integrity sha512-myTguXJ3VQHS2E1ylNsSF1avNpDmq5t+K4Q47wdzeakGc3sDIDDyEbvuFTujl9c9wBIkup94O1mZj5DR37ajzA==
   dependencies:
     node-gyp-build "^3.9.0"
 
