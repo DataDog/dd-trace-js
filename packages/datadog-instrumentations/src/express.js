@@ -39,7 +39,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    next.apply(this, arguments)
+    return next.apply(this, arguments)
   }
 }
 
