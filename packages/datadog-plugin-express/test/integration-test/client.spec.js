@@ -7,44 +7,52 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const semver = require('semver')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(50000)
-    sandbox = await createSandbox(['express'], false, [`./packages/datadog-plugin-express/test/integration-test/*`])
-  })
+  withVersions('express', 'express', version => {
+    // skip any semver incompatible versions
+    const describe = !semver.valid(version)
+      ? globalThis.describe.skip : globalThis.describe
 
-  after(async function () {
-    this.timeout(50000)
-    await sandbox.remove()
-  })
-
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
-
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
-
-  context('express', () => {
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
-        assert.strictEqual(payload[0].length, 4)
-        assert.propertyVal(payload[0][0], 'name', 'express.request')
-        assert.propertyVal(payload[0][1], 'name', 'express.middleware')
+    describe('express', () => {
+      before(async function () {
+        this.timeout(50000)
+        sandbox = await createSandbox([`express@${version}`], false,
+          [`./packages/datadog-plugin-express/test/integration-test/*`])
       })
-    }).timeout(50000)
+
+      after(async function () {
+        this.timeout(50000)
+        await sandbox.remove()
+      })
+
+      beforeEach(async () => {
+        agent = await new FakeAgent().start()
+      })
+
+      afterEach(async () => {
+        proc && proc.kill()
+        await agent.stop()
+      })
+
+      it('is instrumented', async () => {
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+
+        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 1)
+          assert.isArray(payload[0])
+          assert.strictEqual(payload[0].length, 4)
+          assert.propertyVal(payload[0][0], 'name', 'express.request')
+          assert.propertyVal(payload[0][1], 'name', 'express.middleware')
+        })
+      }).timeout(50000)
+    })
   })
 })

@@ -7,42 +7,49 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const semver = require('semver')
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['openai@3', 'nock'], false, [
-      `./packages/datadog-plugin-openai/test/integration-test/*`])
-  })
+  withVersions('openai', 'openai', version => {
+    // skip any semver incompatible versions
+    const describe = !semver.valid(version)
+      ? globalThis.describe.skip : globalThis.describe
 
-  after(async () => {
-    await sandbox.remove()
-  })
-
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
-
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
-
-  context('openai', () => {
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'openai.request'), true)
+    describe('openai', () => {
+      before(async function () {
+        this.timeout(20000)
+        sandbox = await createSandbox([`openai@${version}`, 'nock'], false, [
+          `./packages/datadog-plugin-openai/test/integration-test/*`])
       })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      after(async () => {
+        await sandbox.remove()
+      })
 
-      await res
-    }).timeout(20000)
+      beforeEach(async () => {
+        agent = await new FakeAgent().start()
+      })
+
+      afterEach(async () => {
+        proc && proc.kill()
+        await agent.stop()
+      })
+
+      it('is instrumented', async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+          assert.isArray(payload)
+          assert.strictEqual(checkSpansForServiceName(payload, 'openai.request'), true)
+        })
+
+        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+
+        await res
+      }).timeout(20000)
+    })
   })
 })

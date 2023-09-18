@@ -8,6 +8,8 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { DD_MAJOR } = require('../../../../version')
+const semver = require('semver')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -16,27 +18,28 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    // next builds slower in the CI, match timeout with unit tests
-    this.timeout(120 * 1000)
-    sandbox = await createSandbox(['next', 'react', 'react-dom'],
-      false, ['./packages/datadog-plugin-next/test/integration-test/*'], 'yarn exec next build')
-  })
+  withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+    // skip any semver incompatible versions
+    before(async function () {
+      // next builds slower in the CI, match timeout with unit tests
+      this.timeout(120 * 1000)
+      sandbox = await createSandbox([`'next@${version}'`, 'react', 'react-dom'],
+        false, ['./packages/datadog-plugin-next/test/integration-test/*'], 'yarn exec next build')
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('next', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
         NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init`
