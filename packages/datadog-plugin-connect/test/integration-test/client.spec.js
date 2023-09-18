@@ -14,7 +14,7 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  withVersions('connect', 'connect', version => {
+  withVersions('connect', 'connect', '>=3', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`connect@${version}`], false, [
