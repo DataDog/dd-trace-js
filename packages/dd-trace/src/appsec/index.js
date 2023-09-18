@@ -10,7 +10,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
-  queryParser
+  queryParser,
+  nextBodyParsed
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -43,6 +44,7 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
+    nextBodyParsed.subscribe(onNextRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
@@ -135,6 +137,17 @@ function onRequestBodyParsed ({ req, res, abortController }) {
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onNextRequestBodyParsed ({ req, body }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (body === undefined || body === null) return
+
+  waf.run({
+    [addresses.HTTP_INCOMING_BODY]: body
+  }, req)
 }
 
 function onRequestQueryParsed ({ req, res, abortController }) {

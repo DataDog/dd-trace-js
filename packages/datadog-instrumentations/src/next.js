@@ -10,6 +10,7 @@ const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
+const bodyParsedChannel = channel('apm:next:body-parsed')
 
 const requests = new WeakSet()
 
@@ -123,7 +124,7 @@ function instrument (req, res, handler) {
       const promise = handler(ctx)
 
       // promise should only reject when propagateError is true:
-      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
+      // https://github.comapp-route/module.js/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
         result => finish(ctx, result),
         err => finish(ctx, null, err)
@@ -211,4 +212,34 @@ addHook({
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
+})
+
+addHook({
+  name: 'next',
+  versions: ['>=13.4.13'],
+  file: 'dist/server/web/spec-extension/adapters/next-request.js'
+}, nextRequest => {
+  const { NextRequestAdapter } = nextRequest
+  shimmer.wrap(NextRequestAdapter, 'fromNodeNextRequest', function (originalFromNodeNextRequest) {
+    return function fromNodeNextRequest (req) {
+      const request = originalFromNodeNextRequest.apply(this, arguments)
+
+      if (bodyParsedChannel.hasSubscribers) {
+        shimmer.massWrap(request, ['text', 'json'], function (originalMethod) {
+          return async function () {
+            const body = await originalMethod.apply(this, arguments)
+
+            bodyParsedChannel.publish({
+              body, req: req._req
+            })
+
+            return body
+          }
+        })
+      }
+
+      return request
+    }
+  })
+  return nextRequest
 })
