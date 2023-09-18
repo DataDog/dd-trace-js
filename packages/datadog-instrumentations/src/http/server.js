@@ -29,7 +29,7 @@ addHook({ name: 'http' }, http => {
 
 function wrapResponseEmit (emit) {
   return function (eventName, event) {
-    if (!startServerCh.hasSubscribers) {
+    if (!finishServerCh.hasSubscribers) {
       return emit.apply(this, arguments)
     }
 
