@@ -83,7 +83,11 @@ class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
-      resultReject([...errors, new Error('timeout')])
+      if (errors.length === expectedMessageCount) {
+        resultReject([...errors, new Error('timeout')])
+      } else {
+        resultResolve()
+      }
     }, timeout)
 
     const resultPromise = new Promise((resolve, reject) => {
@@ -252,8 +256,8 @@ async function curl (url, useHttp2 = false) {
   })
 }
 
-async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
-  const resultPromise = agent.assertMessageReceived(fn, timeout)
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMessageCount) {
+  const resultPromise = agent.assertMessageReceived(fn, timeout, expectedMessageCount)
   await curl(procOrUrl)
   return resultPromise
 }
