@@ -19,7 +19,7 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  withVersions('tedious', 'tedious', version => {
+  withVersions('tedious', 'tedious', '>=16.0.0', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`tedious@${version}`], false, [
