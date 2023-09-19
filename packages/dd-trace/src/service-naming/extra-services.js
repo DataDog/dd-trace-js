@@ -5,13 +5,13 @@ const extraServices = new Set()
 
 process.env.DD_EXTRA_SERVICES?.split(',')
   .map(serviceName => serviceName.trim())
-  .forEach(registerService)
+  .forEach(registerExtraService)
 
 function getExtraServices () {
   return [...extraServices]
 }
 
-function registerService (serviceName) {
+function registerExtraService (serviceName) {
   if (serviceName && extraServices.size < maxExtraServices) {
     extraServices.add(serviceName)
   }
@@ -22,7 +22,7 @@ function clear () {
 }
 
 module.exports = {
-  registerService,
+  registerExtraService,
   getExtraServices,
   clear
 }

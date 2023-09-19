@@ -276,10 +276,10 @@ describe('RemoteConfigManager', () => {
 
       // getPayload includes the new extraServices that might be available
       const payload = rc.getPayload()
+      expect(JSON.parse(payload).client.client_tracer.extra_services).to.deep.equal(extraServices)
 
       rc.poll(() => {
         expect(request).to.have.been.calledOnceWith(payload, rc.requestOptions)
-        expect(JSON.parse(payload).client.client_tracer.extra_services).to.deep.equal(extraServices)
         cb()
       })
     })

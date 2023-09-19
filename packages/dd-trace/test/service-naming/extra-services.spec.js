@@ -3,30 +3,30 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const { registerService, getExtraServices, clear } = require('../../src/service-naming/extra-services')
+const { registerExtraService, getExtraServices, clear } = require('../../src/service-naming/extra-services')
 
 describe('Extra services', () => {
   beforeEach(clear)
 
-  describe('registerService', () => {
+  describe('registerExtraService', () => {
     it('should register defined service names', () => {
-      registerService('service-test')
+      registerExtraService('service-test')
 
       expect(getExtraServices()).to.deep.equal(['service-test'])
     })
 
     it('should not register invalid service names', () => {
-      registerService()
-      registerService(null)
-      registerService('')
+      registerExtraService()
+      registerExtraService(null)
+      registerExtraService('')
 
       expect(getExtraServices().length).to.equal(0)
     })
 
     it('should register the same service name only once', () => {
-      registerService('service-test')
-      registerService('service-test')
-      registerService('service-test')
+      registerExtraService('service-test')
+      registerExtraService('service-test')
+      registerExtraService('service-test')
 
       const extraServices = getExtraServices()
       expect(extraServices.length).to.equal(1)
@@ -35,7 +35,7 @@ describe('Extra services', () => {
 
     it('should register a max of 64 service names', () => {
       for (let i = 0; i < 100; i++) {
-        registerService(`service-test-${i}`)
+        registerExtraService(`service-test-${i}`)
       }
 
       expect(getExtraServices().length).to.equal(64)
