@@ -971,18 +971,18 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
-    const origLogCollectionValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
+  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
+    const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
     const config = new Config()
 
     expect(config.telemetry.logCollection).to.be.false
 
-    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogCollectionValue
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
   })
 
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = true if DD_IAST_ENABLED', () => {
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
     const origIastEnabledValue = process.env.DD_IAST_ENABLED
     process.env.DD_IAST_ENABLED = 'true'
 

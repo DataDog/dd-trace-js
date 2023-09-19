@@ -588,8 +588,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
-      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
