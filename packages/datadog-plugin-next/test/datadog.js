@@ -6,8 +6,13 @@ module.exports = require('../../..').init({
   validateStatus: code => false,
   hooks: {
     request: (span, req) => {
+      // to count the number of times this hook has run between all processes
+      const times = Number(process.env.TIMES_HOOK_CALLED) + 1
+      process.env.TIMES_HOOK_CALLED = times + 1
+      span.setTag('times_hook_called', String(times))
+
       span.setTag('req', req.constructor.name)
       span.setTag('foo', 'bar')
     }
   }
-} : true).use('http', { client: false })
+} : true).use('http')

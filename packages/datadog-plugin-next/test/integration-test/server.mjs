@@ -1,4 +1,3 @@
-import 'dd-trace/init.js'
 import { createServer } from 'http'
 import next from 'next'
 
