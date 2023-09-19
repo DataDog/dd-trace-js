@@ -12,6 +12,7 @@ const tags = {
   MANUAL_KEEP: 'manual.keep',
   MANUAL_DROP: 'manual.drop',
   MEASURED: '_dd.measured',
+  BASE_SERVICE: '_dd.base_service',
 
   // HTTP
   HTTP_URL: 'http.url',
