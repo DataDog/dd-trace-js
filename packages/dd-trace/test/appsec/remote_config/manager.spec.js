@@ -2,7 +2,6 @@
 
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
-const { expect } = require('chai')
 
 const noop = () => {}
 
