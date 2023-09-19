@@ -7,6 +7,7 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { END_TIMESTAMP, ROOT_SPAN_ID, SPAN_ID } = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -26,10 +27,10 @@ function getStartedSpans (context) {
 function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
   const labels = {}
   if (spanId) {
-    labels['span id'] = spanId
+    labels[SPAN_ID] = spanId
   }
   if (rootSpanId) {
-    labels['local root span id'] = rootSpanId
+    labels[ROOT_SPAN_ID] = rootSpanId
   }
   if (webTags && Object.keys(webTags).length !== 0) {
     labels['trace endpoint'] = endpointNameFromTags(webTags)
@@ -38,7 +39,7 @@ function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, t
     labels['trace endpoint'] = endpoint
   }
   // Incoming timestamps are in microseconds, we emit nanos.
-  labels['end_timestamp_ns'] = timestamp * 1000n
+  labels[END_TIMESTAMP] = timestamp * 1000n
 
   return labels
 }
