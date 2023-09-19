@@ -50,7 +50,6 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = span.context()._tags['error']
-    const page = span.context()._tags['next.page']
 
     if (!this.config.validateStatus(res.statusCode) && !error) {
       span.setTag('error', true)
@@ -59,8 +58,6 @@ class NextPlugin extends ServerPlugin {
     span.addTags({
       'http.status_code': res.statusCode
     })
-
-    if (page) web.setRoute(req, page)
 
     this.config.hooks.request(span, req, res)
 
@@ -81,11 +78,20 @@ class NextPlugin extends ServerPlugin {
       return
     }
 
+    // This is for static files whose 'page' includes the whole file path
+    // For normal page matches, like /api/hello/[name] and a req.url like /api/hello/world,
+    // nothing should happen
+    // For page matches like /User/something/public/text.txt and req.url like /text.txt,
+    // it should disregard the extra absolute path Next.js sometimes sets
+    if (page.includes(req.url)) page = req.url
+
     span.addTags({
       [COMPONENT]: this.constructor.id,
       'resource.name': `${req.method} ${page}`.trim(),
       'next.page': page
     })
+
+    web.setRoute(req, page)
   }
 
   configure (config) {

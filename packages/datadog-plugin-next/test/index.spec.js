@@ -46,7 +46,8 @@ describe('Plugin', function () {
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
-              HOSTNAME: '127.0.0.1'
+              HOSTNAME: '127.0.0.1',
+              TIMES_HOOK_CALLED: 0
             }
           })
 
@@ -350,12 +351,27 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('name', 'next.request')
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
-                expect(spans[1]).to.have.property('resource',
-                  satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET')
+                expect(spans[1]).to.have.property('resource', 'GET /test.txt')
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/test.txt`)
+              .catch(done)
+          })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /test.txt')
               })
               .then(done)
               .catch(done)
@@ -385,7 +401,7 @@ describe('Plugin', function () {
       describe('with configuration', () => {
         startServer({ withConfig: true, standalone: false })
 
-        it('should execute the hook and validate the status', done => {
+        it('should execute the hook and validate the status only once', done => {
           agent
             .use(traces => {
               const spans = traces[0]
@@ -401,6 +417,9 @@ describe('Plugin', function () {
               expect(spans[1].meta).to.have.property('foo', 'bar')
               expect(spans[1].meta).to.have.property('req', 'IncomingMessage')
               expect(spans[1].meta).to.have.property('component', 'next')
+
+              // assert request hook was only called once across the whole request
+              expect(spans[1].meta).to.have.property('times_hook_called', '1')
             })
             .then(done)
             .catch(done)
@@ -411,7 +430,11 @@ describe('Plugin', function () {
         })
       })
 
-      if (satisfiesStandalone(pkg.version)) {
+      // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
+      // which affects how the tracer is passed down through NODE_OPTIONS, making tests fail
+      // https://github.com/vercel/next.js/issues/53367
+      // TODO investigate this further - traces appear in the UI for a small test app
+      if (satisfiesStandalone(pkg.version) && satisfies(pkg.version, '<13.4.13 >=13.4.19')) {
         describe('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
@@ -419,7 +442,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET']
+            ['static files', '/test.txt', 'GET /test.txt']
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {
