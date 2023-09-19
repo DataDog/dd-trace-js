@@ -9,31 +9,15 @@ const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
   describe('start', () => {
-    let subscribe
-    let dependencies
-
-    beforeEach(() => {
-      subscribe = sinon.stub()
-      dependencies = proxyquire('../../src/telemetry/dependencies', {
-        '../../../diagnostics_channel': {
-          channel () { return { subscribe } }
-        }
-      })
-    })
-
-    afterEach(() => {
-      dependencies.stop()
-      subscribe.reset()
-    })
-
     it('should subscribe', () => {
+      const subscribe = sinon.stub()
+      const dc = { channel () { return { subscribe } } }
+      const dependencies = proxyquire('../../src/telemetry/dependencies', {
+        '../../../diagnostics_channel': dc
+      })
+
       dependencies.start()
       expect(subscribe).to.have.been.calledOnce
-    })
-
-    it('should not subscribe if dependencies collection set to false', () => {
-      dependencies.start({ telemetry: { dependencyCollection: false } })
-      expect(subscribe).to.not.have.been.called
     })
   })
 
@@ -282,7 +266,7 @@ describe('dependencies', () => {
       expect(sendData).to.have.been.calledOnce
     })
 
-    it('should call sendData twice with more than 1000 dependencies', (done) => {
+    it('should call sendData twice with more than 2000 dependencies', (done) => {
       const requestPrefix = 'custom-module'
       requirePackageJson.returns({ version: '1.0.0' })
       const timeouts = []
@@ -297,7 +281,7 @@ describe('dependencies', () => {
         timeouts.push(timeout)
         return timeout
       }
-      for (let i = 0; i < 1200; i++) {
+      for (let i = 0; i < 2200; i++) {
         const request = requestPrefix + i
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
         moduleLoadStartChannel.publish({ request, filename })
@@ -309,6 +293,53 @@ describe('dependencies', () => {
           done()
         }
       })
+    })
+  })
+
+  describe('with configuration', () => {
+    const config = {
+      telemetry: {
+        dependencyCollection: false
+      }
+    }
+    const application = 'test'
+    const host = 'host'
+    const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
+
+    let dependencies
+    let sendData
+    let requirePackageJson
+
+    beforeEach(() => {
+      requirePackageJson = sinon.stub()
+      sendData = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './send-data': { sendData },
+        '../require-package-json': requirePackageJson
+      })
+      global.setImmediate = function (callback) { callback() }
+
+      dependencies.start(config, application, host)
+
+      // force first publish to load cached requires
+      moduleLoadStartChannel.publish({}) // called once here
+      const request = 'custom-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename }) // called again here
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      sendData.reset()
+      global.setImmediate = originalSetImmediate
+    })
+
+    it('should not call sendData for modules not captured in the initial load', () => {
+      const request = 'custom-module2'
+      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename }) // should not be called here
+      expect(sendData).to.have.been.calledTwice
     })
   })
 })

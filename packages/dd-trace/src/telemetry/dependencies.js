@@ -14,7 +14,7 @@ const detectedDependencyVersions = new Set()
 const FILE_URI_START = `file://`
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
-let immediate, config, application, host
+let immediate, config, application, host, initialLoad
 let isFirstModule = true
 
 function waitAndSend (config, application, host) {
@@ -22,11 +22,19 @@ function waitAndSend (config, application, host) {
     immediate = setImmediate(() => {
       immediate = null
       if (savedDependenciesToSend.size > 0) {
-        const dependencies = Array.from(savedDependenciesToSend.values()).splice(0, 1000).map(pair => {
-          savedDependenciesToSend.delete(pair)
-          const [name, version] = pair.split(' ')
-          return { name, version }
-        })
+        const dependencies = Array.from(savedDependenciesToSend.values())
+          // if a depencdency is from the initial load, *always* send the event
+          // Otherwise, only send if dependencyCollection is enabled
+          .filter(dep => {
+            const initialLoadModule = dep.split(' ')[2]
+            return initialLoadModule || (config.telemetry?.dependencyCollection)
+          })
+          .splice(0, 2000) // v2 documentation specifies up to 2000 dependencies can be sent at once
+          .map(pair => {
+            savedDependenciesToSend.delete(pair)
+            const [name, version] = pair.split(' ')
+            return { name, version }
+          })
         sendData(config, application, host, 'app-dependencies-loaded', { dependencies })
         if (savedDependenciesToSend.size > 0) {
           waitAndSend(config, application, host)
@@ -76,7 +84,7 @@ function onModuleLoad (data) {
             const dependencyAndVersion = `${name} ${version}`
 
             if (!detectedDependencyVersions.has(dependencyAndVersion)) {
-              savedDependenciesToSend.add(dependencyAndVersion)
+              savedDependenciesToSend.add(`${dependencyAndVersion} ${initialLoad}`)
               detectedDependencyVersions.add(dependencyAndVersion)
 
               waitAndSend(config, application, host)
@@ -90,12 +98,16 @@ function onModuleLoad (data) {
   }
 }
 function start (_config = {}, _application, _host) {
-  if (_config.telemetry && !_config.telemetry.dependencyCollection) return
-
   config = _config
   application = _application
   host = _host
+  initialLoad = true
   moduleLoadStartChannel.subscribe(onModuleLoad)
+
+  // try and capture intially loaded modules in the first tick
+  // since, ideally, the tracer (and this module) should be loaded first,
+  // this should capture any first-tick dependencies
+  setTimeout(() => { initialLoad = false }, 0)
 }
 
 function isDependency (filename, request) {
