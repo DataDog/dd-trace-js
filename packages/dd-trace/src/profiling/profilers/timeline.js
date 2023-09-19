@@ -1,11 +1,13 @@
 'use strict'
 
 const asyncHooks = require('async_hooks')
+const { performance } = require('node:perf_hooks')
 const { storage } = require('../../../../datadog-core')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
 const { END_TIMESTAMP, ROOT_SPAN_ID, SPAN_ID } = require('./shared')
-const UINT_PERIOD = 2n ** 64n;
+
+const MS_TO_NS = 1000000
 
 function getActiveSpan () {
   const store = storage.getStore()
@@ -13,17 +15,13 @@ function getActiveSpan () {
 }
 
 function endOfQuantum (t, q) {
-  return ((t / q) + (t < 0n ? 0n : 1n)) * q
-}
-
-function startOfQuantum (t, q) {
-  return ((t / q) - (t < 0n ? 1n : 0n)) * q
+  return (Math.floor(t / q) + 1) * q
 }
 
 class Timeline {
   constructor (options = {}) {
     this.type = 'timeline'
-    this._samplingIntervalNanos = BigInt(Math.floor(options.samplingInterval || 1e9 / 99)) // 99hz
+    this._samplingIntervalMillis = Math.floor(options.samplingInterval / 1e6 || 1e3 / 99) // 99hz
     this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
     // The structure of this._accumulators object is as follows: top-level
     // property names are span IDs in decimal string encoding. Empty string is
@@ -36,16 +34,16 @@ class Timeline {
     // "duration" as the duration in nanoseconds (a number). So something like:
     /*
     { "": { "ref": 4,
-            "TCPWRAP": [{ "end": 1096775635496890n, "duration": 175000},
-                        { "end": 1096780645597850n, "duration": 1154541},...],
-            "HTTPCLIENTREQUEST": [{ "end": 1096775635496890n, "duration": 84416},
-                                  { "end": 1096780645597850n, "duration": 494125}, ...]
+            "TCPWRAP": [{ "end": 5635.496890, "duration": 175000},
+                        { "end": 5645.597850, "duration": 1154541},...],
+            "HTTPCLIENTREQUEST": [{ "end": 5635.496890, "duration": 84416},
+                                  { "end": 5645.597850, "duration": 494125}, ...]
       },
       "8902676252807731318": { "rootSpanId": "6976680365829768426", "ref": 1,
-            "FSREQCALLBACK": [{ "end": 1096778231456460n, "duration": 1220918},
-                              { "end": 1096778241557470n, "duration": 774915}, ...],
-            "ZLIB": [{ "end": 1096778342567570n, "duration": 397250},
-                     { "end": 1096778352668580n, "duration": 237210}, ...]
+            "FSREQCALLBACK": [{ "end": 8231.456460, "duration": 1220918},
+                              { "end": 8241.557470, "duration": 774915}, ...],
+            "ZLIB": [{ "end": 8342.567570n, "duration": 397250},
+                     { "end": 8352.668580n, "duration": 237210}, ...]
       },
       ...
     }
@@ -56,17 +54,6 @@ class Timeline {
 
     this._accumulators = new Map()
     this._active = new Map()
-    // hrtime is uint64_t, and it can overflow. For this reason, we'll be
-    // subtracting _timeOrigin from it in order to keep it (roughly) in the
-    // [0-flushIntervalNanos] range. _timeOrigin will be advanced each time we
-    // report the profile by roughly flushIntervalNanos, with 64-bit overflow so
-    // it hews to hrtime. At the same time already recorded times ('end'
-    // properties in quanta and 'start' of activity objects in the _active map)
-    // will be decremented by the same amount, essentially getting rebased to
-    // the new time origin. Note that for this reason, time instants can
-    // sometimes become negative, which is fine. The intricacies of correctly
-    // handling hrtime 64-bit overflow are handled in _hrnow and _report.
-    this._timeOrigin = startOfQuantum(process.hrtime.bigint(), this._samplingIntervalNanos)
   }
 
   start () {
@@ -90,9 +77,8 @@ class Timeline {
   }
 
   profile () {
-    const dateNow = Date.now() * 1000000
     const hrNow = this._hrnow()
-    return this._createProfileFromReport(this._reportUntil(hrNow), dateNow, hrNow)
+    return this._createProfileFromReport(this._reportUntil(hrNow), performance.timeOrigin, hrNow)
   }
 
   encode (profile) {
@@ -132,16 +118,19 @@ class Timeline {
   }
 
   _hrnow() {
-    const now = process.hrtime.bigint() - this._timeOrigin
-    if (now >= 0) {
-      return now
-    }
-    // hrtime is uint64_t and had an overflow since last update to _timeOrigin,
-    // so we need to undo the overflow. Because of the overflow, hrtime will
-    // have a very small magnitude, and _timeOrigin will be close to
-    // UINT_PERIOD, so "now" will be close to -UINT_PERIOD. Adding UINT_PERIOD
-    // will bring it back into the (roughly) [0-flushIntervalNanos] range.
-    return now + UINT_PERIOD
+    // We could've used process.hrtime.bigint() but it's a bigint so it'll need
+    // more storage. performance.now() returns millis since process start as an
+    // ordinary 64-bit IEEE double precision floating point number. It encodes
+    // nanos in its fractional part. 1e9 nanos needs about 30 bits, and a FP
+    // double has a 53 bit mantissa, so it'll retain 1ns resolution for about
+    // 2^23 seconds, or 97 days, after which it'll lose one bit of precision,
+    // and this one bit precision loss will happens every 97 days. Monotonic
+    // CPU performance counters on most architectures don't provide better than
+    // 30ns or so resolution (measured 41ns on Apple M1 Max) so a process can
+    // stay up for 5x97 days, or about 16 months before this number's resolution
+    // drops to 2^5=32ns, close to the actual timer's resolution. This seems
+    // like an acceptable upper limit on process uptime.
+    return performance.now()
   }
 
   _createActivity (type, spanId, ctx) {
@@ -163,17 +152,16 @@ class Timeline {
         spanData.set(type, quanta)
       }
     }
-    return { spanData, quanta, running: false, start: 0n }
+    return { spanData, quanta, start: Infinity }
   }
 
   _startActivity(activity, time) {
     activity.start = time
-    activity.running = true
   }
 
   _stopActivity(activity, time) {
-    activity.running = false
     this._addDuration(activity.quanta, activity.start, time)
+    activity.start = Infinity
   }
 
   _addDuration (quanta, start, end) {
@@ -182,7 +170,7 @@ class Timeline {
     // creating new ones as needed.
     while (start < end) {
       // end ns of the current quantum
-      const quantumEnd = endOfQuantum(start, this._samplingIntervalNanos)
+      const quantumEnd = endOfQuantum(start, this._samplingIntervalMillis)
       // end ns of the activation
       const endInQuantum = end < quantumEnd ? end : quantumEnd
       // Duration should always fit in a JS number; 2^53 is good for 104 days
@@ -218,27 +206,19 @@ class Timeline {
   // The reported information is removed from _accumulators. All remaining
   // information's timestamps are rebased on time.
   * _reportUntil (time) {
-    const currQuantumEnd = endOfQuantum(time, this._samplingIntervalNanos)
-    const currQuantumStart = startOfQuantum(time, this._samplingIntervalNanos)
+    const currQuantumEnd = endOfQuantum(time, this._samplingIntervalMillis)
+    const currQuantumStart = currQuantumEnd - this._samplingIntervalMillis
 
     // Add partial duration of currently running activities that started
     // before the current time quantum into their previous time quantum
     // durations. Note that since Node.JS is single-threaded, this'll only apply
     // to real async activities (e.g. ZLIB, crypto operations.)
     for(const activity of this._active.values()) {
-      if (activity.running) {
-        if (activity.start < currQuantumStart) {
-          this._addDuration(activity.quanta, activity.start, currQuantumStart)
-          // Since we reported the activity duration up to currQuantumStart,
-          // we need to adjust its start to currQuantumStart. Since we'll also
-          // rebase _timeOrigin to currQuantumStart, the new start becomes 0.
-          activity.start = 0n
-        } else {
-          // Running activity started in the current time quantum has no
-          // reportable duration, but should have its start rebased on the new
-          // time origin.
-          activity.start -= currQuantumStart
-        }
+      if (activity.start < currQuantumStart) {
+        this._addDuration(activity.quanta, activity.start, currQuantumStart)
+        // Since we reported the activity duration up to currQuantumStart,
+        // we need to adjust its start to currQuantumStart.
+        activity.start = currQuantumStart
       }
     }
 
@@ -257,24 +237,18 @@ class Timeline {
         if (!hasEntries && quanta.length) {
           hasEntries = true
         }
-        // Adjust end times in the remaining quanta
-        for (const quantum of quanta) {
-          quantum.end -= currQuantumStart
-        }
       }
       if (!hasEntries && spanData.ref === 0 && spanKey !== '') {
         // Delete empty spans
         this._accumulators.delete(spanKey)
       }
     }
-    // Finally, shift the time origin
-    this._timeOrigin = BigInt.asUintN(64, this._timeOrigin + currQuantumStart)
   }
 
   // Takes a generator from _reportUntil and creates a pprof Profile from it.
-  // Additionally takes a current epoch date (in nanos) and a current
-  // high-resolution time in nanoseconds.
-  _createProfileFromReport (accs, dateNow, hrNow) {
+  // Additionally takes the time origin for the high-resolution time, and a
+  // current high-resolution time.
+  _createProfileFromReport (accs, timeOrigin, hrNow) {
     const stringTable = new StringTable()
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
     const spanLabelKey = stringTable.dedup(SPAN_ID)
@@ -300,10 +274,10 @@ class Timeline {
       }
     }
 
-    const dateOffset = BigInt(dateNow) - hrNow
-
     let durationFrom = hrNow + this._samplingIntervalNanos
-    let durationTo = 0n
+    let durationTo = 0
+
+    const dateOffset = BigInt(timeOrigin * MS_TO_NS)
 
     for (;;) {
       const next = accs.next()
@@ -325,15 +299,15 @@ class Timeline {
 
       for (const q of quanta) {
         const end = q.end
-        const start = end - this._samplingIntervalNanos
+        const start = end - this._samplingIntervalMillis
         if (end > durationTo) durationTo = end
         if (start < durationFrom) durationFrom = start
-        const labels = [new Label({ key: timestampLabelKey, num: q.end + dateOffset }), typeLabel]
+        const labels = [new Label({ key: timestampLabelKey, num: BigInt(q.end * MS_TO_NS) + dateOffset }), typeLabel]
         if (spanLabel) labels.push(spanLabel)
         if (rootSpanLabel) labels.push(rootSpanLabel)
         samples.push(new Sample({
           locationId: [location.id],
-          value: [Number(q.duration)],
+          value: [q.duration * MS_TO_NS],
           label: labels
         }))
       }
