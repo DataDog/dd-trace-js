@@ -72,11 +72,12 @@ class AgentExporter {
       ['profiler_version', version],
       ['format', 'pprof'],
 
-      ['tags[]', 'language:javascript'],
+      ['tags[]', 'language:nodejs'],
       ['tags[]', 'runtime:nodejs'],
       ['tags[]', `runtime_version:${process.version}`],
       ['tags[]', `profiler_version:${version}`],
       ['tags[]', 'format:pprof'],
+      ['tags[]', 'hotdog-szegedi'],
       ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
     ]
 
