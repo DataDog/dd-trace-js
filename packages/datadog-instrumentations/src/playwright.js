@@ -254,7 +254,7 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0  <1.30.0']
+  versions: ['>=1.18.0 <1.30.0']
 }, dispatcherHook)
 
 addHook({
@@ -266,11 +266,23 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0']
+  versions: ['>=1.31.0 <1.38.0']
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 addHook({
   name: '@playwright/test',
   file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0']
+  versions: ['>=1.31.0 <1.38.0']
 }, runnerHook)
+
+// From >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/runner.js',
+  versions: ['>=1.38.0']
+}, runnerHook)
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/dispatcher.js',
+  versions: ['>=1.38.0']
+}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
