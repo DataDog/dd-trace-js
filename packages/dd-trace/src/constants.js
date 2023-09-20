@@ -6,6 +6,8 @@ module.exports = {
   ORIGIN_KEY: '_dd.origin',
   HOSTNAME_KEY: '_dd.hostname',
   TOP_LEVEL_KEY: '_dd.top_level',
+  PAYLOAD_TAGGING_PREFIX: 'http.payload',
+  PAYLOAD_TAGGING_DEPTH: 10,
   SAMPLING_RULE_DECISION: '_dd.rule_psr',
   SAMPLING_LIMIT_DECISION: '_dd.limit_psr',
   SAMPLING_AGENT_DECISION: '_dd.agent_psr',

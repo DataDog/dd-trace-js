@@ -322,6 +322,10 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
+    const DD_TRACE_PAYLOAD_TAGS = coalesce(
+      options.HTTPpayloadTagging,
+      process.env.DD_TRACE_PAYLOAD_TAGS
+    )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
@@ -578,6 +582,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
+    this.HTTPpayloadTagging = DD_TRACE_PAYLOAD_TAGS
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
