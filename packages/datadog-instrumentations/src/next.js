@@ -28,9 +28,9 @@ function wrapHandleApiRequest (handleApiRequest) {
         if (!handled) return handled
 
         return this.hasPage(pathname).then(pageFound => {
-          const page = pageFound ? pathname : getPageFromPath(pathname, this.dynamicRoutes)
+          const pageData = pageFound ? { page: pathname } : getPageFromPath(pathname, this.dynamicRoutes)
 
-          pageLoadChannel.publish({ page })
+          pageLoadChannel.publish(pageData)
 
           return handled
         })
@@ -83,15 +83,19 @@ function wrapFindPageComponents (findPageComponents) {
     const result = findPageComponents.apply(this, arguments)
 
     if (result) {
-      pageLoadChannel.publish({ page: getPagePath(pathname) })
+      pageLoadChannel.publish(getPagePath(pathname))
     }
 
     return result
   }
 }
 
-function getPagePath (page) {
-  return typeof page === 'object' ? page.pathname : page
+function getPagePath (maybePage) {
+  if (typeof maybePage !== 'object') return { page: maybePage }
+
+  const isAppPath = maybePage.isAppPath
+  const page = maybePage.pathname || maybePage.page
+  return { page, isAppPath }
 }
 
 function getPageFromPath (page, dynamicRoutes = []) {
