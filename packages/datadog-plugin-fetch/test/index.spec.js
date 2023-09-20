@@ -90,6 +90,38 @@ describe('Plugin', () => {
         })
       })
 
+      it('should do payload tagging', done => {
+        const tracer = require('../../dd-trace')
+        const plugin = tracer._pluginManager._pluginsByName['fetch']
+        plugin._tracerConfig.HTTPpayloadTagging = '*'
+        const app = express()
+        app.post('/user', (req, res) => {
+          res.status(200).send()
+        })
+        getPort().then(port => {
+          agent
+            .use(traces => {
+              const span = traces[0][0]
+              expect(span.meta).to.have.property('http.payload.foo.bar', '1')
+              expect(span.meta).to.have.property('http.payload.foo.baz', '2')
+            })
+            .then(done)
+            .catch(done)
+          appListener = server(app, port, () => {
+            fetch(
+              new URL(`http://localhost:${port}/user`),
+              {
+                method: 'POST',
+                body: JSON.stringify({ foo: { bar: 1, baz: 2 } }),
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              }
+            )
+          })
+        })
+      })
+
       it('should support URL input', done => {
         const app = express()
         app.post('/user', (req, res) => {

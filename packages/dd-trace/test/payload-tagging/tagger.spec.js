@@ -1,4 +1,4 @@
-const toJSONTags = require('../src/payload-tagging/json_payload_tagger')
+const toJSONTags = require('../../src/payload-tagging/tagger')
 
 describe('JSON payload tagger', () => {
   describe('filtering', () => {
@@ -46,6 +46,23 @@ describe('JSON payload tagger', () => {
         'http.payload.foo.bar': '1',
         'http.payload.foo.quux': '2'
       })
+    })
+  })
+
+  describe('tag count cutoff', () => {
+    it('generate many tags when not reaching the cap', () => {
+      const belowCap = 200
+      const input = JSON.stringify({ foo: Object.fromEntries([...Array(belowCap).keys()].map(i => [i, i])) })
+      const tagCount = Object.entries(toJSONTags(input, 'application/json')).length
+      expect(tagCount).to.equal(belowCap)
+    })
+
+    it('should stop generating tags once the cap is reached', () => {
+      const aboveCap = 759
+      const input = JSON.stringify({ foo: Object.fromEntries([...Array(aboveCap).keys()].map(i => [i, i])) })
+      const tagCount = Object.entries(toJSONTags(input, 'application/json')).length
+      expect(tagCount).to.not.equal(aboveCap)
+      expect(tagCount).to.equal(758)
     })
   })
 

@@ -17,7 +17,7 @@ function wrapFetch (fetch, Request) {
     const headers = req.headers
     const message = { req, headers }
 
-    return startChannel.runStores(message, () => {
+    return startChannel.runStores({ message, body: init?.body }, () => {
       // Request object is read-only so we need new objects to change headers.
       arguments[0] = message.req
       arguments[1] = { headers: message.headers }

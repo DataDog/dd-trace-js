@@ -1,5 +1,5 @@
-const { filterFromStr } = require('./filter')
-const { PAYLOAD_TAGGING_PREFIX, PAYLOAD_TAGGING_DEPTH } = require('../constants')
+const { filterFromString } = require('./filter')
+const { PAYLOAD_TAGGING_PREFIX, PAYLOAD_TAGGING_DEPTH, PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 
 const redactedKeys = [
   'authorization', 'x-authorization', 'password', 'token'
@@ -16,11 +16,15 @@ function isJSONContentType (contentType) {
 }
 
 function tagsFromObject (object, filter) {
+  let tagCount = 0
   const result = {}
 
   function tagRec (prefix, object, filterObj = filter.filterObj, depth = 0, indent) {
+    if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS) return
+
     if (depth >= PAYLOAD_TAGGING_DEPTH && typeof object === 'object') {
       result[prefix] = truncated
+      tagCount += 1
       return
     } else {
       depth += 1
@@ -31,17 +35,20 @@ function tagsFromObject (object, filter) {
       // Probably all of them
       // Limitation to document for users
       result[prefix] = 'null'
+      tagCount += 1
       return
     }
 
     if (typeof object === 'number' || typeof object === 'boolean') {
       result[prefix] = object.toString()
+      tagCount += 1
       return
     }
 
     if (typeof object === 'string') {
       const lastKey = prefix.split('.').pop()
       result[prefix] = redactedKeys.includes(lastKey) ? redacted : object.substring(0, 5000)
+      tagCount += 1
       return
     }
 
@@ -68,7 +75,7 @@ function toTags (jsonString, contentType, filterStr = '*') {
     return {}
   }
 
-  const filter = filterFromStr(filterStr)
+  const filter = filterFromString(filterStr)
   return tagsFromObject(object, filter)
 }
 

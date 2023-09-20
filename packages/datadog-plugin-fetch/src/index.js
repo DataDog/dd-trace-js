@@ -10,7 +10,7 @@ class FetchPlugin extends HttpClientPlugin {
     this.addSub(`apm:${this.constructor.id}:${this.operation}:${eventName}`, handler)
   }
 
-  bindStart (message) {
+  bindStart ({ message, body }) {
     const req = message.req
     const options = new URL(req.url)
     const headers = options.headers = Object.fromEntries(req.headers.entries())
@@ -19,7 +19,7 @@ class FetchPlugin extends HttpClientPlugin {
 
     message.args = { options }
 
-    const store = super.bindStart(message)
+    const store = super.bindStart(message, body)
 
     message.headers = headers
     message.req = new globalThis.Request(req, { headers })

@@ -326,6 +326,11 @@ class Config {
       options.HTTPpayloadTagging,
       process.env.DD_TRACE_PAYLOAD_TAGS
     )
+    const DD_TRACE_PAYLOAD_MAX_DEPTH = coalesce(
+      options.HTTPpayloadMaxDepth,
+      process.env.DD_TRACE_PAYLOAD_MAX_DEPTH,
+      10
+    )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
@@ -583,6 +588,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       exporters: DD_PROFILING_EXPORTERS
     }
     this.HTTPpayloadTagging = DD_TRACE_PAYLOAD_TAGS
+    this.HTTPpayloadMaxDepth = DD_TRACE_PAYLOAD_MAX_DEPTH
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
