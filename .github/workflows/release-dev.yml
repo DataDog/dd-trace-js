@@ -11,6 +11,9 @@ jobs:
     environment: npm
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
