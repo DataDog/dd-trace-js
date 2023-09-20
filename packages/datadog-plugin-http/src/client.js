@@ -10,7 +10,6 @@ const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { URL } = require('url')
-const tagJsonPayload = require('../../dd-trace/src/payload-tagging/tagger')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -20,12 +19,7 @@ class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
   static get prefix () { return `apm:http:client:request` }
 
-  tagPayload (span, contentType, body) {
-    const payloadTags = tagJsonPayload(body, contentType, this._tracerConfig.HTTPpayloadTagging)
-    span.addTags(payloadTags)
-  }
-
-  bindStart (message, body) {
+  bindStart (message) {
     const { args, http = {} } = message
     const store = storage.getStore()
     const options = args.options
@@ -59,12 +53,6 @@ class HttpClientPlugin extends ClientPlugin {
         [CLIENT_PORT_KEY]: parseInt(options.port)
       }
     }, false)
-
-    if (this._tracerConfig.HTTPpayloadTagging && body) {
-      const headers = Object.fromEntries(message.req.headers.entries())
-      const contentType = headers['content-type']
-      this.tagPayload(span, contentType, body)
-    }
 
     // TODO: Figure out a better way to do this for any span.
     if (!allowed) {

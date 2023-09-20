@@ -65,6 +65,8 @@ function tagsFromObject (object, filter) {
 }
 
 function toTags (jsonString, contentType, filterStr = '*') {
+  console.log(`computing tags for ${contentType} with filter ${filterStr}`)
+  console.log(`json ctype: ${isJSONContentType(contentType)}`)
   if (!isJSONContentType(contentType)) {
     return {}
   }

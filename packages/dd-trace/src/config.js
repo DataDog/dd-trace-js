@@ -326,6 +326,9 @@ class Config {
       options.HTTPpayloadTagging,
       process.env.DD_TRACE_PAYLOAD_TAGS
     )
+
+    console.log(`DD_TRACE_PAYLOAD_TAGS value ${DD_TRACE_PAYLOAD_TAGS}`)
+
     const DD_TRACE_PAYLOAD_MAX_DEPTH = coalesce(
       options.HTTPpayloadMaxDepth,
       process.env.DD_TRACE_PAYLOAD_MAX_DEPTH,
