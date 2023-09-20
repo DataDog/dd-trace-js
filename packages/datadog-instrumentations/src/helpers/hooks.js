@@ -82,6 +82,7 @@ module.exports = {
   'pg': () => require('../pg'),
   'pino': () => require('../pino'),
   'pino-pretty': () => require('../pino'),
+  'playwright': () => require('../playwright'),
   'promise-js': () => require('../promise-js'),
   'promise': () => require('../promise'),
   'q': () => require('../q'),
