@@ -1,4 +1,4 @@
-const toJSONTags = require('../src/json_payload_tagger')
+const toJSONTags = require('../src/payload-tagging/json_payload_tagger')
 
 describe('JSON payload tagger', () => {
   describe('filtering', () => {
@@ -24,6 +24,23 @@ describe('JSON payload tagger', () => {
 
     it('should only provide included paths when including', () => {
       const filter = 'foo.bar,foo.quux'
+      const tags = toJSONTags(input, ctype, filter)
+      expect(tags).to.deep.equal({
+        'http.payload.foo.bar': '1',
+        'http.payload.foo.quux': '2'
+      })
+    })
+
+    it('should remove an entire section if given a partial path', () => {
+      const filter = '*,-foo'
+      const tags = toJSONTags(input, ctype, filter)
+      expect(tags).to.deep.equal({
+        'http.payload.bar': '3'
+      })
+    })
+
+    it('should include an entire section if given a partial path', () => {
+      const filter = 'foo'
       const tags = toJSONTags(input, ctype, filter)
       expect(tags).to.deep.equal({
         'http.payload.foo.bar': '1',
