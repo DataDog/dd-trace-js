@@ -4,6 +4,7 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
+const { clear: clearExtraServices } = require('../src/service-naming/extra-services')
 
 describe('Config', () => {
   let Config
@@ -60,6 +61,8 @@ describe('Config', () => {
       fs,
       os
     })
+
+    clearExtraServices()
   })
 
   afterEach(() => {
@@ -95,6 +98,7 @@ describe('Config', () => {
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
+    expect(config).to.have.nested.property('extraServices', undefined)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -165,6 +169,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
+    process.env.DD_EXTRA_SERVICES = 'service1, service2'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc, d:dd'
     process.env.DD_VERSION = '1.0.0'
     process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = '.*'
@@ -228,6 +233,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
@@ -358,6 +364,7 @@ describe('Config', () => {
         port: 5218
       },
       service: 'service',
+      extraServices: ['service1', 'service2'],
       version: '0.1.0',
       env: 'test',
       clientIpEnabled: true,
@@ -429,6 +436,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -499,6 +507,7 @@ describe('Config', () => {
       site: 'datadoghq.eu',
       port: 6218,
       service: 'service',
+      extraServices: ['service1', 'service2'],
       env: 'test',
       sampleRate: 0.5,
       logger,
@@ -513,6 +522,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
+    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
@@ -616,6 +626,7 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
+    process.env.DD_EXTRA_SERVICES = 'service1, service2'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
@@ -665,6 +676,7 @@ describe('Config', () => {
       reportHostname: false,
       flushMinSpans: 500,
       service: 'test',
+      extraServices: ['service3', 'service4'],
       version: '1.0.0',
       env: 'development',
       clientIpEnabled: true,
@@ -726,6 +738,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
+    expect(config).to.have.deep.nested.property('extraServices', ['service3', 'service4'])
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
@@ -1303,6 +1316,41 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
+    })
+  })
+  context('RC extra services', () => {
+    it('should trim and filter out invalid values', () => {
+      const originalExtraServices = process.env.DD_EXTRA_SERVICES
+
+      process.env.DD_EXTRA_SERVICES = 'service1,   service2, service3   ,, '
+
+      const config = new Config({})
+
+      expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2', 'service3'])
+
+      process.env.DD_EXTRA_SERVICES = originalExtraServices
+    })
+
+    it('should register configured extra services', () => {
+      const extraServices = {
+        registerExtraService: sinon.spy()
+      }
+      const Config = proxyquire('../src/config', {
+        './pkg': pkg,
+        './log': log,
+        './service-naming/extra-services': extraServices,
+        fs,
+        os
+      })
+
+      // eslint-disable-next-line no-new
+      new Config({
+        extraServices: ['service1', 'service2']
+      })
+
+      expect(extraServices.registerExtraService).to.be.calledTwice
+      expect(extraServices.registerExtraService.firstCall).to.be.calledWith('service1')
+      expect(extraServices.registerExtraService.secondCall).to.be.calledWith('service2')
     })
   })
 })

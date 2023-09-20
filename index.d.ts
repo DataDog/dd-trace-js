@@ -271,6 +271,11 @@ export declare interface TracerOptions {
   serviceMapping?: { [key: string]: string };
 
   /**
+   *  Declare additional service names to bind to remote configuration
+   */
+  extraServices?: string[];
+
+  /**
    * The url of the trace agent that the tracer will submit to.
    * Takes priority over hostname and port, if set.
    */
@@ -581,7 +586,7 @@ export declare interface TracerOptions {
      * Specifies the remote configuration polling interval in seconds
      * @default 5
      */
-    pollInterval?: number,
+    pollInterval?: number
   }
 
   /**

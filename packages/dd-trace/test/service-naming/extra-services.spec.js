@@ -33,26 +33,17 @@ describe('Extra services', () => {
       expect(extraServices).to.deep.equal(['service-test'])
     })
 
+    it('should filter duplicated and invalid values', () => {
+      const filtered = ['service1', '', 'service2', 'service1'].filter(registerExtraService)
+      expect(filtered).to.deep.equal(['service1', 'service2'])
+    })
+
     it('should register a max of 64 service names', () => {
       for (let i = 0; i < 100; i++) {
         registerExtraService(`service-test-${i}`)
       }
 
       expect(getExtraServices().length).to.equal(64)
-    })
-
-    it('should register automatically service names defined in DD_EXTRA_SERVICES env var', () => {
-      const originalExtraServices = process.env.DD_EXTRA_SERVICES
-
-      delete require.cache[require.resolve('../../src/service-naming/extra-services')]
-
-      process.env.DD_EXTRA_SERVICES = 'service1,   service2, service3   ,, '
-
-      const { getExtraServices } = require('../../src/service-naming/extra-services')
-
-      expect(getExtraServices()).to.deep.equal(['service1', 'service2', 'service3'])
-
-      process.env.DD_EXTRA_SERVICES = originalExtraServices
     })
   })
 })
