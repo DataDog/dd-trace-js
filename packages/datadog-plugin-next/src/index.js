@@ -64,7 +64,7 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page }) {
+  pageLoad ({ page, isAppPath }) {
     const store = storage.getStore()
 
     if (!store) return
@@ -74,9 +74,12 @@ class NextPlugin extends ServerPlugin {
 
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    if (current && (page === '/404' || page === '/500' || page === '/_error')) {
+    if (current && ['/404', '/500', '/_error', '/_not-found'].includes(page)) {
       return
     }
+
+    // remove ending /route or /page for appDir projects
+    if (isAppPath) page = page.substring(0, page.lastIndexOf('/'))
 
     // This is for static files whose 'page' includes the whole file path
     // For normal page matches, like /api/hello/[name] and a req.url like /api/hello/world,
