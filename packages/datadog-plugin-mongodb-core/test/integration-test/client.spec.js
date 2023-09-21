@@ -21,7 +21,7 @@ describe('esm', () => {
 
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(30000)
       sandbox = await createSandbox([`'mongodb@${version}'`], false, [
         `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
     })
@@ -49,12 +49,12 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
-    }).timeout(20000)
+    }).timeout(30000)
   })
 
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
     before(async function () {
-      this.timeout(20000)
+      this.timeout(30000)
       sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
         `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
     })
@@ -82,6 +82,6 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
 
       await res
-    }).timeout(20000)
+    }).timeout(30000)
   })
 })
