@@ -60,7 +60,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
         } else {
           sensitiveValueRegex.lastIndex = 0
 
-          if (!sensitiveKey && sensitiveValueRegex.test(key)) {
+          if (sensitiveValueRegex.test(key)) {
             const current = counter++
             const id = `${STRINGIFY_SENSITIVE_KEY}_${current}_${key.length}_`
             key = `${id}${key}`

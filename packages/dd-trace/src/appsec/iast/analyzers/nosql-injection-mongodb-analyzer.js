@@ -16,6 +16,7 @@ function iterateObjectStrings (target, fn, levelKeys = [], depth = 50, visited =
     Object.keys(target).forEach((key) => {
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
+
       if (typeof val === 'string') {
         fn(val, nextLevelKeys, target, key)
       } else if (depth > 0 && !visited.has(val)) {
@@ -128,18 +129,16 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         if (ranges?.length) {
           const filteredRanges = []
 
-          for (let i = 0; i < ranges.length; i++) {
-            const range = ranges[i]
-
+          for (const range of ranges) {
             if ((range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK) {
               isVulnerable = true
               filteredRanges.push(range)
             }
+          }
 
-            if (filteredRanges.length > 0) {
-              rangesByKey[nextLevelKeys.join('.')] = filteredRanges
-              allRanges.push(...filteredRanges)
-            }
+          if (filteredRanges.length > 0) {
+            rangesByKey[nextLevelKeys.join('.')] = filteredRanges
+            allRanges.push(...filteredRanges)
           }
         }
       }, [], 4)

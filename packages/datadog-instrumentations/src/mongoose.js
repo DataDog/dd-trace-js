@@ -120,7 +120,7 @@ addHook({
                     finish()
 
                     if (resolve) {
-                      resolve.apply(this, arguments)
+                      return resolve.apply(this, arguments)
                     }
                   }
 
@@ -128,7 +128,7 @@ addHook({
                     finish()
 
                     if (reject) {
-                      reject.apply(this, arguments)
+                      return reject.apply(this, arguments)
                     }
                   }
 
