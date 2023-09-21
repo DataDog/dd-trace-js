@@ -11,7 +11,8 @@ const {
   incomingHttpRequestEnd,
   passportVerify,
   queryParser,
-  nextBodyParsed
+  nextBodyParsed,
+  nextQueryParsed
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -45,6 +46,7 @@ function enable (_config) {
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
     nextBodyParsed.subscribe(onNextRequestBodyParsed)
+    nextQueryParsed.subscribe(onNextRequestQueryParsed)
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
@@ -119,6 +121,10 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
+  // TODO: no need to analyze it if it was already done by the body-parser hook
+  if (req.query !== undefined && req.query !== null) {
+    payload[addresses.HTTP_INCOMING_QUERY] = req.query
+  }
   waf.run(payload, req)
 
   waf.disposeContext(req)
@@ -147,6 +153,17 @@ function onNextRequestBodyParsed ({ req, body }) {
 
   waf.run({
     [addresses.HTTP_INCOMING_BODY]: body
+  }, req)
+}
+
+function onNextRequestQueryParsed ({ req, query }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (query === undefined || query === null) return
+
+  waf.run({
+    [addresses.HTTP_INCOMING_QUERY]: query
   }, req)
 }
 

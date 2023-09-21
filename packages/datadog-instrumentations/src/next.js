@@ -11,6 +11,7 @@ const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 const bodyParsedChannel = channel('apm:next:body-parsed')
+const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 
@@ -220,9 +221,17 @@ addHook({
   file: 'dist/server/web/spec-extension/adapters/next-request.js'
 }, nextRequest => {
   const { NextRequestAdapter } = nextRequest
+
   shimmer.wrap(NextRequestAdapter, 'fromNodeNextRequest', function (originalFromNodeNextRequest) {
     return function fromNodeNextRequest (req) {
       const request = originalFromNodeNextRequest.apply(this, arguments)
+
+      if (queryParsedChannel.hasSubscribers) {
+        queryParsedChannel.publish({
+          query: Object.fromEntries(request.nextUrl.searchParams),
+          req: req._req
+        })
+      }
 
       if (bodyParsedChannel.hasSubscribers) {
         shimmer.massWrap(request, ['text', 'json'], function (originalMethod) {
@@ -241,5 +250,6 @@ addHook({
       return request
     }
   })
+
   return nextRequest
 })
