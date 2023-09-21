@@ -47,7 +47,6 @@ class WAFContextWrapper {
       })
 
       if (ruleTriggered) {
-        console.log('REPORT ATTACK!!')
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 

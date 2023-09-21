@@ -14,10 +14,10 @@ describe('test suite', () => {
   let port
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
-  let i = 0
-  withVersions('next', 'next', DD_MAJOR >= 4 && '>=12', version => {
-    if (i > 0) return
-    i++
+
+  withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+    const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
+
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
 
@@ -27,7 +27,6 @@ describe('test suite', () => {
         const cwd = appDir
 
         const pkg = require(`${__dirname}/../../../../versions/next@${version}/package.json`)
-        const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
 
         if (realVersion.startsWith('10')) {
           return this.skip() // TODO: Figure out why 10.x tests fail.
@@ -110,7 +109,7 @@ describe('test suite', () => {
         })
 
         server.once('error', done)
-        server.stdout.once('data', (d) => {
+        server.stdout.once('data', () => {
           done()
         })
         server.stderr.on('data', chunk => process.stderr.write(chunk))
@@ -126,17 +125,23 @@ describe('test suite', () => {
         await agent.close({ ritmReset: false })
       })
     }
-    [
-      // {
-      //   appName: 'app1',
-      //   serverPath: 'server'
-      // },
+
+    const tests = [
       {
+        appName: 'app1',
+        serverPath: 'server'
+      }
+    ]
+
+    if (satisfies(realVersion, '>=13.2')) {
+      tests.push({
         appName: 'app2',
         serverPath: '.next/standalone/server.js'
-      }
-    ].forEach(({ appName, serverPath }) => {
-      describe('detect threats', () => {
+      })
+    }
+
+    tests.forEach(({ appName, serverPath }) => {
+      describe(`detect threats in ${appName}`, () => {
         initApp(appName)
 
         startServer({ appName, serverPath })
@@ -162,7 +167,7 @@ describe('test suite', () => {
           }
 
           agent.subscribe(findBodyThreat)
-
+          console.log(`http://127.0.0.1:${port}/api/test`)
           axios
             .post(`http://127.0.0.1:${port}/api/test`, {
               key: 'testattack'

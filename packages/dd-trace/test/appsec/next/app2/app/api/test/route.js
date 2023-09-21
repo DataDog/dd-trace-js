@@ -14,3 +14,16 @@ export async function GET (request) {
     data: request.nextUrl.searchParams
   })
 }
+
+export default async function handler (request) {
+  const resData = {
+    now: Date.now(),
+    cache: 'no-store'
+  }
+  if (request.method === 'POST') {
+    resData.data = await request.json()
+  } else {
+    resData.data = request.nextUrl.searchParams
+  }
+  return NextResponse.json(resData)
+}
