@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('oracledb', 'oracledb', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`oracledb@${version}`], false, [
+      sandbox = await createSandbox([`'oracledb@${version}'`], false, [
         `./packages/datadog-plugin-oracledb/test/integration-test/*`])
     })
 

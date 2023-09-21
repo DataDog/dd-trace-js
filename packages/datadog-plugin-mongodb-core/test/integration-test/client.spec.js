@@ -8,7 +8,6 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
-const semver = require('semver')
 
 // Error: Command failed: yarn add file:/tmp/1236761b054ee8e5/dd-trace.tgz mongodb mongodb-core
 // error bson@6.0.0: The engine "node" is incompatible with this module. Expected version ">=16.20.1". Got "14.21.3"
@@ -21,14 +20,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('mongodb', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`mongodb@${version}`], false, [
+        sandbox = await createSandbox([`'mongodb@${version}'`], false, [
           `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
       })
 
@@ -60,14 +55,10 @@ describe('esm', () => {
   })
 
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('mongodb-core', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`mongodb-core@${version}`], false, [
+        sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
           `./packages/datadog-plugin-mongodb-core/test/integration-test/*`])
       })
 

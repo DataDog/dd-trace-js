@@ -7,7 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -15,14 +14,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('openai', 'openai', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('openai', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`openai@${version}`, 'nock'], false, [
+        sandbox = await createSandbox([`'openai@${version}'`, 'nock'], false, [
           `./packages/datadog-plugin-openai/test/integration-test/*`])
       })
 

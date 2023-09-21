@@ -7,7 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -15,14 +14,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('cassandra-driver', 'cassandra-driver', '>=4.4.0', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('cassandra-driver', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`cassandra-driver@${version}`], false, [
+        sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
           `./packages/datadog-plugin-cassandra-driver/test/integration-test/*`])
       })
 

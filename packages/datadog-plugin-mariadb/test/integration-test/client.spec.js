@@ -17,7 +17,7 @@ describe('esm', () => {
     describe('mariadb', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`mariadb@${version}`], false, [
+        sandbox = await createSandbox([`'mariadb@${version}'`], false, [
           `./packages/datadog-plugin-mariadb/test/integration-test/*`])
       })
 

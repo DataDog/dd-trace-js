@@ -15,7 +15,7 @@ describe('esm', () => {
   withVersions('ioredis', 'ioredis', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`ioredis@${version}`], false, [
+      sandbox = await createSandbox([`'ioredis@${version}'`], false, [
         `./packages/datadog-plugin-ioredis/test/integration-test/*`])
     })
 

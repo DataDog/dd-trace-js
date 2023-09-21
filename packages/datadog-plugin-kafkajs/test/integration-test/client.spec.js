@@ -15,7 +15,7 @@ describe('esm', () => {
   withVersions('kafkajs', 'kafkajs', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`kafkajs@${version}`], false, [
+      sandbox = await createSandbox([`'kafkajs@${version}'`], false, [
         `./packages/datadog-plugin-kafkajs/test/integration-test/*`])
     })
 

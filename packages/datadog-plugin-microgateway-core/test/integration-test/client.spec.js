@@ -22,7 +22,7 @@ describe('esm', () => {
     describe('microgateway-core', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`microgateway-core@${version}`, 'get-port'], false, [
+        sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
           `./packages/datadog-plugin-microgateway-core/test/integration-test/*`])
       })
 

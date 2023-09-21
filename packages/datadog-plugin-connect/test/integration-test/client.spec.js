@@ -17,7 +17,7 @@ describe('esm', () => {
   withVersions('connect', 'connect', '>=3', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`connect@${version}`], false, [
+      sandbox = await createSandbox([`'connect@${version}'`], false, [
         `./packages/datadog-plugin-connect/test/integration-test/*`])
     })
 

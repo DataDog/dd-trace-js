@@ -8,7 +8,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -16,13 +15,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('fastify', 'fastify', '>=3.0.0', version => {
-    // skip any semver incompatibale versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
     describe('fastify', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`fastify@${version}`], false,
+        sandbox = await createSandbox([`'fastify@${version}'`], false,
           [`./packages/datadog-plugin-fastify/test/integration-test/*`])
       })
 

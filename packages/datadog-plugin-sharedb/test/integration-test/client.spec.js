@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('sharedb', 'sharedb', '>=3', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`sharedb@${version}`], false, [
+      sandbox = await createSandbox([`'sharedb@${version}'`], false, [
         `./packages/datadog-plugin-sharedb/test/integration-test/*`])
     })
 

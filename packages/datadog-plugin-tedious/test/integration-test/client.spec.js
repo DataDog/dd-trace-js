@@ -22,7 +22,7 @@ describe('esm', () => {
   withVersions('tedious', 'tedious', '>=16.0.0', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`tedious@${version}`], false, [
+      sandbox = await createSandbox([`'tedious@${version}'`], false, [
         `./packages/datadog-plugin-tedious/test/integration-test/*`])
     })
 

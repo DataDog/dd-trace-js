@@ -7,7 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -15,14 +14,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('express', 'express', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('express', () => {
       before(async function () {
         this.timeout(50000)
-        sandbox = await createSandbox([`express@${version}`], false,
+        sandbox = await createSandbox([`'express@${version}'`], false,
           [`./packages/datadog-plugin-express/test/integration-test/*`])
       })
 

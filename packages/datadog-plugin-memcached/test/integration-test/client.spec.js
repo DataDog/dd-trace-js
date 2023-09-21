@@ -16,7 +16,7 @@ describe('esm', () => {
   withVersions('memcached', 'memcached', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`memcached@${version}`], false, [
+      sandbox = await createSandbox([`'memcached@${version}'`], false, [
         `./packages/datadog-plugin-memcached/test/integration-test/*`])
     })
 

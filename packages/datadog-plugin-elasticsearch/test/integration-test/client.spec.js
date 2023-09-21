@@ -7,7 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -15,13 +14,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('elasticsearch', ['@elastic/elasticsearch'], version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
     describe('elasticsearch', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`@elastic/elasticsearch@${version}`], false, [
+        sandbox = await createSandbox([`'@elastic/elasticsearch@${version}'`], false, [
           `./packages/datadog-plugin-elasticsearch/test/integration-test/*`])
       })
 

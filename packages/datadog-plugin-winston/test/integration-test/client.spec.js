@@ -15,7 +15,7 @@ describe('esm', () => {
   withVersions('winston', 'winston', '>=3', version => {
     before(async function () {
       this.timeout(50000)
-      sandbox = await createSandbox([`winston@${version}`]
+      sandbox = await createSandbox([`'winston@${version}'`]
         , false, [`./packages/datadog-plugin-winston/test/integration-test/*`])
     })
 

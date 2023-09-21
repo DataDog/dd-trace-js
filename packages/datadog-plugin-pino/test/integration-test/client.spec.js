@@ -6,7 +6,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { expect } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -14,14 +13,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('pino', 'pino', version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('pino', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`pino@${version}`],
+        sandbox = await createSandbox([`'pino@${version}'`],
           false, [`./packages/datadog-plugin-pino/test/integration-test/*`])
       })
 

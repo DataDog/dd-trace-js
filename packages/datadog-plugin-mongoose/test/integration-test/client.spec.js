@@ -7,8 +7,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { describe } = require('node:test')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
@@ -16,14 +14,10 @@ describe('esm', () => {
   let sandbox
 
   withVersions('mongoose', ['mongoose'], version => {
-    // skip any semver incompatible versions
-    const describe = !semver.valid(version)
-      ? globalThis.describe.skip : globalThis.describe
-
     describe('mongoose', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`mongoose@${version}`], false, [
+        sandbox = await createSandbox([`'mongoose@${version}'`], false, [
           `./packages/datadog-plugin-mongoose/test/integration-test/*`])
       })
 

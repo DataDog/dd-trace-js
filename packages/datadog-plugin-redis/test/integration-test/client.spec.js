@@ -16,7 +16,7 @@ describe('esm', () => {
     describe('redis', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`redis@${version}`], false, [
+        sandbox = await createSandbox([`'redis@${version}'`], false, [
           `./packages/datadog-plugin-redis/test/integration-test/*`])
       })
 

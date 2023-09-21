@@ -16,7 +16,7 @@ describe('esm', () => {
     describe('amqplib', () => {
       before(async function () {
         this.timeout(20000)
-        sandbox = await createSandbox([`amqplib`], false,
+        sandbox = await createSandbox([`'amqplib@${version}'`], false,
           [`./packages/datadog-plugin-amqplib/test/integration-test/*`])
       })
 
