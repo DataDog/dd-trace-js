@@ -1,3 +1,6 @@
+const {readFileSync} = require('fs')
+const {parse, extract} = require('jest-docblock')
+
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 
 /**
@@ -52,7 +55,20 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
     const relativePath = getTestSuitePath(test.path, rootDir)
     const shouldBeSkipped = skippableSuites.includes(relativePath)
     if (shouldBeSkipped) {
-      acc.skippedSuites.push(relativePath)
+      // check if it has been marked as non skippable
+      try {
+        const testSource = readFileSync(test.path, 'utf8')
+        const docblocks = parse(extract(testSource))
+
+        const { datadogUnskippable } = JSON.parse(docblocks['jest-environment-options'])
+        if (!datadogUnskippable) {
+          acc.skippedSuites.push(relativePath)
+        } else {
+          acc.suitesToRun.push(test)
+        }
+      } catch (e) {
+        // if something above fails, we don't feel confident to skip the suite
+      }
     } else {
       acc.suitesToRun.push(test)
     }
