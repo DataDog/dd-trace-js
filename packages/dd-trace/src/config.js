@@ -198,9 +198,7 @@ class Config {
     )
     const DD_EXTRA_SERVICES = coalesce(
       options.extraServices,
-      process.env.DD_EXTRA_SERVICES
-        ? process.env.DD_EXTRA_SERVICES.split(',').map(x => x.trim())
-        : undefined
+      process.env.DD_EXTRA_SERVICES?.split(',').map(x => x.trim())
     )
     const DD_ENV = coalesce(
       options.env,

@@ -4,7 +4,7 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
-const { clear: clearExtraServices } = require('../src/service-naming/extra-services')
+const extraServices = require('../src/service-naming/extra-services')
 
 describe('Config', () => {
   let Config
@@ -62,7 +62,7 @@ describe('Config', () => {
       os
     })
 
-    clearExtraServices()
+    extraServices.clear()
   })
 
   afterEach(() => {
@@ -507,7 +507,6 @@ describe('Config', () => {
       site: 'datadoghq.eu',
       port: 6218,
       service: 'service',
-      extraServices: ['service1', 'service2'],
       env: 'test',
       sampleRate: 0.5,
       logger,
@@ -522,7 +521,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('url.port', '7777')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
-    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
     expect(config).to.have.property('logger', logger)
