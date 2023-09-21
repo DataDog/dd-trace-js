@@ -30,19 +30,16 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-
-    context('bunyan', () => {
-      it('is instrumented', async () => {
-        proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
-          'server.mjs',
-          agent.port,
-          (data) => {
-            const jsonObject = JSON.parse(data.toString())
-            expect(jsonObject).to.have.property('dd')
-          }
-        )
-      }).timeout(20000)
-    })
+    it('is instrumented', async () => {
+      proc = await spawnPluginIntegrationTestProc(
+        sandbox.folder,
+        'server.mjs',
+        agent.port,
+        (data) => {
+          const jsonObject = JSON.parse(data.toString())
+          expect(jsonObject).to.have.property('dd')
+        }
+      )
+    }).timeout(20000)
   })
 })

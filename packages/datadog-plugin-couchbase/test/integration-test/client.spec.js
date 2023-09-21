@@ -37,17 +37,15 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    context('couchbase', () => {
-      it('is instrumented', async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.upsert'), true)
-        })
+    it('is instrumented', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.upsert'), true)
+      })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-        await res
-      }).timeout(20000)
-    })
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      await res
+    }).timeout(20000)
   })
 })

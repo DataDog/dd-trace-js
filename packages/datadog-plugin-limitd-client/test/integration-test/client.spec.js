@@ -33,20 +33,18 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    context('limitd-client', () => {
-      it('is instrumented', async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          // not asserting for a limitd-client trace,
-          // just asserting that we're not completely breaking when loading limitd-client with esm
-          assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
-        })
+    it('is instrumented', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        // not asserting for a limitd-client trace,
+        // just asserting that we're not completely breaking when loading limitd-client with esm
+        assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
+      })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
-        await res
-      }).timeout(20000)
-    })
+      await res
+    }).timeout(20000)
   })
 })

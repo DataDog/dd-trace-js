@@ -34,16 +34,14 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    context('router', () => {
-      it('is instrumented', async () => {
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+    it('is instrumented', async () => {
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
-        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(checkSpansForServiceName(payload, 'router.middleware'), true)
-        })
-      }).timeout(20000)
-    })
+      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'router.middleware'), true)
+      })
+    }).timeout(20000)
   })
 })

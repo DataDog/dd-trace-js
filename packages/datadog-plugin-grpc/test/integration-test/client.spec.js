@@ -33,17 +33,15 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    context('grpc', () => {
-      it('is instrumented', async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
-        })
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
+    it('is instrumented', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'grpc.client'), true)
+      })
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
-        await res
-      }).timeout(20000)
-    })
+      await res
+    }).timeout(20000)
   })
 })

@@ -33,18 +33,16 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    context('winston', () => {
-      it('is instrumented', async () => {
-        proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
-          'server.mjs',
-          agent.port,
-          (data) => {
-            const jsonObject = JSON.parse(data.toString())
-            expect(jsonObject).to.have.property('dd')
-          }
-        )
-      }).timeout(50000)
-    })
+    it('is instrumented', async () => {
+      proc = await spawnPluginIntegrationTestProc(
+        sandbox.folder,
+        'server.mjs',
+        agent.port,
+        (data) => {
+          const jsonObject = JSON.parse(data.toString())
+          expect(jsonObject).to.have.property('dd')
+        }
+      )
+    }).timeout(50000)
   })
 })

@@ -31,19 +31,16 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
+    it('is instrumented', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
+        assert.isArray(payload)
+        assert.strictEqual(checkSpansForServiceName(payload, 'kafka.produce'), true)
+      })
 
-    context('kafkajs', () => {
-      it('is instrumented', async () => {
-        const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
-          assert.strictEqual(checkSpansForServiceName(payload, 'kafka.produce'), true)
-        })
+      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-
-        await res
-      }).timeout(20000)
-    })
+      await res
+    }).timeout(20000)
   })
 })
