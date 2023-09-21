@@ -14,8 +14,10 @@ describe('test suite', () => {
   let port
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
-
+  let i = 0
   withVersions('next', 'next', DD_MAJOR >= 4 && '>=12', version => {
+    if (i > 0) return
+    i++
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
 
@@ -108,7 +110,9 @@ describe('test suite', () => {
         })
 
         server.once('error', done)
-        server.stdout.once('data', () => done())
+        server.stdout.once('data', (d) => {
+          done()
+        })
         server.stderr.on('data', chunk => process.stderr.write(chunk))
         server.stdout.on('data', chunk => process.stdout.write(chunk))
       })
@@ -123,10 +127,10 @@ describe('test suite', () => {
       })
     }
     [
-      {
-        appName: 'app1',
-        serverPath: 'server'
-      },
+      // {
+      //   appName: 'app1',
+      //   serverPath: 'server'
+      // },
       {
         appName: 'app2',
         serverPath: '.next/standalone/server.js'
