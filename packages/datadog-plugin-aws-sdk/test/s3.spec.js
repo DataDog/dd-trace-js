@@ -57,6 +57,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'aws-sdk',
           (done) => s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
