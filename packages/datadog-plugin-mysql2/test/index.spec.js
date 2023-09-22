@@ -40,6 +40,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'mysql2',
           (done) => connection.query('SELECT 1', (_) => done()),
           'db', 'db.name')
 
