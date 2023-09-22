@@ -42,6 +42,7 @@ describe('Legacy Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'redis',
           () => client.get('foo'),
           '127.0.0.1',
           'out.host'

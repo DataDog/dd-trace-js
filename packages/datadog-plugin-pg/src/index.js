@@ -12,7 +12,7 @@ class PGPlugin extends DatabasePlugin {
     const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
-    this.startSpan(this.operationName(), {
+    const span = this.startSpan(this.operationName(), {
       service,
       resource: originalStatement,
       type: 'sql',
@@ -27,7 +27,7 @@ class PGPlugin extends DatabasePlugin {
       }
     })
 
-    query.__ddInjectableQuery = this.injectDbmQuery(query.text, service, !!query.name)
+    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
   }
 }
 
