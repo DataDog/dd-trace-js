@@ -13,6 +13,7 @@ describe('esm', () => {
   let proc
   let sandbox
 
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('cassandra-driver', 'cassandra-driver', '>=4.4.0', version => {
     before(async function () {
       this.timeout(20000)

@@ -12,6 +12,7 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('amqplib', 'amqplib', '>=0.10.0', version => {
     before(async function () {
       this.timeout(20000)

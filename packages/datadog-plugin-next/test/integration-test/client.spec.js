@@ -8,7 +8,6 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
-const { DD_MAJOR } = require('../../../../version')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -17,7 +16,7 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+  withVersions('next', 'next', version => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(120 * 1000)

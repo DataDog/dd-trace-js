@@ -19,6 +19,7 @@ describe('esm', () => {
   let proc
   let sandbox
 
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
     before(async function () {
       this.timeout(30000)
@@ -52,6 +53,7 @@ describe('esm', () => {
     }).timeout(30000)
   })
 
+  // test against later versions because server2.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
     before(async function () {
       this.timeout(30000)

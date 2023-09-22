@@ -12,12 +12,13 @@ const { NODE_MAJOR } = require('../../../../version')
 // Error: Command failed: yarn add file:/tmp/701a143ad8465e61/dd-trace.tgz 'redis@^4'
 // error @redis/client@1.5.10: The engine "node" is incompatible with this module.
 // Expected version ">=18". Got "16.20.2" error Found incompatible module.
-const describe = NODE_MAJOR < 18 ? globalThis.describe.skip : globalThis.describe
+// const describe = NODE_MAJOR < 18 ? globalThis.describe.skip : globalThis.describe
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('redis', 'redis', '>=4', version => {
     before(async function () {
       this.timeout(20000)

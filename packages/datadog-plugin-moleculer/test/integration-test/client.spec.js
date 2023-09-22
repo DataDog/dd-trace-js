@@ -16,6 +16,7 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('moleculer', 'moleculer', '>0.14.0', version => {
     before(async function () {
       this.timeout(20000)

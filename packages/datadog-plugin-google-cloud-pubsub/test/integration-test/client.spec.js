@@ -12,6 +12,7 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  // test against later versions because server.mjs uses newer package syntax
   withVersions('google-cloud-pubsub', '@google-cloud/pubsub', '>=4.0.0', version => {
     before(async function () {
       this.timeout(20000)
