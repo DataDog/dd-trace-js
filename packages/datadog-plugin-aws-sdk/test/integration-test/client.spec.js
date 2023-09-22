@@ -13,26 +13,26 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['aws-sdk'], false, [
-      `./packages/datadog-plugin-aws-sdk/test/integration-test/*`])
-  })
+  withVersions('aws-sdk', ['aws-sdk'], version => {
+    before(async function () {
+      this.timeout(20000)
+      sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
+        `./packages/datadog-plugin-aws-sdk/test/integration-test/*`])
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('aws-sdk', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
