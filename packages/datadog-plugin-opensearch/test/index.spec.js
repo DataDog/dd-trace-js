@@ -244,7 +244,8 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
-          (done) => client.search({
+          'opensearch',
+          () => client.search({
             index: 'docs',
             sort: 'name',
             size: 100,

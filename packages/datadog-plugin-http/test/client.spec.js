@@ -76,6 +76,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'http',
           spanProducerFn,
           'localhost',
           'out.host'

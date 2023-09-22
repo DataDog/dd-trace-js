@@ -139,13 +139,12 @@ function withNamingSchema (
   })
 }
 
-function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
+function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
     beforeEach(() => {
-      // FIXME: workaround due to the evaluation order of mocha beforeEach
-      const tracerObj = typeof tracer === 'function' ? tracer() : tracer
-      computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
+      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
     afterEach(() => {
       computePeerServiceSpy.restore()
