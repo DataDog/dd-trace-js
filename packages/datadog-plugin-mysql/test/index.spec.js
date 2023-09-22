@@ -28,7 +28,7 @@ describe('Plugin', () => {
           await agent.load('mysql')
           mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
           connection = mysql.createConnection({
-            host: 'localhost',
+            host: '127.0.0.1',
             user: 'root',
             database: 'db'
           })

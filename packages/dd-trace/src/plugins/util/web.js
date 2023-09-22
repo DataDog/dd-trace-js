@@ -62,8 +62,10 @@ const web = {
 
     if (!span) return
 
-    span.context()._name = `${name}.request`
-    span.context()._tags['component'] = name
+    span.addTags({
+      'span.name': `${name}.request`,
+      'component': name
+    })
 
     web.setConfig(req, config)
   },
@@ -465,7 +467,7 @@ function addResourceTag (context) {
   const { req, span } = context
   const tags = span.context()._tags
 
-  if (tags['resource.name']) return
+  if (tags['resource.name'] || !tags[HTTP_ROUTE]) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(val => val)

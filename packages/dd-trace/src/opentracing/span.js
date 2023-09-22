@@ -2,6 +2,7 @@
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
 const { performance } = require('perf_hooks')
+const { channel } = require('../../../diagnostics_channel')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
 const semver = require('semver')
@@ -17,8 +18,14 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
-  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
+  DD_TRACE_EXPERIMENTAL_SPAN_COUNTS,
+  DD_COLLECTOR_ENABLED
 } = process.env
+
+const startChannel = channel('datadog:tracing:span:start')
+const tagsChannel = channel('datadog:tracing:span:tags')
+const errorChannel = channel('datadog:tracing:span:error')
+const finishChannel = channel('datadog:tracing:span:finish')
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
@@ -56,10 +63,7 @@ class DatadogSpan {
 
     this._parentTracer = tracer
     this._debug = debug
-    this._processor = processor
-    this._prioritySampler = prioritySampler
     this._store = storage.getStore()
-    this._duration = undefined
 
     // For internal use only. You probably want `context()._name`.
     // This name property is not updated when the span name changes.
@@ -70,13 +74,30 @@ class DatadogSpan {
     getIntegrationCounter('span_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
-    this._spanContext._name = operationName
-    this._spanContext._tags = tags
-    this._spanContext._hostname = hostname
-
-    this._spanContext._trace.started.push(this)
-
     this._startTime = fields.startTime || this._getTime()
+
+    if (DD_COLLECTOR_ENABLED !== 'false') {
+      startChannel.publish({
+        time: this._startTime * 1e6,
+        traceId: this._spanContext._traceId,
+        spanId: this._spanContext._spanId,
+        parentId: this._spanContext._parentId,
+        type: tags['span.type'],
+        name: operationName,
+        resource: tags['resource.name'],
+        service: tags['service.name'],
+        meta: tags,
+        metrics: tags
+      })
+    } else {
+      this._processor = processor
+      this._prioritySampler = prioritySampler
+      this._duration = undefined
+      this._spanContext._name = operationName
+      this._spanContext._tags = tags
+      this._spanContext._hostname = hostname
+      this._spanContext._trace.started.push(this)
+    }
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -146,14 +167,28 @@ class DatadogSpan {
   logEvent () {}
 
   finish (finishTime) {
-    if (this._duration !== undefined) {
-      return
-    }
+    if (this._isFinished !== undefined) return
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
-      if (!this._spanContext._tags['service.name']) {
-        log.error(`Finishing invalid span: ${this}`)
+    this._spanContext._isFinished = true
+
+    finishTime = parseFloat(finishTime) || this._getTime()
+
+    if (DD_COLLECTOR_ENABLED !== 'false') {
+      finishChannel.publish({
+        time: finishTime * 1e6,
+        traceId: this._spanContext._traceId,
+        spanId: this._spanContext._spanId
+      })
+    } else {
+      if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true') {
+        if (!this._spanContext._tags['service.name']) {
+          log.error(`Finishing invalid span: ${this}`)
+        }
       }
+
+      this._duration = finishTime - this._startTime
+      this._spanContext._trace.finished.push(this)
+      this._processor.process(this)
     }
 
     getIntegrationCounter('span_finished', this._integrationName).inc()
@@ -170,13 +205,6 @@ class DatadogSpan {
       unfinishedRegistry.unregister(this)
       finishedRegistry.register(this, this._name)
     }
-
-    finishTime = parseFloat(finishTime) || this._getTime()
-
-    this._duration = finishTime - this._startTime
-    this._spanContext._trace.finished.push(this)
-    this._spanContext._isFinished = true
-    this._processor.process(this)
   }
 
   _createContext (parent, fields) {
@@ -233,9 +261,32 @@ class DatadogSpan {
   }
 
   _addTags (keyValuePairs) {
-    tagger.add(this._spanContext._tags, keyValuePairs)
+    if (!keyValuePairs) return
 
-    this._prioritySampler.sample(this, false)
+    if (DD_COLLECTOR_ENABLED !== 'false') {
+      tagsChannel.publish({
+        traceId: this._spanContext._traceId,
+        spanId: this._spanContext._spanId,
+        meta: keyValuePairs,
+        metrics: keyValuePairs
+      })
+
+      if (keyValuePairs['error']) {
+        errorChannel.publish({
+          traceId: this._spanContext._traceId,
+          spanId: this._spanContext._spanId,
+          error: keyValuePairs['error']
+        })
+      }
+    } else {
+      if (keyValuePairs['span.name']) {
+        this._spanContext._name = keyValuePairs['span.name']
+      }
+
+      tagger.add(this._spanContext._tags, keyValuePairs)
+
+      this._prioritySampler.sample(this, false)
+    }
   }
 }
 
