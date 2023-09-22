@@ -49,6 +49,7 @@ describe('Plugin', () => {
           describe('sending a message', () => {
             withPeerService(
               () => tracer,
+              'rhea',
               () => context.sender.send({ body: 'Hello World!' }),
               'localhost',
               'out.host'

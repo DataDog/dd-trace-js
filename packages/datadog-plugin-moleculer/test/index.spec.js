@@ -143,6 +143,7 @@ describe('Plugin', () => {
 
           withPeerService(
             () => tracer,
+            'moleculer',
             done => {
               broker.call('math.add', { a: 5, b: 3 }).catch(done)
             },
