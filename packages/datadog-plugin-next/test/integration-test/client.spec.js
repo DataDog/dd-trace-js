@@ -15,8 +15,8 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
-
-  withVersions('next', 'next', version => {
+  // match versions tested with unit tests
+  withVersions('next', 'next', '>=11', version => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(120 * 1000)
