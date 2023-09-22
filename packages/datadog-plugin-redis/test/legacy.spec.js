@@ -13,7 +13,7 @@ describe('Legacy Plugin', () => {
   let sub
 
   describe('redis', () => {
-    withVersions('redis', 'redis', version => {
+    withVersions('redis', 'redis', '<4', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
