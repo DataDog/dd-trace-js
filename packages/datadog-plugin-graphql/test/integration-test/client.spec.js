@@ -13,26 +13,26 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(50000)
-    sandbox = await createSandbox(['graphql'], false, [
-      `./packages/datadog-plugin-graphql/test/integration-test/*`])
-  })
+  withVersions('graphql', 'graphql', version => {
+    before(async function () {
+      this.timeout(50000)
+      sandbox = await createSandbox([`'graphql@${version}'`], false, [
+        `./packages/datadog-plugin-graphql/test/integration-test/*`])
+    })
 
-  after(async function () {
-    await sandbox.remove()
-  })
+    after(async function () {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('graphql', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
