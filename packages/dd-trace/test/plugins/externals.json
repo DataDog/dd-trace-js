@@ -224,5 +224,11 @@
       "name": "q",
       "versions": ["2"]
     }
+  ],
+  "redis": [
+    {
+      "name": "redis",
+      "versions": ["^4"]
+    }
   ]
 }
