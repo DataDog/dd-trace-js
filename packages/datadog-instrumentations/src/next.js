@@ -222,7 +222,7 @@ addHook({
 }, request => {
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
   shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
-    return function get () {
+    return function wrappedGet () {
       const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
         queryParsedChannel.publish({
@@ -235,14 +235,15 @@ addHook({
 
   Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
 
-  shimmer.wrap(request.NextRequest.prototype, 'json', function (originalJson) {
-    return async function json () {
-      const body = await originalJson.apply(this, arguments)
+  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+    return async function wrappedJson () {
+      const body = await originalMethod.apply(this, arguments)
       bodyParsedChannel.publish({
         body
       })
       return body
     }
   })
+
   return request
 })

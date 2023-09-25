@@ -172,6 +172,36 @@ describe('test suite', () => {
               key: 'testattack'
             }).catch(e => { done(e) })
         })
+        if (appName === 'app-dir') {
+          it('in request body with .text() function', function (done) {
+            this.timeout(5000)
+
+            function findBodyThreat (traces) {
+              let attackFound = false
+
+              traces.forEach(trace => {
+                trace.forEach(span => {
+                  if (span.meta['_dd.appsec.json']) {
+                    attackFound = true
+                  }
+                })
+              })
+
+              if (attackFound) {
+                agent.unsubscribe(findBodyThreat)
+                done()
+              }
+            }
+
+            agent.subscribe(findBodyThreat)
+            axios
+              .post(`http://127.0.0.1:${port}/api/test-text`, {
+                key: 'testattack'
+              }).catch(e => {
+                done(e)
+              })
+          })
+        }
 
         it('in request query', function (done) {
           this.timeout(5000)
