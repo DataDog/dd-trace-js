@@ -143,17 +143,19 @@ module.exports.setup = function (build) {
       (function() {
         ${fileCode}
       })(...arguments);
-      const dc = require('diagnostics_channel');
-      const ch = dc.channel('${CHANNEL}');
-      const mod = module.exports
-      const payload = {
-        module: mod,
-        version: '${data.version}',
-        package: '${data.pkg}',
-        path: '${pkgPath}'
-      };
-      ch.publish(payload);
-      module.exports = payload.module;
+      {
+        const dc = require('diagnostics_channel');
+        const ch = dc.channel('${CHANNEL}');
+        const mod = module.exports
+        const payload = {
+          module: mod,
+          version: '${data.version}',
+          package: '${data.pkg}',
+          path: '${pkgPath}'
+        };
+        ch.publish(payload);
+        module.exports = payload.module;
+    }
     `
 
     // https://esbuild.github.io/plugins/#on-load-results
