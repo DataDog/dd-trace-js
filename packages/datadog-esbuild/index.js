@@ -140,7 +140,6 @@ module.exports.setup = function (build) {
     const fileCode = fs.readFileSync(args.path, 'utf8')
 
     const contents = `
-      // Module code from ${args.path}
       (function() {
         ${fileCode}
       })(...arguments);
