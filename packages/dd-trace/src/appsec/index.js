@@ -163,7 +163,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_QUERY]: req.query
+    [addresses.HTTP_INCOMING_QUERY]: query
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)

@@ -226,8 +226,7 @@ addHook({
       const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
         queryParsedChannel.publish({
-          query: Object.fromEntries(nextUrl.searchParams),
-          req: this.body
+          query: Object.fromEntries(nextUrl.searchParams)
         })
       }
       return nextUrl
