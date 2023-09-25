@@ -217,39 +217,77 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13.4.13'],
-  file: 'dist/server/web/spec-extension/adapters/next-request.js'
-}, nextRequest => {
-  const { NextRequestAdapter } = nextRequest
-
-  shimmer.wrap(NextRequestAdapter, 'fromNodeNextRequest', function (originalFromNodeNextRequest) {
-    return function fromNodeNextRequest (req) {
-      const request = originalFromNodeNextRequest.apply(this, arguments)
-
+  versions: ['>=13'],
+  file: 'dist/server/web/spec-extension/request.js'
+}, request => {
+  const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
+  shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
+    return function get () {
+      const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
         queryParsedChannel.publish({
-          query: Object.fromEntries(request.nextUrl.searchParams),
-          req: req._req
+          query: Object.fromEntries(nextUrl.searchParams),
+          req: this.body
         })
       }
-
-      if (bodyParsedChannel.hasSubscribers) {
-        shimmer.massWrap(request, ['text', 'json'], function (originalMethod) {
-          return async function () {
-            const body = await originalMethod.apply(this, arguments)
-
-            bodyParsedChannel.publish({
-              body, req: req._req
-            })
-
-            return body
-          }
-        })
-      }
-
-      return request
+      return nextUrl
     }
   })
 
-  return nextRequest
+  Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
+
+  shimmer.wrap(request.NextRequest.prototype, 'json', function (originalJson) {
+    return async function json () {
+      const body = await originalJson.apply(this, arguments)
+      bodyParsedChannel.publish({
+        body
+      })
+      return body
+    }
+  })
+  return request
 })
+
+// addHook({
+//   name: 'next',
+//   versions: ['>=13'],
+//   file: 'dist/server/web/spec-extension/adapters/next-request.js'
+// }, nextRequest => {
+//   const { NextRequestAdapter } = nextRequest
+//
+//   shimmer.wrap(NextRequestAdapter, 'fromNodeNextRequest', function (originalFromNodeNextRequest) {
+//     return function fromNodeNextRequest (req) {
+//
+//       const ts = (new Date()).getTime()
+//       const fd = fs.openSync('/Users/ugaitz.urien/logtodelete.txt', 'a')
+//       fs.writeSync(fd, `${ts}: fromNodeNextRequest\n`)
+//       console.log('fromNodeNextRequest')
+//       const request = originalFromNodeNextRequest.apply(this, arguments)
+//
+//       if (queryParsedChannel.hasSubscribers) {
+//         queryParsedChannel.publish({
+//           query: Object.fromEntries(request.nextUrl.searchParams),
+//           req: req._req
+//         })
+//       }
+//
+//       if (bodyParsedChannel.hasSubscribers) {
+//         shimmer.massWrap(request, ['text', 'json'], function (originalMethod) {
+//           return async function () {
+//             const body = await originalMethod.apply(this, arguments)
+//
+//             bodyParsedChannel.publish({
+//               body, req: req._req
+//             })
+//
+//             return body
+//           }
+//         })
+//       }
+//
+//       return request
+//     }
+//   })
+//
+//   return nextRequest
+// })

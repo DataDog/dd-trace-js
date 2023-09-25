@@ -161,10 +161,13 @@ jobs:
       RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
       - run: yarn install
       - run: yarn test:appsec:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2

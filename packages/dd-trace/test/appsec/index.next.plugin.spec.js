@@ -17,6 +17,7 @@ describe('test suite', () => {
 
   withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
     const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
+    // if (realVersion !== '13.4.13') return
 
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
@@ -121,7 +122,6 @@ describe('test suite', () => {
 
         server.kill()
 
-        await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
         await agent.close({ ritmReset: false })
       })
     }
@@ -167,7 +167,6 @@ describe('test suite', () => {
           }
 
           agent.subscribe(findBodyThreat)
-          console.log(`http://127.0.0.1:${port}/api/test`)
           axios
             .post(`http://127.0.0.1:${port}/api/test`, {
               key: 'testattack'

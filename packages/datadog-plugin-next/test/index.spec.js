@@ -26,7 +26,7 @@ describe('Plugin', function () {
         before(async () => {
           port = await getPort()
 
-          return agent.load('next')
+          return agent.load(['http', 'next'])
         })
 
         before(function (done) {

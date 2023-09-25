@@ -146,6 +146,11 @@ function onRequestBodyParsed ({ req, res, abortController }) {
 }
 
 function onNextRequestBodyParsed ({ req, body }) {
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -157,6 +162,10 @@ function onNextRequestBodyParsed ({ req, body }) {
 }
 
 function onNextRequestQueryParsed ({ req, query }) {
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
