@@ -56,7 +56,6 @@ describe('esm', () => {
       })
     }).timeout(20000)
 
-    //
     it('Fastify import fastify is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
 
