@@ -142,7 +142,6 @@ function reportAttack (attackData) {
   newTags['network.client.ip'] = req.socket.remoteAddress
 
   rootSpan.addTags(newTags)
-  console.log('REPORT ATTACK')
 }
 
 function finishRequest (req, res) {

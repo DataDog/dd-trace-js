@@ -125,7 +125,7 @@ function instrument (req, res, handler) {
       const promise = handler(ctx)
 
       // promise should only reject when propagateError is true:
-      // https://github.comapp-route/module.js/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
+      // https://github.com/vercel/next.js/blob/cee656238a/packages/next/server/api-utils/node.ts#L547
       return promise.then(
         result => finish(ctx, result),
         err => finish(ctx, null, err)
@@ -247,47 +247,3 @@ addHook({
   })
   return request
 })
-
-// addHook({
-//   name: 'next',
-//   versions: ['>=13'],
-//   file: 'dist/server/web/spec-extension/adapters/next-request.js'
-// }, nextRequest => {
-//   const { NextRequestAdapter } = nextRequest
-//
-//   shimmer.wrap(NextRequestAdapter, 'fromNodeNextRequest', function (originalFromNodeNextRequest) {
-//     return function fromNodeNextRequest (req) {
-//
-//       const ts = (new Date()).getTime()
-//       const fd = fs.openSync('/Users/ugaitz.urien/logtodelete.txt', 'a')
-//       fs.writeSync(fd, `${ts}: fromNodeNextRequest\n`)
-//       console.log('fromNodeNextRequest')
-//       const request = originalFromNodeNextRequest.apply(this, arguments)
-//
-//       if (queryParsedChannel.hasSubscribers) {
-//         queryParsedChannel.publish({
-//           query: Object.fromEntries(request.nextUrl.searchParams),
-//           req: req._req
-//         })
-//       }
-//
-//       if (bodyParsedChannel.hasSubscribers) {
-//         shimmer.massWrap(request, ['text', 'json'], function (originalMethod) {
-//           return async function () {
-//             const body = await originalMethod.apply(this, arguments)
-//
-//             bodyParsedChannel.publish({
-//               body, req: req._req
-//             })
-//
-//             return body
-//           }
-//         })
-//       }
-//
-//       return request
-//     }
-//   })
-//
-//   return nextRequest
-// })

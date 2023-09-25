@@ -128,14 +128,14 @@ describe('test suite', () => {
 
     const tests = [
       {
-        appName: 'app1',
+        appName: 'pages-dir',
         serverPath: 'server'
       }
     ]
 
     if (satisfies(realVersion, '>=13.2')) {
       tests.push({
-        appName: 'app2',
+        appName: 'app-dir',
         serverPath: '.next/standalone/server.js'
       })
     }
