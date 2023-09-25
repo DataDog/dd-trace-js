@@ -71,6 +71,14 @@
     {
       "name": "graphql-tools",
       "versions": ["3.1.1"]
+    },
+    {
+      "name": "graphql-yoga",
+      "versions": ["^3.6.0"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^15.2.0"]
     }
   ],
   "grpc": [
