@@ -60,20 +60,26 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
         const testSource = readFileSync(test.path, 'utf8')
         const docblocks = parse(extract(testSource))
 
-        const { datadogUnskippable } = JSON.parse(docblocks['jest-environment-options'])
-        if (!datadogUnskippable) {
+        if (docblocks['jest-environment-options']) {
+          const { datadogUnskippable } = JSON.parse(docblocks['jest-environment-options'])
+          if (!datadogUnskippable) {
+            acc.skippedSuites.push(relativePath)
+          } else {
+            acc.forcedToRun.push(relativePath)
+            acc.suitesToRun.push(test)
+          }
+        } else { // there is no docblock, so we can assume it can be skipped
           acc.skippedSuites.push(relativePath)
-        } else {
-          acc.suitesToRun.push(test)
         }
       } catch (e) {
         // if something above fails, we don't feel confident to skip the suite
+        acc.suitesToRun.push(test)
       }
     } else {
       acc.suitesToRun.push(test)
     }
     return acc
-  }, { skippedSuites: [], suitesToRun: [] })
+  }, { skippedSuites: [], suitesToRun: [], forcedToRun: [] })
 }
 
 module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }

@@ -22,7 +22,9 @@ const {
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_SKIPPING_TYPE,
-  TEST_ITR_SKIPPING_COUNT
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -130,8 +132,6 @@ testFrameworks.forEach(({
     })
 
     after(async function () {
-      // add an explicit timeout to make esm tests less flaky
-      this.timeout(50000)
       await sandbox.remove()
     })
 
@@ -815,6 +815,56 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('does not skip suites if suite is marked as unskippable', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-to-skip.js'
+            }
+          },
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-unskippable.js'
+            }
+          }
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const suites = payloads.flatMap(({ payload }) => payload.events).filter(event => event.type === 'test_suite_end')
+
+            assert.equal(suites.length, 2)
+
+            const skippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js')
+            const forcedToRunSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js')
+
+            assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
+
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_REGEX: 'unskippable-test/test-',
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
