@@ -9,6 +9,7 @@ module.exports = {
   graphqlFinishExecute: dc.channel('apm:graphql:execute:finish'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
+  paramsParser: dc.channel('datadog:express:process_params:start'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
   queryParser: dc.channel('datadog:query:read:finish'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie')

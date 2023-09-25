@@ -9,6 +9,7 @@ const {
   graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  paramsParser,
   passportVerify,
   queryParser
 } = require('./channels')
@@ -45,6 +46,7 @@ function enable (_config) {
     bodyParser.subscribe(onRequestBodyParsed)
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
+    paramsParser.subscribe(onRequestParamsParsed)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
 
     if (_config.appsec.eventTracking.enabled) {
@@ -163,6 +165,19 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
+function onRequestParamsParsed ({ req, res, abortController, params }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  if (!params || typeof params !== 'object' || !Object.keys(params).length) return
+
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_PARAMS]: params
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
 function onPassportVerify ({ credentials, user }) {
   const store = storage.getStore()
   const rootSpan = store && store.req && web.root(store.req)
@@ -214,6 +229,7 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
+  if (paramsParser.hasSubscribers) paramsParser.unsubscribe(onRequestParamsParsed)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
 
