@@ -11,7 +11,8 @@ function publishRequestBodyAndNext (req, res, next) {
     if (bodyParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
 
-      bodyParserReadCh.publish({ req, res, abortController })
+      const body = req.body
+      bodyParserReadCh.publish({ req, res, body, abortController })
 
       if (abortController.signal.aborted) return
     }

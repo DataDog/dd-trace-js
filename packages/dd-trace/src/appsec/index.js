@@ -45,8 +45,8 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
-    nextBodyParsed.subscribe(onNextRequestBodyParsed)
-    nextQueryParsed.subscribe(onNextRequestQueryParsed)
+    nextBodyParsed.subscribe(onRequestBodyParsed)
+    nextQueryParsed.subscribe(onRequestQueryParsed)
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
@@ -125,6 +125,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   if (req.query !== undefined && req.query !== null) {
     payload[addresses.HTTP_INCOMING_QUERY] = req.query
   }
+
   waf.run(payload, req)
 
   waf.disposeContext(req)
@@ -132,20 +133,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onRequestBodyParsed ({ req, res, abortController }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (req.body === undefined || req.body === null) return
-
-  const results = waf.run({
-    [addresses.HTTP_INCOMING_BODY]: req.body
-  }, req)
-
-  handleResults(results, req, res, rootSpan, abortController)
-}
-
-function onNextRequestBodyParsed ({ req, body }) {
+function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (!req) {
     const store = storage.getStore()
     req = store?.req
@@ -156,31 +144,23 @@ function onNextRequestBodyParsed ({ req, body }) {
 
   if (body === undefined || body === null) return
 
-  waf.run({
+  const results = waf.run({
     [addresses.HTTP_INCOMING_BODY]: body
   }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onNextRequestQueryParsed ({ req, query }) {
+function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!req) {
     const store = storage.getStore()
     req = store?.req
   }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (query === undefined || query === null) return
-
-  waf.run({
-    [addresses.HTTP_INCOMING_QUERY]: query
-  }, req)
-}
-
-function onRequestQueryParsed ({ req, res, abortController }) {
-  const rootSpan = web.root(req)
-  if (!rootSpan) return
-
-  if (!req.query || typeof req.query !== 'object') return
+  if (!query || typeof query !== 'object') return
 
   const results = waf.run({
     [addresses.HTTP_INCOMING_QUERY]: req.query
