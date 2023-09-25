@@ -17,7 +17,6 @@ describe('test suite', () => {
 
   withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
     const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
-    // if (realVersion !== '13.4.13') return
 
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
