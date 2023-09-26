@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-// eslint-disable no-console
-const fs = require('fs')
-const assert = require('assert')
+/* eslint-disable no-console */
 const { spawnSync } = require('child_process')
 
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
