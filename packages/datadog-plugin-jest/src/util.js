@@ -51,15 +51,25 @@ function getJestTestName (test) {
 }
 
 function isMarkedAsUnskippable (test) {
+  let docblocks
+
   try {
     const testSource = readFileSync(test.path, 'utf8')
-    const docblocks = parse(extract(testSource))
-    if (!docblocks?.datadog) {
-      return false
-    }
+    docblocks = parse(extract(testSource))
+  } catch (e) {
+    // If we have issues parsing the file, we'll assume no unskippable was passed
+    return false
+  }
+
+  // docblocks were correctly parsed by it does not include a @datadog block
+  if (!docblocks?.datadog) {
+    return false
+  }
+
+  try {
     return JSON.parse(docblocks.datadog).unskippable
   } catch (e) {
-    // If the @datadog block comment is malformed, we'll run the suite
+    // If the @datadog block comment is present but malformed, we'll run the suite
     return true
   }
 }
