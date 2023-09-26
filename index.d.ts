@@ -829,6 +829,7 @@ interface Plugins {
   "mysql2": plugins.mysql2;
   "net": plugins.net;
   "next": plugins.next;
+  "openai": plugins.openai;
   "opensearch": plugins.opensearch;
   "oracledb": plugins.oracledb;
   "paperplane": plugins.paperplane;
