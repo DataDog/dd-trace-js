@@ -9,14 +9,15 @@ const {
 const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
 
-const describe = NODE_MAJOR < 16 ? globalThis.describe.skip : globalThis.describe
+// newer packages are not supported on older node versions
+const range = NODE_MAJOR < 16 ? '<5' : '>=4'
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  withVersions('mongoose', ['mongoose'], version => {
+  withVersions('mongoose', ['mongoose'], range, version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [
