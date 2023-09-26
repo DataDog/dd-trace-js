@@ -23,12 +23,10 @@ describe('CI Visibility Agentless Exporter', () => {
 
   before(() => {
     process.env.DD_API_KEY = '1'
-    process.env.DD_APP_KEY = '1'
   })
 
   after(() => {
     delete process.env.DD_API_KEY
-    delete process.env.DD_APP_KEY
   })
 
   it('can use CI Vis protocol right away', () => {
@@ -136,7 +134,6 @@ describe('CI Visibility Agentless Exporter', () => {
     })
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
-      delete process.env.DD_APP_KEY
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
