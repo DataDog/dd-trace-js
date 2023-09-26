@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawn, execSync } = require('child_process')
-const { rmdirSync, unlinkSync } = require('fs')
+const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('fs')
 const getPort = require('get-port')
 const axios = require('axios')
 const { writeFileSync } = require('fs')
@@ -64,8 +64,8 @@ describe('test suite', () => {
           const rulesFileOrigin = `${appDir}/appsec-rules.json`
           const rulesFileDestination = `${appDir}/.next/standalone/appsec-rules.json`
 
-          execSync(`mkdir ${publicDestination}`)
-          execSync(`cp ${rulesFileOrigin} ${rulesFileDestination}`)
+          mkdirSync(publicDestination)
+          cpSync(rulesFileOrigin, rulesFileDestination)
         }
       })
 
