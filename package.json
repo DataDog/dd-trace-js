@@ -103,6 +103,7 @@
   "devDependencies": {
     "@types/node": ">=16",
     "autocannon": "^4.5.2",
+    "aws-sdk": "^2.1446.0",
     "axios": "^0.21.2",
     "benchmark": "^2.1.4",
     "body-parser": "^1.20.2",
