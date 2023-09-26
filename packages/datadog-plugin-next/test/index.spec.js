@@ -52,7 +52,15 @@ describe('Plugin', function () {
           })
 
           server.once('error', done)
-          server.stdout.once('data', () => done())
+          server.stdout.once('data', () => {
+            // first log outputted isn't always the server started log
+            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/next-server/server/config-utils.ts#L39
+            // these are webpack related logs that run during execution time and not build
+
+            // additionally, next.js sets timeouts in 10.x when displaying extra logs
+            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/server/next.ts#L132-L133
+            setTimeout(done, 100) // relatively high timeout chosen to be safe
+          })
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
@@ -73,10 +81,6 @@ describe('Plugin', function () {
         const cwd = __dirname
         const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
         const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
-
-        if (realVersion.startsWith('10')) {
-          return this.skip() // TODO: Figure out why 10.x tests fail.
-        }
 
         delete pkg.workspaces
 
@@ -285,7 +289,7 @@ describe('Plugin', function () {
             ['/hello', '/hello'],
             ['/hello/world', '/hello/[name]'],
             ['/hello/other', '/hello/other'],
-            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=11') ? 404 : 500],
+            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=10') ? 404 : 500],
             ['/error/get_server_side_props', '/error/get_server_side_props', 500]
           ]
           pathTests.forEach(([url, expectedPath, statusCode]) => {

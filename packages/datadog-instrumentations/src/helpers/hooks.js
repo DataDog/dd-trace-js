@@ -7,6 +7,7 @@ module.exports = {
   '@elastic/elasticsearch': () => require('../elasticsearch'),
   '@elastic/transport': () => require('../elasticsearch'),
   '@google-cloud/pubsub': () => require('../google-cloud-pubsub'),
+  '@graphql-tools/executor': () => require('../graphql'),
   '@grpc/grpc-js': () => require('../grpc'),
   '@hapi/hapi': () => require('../hapi'),
   '@jest/core': () => require('../jest'),

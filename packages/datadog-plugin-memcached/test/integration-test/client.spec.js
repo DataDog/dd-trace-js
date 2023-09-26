@@ -13,27 +13,27 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(50000)
-    sandbox = await createSandbox(['memcached'], false, [
-      `./packages/datadog-plugin-memcached/test/integration-test/*`])
-  })
+  withVersions('memcached', 'memcached', version => {
+    before(async function () {
+      this.timeout(50000)
+      sandbox = await createSandbox([`'memcached@${version}'`], false, [
+        `./packages/datadog-plugin-memcached/test/integration-test/*`])
+    })
 
-  after(async function () {
-    this.timeout(50000)
-    await sandbox.remove()
-  })
+    after(async function () {
+      this.timeout(50000)
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('memcached', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

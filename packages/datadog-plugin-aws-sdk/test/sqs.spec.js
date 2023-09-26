@@ -53,6 +53,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'aws-sdk',
           (done) => sqs.sendMessage({
             MessageBody: 'test body',
             QueueUrl
