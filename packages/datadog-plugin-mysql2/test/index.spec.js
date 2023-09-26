@@ -444,14 +444,17 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          const clock = sinon.useFakeTimers(new Date())
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
+            clock.restore()
             queryText = connect.sql
           })
         })
@@ -521,14 +524,17 @@ describe('Plugin', () => {
         it('query text should contain traceparent', done => {
           let queryText = ''
           agent.use(traces => {
-            const traceId = traces[0][0].trace_id.toString(16).padStart(32, '0')
+            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
+          const clock = sinon.useFakeTimers(new Date())
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
+            clock.restore()
             queryText = queryPool.sql
           })
         })
