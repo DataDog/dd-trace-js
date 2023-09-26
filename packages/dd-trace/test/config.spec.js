@@ -364,7 +364,6 @@ describe('Config', () => {
         port: 5218
       },
       service: 'service',
-      extraServices: ['service1', 'service2'],
       version: '0.1.0',
       env: 'test',
       clientIpEnabled: true,
@@ -436,7 +435,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
-    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
+    expect(config).to.have.property('extraServices', undefined)
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -624,7 +623,6 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.4'
     process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = 2000
     process.env.DD_SERVICE = 'service'
-    process.env.DD_EXTRA_SERVICES = 'service1, service2'
     process.env.DD_SERVICE_MAPPING = 'a:aa'
     process.env.DD_TRACE_PEER_SERVICE_MAPPING = 'c:cc'
     process.env.DD_VERSION = '0.0.0'
@@ -674,7 +672,6 @@ describe('Config', () => {
       reportHostname: false,
       flushMinSpans: 500,
       service: 'test',
-      extraServices: ['service3', 'service4'],
       version: '1.0.0',
       env: 'development',
       clientIpEnabled: true,
@@ -736,7 +733,6 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
-    expect(config).to.have.deep.nested.property('extraServices', ['service3', 'service4'])
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
@@ -1330,6 +1326,10 @@ describe('Config', () => {
     })
 
     it('should register configured extra services', () => {
+      const originalExtraServices = process.env.DD_EXTRA_SERVICES
+
+      process.env.DD_EXTRA_SERVICES = 'service1,   service2'
+
       const extraServices = {
         registerExtraService: sinon.spy()
       }
@@ -1342,13 +1342,13 @@ describe('Config', () => {
       })
 
       // eslint-disable-next-line no-new
-      new Config({
-        extraServices: ['service1', 'service2']
-      })
+      new Config({})
 
       expect(extraServices.registerExtraService).to.be.calledTwice
       expect(extraServices.registerExtraService.firstCall).to.be.calledWith('service1')
       expect(extraServices.registerExtraService.secondCall).to.be.calledWith('service2')
+
+      process.env.DD_EXTRA_SERVICES = originalExtraServices
     })
   })
 })

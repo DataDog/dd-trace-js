@@ -196,10 +196,8 @@ class Config {
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_EXTRA_SERVICES = coalesce(
-      options.extraServices,
-      process.env.DD_EXTRA_SERVICES?.split(',').map(x => x.trim())
-    )
+    const DD_EXTRA_SERVICES = process.env.DD_EXTRA_SERVICES?.split(',').map(x => x.trim())
+
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
