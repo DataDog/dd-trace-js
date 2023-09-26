@@ -101,7 +101,7 @@ describe('getJestSuitesToRun', () => {
     const tests = [
       { path: path.join(__dirname, './fixtures/test-to-run.js') },
       { path: path.join(__dirname, './fixtures/test-to-skip.js') },
-      { path: path.join(__dirname, './fixtures/test-unskippable.js') },
+      { path: path.join(__dirname, './fixtures/test-unskippable.js') }
     ]
     const rootDir = __dirname
 
