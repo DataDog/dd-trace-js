@@ -134,6 +134,8 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onRequestBodyParsed ({ req, res, body, abortController }) {
+  if (body === undefined || body === null) return
+
   if (!req) {
     const store = storage.getStore()
     req = store?.req
@@ -141,8 +143,6 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
-
-  if (body === undefined || body === null) return
 
   const results = waf.run({
     [addresses.HTTP_INCOMING_BODY]: body
@@ -152,6 +152,8 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 }
 
 function onRequestQueryParsed ({ req, res, query, abortController }) {
+  if (!query || typeof query !== 'object') return
+
   if (!req) {
     const store = storage.getStore()
     req = store?.req
@@ -159,8 +161,6 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
-
-  if (!query || typeof query !== 'object') return
 
   const results = waf.run({
     [addresses.HTTP_INCOMING_QUERY]: query
@@ -170,10 +170,10 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 }
 
 function onRequestCookieParser ({ req, res, abortController, cookies }) {
+  if (!cookies || typeof cookies !== 'object') return
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
-
-  if (!cookies || typeof cookies !== 'object') return
 
   const results = waf.run({
     [addresses.HTTP_INCOMING_COOKIES]: cookies
