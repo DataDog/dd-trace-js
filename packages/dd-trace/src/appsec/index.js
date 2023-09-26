@@ -26,6 +26,10 @@ const { storage } = require('../../../datadog-core')
 let isEnabled = false
 let config
 
+function sampleRequest (sampling) {
+  return true
+}
+
 function enable (_config) {
   if (isEnabled) return
 
@@ -115,6 +119,10 @@ function incomingHttpEndTranslator ({ req, res }) {
   // we need to keep this to support other cookie parsers
   if (req.cookies && typeof req.cookies === 'object') {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
+  }
+
+  if (config.appsec.apiSecurity.enabled && sampleRequest(config.appsec.apiSecurity.requestSampling)) {
+    payload['waf.context.settings'] = { 'extract-schema': true }
   }
 
   waf.run(payload, req)
