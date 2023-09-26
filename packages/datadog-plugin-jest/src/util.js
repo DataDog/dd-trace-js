@@ -1,5 +1,5 @@
-const {readFileSync} = require('fs')
-const {parse, extract} = require('jest-docblock')
+const { readFileSync } = require('fs')
+const { parse, extract } = require('jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 
@@ -50,36 +50,44 @@ function getJestTestName (test) {
   return titles.join(' ')
 }
 
+function isMarkedAsUnskippable (test) {
+  try {
+    const testSource = readFileSync(test.path, 'utf8')
+    const docblocks = parse(extract(testSource))
+    if (!docblocks?.datadog) {
+      return false
+    }
+    return JSON.parse(docblocks.datadog).unskippable
+  } catch (e) {
+    // If the @datadog block comment is malformed, we'll run the suite
+    return true
+  }
+}
+
+
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   return originalTests.reduce((acc, test) => {
     const relativePath = getTestSuitePath(test.path, rootDir)
     const shouldBeSkipped = skippableSuites.includes(relativePath)
-    if (shouldBeSkipped) {
-      // check if it has been marked as non skippable
-      try {
-        const testSource = readFileSync(test.path, 'utf8')
-        const docblocks = parse(extract(testSource))
 
-        if (docblocks['jest-environment-options']) {
-          const { datadogUnskippable } = JSON.parse(docblocks['jest-environment-options'])
-          if (!datadogUnskippable) {
-            acc.skippedSuites.push(relativePath)
-          } else {
-            acc.forcedToRun.push(relativePath)
-            acc.suitesToRun.push(test)
-          }
-        } else { // there is no docblock, so we can assume it can be skipped
-          acc.skippedSuites.push(relativePath)
+    if (isMarkedAsUnskippable(test)) {
+      acc.suitesToRun.push(test)
+      if (test?.context?.config?.testEnvironmentOptions) {
+        test.context.config.testEnvironmentOptions['_ddUnskippable'] = true
+        if (shouldBeSkipped) {
+          test.context.config.testEnvironmentOptions['_ddForcedToRun'] = true
         }
-      } catch (e) {
-        // if something above fails, we don't feel confident to skip the suite
-        acc.suitesToRun.push(test)
       }
+      return acc
+    }
+
+    if (shouldBeSkipped) {
+      acc.skippedSuites.push(relativePath)
     } else {
       acc.suitesToRun.push(test)
     }
     return acc
-  }, { skippedSuites: [], suitesToRun: [], forcedToRun: [] })
+  }, { skippedSuites: [], suitesToRun: [] })
 }
 
 module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }

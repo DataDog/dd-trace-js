@@ -842,10 +842,58 @@ testFrameworks.forEach(({
             const forcedToRunSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js')
 
             assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
-            assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
+            assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+            assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
 
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
             assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
             assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
+          }, 25000)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_REGEX: 'unskippable-test/test-',
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-to-skip.js'
+            }
+          }
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const suites = payloads.flatMap(({ payload }) => payload.events).filter(event => event.type === 'test_suite_end')
+
+            assert.equal(suites.length, 2)
+
+            const skippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js')
+            const nonSkippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js')
+
+
+            assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+
+            assert.propertyVal(nonSkippedSuite.content.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(nonSkippedSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // it was not forced to run because it wasn't going to be skipped
+            assert.notProperty(nonSkippedSuite.content.meta, TEST_ITR_FORCED_RUN)
           }, 25000)
 
         childProcess = exec(

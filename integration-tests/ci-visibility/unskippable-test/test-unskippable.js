@@ -1,5 +1,5 @@
 /**
- * @jest-environment-options {"datadogUnskippable": true}
+ * @datadog {"unskippable": true}
  */
 
 const { expect } = require('chai')

@@ -92,7 +92,8 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
-        datadogUnskippable
+        _ddForcedToRun,
+        _ddUnskippable
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -102,10 +103,11 @@ class JestPlugin extends CiPlugin {
 
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
 
-      if (datadogUnskippable) {
+      if (_ddUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
-        // TODO: fix this. Forced to run can't be known from here
-        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        if (_ddForcedToRun) {
+          testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        }
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
