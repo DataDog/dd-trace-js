@@ -225,9 +225,14 @@ addHook({
     return function wrappedGet () {
       const nextUrl = originalGet.apply(this, arguments)
       if (queryParsedChannel.hasSubscribers) {
-        queryParsedChannel.publish({
-          query: Object.fromEntries(nextUrl.searchParams)
-        })
+        const query = {}
+        for (const key of nextUrl.searchParams.keys()) {
+          if (!query[key]) {
+            query[key] = nextUrl.searchParams.getAll(key)
+          }
+        }
+
+        queryParsedChannel.publish({ query })
       }
       return nextUrl
     }

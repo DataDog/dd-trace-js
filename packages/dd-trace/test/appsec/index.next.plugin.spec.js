@@ -1,6 +1,8 @@
 'use strict'
-const getPort = require('get-port')
+
 const { spawn, execSync } = require('child_process')
+const { rmdirSync, unlinkSync } = require('fs')
+const getPort = require('get-port')
 const axios = require('axios')
 const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
@@ -63,21 +65,30 @@ describe('test suite', () => {
           const rulesFileDestination = `${appDir}/.next/standalone/appsec-rules.json`
 
           execSync(`mkdir ${publicDestination}`)
-          // execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
           execSync(`cp ${rulesFileOrigin} ${rulesFileDestination}`)
         }
       })
 
       after(function () {
         this.timeout(5000)
+
         const files = [
           'package.json',
-          'node_modules',
-          '.next',
           'yarn.lock'
         ]
-        const paths = files.map(file => `${appDir}/${file}`)
-        execSync(`rm -rf ${paths.join(' ')}`)
+        const filePaths = files.map(file => `${appDir}/${file}`)
+        filePaths.forEach(path => {
+          unlinkSync(path)
+        })
+
+        const dirs = [
+          'node_modules',
+          '.next'
+        ]
+        const dirPaths = dirs.map(file => `${appDir}/${file}`)
+        dirPaths.forEach(path => {
+          rmdirSync(path, { recursive: true, force: true })
+        })
       })
     }
 
@@ -140,7 +151,7 @@ describe('test suite', () => {
     }
 
     tests.forEach(({ appName, serverPath }) => {
-      describe(`detect threats in ${appName}`, () => {
+      describe(`should detect threats in ${appName}`, () => {
         initApp(appName)
 
         startServer({ appName, serverPath })
@@ -171,6 +182,7 @@ describe('test suite', () => {
               key: 'testattack'
             }).catch(e => { done(e) })
         })
+
         if (appName === 'app-dir') {
           it('in request body with .text() function', function (done) {
             this.timeout(5000)
@@ -222,6 +234,56 @@ describe('test suite', () => {
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param=testattack`)
+            .catch(e => { done(e) })
+
+          agent.subscribe(findBodyThreat)
+        })
+
+        it('in request query with array params, attack in the second  item', function (done) {
+          this.timeout(5000)
+
+          function findBodyThreat (traces) {
+            let attackFound = false
+            traces.forEach(trace => {
+              trace.forEach(span => {
+                if (span.meta['_dd.appsec.json']) {
+                  attackFound = true
+                }
+              })
+            })
+            if (attackFound) {
+              agent.unsubscribe(findBodyThreat)
+              done()
+            }
+          }
+
+          axios
+            .get(`http://127.0.0.1:${port}/api/test?param[]=safe&param[]=testattack`)
+            .catch(e => { done(e) })
+
+          agent.subscribe(findBodyThreat)
+        })
+
+        it('in request query with array params, threat in the first item', function (done) {
+          this.timeout(5000)
+
+          function findBodyThreat (traces) {
+            let attackFound = false
+            traces.forEach(trace => {
+              trace.forEach(span => {
+                if (span.meta['_dd.appsec.json']) {
+                  attackFound = true
+                }
+              })
+            })
+            if (attackFound) {
+              agent.unsubscribe(findBodyThreat)
+              done()
+            }
+          }
+
+          axios
+            .get(`http://127.0.0.1:${port}/api/test?param[]=testattack&param[]=safe`)
             .catch(e => { done(e) })
 
           agent.subscribe(findBodyThreat)
