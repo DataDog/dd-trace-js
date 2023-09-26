@@ -64,7 +64,6 @@ function isMarkedAsUnskippable (test) {
   }
 }
 
-
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   return originalTests.reduce((acc, test) => {
     const relativePath = getTestSuitePath(test.path, rootDir)
