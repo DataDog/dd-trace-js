@@ -45,39 +45,39 @@ const jestCommonOptions = {
 }
 
 const testFrameworks = [
-  // {
-  //   ...mochaCommonOptions,
-  //   name: 'mocha',
-  //   testFile: 'ci-visibility/run-mocha.js',
-  //   dependencies: ['mocha', 'chai', 'nyc'],
-  //   expectedCoverageFiles: [
-  //     'ci-visibility/run-mocha.js',
-  //     'ci-visibility/test/sum.js',
-  //     'ci-visibility/test/ci-visibility-test.js',
-  //     'ci-visibility/test/ci-visibility-test-2.js'
-  //   ],
-  //   runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-  //   coverageMessage: 'Lines        : 80%',
-  //   type: 'commonJS'
-  // },
-  // {
-  //   ...mochaCommonOptions,
-  //   name: 'mocha',
-  //   testFile: 'ci-visibility/run-mocha.mjs',
-  //   dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
-  //   expectedCoverageFiles: [
-  //     'ci-visibility/run-mocha.mjs',
-  //     'ci-visibility/test/sum.js',
-  //     'ci-visibility/test/ci-visibility-test.js',
-  //     'ci-visibility/test/ci-visibility-test-2.js'
-  //   ],
-  //   runTestsWithCoverageCommand:
-  //     `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
-  //     `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
-  //     `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
-  //   coverageMessage: 'Lines        : 78.57%',
-  //   type: 'esm'
-  // },
+  {
+    ...mochaCommonOptions,
+    name: 'mocha',
+    testFile: 'ci-visibility/run-mocha.js',
+    dependencies: ['mocha', 'chai', 'nyc'],
+    expectedCoverageFiles: [
+      'ci-visibility/run-mocha.js',
+      'ci-visibility/test/sum.js',
+      'ci-visibility/test/ci-visibility-test.js',
+      'ci-visibility/test/ci-visibility-test-2.js'
+    ],
+    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
+    coverageMessage: 'Lines        : 80%',
+    type: 'commonJS'
+  },
+  {
+    ...mochaCommonOptions,
+    name: 'mocha',
+    testFile: 'ci-visibility/run-mocha.mjs',
+    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+    expectedCoverageFiles: [
+      'ci-visibility/run-mocha.mjs',
+      'ci-visibility/test/sum.js',
+      'ci-visibility/test/ci-visibility-test.js',
+      'ci-visibility/test/ci-visibility-test-2.js'
+    ],
+    runTestsWithCoverageCommand:
+      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
+      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
+      `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
+    coverageMessage: 'Lines        : 78.57%',
+    type: 'esm'
+  },
   {
     ...jestCommonOptions,
     name: 'jest',
@@ -85,13 +85,13 @@ const testFrameworks = [
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
     type: 'commonJS'
   },
-  // {
-  //   ...jestCommonOptions,
-  //   name: 'jest',
-  //   testFile: 'ci-visibility/run-jest.mjs',
-  //   runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
-  //   type: 'esm'
-  // }
+  {
+    ...jestCommonOptions,
+    name: 'jest',
+    testFile: 'ci-visibility/run-jest.mjs',
+    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
+    type: 'esm'
+  }
 ]
 
 testFrameworks.forEach(({
@@ -115,7 +115,7 @@ testFrameworks.forEach(({
   // if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
   //   return
   // }
-  describe.only(`${name} ${type}`, () => {
+  describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
@@ -836,12 +836,18 @@ testFrameworks.forEach(({
 
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const suites = payloads.flatMap(({ payload }) => payload.events).filter(event => event.type === 'test_suite_end')
+              const suites = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
 
               assert.equal(suites.length, 2)
 
-              const skippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js')
-              const forcedToRunSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js')
+              const skippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+              )
+              const forcedToRunSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+              )
 
               assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
               assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
@@ -858,7 +864,7 @@ testFrameworks.forEach(({
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'unskippable-test/test-',
+                TEST_REGEX: 'unskippable-test/test-'
               },
               stdio: 'inherit'
             }
@@ -882,13 +888,18 @@ testFrameworks.forEach(({
 
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const suites = payloads.flatMap(({ payload }) => payload.events).filter(event => event.type === 'test_suite_end')
+              const suites = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
 
               assert.equal(suites.length, 2)
 
-              const skippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js')
-              const nonSkippedSuite = suites.find(event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js')
-
+              const skippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+              )
+              const nonSkippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+              )
 
               assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
 
@@ -904,7 +915,7 @@ testFrameworks.forEach(({
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'unskippable-test/test-',
+                TEST_REGEX: 'unskippable-test/test-'
               },
               stdio: 'inherit'
             }
