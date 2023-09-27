@@ -83,12 +83,12 @@ addHook({
 
           if (typeof arguments[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
-            const originalCb = arguments[lastArgumentIndex]
+            shimmer.wrap(arguments, lastArgumentIndex, function (originalCb) {
+              return function () {
+                finish()
 
-            arguments[lastArgumentIndex] = shimmer.wrap(originalCb, function () {
-              finish()
-
-              originalCb.apply(this, arguments)
+                return originalCb.apply(this, arguments)
+              }
             })
 
             callbackWrapped = true
@@ -104,38 +104,39 @@ addHook({
 
             // if it is not callback, wrap exec method and its then
             if (!callbackWrapped) {
-              const originalExec = res.exec
+              shimmer.wrap(res, 'exec', function (originalExec) {
+                return function wrappedExec () {
+                  const execResult = originalExec.apply(this, arguments)
 
-              res.exec = shimmer.wrap(originalExec, function () {
-                const execResult = originalExec.apply(this, arguments)
+                  // wrap them method, wrap resolve and reject methods
+                  shimmer.wrap(execResult, 'then', function (originalThen) {
+                    return function wrappedThen () {
+                      const resolve = arguments[0]
+                      const reject = arguments[1]
 
-                // wrap them method, wrap resolve and reject methods
-                const originalThen = execResult.then
-                execResult.then = shimmer.wrap(originalThen, function () {
-                  const resolve = arguments[0]
-                  const reject = arguments[1]
+                      // not using shimmer here because resolve/reject could be empty
+                      arguments[0] = function wrappedResolve () {
+                        finish()
 
-                  // not using shimmer here because resolve/reject could be empty
-                  arguments[0] = function () {
-                    finish()
+                        if (resolve) {
+                          return resolve.apply(this, arguments)
+                        }
+                      }
 
-                    if (resolve) {
-                      return resolve.apply(this, arguments)
+                      arguments[1] = function wrappedReject () {
+                        finish()
+
+                        if (reject) {
+                          return reject.apply(this, arguments)
+                        }
+                      }
+
+                      return originalThen.apply(this, arguments)
                     }
-                  }
+                  })
 
-                  arguments[1] = function () {
-                    finish()
-
-                    if (reject) {
-                      return reject.apply(this, arguments)
-                    }
-                  }
-
-                  return originalThen.apply(this, arguments)
-                })
-
-                return execResult
+                  return execResult
+                }
               })
             }
             return res
