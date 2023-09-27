@@ -266,7 +266,6 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...process.env,
     DD_API_KEY: '1',
-    DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init'

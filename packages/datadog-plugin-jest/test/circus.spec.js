@@ -75,7 +75,6 @@ describe('Plugin', function () {
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {
       delete process.env.DD_API_KEY
-      delete process.env.DD_APP_KEY
       const jestTestFile = fs.readdirSync(__dirname).filter(name => name.startsWith('jest-'))
       jestTestFile.forEach((testFile) => {
         delete require.cache[require.resolve(path.join(__dirname, testFile))]
@@ -86,7 +85,6 @@ describe('Plugin', function () {
     })
     beforeEach(function () {
       process.env.DD_API_KEY = 'key'
-      process.env.DD_APP_KEY = 'app-key'
     })
     describe('jest with jest-circus', () => {
       describe('older versions of the agent', () => {

@@ -623,7 +623,6 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
     process.env.DD_API_KEY = '123'
-    process.env.DD_APP_KEY = '456'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'false'
