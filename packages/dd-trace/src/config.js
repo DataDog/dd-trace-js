@@ -4,16 +4,15 @@ const fs = require('fs')
 const os = require('os')
 const uuid = require('crypto-randomuuid')
 const URL = require('url').URL
-const coalesce = require('koalas')
 const log = require('./log')
 const pkg = require('./pkg')
+const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
-const { registerExtraService } = require('./service-naming/extra-services')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -196,7 +195,6 @@ class Config {
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_EXTRA_SERVICES = process.env.DD_EXTRA_SERVICES?.split(',').map(x => x.trim())
 
     const DD_ENV = coalesce(
       options.env,
@@ -553,7 +551,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.extraServices = DD_EXTRA_SERVICES?.filter(registerExtraService)
     this.version = DD_VERSION
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),

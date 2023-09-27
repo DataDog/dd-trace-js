@@ -4,7 +4,6 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
-const extraServices = require('../src/service-naming/extra-services')
 
 describe('Config', () => {
   let Config
@@ -61,8 +60,6 @@ describe('Config', () => {
       fs,
       os
     })
-
-    extraServices.clear()
   })
 
   afterEach(() => {
@@ -98,7 +95,6 @@ describe('Config', () => {
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.deep.property('serviceMapping', {})
-    expect(config).to.have.nested.property('extraServices', undefined)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.property('experimental.runtimeId', false)
@@ -233,7 +229,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'dsd-agent')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
-    expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2'])
     expect(config).to.have.property('version', '1.0.0')
     expect(config).to.have.property('queryStringObfuscation', '.*')
     expect(config).to.have.property('clientIpEnabled', true)
@@ -435,7 +430,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent-dsd')
     expect(config).to.have.nested.property('dogstatsd.port', '5218')
     expect(config).to.have.property('service', 'service')
-    expect(config).to.have.property('extraServices', undefined)
     expect(config).to.have.property('version', '0.1.0')
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -1310,45 +1304,6 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
-    })
-  })
-  context('RC extra services', () => {
-    it('should trim and filter out invalid values', () => {
-      const originalExtraServices = process.env.DD_EXTRA_SERVICES
-
-      process.env.DD_EXTRA_SERVICES = 'service1,   service2, service3   ,, '
-
-      const config = new Config({})
-
-      expect(config).to.have.deep.nested.property('extraServices', ['service1', 'service2', 'service3'])
-
-      process.env.DD_EXTRA_SERVICES = originalExtraServices
-    })
-
-    it('should register configured extra services', () => {
-      const originalExtraServices = process.env.DD_EXTRA_SERVICES
-
-      process.env.DD_EXTRA_SERVICES = 'service1,   service2'
-
-      const extraServices = {
-        registerExtraService: sinon.spy()
-      }
-      const Config = proxyquire('../src/config', {
-        './pkg': pkg,
-        './log': log,
-        './service-naming/extra-services': extraServices,
-        fs,
-        os
-      })
-
-      // eslint-disable-next-line no-new
-      new Config({})
-
-      expect(extraServices.registerExtraService).to.be.calledTwice
-      expect(extraServices.registerExtraService.firstCall).to.be.calledWith('service1')
-      expect(extraServices.registerExtraService.secondCall).to.be.calledWith('service2')
-
-      process.env.DD_EXTRA_SERVICES = originalExtraServices
     })
   })
 })
