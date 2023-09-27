@@ -150,6 +150,13 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
+      agentlessExporter.sendGitMetadata = () => {
+        return new Promise(resolve => {
+          agentlessExporter._resolveGit()
+          resolve()
+        })
+      }
+
       expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
       agentlessExporter.getItrConfiguration({}, (err) => {
         expect(scope.isDone()).not.to.be.true
