@@ -8,11 +8,9 @@ function getExtraServices () {
 }
 
 function registerExtraService (serviceName) {
-  if (serviceName && !extraServices.has(serviceName) && extraServices.size < maxExtraServices) {
+  if (serviceName && extraServices.size < maxExtraServices) {
     extraServices.add(serviceName)
-    return true
   }
-  return false
 }
 
 function clear () {
