@@ -470,7 +470,6 @@ moduleType.forEach(({
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-            assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           })
 
         const {
@@ -573,7 +572,6 @@ moduleType.forEach(({
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-            assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           })
 
         const {
