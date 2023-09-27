@@ -96,7 +96,6 @@ describe('Plugin', () => {
         .reply(200, 'OK')
 
       process.env.DD_API_KEY = 'key'
-      process.env.DD_APP_KEY = 'app-key'
 
       const isAgentlessTest = this.currentTest.parent.title === 'reporting through agentless'
       const isEvpProxyTest = this.currentTest.parent.title === 'reporting through evp proxy'

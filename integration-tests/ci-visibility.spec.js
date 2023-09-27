@@ -590,7 +590,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
           assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(itrConfigRequest.headers, 'dd-application-key', '1')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
@@ -691,7 +690,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
           assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           const [coveragePayload] = coverageRequest.payload
           assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
@@ -946,12 +944,10 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
           assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
-          assert.notProperty(itrConfigRequest.headers, 'dd-application-key')
           assert.propertyVal(itrConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.notProperty(codeCovRequest.headers, 'dd-api-key')
-          assert.notProperty(codeCovRequest.headers, 'dd-application-key')
 
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
@@ -1045,7 +1041,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
           assert.notProperty(skippableRequest.headers, 'dd-api-key')
-          assert.notProperty(skippableRequest.headers, 'dd-application-key')
           assert.propertyVal(skippableRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = coverageRequest.payload
