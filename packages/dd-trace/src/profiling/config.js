@@ -37,6 +37,8 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED
     } = process.env
@@ -53,8 +55,6 @@ class Config {
       Number(DD_PROFILING_UPLOAD_TIMEOUT), 60 * 1000)
     const sourceMap = coalesce(options.sourceMap,
       DD_PROFILING_SOURCE_MAP, true)
-    const endpointCollectionEnabled = coalesce(options.endpointCollection,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false)
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
 
@@ -71,11 +71,25 @@ class Config {
       tagger.parse({ env, host, service, version, functionname })
     )
     this.logger = ensureLogger(options.logger)
+    const logger = this.logger
+    function logExperimentalVarDeprecation (shortVarName) {
+      const deprecatedEnvVarName = `DD_PROFILING_EXPERIMENTAL_${shortVarName}`
+      const v = process.env[deprecatedEnvVarName]
+      // not null, undefined, or NaN -- same logic as koalas.hasValue
+      // eslint-disable-next-line no-self-compare
+      if (v != null && v === v) {
+        logger.warn(`${deprecatedEnvVarName} is deprecated. Use DD_PROFILING_${shortVarName} instead.`)
+      }
+    }
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
-    this.endpointCollectionEnabled = endpointCollectionEnabled
+    this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false))
+    logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
+
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND, true))
@@ -114,7 +128,9 @@ class Config {
       ? options.profilers
       : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
+      DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
+    logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
 
     this.profilers = ensureProfilers(profilers, this)
   }

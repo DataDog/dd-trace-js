@@ -100,6 +100,10 @@ class NativeWallProfiler {
     return this._codeHotspotsEnabled
   }
 
+  endpointCollectionEnabled () {
+    return this._endpointCollectionEnabled
+  }
+
   start ({ mapper } = {}) {
     if (this._started) return
 
