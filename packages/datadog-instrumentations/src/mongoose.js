@@ -62,7 +62,7 @@ addHook({
 
     try {
       shimmer.wrap(Model, methodName, method => {
-        return function () {
+        return function wrappedModelMethod () {
           if (!startCh.hasSubscribers) {
             return method.apply(this, arguments)
           }
@@ -83,7 +83,7 @@ addHook({
 
           if (typeof arguments[lastArgumentIndex] === 'function') {
             // is a callback, wrap it to execute finish()
-            shimmer.wrap(arguments, lastArgumentIndex, function (originalCb) {
+            shimmer.wrap(arguments, lastArgumentIndex, originalCb => {
               return function () {
                 finish()
 
@@ -104,12 +104,12 @@ addHook({
 
             // if it is not callback, wrap exec method and its then
             if (!callbackWrapped) {
-              shimmer.wrap(res, 'exec', function (originalExec) {
+              shimmer.wrap(res, 'exec', originalExec => {
                 return function wrappedExec () {
                   const execResult = originalExec.apply(this, arguments)
 
                   // wrap them method, wrap resolve and reject methods
-                  shimmer.wrap(execResult, 'then', function (originalThen) {
+                  shimmer.wrap(execResult, 'then', originalThen => {
                     return function wrappedThen () {
                       const resolve = arguments[0]
                       const reject = arguments[1]
@@ -158,7 +158,7 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
-  return shimmer.wrap(sanitizeFilter, function () {
+  return shimmer.wrap(sanitizeFilter, function wrappedSanitizeFilter () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
