@@ -134,6 +134,7 @@ describe('CI Visibility Agentless Exporter', () => {
     })
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
+      delete process.env.DD_API_KEY
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -153,9 +154,10 @@ describe('CI Visibility Agentless Exporter', () => {
       agentlessExporter.getItrConfiguration({}, (err) => {
         expect(scope.isDone()).not.to.be.true
         expect(err.message).to.contain(
-          'Request to settings endpoint was not done because Datadog application key is not defined'
+          'Request to settings endpoint was not done because Datadog API key is not defined'
         )
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
+        process.env.DD_API_KEY = '1'
         done()
       })
     })
