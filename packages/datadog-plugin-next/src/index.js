@@ -43,7 +43,7 @@ class NextPlugin extends ServerPlugin {
     this.addError(error, span)
   }
 
-  finish ({ req, res }) {
+  finish ({ req, res, nextRequest = {} }) {
     const store = storage.getStore()
 
     if (!store) return
@@ -59,7 +59,8 @@ class NextPlugin extends ServerPlugin {
       'http.status_code': res.statusCode
     })
 
-    this.config.hooks.request(span, req, res)
+    // TODO add something in index.d.ts for nextRequest, or add to separate hook?
+    this.config.hooks.request(span, req, res, nextRequest)
 
     span.finish()
   }

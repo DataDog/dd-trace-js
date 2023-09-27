@@ -12,6 +12,7 @@ const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
 
 const requests = new WeakSet()
+const nodeNextRequestsToNextRequests = new WeakMap()
 
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
@@ -152,6 +153,11 @@ function finish (ctx, result, err) {
     errorChannel.publish(ctx)
   }
 
+  const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
+  if (maybeNextRequest) {
+    ctx = { nextRequest: maybeNextRequest, ...ctx }
+  }
+
   finishChannel.publish(ctx)
 
   if (err) {
@@ -160,6 +166,21 @@ function finish (ctx, result, err) {
 
   return result
 }
+
+addHook({
+  name: 'next',
+  versions: ['>=13.3.0'],
+  file: 'dist/server/web/spec-extension/adapters/next-request.js'
+}, NextRequestAdapter => {
+  shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
+    return function (nodeNextRequest) {
+      const nextRequest = fromNodeNextRequest.apply(this, arguments)
+      nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
+      return nextRequest
+    }
+  })
+  return NextRequestAdapter
+})
 
 addHook({
   name: 'next',
