@@ -195,7 +195,6 @@ class Config {
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
