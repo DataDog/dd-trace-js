@@ -14,7 +14,6 @@ describe('CI Visibility Exporter', () => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
     process.env.DD_API_KEY = '1'
-    process.env.DD_APP_KEY = '1'
     nock.cleanAll()
   })
 
