@@ -7,6 +7,10 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
+
+// newer packages are not supported on older node versions
+const range = NODE_MAJOR < 16 ? '<3' : '>=4.4.0'
 
 describe('esm', () => {
   let agent
@@ -14,7 +18,7 @@ describe('esm', () => {
   let sandbox
 
   // test against later versions because server.mjs uses newer package syntax
-  withVersions('cassandra-driver', 'cassandra-driver', '>=4.4.0', version => {
+  withVersions('cassandra-driver', 'cassandra-driver', range, version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
