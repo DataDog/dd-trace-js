@@ -1,9 +1,10 @@
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -50,6 +51,7 @@ let suitesToSkip = []
 let frameworkVersion
 let isSuitesSkipped = false
 let skippedSuites = []
+const unskippableSuites = []
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -104,7 +106,8 @@ function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
     const shouldSkip = suitesToSkip.includes(testPath)
-    if (shouldSkip) {
+    const isUnskippable = unskippableSuites.includes(suite.file)
+    if (shouldSkip && !isUnskippable) {
       acc.skippedSuites.add(testPath)
     } else {
       acc.suitesToRun.push(suite)
@@ -445,6 +448,14 @@ addHook({
       return runMocha.apply(this, arguments)
     }
     const mocha = arguments[0]
+    mocha.suite.on('post-require', (_, path) => {
+      // TODO: we probably only want to do this if ITR is enabled, but this is done
+      // before the request
+      const isUnskippable = isMarkedAsUnskippable({ path })
+      if (isUnskippable) {
+        unskippableSuites.push(path)
+      }
+    })
     /**
      * This attaches `run` to the global context, which we'll call after
      * our configuration and skippable suites requests

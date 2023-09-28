@@ -101,4 +101,4 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   }, { skippedSuites: [], suitesToRun: [] })
 }
 
-module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }
+module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun, isMarkedAsUnskippable }
