@@ -3,11 +3,12 @@
 const { URL, format } = require('url')
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
-const Scheduler = require('./scheduler')
 const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
 const log = require('../../log')
+const { getExtraServices } = require('../../service-naming/extra-services')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
+const Scheduler = require('./scheduler')
 
 const clientId = uuid()
 
@@ -57,7 +58,8 @@ class RemoteConfigManager extends EventEmitter {
           tracer_version: tracerVersion,
           service: config.service,
           env: config.env,
-          app_version: config.version
+          app_version: config.version,
+          extra_services: []
         },
         capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
       },
@@ -113,8 +115,14 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.products = this.eventNames().filter(e => typeof e === 'string')
   }
 
+  getPayload () {
+    this.state.client.client_tracer.extra_services = getExtraServices()
+
+    return JSON.stringify(this.state)
+  }
+
   poll (cb) {
-    request(JSON.stringify(this.state), this.requestOptions, (err, data, statusCode) => {
+    request(this.getPayload(), this.requestOptions, (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
 
