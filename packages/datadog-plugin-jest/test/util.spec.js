@@ -92,4 +92,30 @@ describe('getJestSuitesToRun', () => {
       'src/integration.spec.js'
     ])
   })
+
+  it('takes unskippable into account', () => {
+    const skippableSuites = [
+      'fixtures/test-to-skip.js',
+      'fixtures/test-unskippable.js'
+    ]
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js') },
+      { path: path.join(__dirname, './fixtures/test-to-skip.js') },
+      { path: path.join(__dirname, './fixtures/test-unskippable.js') }
+    ]
+    const rootDir = __dirname
+
+    const { suitesToRun, skippedSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(suitesToRun).to.eql([
+      {
+        path: path.join(__dirname, './fixtures/test-to-run.js')
+      },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js')
+      }
+    ])
+    expect(skippedSuites).to.eql([
+      'fixtures/test-to-skip.js'
+    ])
+  })
 })
