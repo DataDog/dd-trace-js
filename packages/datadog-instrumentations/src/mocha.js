@@ -175,8 +175,10 @@ function mochaHook (Runner) {
       if (!asyncResource) {
         asyncResource = new AsyncResource('bound-anonymous-fn')
         testFileToSuiteAr.set(suite.file, asyncResource)
+        const isUnskippable = unskippableSuites.includes(suite.file)
+        const isForcedToRun = isUnskippable && suitesToSkip.includes(suite.file)
         asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish(suite)
+          testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
         })
       }
     })
