@@ -136,7 +136,8 @@ module.exports = class PluginManager {
       headerTags,
       dbmPropagationMode,
       dsmEnabled,
-      clientIpEnabled
+      clientIpEnabled,
+      memcachedCommandEnabled
     } = this._tracerConfig
 
     const sharedConfig = {}
@@ -151,6 +152,7 @@ module.exports = class PluginManager {
 
     sharedConfig.dbmPropagationMode = dbmPropagationMode
     sharedConfig.dsmEnabled = dsmEnabled
+    sharedConfig.memcachedCommandEnabled = memcachedCommandEnabled
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
