@@ -1,6 +1,10 @@
 variables:
   BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
 
+  # Benchmark's env variables. Modify to tweak benchmark parameters.
+  UNCONFIDENCE_THRESHOLD: "5.0"
+  MD_REPORT_ONLY_CHANGES: "1"
+
 .benchmarks:
   stage: benchmarks
   when: on_success
@@ -18,10 +22,6 @@ variables:
       - platform/artifacts/
     expire_in: 3 months
   variables:
-    # Benchmark's env variables. Modify to tweak benchmark parameters.
-    UNCONFIDENCE_THRESHOLD: "5.0"
-    MD_REPORT_ONLY_CHANGES: "1"
-
     # Gitlab and BP specific env vars. Do not modify.
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
