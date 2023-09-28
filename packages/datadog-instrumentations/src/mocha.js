@@ -52,6 +52,7 @@ let frameworkVersion
 let isSuitesSkipped = false
 let skippedSuites = []
 const unskippableSuites = []
+let isProgrammaticApi = true
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -176,7 +177,7 @@ function mochaHook (Runner) {
         asyncResource = new AsyncResource('bound-anonymous-fn')
         testFileToSuiteAr.set(suite.file, asyncResource)
         const isUnskippable = unskippableSuites.includes(suite.file)
-        const isForcedToRun = isUnskippable && suitesToSkip.includes(suite.file)
+        const isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
         asyncResource.runInAsyncScope(() => {
           testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
         })
@@ -375,6 +376,22 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
+    if (isProgrammaticApi) {
+      // we need to do this if it's the programmatic API,
+      // that is, you're running mocha with
+      // const mocha = new Mocha()
+      // mocha.run()
+      // Otherwise unskippableSuites is filled in `runMocha`
+      // TODO: is there any better way to do this?
+      // ** Couldn't we do this only here?? **
+      this.files.forEach(path => {
+        const isUnskippable = isMarkedAsUnskippable({ path })
+        if (isUnskippable) {
+          unskippableSuites.push(path)
+        }
+      })
+    }
+
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
         suitesToSkip = []
@@ -449,6 +466,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
+    isProgrammaticApi = false
     const mocha = arguments[0]
     mocha.suite.on('post-require', (_, path) => {
       // TODO: we probably only want to do this if ITR is enabled, but this is done

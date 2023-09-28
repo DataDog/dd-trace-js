@@ -854,13 +854,21 @@ testFrameworks.forEach(({
             assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
           }, 25000)
 
+        let TEST_REGEX = 'unskippable-test/test-'
+        if (name === 'mocha') {
+          TEST_REGEX = JSON.stringify([
+            './unskippable-test/test-to-skip.js',
+            './unskippable-test/test-unskippable.js'
+          ])
+        }
+
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX: 'unskippable-test/test-'
+              TEST_REGEX
             },
             stdio: 'inherit'
           }
@@ -905,13 +913,21 @@ testFrameworks.forEach(({
             assert.notProperty(nonSkippedSuite.content.meta, TEST_ITR_FORCED_RUN)
           }, 25000)
 
+        let TEST_REGEX = 'unskippable-test/test-'
+        if (name === 'mocha') {
+          TEST_REGEX = JSON.stringify([
+            './unskippable-test/test-to-skip.js',
+            './unskippable-test/test-unskippable.js'
+          ])
+        }
+
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX: 'unskippable-test/test-'
+              TEST_REGEX
             },
             stdio: 'inherit'
           }
