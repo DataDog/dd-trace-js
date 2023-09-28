@@ -2,6 +2,7 @@ const { readFileSync } = require('fs')
 const { parse, extract } = require('jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const log = require('../../dd-trace/src/log')
 
 /**
  * There are two ways to call `test.each` in `jest`:
@@ -70,6 +71,7 @@ function isMarkedAsUnskippable (test) {
     return JSON.parse(docblocks.datadog).unskippable
   } catch (e) {
     // If the @datadog block comment is present but malformed, we'll run the suite
+    log.warn('@datadog block comment is malformed.')
     return true
   }
 }
