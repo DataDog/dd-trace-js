@@ -127,10 +127,25 @@ class Config {
     const profilers = options.profilers
       ? options.profilers
       : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
-    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
-      DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
+
+    function getCodeHotspotsOptionsOr (defvalue) {
+      return coalesce(options.codeHotspotsEnabled,
+        DD_PROFILING_CODEHOTSPOTS_ENABLED,
+        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, defvalue)
+    }
+    this.codeHotspotsEnabled = isTrue(getCodeHotspotsOptionsOr(false))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
+    if (this.endpointCollectionEnabled && !this.codeHotspotsEnabled) {
+      if (getCodeHotspotsOptionsOr(undefined) !== undefined) {
+        this.logger.warn(
+          'Endpoint collection is enabled, but Code Hotspots are disabled. ' +
+          'Enable Code Hotspots too for endpoint collection to work.')
+        this.endpointCollectionEnabled = false
+      } else {
+        this.logger.info('Code Hotspots are implicitly enabled by endpoint collection.')
+        this.codeHotspotsEnabled = true
+      }
+    }
 
     this.profilers = ensureProfilers(profilers, this)
   }
