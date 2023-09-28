@@ -61,7 +61,7 @@ function isMarkedAsUnskippable (test) {
     return false
   }
 
-  // docblocks were correctly parsed by it does not include a @datadog block
+  // docblocks were correctly parsed but it does not include a @datadog block
   if (!docblocks?.datadog) {
     return false
   }
