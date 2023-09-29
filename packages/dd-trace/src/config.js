@@ -71,7 +71,10 @@ function propagationStyle (key, option, defaultValue) {
   }
 
   // Should be an array at this point
-  if (Array.isArray(option)) return option.map(v => v.toLowerCase())
+  if (Array.isArray(option)) {
+    configOriginMap.propStyle = 'code'
+    return option.map(v => v.toLowerCase())
+  }
 
   // If it's not an array but not undefined there's something wrong with the input
   if (typeof option !== 'undefined') {
@@ -82,29 +85,71 @@ function propagationStyle (key, option, defaultValue) {
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
   const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE)
   if (typeof envVar !== 'undefined') {
+    configOriginMap.propStyle = 'env_var'
     return envVar.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
   }
 
+  configOriginMap.propStyle = 'default'
   return defaultValue
+}
+
+const configOriginMap = {}
+
+function getConfigOrigin (code, env, def = undefined) {
+  for (const value in code) {
+    if (value) {
+      return 'code'
+    }
+  }
+  for (const value in env) {
+    if (value) {
+      return 'env_var'
+    }
+  }
+  return 'default'
 }
 
 class Config {
   constructor (options) {
     options = options || {}
 
+    const configWithOrigin = {}
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
       false
     ))
+    // this.configWithOrigin.push({
+    //   name: 'debug',
+    //   value: this.debug,
+    //   origin: process.env.DD_TRACE_DEBUG ? 'env_var' : 'default'
+    // })
+
     this.logger = options.logger
+    // this.configWithOrigin.push({
+    //   name: 'logger',
+    //   value: this.logger,
+    //   origin: 'code'
+    // })
+
     this.logLevel = coalesce(
       options.logLevel,
       process.env.DD_TRACE_LOG_LEVEL,
       'debug'
     )
+    // let logLevelOrigin = 'default'
+    // if (options.logLevel) {
+    //   logLevelOrigin = 'code'
+    // } else if (process.env.DD_TRACE_LOG_LEVEL) {
+    //   logLevelOrigin = 'env_var'
+    // }
+    // this.configWithOrigin.push({
+    //   name: 'logLevel',
+    //   value: this.logLevel,
+    //   origin: logLevelOrigin
+    // })
 
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
@@ -120,63 +165,100 @@ class Config {
       process.env.DD_TRACING_ENABLED,
       true
     )
+    configOriginMap.DD_TRACING_ENABLED = getConfigOrigin([], [process.env.DD_TRACING_ENABLED], true)
+
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
       process.env.DD_PROFILING_ENABLED,
       false
     )
+    configOriginMap.DD_PROFILING_ENABLED = getConfigOrigin([options.profiling], // TODO: remove when enabled by default
+      [process.env.DD_EXPERIMENTAL_PROFILING_ENABLED, process.env.DD_PROFILING_ENABLED], false)
+
     const DD_PROFILING_EXPORTERS = coalesce(
       process.env.DD_PROFILING_EXPORTERS,
       'agent'
     )
+    configOriginMap.DD_PROFILING_EXPORTERS = getConfigOrigin([], [process.env.DD_PROFILING_EXPORTERS], 'agent')
+
     const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP
+    configOriginMap.DD_PROFILING_SOURCE_MAP = new ConfigOrigin(process.env.DD_PROFILING_SOURCE_MAP, 'env_var')
+
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics, // TODO: remove when enabled by default
       process.env.DD_RUNTIME_METRICS_ENABLED,
       false
     )
+    configOriginMap.DD_RUNTIME_METRICS_ENABLED = getConfigOrigin(
+      [options.runtimeMetrics], // TODO: remove when enabled by default
+      [process.env.DD_RUNTIME_METRICS_ENABLED], false)
+
     const DD_DBM_PROPAGATION_MODE = coalesce(
       options.dbmPropagationMode,
       process.env.DD_DBM_PROPAGATION_MODE,
       'disabled'
     )
+    configOriginMap.DD_DBM_PROPAGATION_MODE = getConfigOrigin(
+      [options.dbmPropagationMode], [process.env.DD_DBM_PROPAGATION_MODE], 'disabled')
+
     const DD_DATA_STREAMS_ENABLED = coalesce(
       options.dsmEnabled,
       process.env.DD_DATA_STREAMS_ENABLED,
       false
     )
+    configOriginMap.DD_DATA_STREAMS_ENABLED = getConfigOrigin(
+      [options.dsmEnabled], [process.env.DD_DATA_STREAMS_ENABLED], false
+    )
+
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
       process.env.DD_TRACE_AGENT_HOSTNAME,
       '127.0.0.1'
     )
+    configOriginMap.DD_AGENT_HOST = getConfigOrigin([options.hostname],
+      [process.env.DD_AGENT_HOST, process.env.DD_TRACE_AGENT_HOSTNAME], '127.0.0.1')
+
     const DD_TRACE_AGENT_PORT = coalesce(
       options.port,
       process.env.DD_TRACE_AGENT_PORT,
       '8126'
     )
+    configOriginMap.DD_TRACE_AGENT_PORT = getConfigOrigin(
+      [options.port], [process.env.DD_TRACE_AGENT_PORT], '8126')
+
     const DD_TRACE_AGENT_URL = coalesce(
       options.url,
       process.env.DD_TRACE_AGENT_URL,
       process.env.DD_TRACE_URL,
       null
     )
+    configOriginMap.DD_TRACE_AGENT_URL = getConfigOrigin([options.url],
+      [process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL], null)
+
     const DD_IS_CIVISIBILITY = coalesce(
       options.isCiVisibility,
       false
     )
+    configOriginMap.DD_IS_CIVISIBILITY = getConfigOrigin([options.isCiVisibility], [], false)
+
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    configOriginMap.DD_CIVISIBILITY_AGENTLESS_URL = 'env_var'
 
     const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
       true
     )
+    configOriginMap.DD_CIVISIBILITY_ITR_ENABLED = getConfigOrigin(
+      [], [process.env.DD_CIVISIBILITY_ITR_ENABLED], true)
 
     const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
       false
+    )
+    configOriginMap.DD_CIVISIBILITY_MANUAL_API_ENABLED = getConfigOrigin(
+      [], [process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED], false
     )
 
     const DD_SERVICE = options.service ||
@@ -189,38 +271,70 @@ class Config {
       process.env.WEBSITE_SITE_NAME || // set by Azure Functions
       pkg.name ||
       'node'
+
+    if (DD_SERVICE === options.service) {
+      configOriginMap.DD_SERVICE = 'code'
+    } else if (DD_SERVICE === 'node') {
+      configOriginMap.DD_SERVICE = 'default'
+    } else {
+      configOriginMap.DD_SERVICE = 'env_var'
+    }
+
     const DD_SERVICE_MAPPING = coalesce(
       options.serviceMapping,
       process.env.DD_SERVICE_MAPPING ? fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
+
+    if (DD_SERVICE_MAPPING) {
+      if (DD_SERVICE_MAPPING === options.serviceMapping) {
+        configOriginMap.DD_SERVICE_MAPPING = 'code'
+      } else {
+        configOriginMap.DD_SERVICE_MAPPING = 'env_var'
+      }
+    }
+
     const DD_ENV = coalesce(
       options.env,
       process.env.DD_ENV,
       this.tags.env
     )
+    configOriginMap.DD_ENV = getConfigOrigin([options.env],
+      [process.env.DD_ENV, this.tags.env])
+
     const DD_VERSION = coalesce(
       options.version,
       process.env.DD_VERSION,
       this.tags.version,
       pkg.version
     )
+    configOriginMap.DD_VERSION = getConfigOrigin([options.version],
+      [process.env.DD_VERSION, this.tags.version, pkg.version])
+
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
       process.env.DD_TRACE_STARTUP_LOGS,
       false
     )
+    configOriginMap.DD_TRACE_STARTUP_LOGS = getConfigOrigin(
+      [options.startupLogs], [process.env.DD_TRACE_STARTUP_LOGS], false)
 
     const DD_OPENAI_LOGS_ENABLED = coalesce(
       options.openAiLogsEnabled,
       process.env.DD_OPENAI_LOGS_ENABLED,
       false
     )
+    configOriginMap.DD_OPENAI_LOGS_ENABLED = getConfigOrigin(
+      [options.openAiLogsEnabled], [process.env.DD_OPENAI_LOGS_ENABLED], false
+    )
 
     const DD_API_KEY = coalesce(
       process.env.DATADOG_API_KEY,
       process.env.DD_API_KEY
+    )
+    configOriginMap.DD_API_KEY = getConfigOrigin(
+      [], [process.env.DATADOG_API_KEY, process.env.DD_API_KEY]
     )
 
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
@@ -234,27 +348,59 @@ class Config {
       process.env.DD_TRACE_TELEMETRY_ENABLED,
       !inServerlessEnvironment
     )
+    configOriginMap.DD_TRACE_TELEMETRY_ENABLED = getConfigOrigin(
+      [process.env.DD_TRACE_TELEMETRY_ENABLED], [!inServerlessEnvironment])
+
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
       ? Math.floor(parseFloat(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000)
       : 60000
+    if (process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
+      configOriginMap.DD_TELEMETRY_HEARTBEAT_INTERVAL = getConfigOrigin([], DD_TELEMETRY_HEARTBEAT_INTERVAL)
+    } else {
+      configOriginMap.DD_TELEMETRY_HEARTBEAT_INTERVAL = getConfigOrigin([], [], 60000)
+    }
+
     const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
       ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
       : 128
+    if (process.env.DD_OPENAI_SPAN_CHAR_LIMIT) {
+      configOriginMap.DD_OPENAI_SPAN_CHAR_LIMIT = getConfigOrigin([], DD_OPENAI_SPAN_CHAR_LIMIT)
+    } else {
+      configOriginMap.DD_OPENAI_SPAN_CHAR_LIMIT = getConfigOrigin([], [], 128)
+    }
+
     const DD_TELEMETRY_DEBUG = coalesce(
       process.env.DD_TELEMETRY_DEBUG,
       false
     )
+    configOriginMap.DD_TELEMETRY_DEBUG = getConfigOrigin(
+      [], [process.env.DD_TELEMETRY_DEBUG], false
+    )
+
     const DD_TELEMETRY_METRICS_ENABLED = coalesce(
       process.env.DD_TELEMETRY_METRICS_ENABLED,
       false
     )
+    configOriginMap.DD_TELEMETRY_METRICS_ENABLED = getConfigOrigin(
+      [], [process.env.DD_TELEMETRY_METRICS_ENABLED], false
+    )
+
     const DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = coalesce(
       process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
       true
     )
+    configOriginMap.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = getConfigOrigin(
+      [], [process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED], true
+    )
+
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
       process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
+      '0.4'
+    )
+    configOriginMap.DD_TRACE_AGENT_PROTOCOL_VERSION = getConfigOrigin(
+      [options.protocolVersion],
+      [process.env.DD_TRACE_AGENT_PROTOCOL_VERSION],
       '0.4'
     )
     const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
@@ -262,28 +408,45 @@ class Config {
       parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
       1000
     )
+    configOriginMap.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = getConfigOrigin(
+      [parseInt(options.flushMinSpans)], [parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS)], 1000)
+
     const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
       process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       qsRegex
     )
+    configOriginMap.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = getConfigOrigin(
+      [], [process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP], qsRegex)
+
     const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
       options.clientIpEnabled,
       process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
       false
     )
+    configOriginMap.DD_TRACE_CLIENT_IP_ENABLED = getConfigOrigin([options.clientIpEnabled],
+      [process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED)], false)
+
     const DD_TRACE_CLIENT_IP_HEADER = coalesce(
       options.clientIpHeader,
       process.env.DD_TRACE_CLIENT_IP_HEADER,
       null
     )
+    configOriginMap.DD_TRACE_CLIENT_IP_HEADER = getConfigOrigin([options.clientIpHeader],
+      [process.env.DD_TRACE_CLIENT_IP_HEADER], null)
+
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
+    configOriginMap.DD_TRACE_B3_ENABLED = getConfigOrigin(
+      [options.experimental && options.experimental.b3],
+      [process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED],
+      false
+    )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
-    if (isTrue(DD_TRACE_B3_ENABLED)) {
+    if (isTrue(configWithOrigin.DD_TRACE_B3_ENABLED.value)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
     }
@@ -302,23 +465,41 @@ class Config {
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
+    configOriginMap.DD_TRACE_PROPAGATION_STYLE_INJECT = configOriginMap.propStyle
+
     const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
       'extract',
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
+    configOriginMap.DD_TRACE_PROPAGATION_STYLE_EXTRACT = configOriginMap.propStyle
+
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      false
+    )
+    configOriginMap.DD_TRACE_RUNTIME_ID_ENABLED = getConfigOrigin(
+      [options.experimental && options.experimental.runtimeId],
+      [process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED],
       false
     )
     const DD_TRACE_EXPORTER = coalesce(
       options.experimental && options.experimental.exporter,
       process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
     )
+    configOriginMap.DD_TRACE_EXPORTER = getConfigOrigin(
+      [options.experimental && options.experimental.exporter],
+      [process.env.DD_TRACE_EXPERIMENTAL_EXPORTER]
+    )
     const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
       options.experimental && options.experimental.enableGetRumData,
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+      false
+    )
+    configOriginMap.DD_TRACE_GET_RUM_DATA_ENABLED = getConfigOrigin(
+      [options.experimental && options.experimental.enableGetRumData],
+      [process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED],
       false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
@@ -327,12 +508,33 @@ class Config {
         process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
       )
     )
+    if (options.spanAttributeSchema) {
+      configOriginMap.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = getConfigOrigin(
+        [DD_TRACE_SPAN_ATTRIBUTE_SCHEMA], []
+      )
+    } else {
+      configOriginMap.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = getConfigOrigin(
+        [], [DD_TRACE_SPAN_ATTRIBUTE_SCHEMA]
+      )
+    }
+
     const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
       options.peerServiceMapping,
       process.env.DD_TRACE_PEER_SERVICE_MAPPING ? fromEntries(
         process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
+    if (options.peerServiceMapping) {
+      configOriginMap.DD_TRACE_PEER_SERVICE_MAPPING = getConfigOrigin([options.peerServiceMapping], [])
+    } else if (process.env.DD_TRACE_PEER_SERVICE_MAPPING) {
+      configOriginMap.DD_TRACE_PEER_SERVICE_MAPPING = getConfigOrigin(
+        [], [fromEntries(
+          process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+        )]
+      )
+    } else {
+      configOriginMap.DD_TRACE_PEER_SERVICE_MAPPING = getConfigOrigin([], [], {})
+    }
 
     const peerServiceSet = (
       options.hasOwnProperty('spanComputePeerService') ||
@@ -350,14 +552,22 @@ class Config {
         // In >v0, peer service is false only if it is explicitly set to false
         : (peerServiceSet ? !isFalse(peerServiceValue) : true)
     )
+    configOriginMap.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'unknown'
 
     const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
       options.spanRemoveIntegrationFromService,
       isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     )
+    configOriginMap.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = getConfigOrigin(
+      [options.spanRemoveIntegrationFromService],
+      [isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)]
+    )
     const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
       process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       '512'
+    )
+    configOriginMap.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = getConfigOrigin(
+      [], [process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH], '512'
     )
 
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
@@ -365,16 +575,31 @@ class Config {
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       isGCPFunction || isAzureFunctionConsumptionPlan
     )
+    configOriginMap.DD_TRACE_STATS_COMPUTATION_ENABLED = getConfigOrigin(
+      [options.stats],
+      [process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+        isGCPFunction || isAzureFunctionConsumptionPlan]
+    )
 
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
       options.traceId128BitGenerationEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       false
     )
+    configOriginMap.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = getConfigOrigin(
+      [options.traceId128BitGenerationEnabled],
+      [process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED],
+      false
+    )
 
     const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
       options.traceId128BitLoggingEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
+      false
+    )
+    configOriginMap.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = getConfigOrigin(
+      [options.traceId128BitLoggingEnabled],
+      [process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED],
       false
     )
 
@@ -397,22 +622,26 @@ class Config {
       appsec.rules,
       process.env.DD_APPSEC_RULES
     )
+
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
       parseInt(appsec.rateLimit),
       parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
       100
     )
+
     const DD_APPSEC_WAF_TIMEOUT = coalesce(
       parseInt(appsec.wafTimeout),
       parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
       5e3 // µs
     )
+
     const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
       appsec.obfuscatorKeyRegex,
       process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|se\
 cret)|sign(?:ed|ature)|bearer|authorization`
     )
+
     const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
       appsec.obfuscatorValueRegex,
       process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
@@ -421,6 +650,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
+
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
       maybeFile(appsec.blockedTemplateHtml),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
@@ -440,9 +670,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
       !inServerlessEnvironment
     )
+    configWithOrigin.DD_REMOTE_CONFIGURATION_ENABLED = getConfigOrigin(
+      [process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
+        !inServerlessEnvironment]
+    )
     const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
       parseFloat(remoteConfigOptions.pollInterval),
       parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
+      5 // seconds
+    )
+    configWithOrigin.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = getConfigOrigin(
+      [parseFloat(remoteConfigOptions.pollInterval)],
+      [parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)],
       5 // seconds
     )
 
@@ -453,10 +692,21 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_IAST_ENABLED,
       false
     )
+    configOriginMap.DD_IAST_ENABLED = getConfigOrigin(
+      [iastOptions &&
+      (iastOptions === true || iastOptions.enabled === true)],
+      [process.env.DD_IAST_ENABLED],
+      false
+    )
     const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
       process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_IAST_ENABLED
     )
+    if (process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED) {
+      configOriginMap.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'env_var'
+    } else {
+      configOriginMap.DD_TELEMETRY_LOG_COLLECTION_ENABLED = configOriginMap.DD_IAST_ENABLED
+    }
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
@@ -466,10 +716,20 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
     const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
+    if (DD_IAST_REQUEST_SAMPLING === defaultIastRequestSampling) {
+      configOriginMap.DD_IAST_REQUEST_SAMPLING = 'default'
+    } else {
+      configOriginMap.DD_IAST_REQUEST_SAMPLING = 'env_var'
+    }
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
       parseInt(iastOptions && iastOptions.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
+      2
+    )
+    configOriginMap.DD_IAST_MAX_CONCURRENT_REQUESTS = getConfigOrigin(
+      [], [parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+        parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS)],
       2
     )
 
@@ -478,10 +738,20 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
+    configOriginMap.DD_IAST_MAX_CONTEXT_OPERATIONS = getConfigOrigin(
+      [], [parseInt(iastOptions && iastOptions.maxContextOperations),
+        parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS)],
+      2
+    )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
       iastOptions && iastOptions.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
+      true
+    )
+    configOriginMap.DD_IAST_DEDUPLICATION_ENABLED = getConfigOrigin(
+      [], [iastOptions && iastOptions.deduplicationEnabled,
+        process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED)],
       true
     )
 
@@ -490,10 +760,20 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
+    configOriginMap.DD_IAST_REDACTION_ENABLED = getConfigOrigin(
+      [], [iastOptions && iastOptions.redactionEnabled,
+        !isFalse(process.env.DD_IAST_REDACTION_ENABLED)],
+      true
+    )
 
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
       iastOptions && iastOptions.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
+      'INFORMATION'
+    )
+    configOriginMap.DD_IAST_TELEMETRY_VERBOSITY = getConfigOrigin(
+      [], [iastOptions && iastOptions.telemetryVerbosity,
+        process.env.DD_IAST_TELEMETRY_VERBOSITY],
       'INFORMATION'
     )
 
@@ -501,9 +781,17 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
     )
+    configOriginMap.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = getConfigOrigin(
+      [], [process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED],
+      true
+    )
 
     const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
       process.env.DD_TRACE_GIT_METADATA_ENABLED,
+      true
+    )
+    configOriginMap.DD_TRACE_GIT_METADATA_ENABLED = getConfigOrigin(
+      [], [process.env.DD_TRACE_GIT_METADATA_ENABLED],
       true
     )
 
@@ -535,15 +823,64 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
+    this.configWithOrigin = []
     this.tracing = !isFalse(DD_TRACING_ENABLED)
+    this.configWithOrigin.push({
+      name: 'tracing',
+      value: this.tracing,
+      origin: configOriginMap.DD_TRACING_ENABLED
+    })
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
+    this.configWithOrigin.push({
+      name: 'dbmPropagationMode',
+      value: this.dbmPropagationMode,
+      origin: configOriginMap.DD_DBM_PROPAGATION_MODE
+    })
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
+    this.configWithOrigin.push({
+      name: 'dsmEnabled',
+      value: this.dsmEnabled,
+      origin: configOriginMap.DD_DATA_STREAMS_ENABLED
+    })
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
+    this.configWithOrigin.push({
+      name: 'openAiLogsEnabled',
+      value: this.openAiLogsEnabled,
+      origin: configOriginMap.DD_OPENAI_LOGS_ENABLED
+    })
     this.apiKey = DD_API_KEY
+    this.configWithOrigin.push({
+      name: 'DD_API_KEY',
+      value: '',
+      origin: configOriginMap.DD_API_KEY
+    })
     this.env = DD_ENV
+    this.configWithOrigin.push({
+      name: 'env',
+      value: this.env,
+      origin: configOriginMap.DD_ENV
+    })
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
+    let urlOrigin
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      urlOrigin = configOriginMap.DD_CIVISIBILITY_AGENTLESS_URL
+    } else if (DD_TRACE_AGENT_URL) {
+      urlOrigin = configOriginMap.DD_TRACE_AGENT_URL
+    } else {
+      urlOrigin = 'default'
+    }
+    this.configWithOrigin.push({
+      name: 'url',
+      value: this.url,
+      origin: urlOrigin
+    })
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
+    this.configWithOrigin.push({
+      name: 'site',
+      value: this.site,
+      origin: getConfigOrigin([options.site], [process.env.DD_SITE], 'datadoghq.com')
+    })
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
