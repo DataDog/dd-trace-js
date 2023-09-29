@@ -45,7 +45,8 @@ function createSpan (parent) {
   }
   const span = {
     context: () => context,
-    tracer: () => ({}),
+    tracer: () => { return { _service: 'exporting-pipeline-sirun' } },
+    setTag: () => {},
     _startTime: 1415926,
     _duration: 100
   }
