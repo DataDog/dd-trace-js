@@ -262,8 +262,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -450,8 +448,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -469,8 +465,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -743,8 +737,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -757,7 +749,7 @@ jobs:
   next:
     strategy:
       matrix:
-        node-version: [16]
+        node-version: [18]
         range: ['>=9.5 <11.1', '>=11.1 <13.2']
         include:
           - node-version: 18
@@ -822,7 +814,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
-  # TODO: Install the Oracle client on the host and test Node >=16.
+  # TODO: Install the Oracle client on the host and test Node >=18.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
     runs-on: ubuntu-latest
@@ -1001,8 +993,6 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
@@ -1060,8 +1050,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
