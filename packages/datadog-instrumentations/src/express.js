@@ -63,7 +63,17 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
   return (original) => {
     return function () {
       if (processParamsStartCh.hasSubscribers) {
-        processParamsStartCh.publish({ req: arguments[requestPositionInArguments] })
+        const req = arguments[requestPositionInArguments]
+        const abortController = new AbortController()
+
+        processParamsStartCh.publish({
+          req,
+          res: req?.res,
+          abortController,
+          params: req?.params
+        })
+
+        if (abortController.signal.aborted) return
       }
 
       return original.apply(this, arguments)
