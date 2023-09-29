@@ -14,6 +14,12 @@ const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 describe('config', () => {
   let Config
   let env
+  const nullLogger = {
+    debug () { },
+    info () { },
+    warn () { },
+    error () { }
+  }
 
   beforeEach(() => {
     Config = require('../../src/profiling/config').Config
@@ -52,12 +58,7 @@ describe('config', () => {
       enabled: false,
       service: 'test',
       version: '1.2.3-test.0',
-      logger: {
-        debug () { },
-        info () { },
-        warn () { },
-        error () { }
-      },
+      logger: nullLogger,
       exporters: 'agent,file',
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
@@ -116,12 +117,7 @@ describe('config', () => {
       DD_PROFILING_PROFILERS: ''
     }
     const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
-      }
+      logger: nullLogger
     }
 
     const config = new Config(options)
@@ -133,16 +129,11 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1',
+      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
     }
     const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
-      }
+      logger: nullLogger
     }
 
     const config = new Config(options)
@@ -161,12 +152,7 @@ describe('config', () => {
       DD_PROFILING_HEAP_ENABLED: '1'
     }
     const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
-      }
+      logger: nullLogger
     }
 
     const config = new Config(options)
@@ -182,12 +168,7 @@ describe('config', () => {
       DD_PROFILING_WALLTIME_ENABLED: '1'
     }
     const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
-      }
+      logger: nullLogger
     }
 
     const config = new Config(options)
@@ -200,17 +181,14 @@ describe('config', () => {
   it('should prioritize options over env variables', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1'
+      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
     }
     const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn () {},
-        error () {}
-      },
+      logger: nullLogger,
       profilers: ['wall'],
-      codeHotspotsEnabled: false
+      codeHotspotsEnabled: false,
+      endpointCollection: false
     }
 
     const config = new Config(options)
@@ -219,6 +197,105 @@ describe('config', () => {
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].endpointCollectionEnabled()).false
+  })
+
+  it('should prioritize non-experimental env variables and warn about experimental ones', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED: '1',
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '0',
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: '1'
+    }
+    const warnings = []
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn (warning) {
+          warnings.push(warning)
+        },
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(warnings.length).to.equal(2)
+    expect(warnings[0]).to.equal(
+      'DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED is deprecated. ' +
+      'Use DD_PROFILING_ENDPOINT_COLLECTION_ENABLED instead.')
+    expect(warnings[1]).to.equal(
+      'DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED is deprecated. ' +
+      'Use DD_PROFILING_CODEHOTSPOTS_ENABLED instead.')
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].endpointCollectionEnabled()).false
+  })
+
+  it('should implicitly turn on code hotspots for endpoint profiling when they are not explicitly disabled', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
+    }
+    const infos = []
+    const options = {
+      logger: {
+        debug () {},
+        info (info) {
+          infos.push(info)
+        },
+        warn () {},
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(infos.length).to.equal(1)
+    expect(infos[0]).to.equal('Code Hotspots are implicitly enabled by endpoint collection.')
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].endpointCollectionEnabled()).true
+  })
+
+  it('should warn about code hotspots being explicitly disabled with endpoint profiling', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
+      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
+    }
+    const warnings = []
+    const options = {
+      logger: {
+        debug () {},
+        info () {},
+        warn (warning) {
+          warnings.push(warning)
+        },
+        error () {}
+      }
+    }
+
+    const config = new Config(options)
+
+    expect(warnings.length).to.equal(1)
+    expect(warnings[0]).to.equal(
+      'Endpoint collection is enabled, but Code Hotspots are disabled. ' +
+      'Enable Code Hotspots too for endpoint collection to work.')
+
+    expect(config.profilers).to.be.an('array')
+    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].endpointCollectionEnabled()).false
   })
 
   it('should support tags', () => {
