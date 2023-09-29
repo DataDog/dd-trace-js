@@ -1,4 +1,6 @@
 function filterFromString (filterStr) {
+  if (filterStr === undefined) return undefined
+
   if (filterStr === '*') return new Filter(undefined, true, true)
 
   const items = filterStr.split(',')

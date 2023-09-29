@@ -1,10 +1,9 @@
-const { filterFromString } = require('./filter')
 const { PAYLOAD_TAGGING_PREFIX, PAYLOAD_TAGGING_DEPTH, PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
 
 const redactedKeys = [
   'authorization', 'x-authorization', 'password', 'token'
 ]
-const truncated = '_dd_truncated_'
+const truncated = 'truncated'
 const redacted = 'redacted'
 
 function escapeKey (key) {
@@ -20,7 +19,10 @@ function tagsFromObject (object, filter) {
   const result = {}
 
   function tagRec (prefix, object, filterObj = filter.filterObj, depth = 0, indent) {
-    if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS) return
+    if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS) {
+      result['_dd.payload_tags_trimmed'] = true
+      return
+    }
 
     if (depth >= PAYLOAD_TAGGING_DEPTH && typeof object === 'object') {
       result[prefix] = truncated
@@ -64,8 +66,8 @@ function tagsFromObject (object, filter) {
   return result
 }
 
-function toTags (jsonString, contentType, filterStr = '*') {
-  console.log(`computing tags for ${contentType} with filter ${filterStr}`)
+function toTags (jsonString, contentType, filter) {
+  console.log(`computing tags for ${contentType} with filter ${filter}`)
   console.log(`json ctype: ${isJSONContentType(contentType)}`)
   if (!isJSONContentType(contentType)) {
     return {}
@@ -77,7 +79,6 @@ function toTags (jsonString, contentType, filterStr = '*') {
     return {}
   }
 
-  const filter = filterFromString(filterStr)
   return tagsFromObject(object, filter)
 }
 

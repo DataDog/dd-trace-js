@@ -93,7 +93,7 @@ describe('Plugin', () => {
       it('should do payload tagging', done => {
         const tracer = require('../../dd-trace')
         const plugin = tracer._pluginManager._pluginsByName['fetch']
-        plugin._tracerConfig.HTTPpayloadTagging = '*'
+        plugin._tracerConfig.httpPpayloadTagging = '*'
         const app = express()
         app.post('/user', (req, res) => {
           res.status(200).send()

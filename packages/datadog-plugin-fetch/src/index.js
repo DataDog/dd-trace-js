@@ -8,7 +8,7 @@ class FetchPlugin extends HttpClientPlugin {
   static get prefix () { return `apm:fetch:request` }
 
   tagPayload (span, contentType, body) {
-    const payloadTags = tagJsonPayload(body, contentType, this._tracerConfig.HTTPpayloadTagging)
+    const payloadTags = tagJsonPayload(body, contentType, this._tracerConfig.httpPayloadTagging)
     console.log(payloadTags)
     span.addTags(payloadTags)
   }
@@ -28,11 +28,11 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(message)
 
-    console.log(`Activation: ${this._tracerConfig.HTTPpayloadTagging}`)
-    if (this._tracerConfig.HTTPpayloadTagging && body) {
+    if (this._tracerConfig.httpPayloadTagging && body !== undefined) {
       const headers = Object.fromEntries(message.req.headers.entries())
       const contentType = headers['content-type']
-      this.tagPayload(this.activeSpan, contentType, body)
+      console.log(`ctype: ${contentType}`)
+      this.tagPayload(store.span, contentType, body)
     }
 
     message.headers = headers
