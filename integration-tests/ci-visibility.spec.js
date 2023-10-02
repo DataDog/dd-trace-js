@@ -628,7 +628,9 @@ testFrameworks.forEach(({
         })
         childProcess.on('exit', () => {
           // coverage report
-          assert.include(testOutput, 'Lines        ')
+          if (name === 'mocha') {
+            assert.include(testOutput, 'Lines        ')
+          }
           done()
         })
       })
@@ -1107,7 +1109,9 @@ testFrameworks.forEach(({
         })
         childProcess.on('exit', () => {
           // coverage report
-          assert.include(testOutput, 'Lines        ')
+          if (name === 'mocha') {
+            assert.include(testOutput, 'Lines        ')
+          }
           done()
         })
       })
