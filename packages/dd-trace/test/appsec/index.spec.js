@@ -316,7 +316,7 @@ describe('AppSec Index', () => {
           remotePort: 8080
         },
         body: null,
-        query: 'string',
+        query: { queryKey: 'queryValue' },
         route: {},
         params: 'string',
         cookies: 'string'
@@ -337,7 +337,8 @@ describe('AppSec Index', () => {
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.query': { queryKey: 'queryValue' }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -391,7 +392,8 @@ describe('AppSec Index', () => {
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4', e: '5' }
+        'server.request.cookies': { d: '4', e: '5' },
+        'server.request.query': { b: '2' }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -449,10 +451,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with body by default', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run')
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -462,10 +465,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run').returns(['block'])
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -525,10 +529,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with query by default', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run')
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -538,10 +543,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run').returns(['block'])
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
