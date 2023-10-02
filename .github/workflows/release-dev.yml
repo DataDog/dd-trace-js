@@ -9,6 +9,8 @@ jobs:
   dev_release:
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      id-token: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
@@ -22,7 +24,7 @@ jobs:
           content=`cat ./package.json | tr '\n' ' '`
           echo "::set-output name=json::$content"
       - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
-      - run: npm publish --tag dev
+      - run: npm publish --tag dev --provenance
       - run: |
           git tag --force dev
           git push origin :refs/tags/dev
