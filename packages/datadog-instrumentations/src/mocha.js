@@ -52,7 +52,6 @@ let frameworkVersion
 let isSuitesSkipped = false
 let skippedSuites = []
 const unskippableSuites = []
-let isProgrammaticApi = true
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -376,21 +375,12 @@ addHook({
 
     const runner = run.apply(this, arguments)
 
-    if (isProgrammaticApi) {
-      // we need to do this if it's the programmatic API,
-      // that is, you're running mocha with
-      // const mocha = new Mocha()
-      // mocha.run()
-      // Otherwise unskippableSuites is filled in `runMocha`
-      // TODO: is there any better way to do this?
-      // ** Couldn't we do this only here?? **
-      this.files.forEach(path => {
-        const isUnskippable = isMarkedAsUnskippable({ path })
-        if (isUnskippable) {
-          unskippableSuites.push(path)
-        }
-      })
-    }
+    this.files.forEach(path => {
+      const isUnskippable = isMarkedAsUnskippable({ path })
+      if (isUnskippable) {
+        unskippableSuites.push(path)
+      }
+    })
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
@@ -466,16 +456,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
-    isProgrammaticApi = false
     const mocha = arguments[0]
-    mocha.suite.on('post-require', (_, path) => {
-      // TODO: we probably only want to do this if ITR is enabled, but this is done
-      // before the request
-      const isUnskippable = isMarkedAsUnskippable({ path })
-      if (isUnskippable) {
-        unskippableSuites.push(path)
-      }
-    })
     /**
      * This attaches `run` to the global context, which we'll call after
      * our configuration and skippable suites requests

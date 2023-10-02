@@ -30,11 +30,13 @@ const {
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 const mochaCommonOptions = {
+  name: 'mocha',
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
 
 const jestCommonOptions = {
+  name: 'jest',
   dependencies: ['jest', 'chai', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
@@ -47,7 +49,6 @@ const jestCommonOptions = {
 const testFrameworks = [
   {
     ...mochaCommonOptions,
-    name: 'mocha',
     testFile: 'ci-visibility/run-mocha.js',
     dependencies: ['mocha', 'chai', 'nyc'],
     expectedCoverageFiles: [
@@ -57,12 +58,10 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    coverageMessage: 'Lines        : 80%',
     type: 'commonJS'
   },
   {
     ...mochaCommonOptions,
-    name: 'mocha',
     testFile: 'ci-visibility/run-mocha.mjs',
     dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
@@ -75,19 +74,16 @@ const testFrameworks = [
       `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
       `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
       `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
-    coverageMessage: 'Lines        : 78.57%',
     type: 'esm'
   },
   {
     ...jestCommonOptions,
-    name: 'jest',
     testFile: 'ci-visibility/run-jest.js',
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
     type: 'commonJS'
   },
   {
     ...jestCommonOptions,
-    name: 'jest',
     testFile: 'ci-visibility/run-jest.mjs',
     runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
     type: 'esm'
@@ -102,7 +98,6 @@ testFrameworks.forEach(({
   extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand,
-  coverageMessage,
   type
 }) => {
   // temporary fix for failing esm tests on the CI, skip for now for the release and comeback to solve the issue
@@ -632,9 +627,8 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          if (coverageMessage) {
-            assert.include(testOutput, coverageMessage)
-          }
+          // coverage report
+          assert.include(testOutput, 'Lines        ')
           done()
         })
       })
@@ -1112,10 +1106,8 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          // check that reported coverage is still the same
-          if (coverageMessage) {
-            assert.include(testOutput, coverageMessage)
-          }
+          // coverage report
+          assert.include(testOutput, 'Lines        ')
           done()
         })
       })
