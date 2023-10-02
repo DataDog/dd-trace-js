@@ -61,15 +61,37 @@ function unshallowRepository () {
   }
   const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
   const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
-  sanitizedExec('git', [
+
+  const baseGitOptions = [
     'fetch',
     '--shallow-since="1 month ago"',
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
-    defaultRemoteName,
-    revParseHead
-  ])
+    defaultRemoteName
+  ]
+
+  try {
+    execFileSync('git', [
+      ...baseGitOptions,
+      revParseHead
+    ])
+  } catch (e) {
+    // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
+    log.error(e)
+    const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    try {
+      execFileSync('git', [
+        ...baseGitOptions,
+        upstreamRemote
+      ])
+    } catch (e) {
+      // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
+      log.error(e)
+      // We use sanitizedExec here because if this last option fails, we'll give up.
+      sanitizedExec('git', baseGitOptions)
+    }
+  }
 }
 
 function getRepositoryUrl () {
