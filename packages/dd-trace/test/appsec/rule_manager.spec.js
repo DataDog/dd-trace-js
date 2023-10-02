@@ -372,7 +372,17 @@ describe('AppSec Rule Manager', () => {
                 'category': 'attack_attempt',
                 'confidence': '1'
               },
-              'conditions': []
+              conditions: [
+                {
+                  parameters: {
+                    inputs: [
+                      { address: 'http.test' }
+                    ],
+                    data: 'blocked_ips'
+                  },
+                  operator: 'ip_match'
+                }
+              ]
             }]
           }
         }
@@ -391,7 +401,17 @@ describe('AppSec Rule Manager', () => {
                 'category': 'attack_attempt',
                 'confidence': '1'
               },
-              'conditions': []
+              conditions: [
+                {
+                  parameters: {
+                    inputs: [
+                      { address: 'http.test' }
+                    ],
+                    data: 'blocked_ips'
+                  },
+                  operator: 'ip_match'
+                }
+              ]
             }]
           }
         }

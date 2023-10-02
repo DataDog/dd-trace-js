@@ -98,6 +98,7 @@ describe('Plugin', () => {
 
             withPeerService(
               () => tracer,
+              'grpc',
               async () => {
                 const client = await buildClient({
                   getUnary: (_, callback) => callback()

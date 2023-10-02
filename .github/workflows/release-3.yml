@@ -13,6 +13,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      id-token: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
@@ -20,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           registry-url: 'https://registry.npmjs.org'
-      - run: npm publish --tag latest-node14
+      - run: npm publish --tag latest-node14 --provenance
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`

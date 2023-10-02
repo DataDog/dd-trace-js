@@ -5,6 +5,7 @@ require('./setup/tap')
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
+const { getExtraServices } = require('../src/service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
@@ -49,6 +50,7 @@ describe('format', () => {
       tracer: sinon.stub().returns({
         _service: 'test'
       }),
+      setTag: sinon.stub(),
       _startTime: 1500000000000.123456,
       _duration: 100
     }
@@ -85,6 +87,32 @@ describe('format', () => {
       expect(trace.error).to.equal(0)
       expect(trace.start).to.equal(span._startTime * 1e6)
       expect(trace.duration).to.equal(span._duration * 1e6)
+    })
+
+    describe('_dd.base_service', () => {
+      it('should infer the tag when span service changes', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = format(span)
+
+        expect(span.setTag).to.have.been.calledWith('_dd.base_service', 'test')
+      })
+
+      it('should infer the tag when no changes occur', () => {
+        span.context()._tags['service.name'] = 'test'
+
+        trace = format(span)
+
+        expect(span.setTag).to.not.have.been.called
+      })
+
+      it('should register extra service name', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = format(span)
+
+        expect(getExtraServices()).to.deep.equal(['foo'])
+      })
     })
 
     it('should extract Datadog specific tags', () => {

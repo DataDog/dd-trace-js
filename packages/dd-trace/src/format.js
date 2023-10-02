@@ -4,6 +4,7 @@ const constants = require('./constants')
 const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
+const { registerExtraService } = require('./service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -13,7 +14,7 @@ const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
-const MEASURED = tags.MEASURED
+const { MEASURED, BASE_SERVICE } = tags
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
@@ -71,6 +72,13 @@ function extractTags (trace, span) {
 
   if (tags['span.kind'] && tags['span.kind'] !== 'internal') {
     addTag({}, trace.metrics, MEASURED, 1)
+  }
+
+  const tracerService = span.tracer()._service.toLowerCase()
+  if (tags['service.name']?.toLowerCase() !== tracerService) {
+    span.setTag(BASE_SERVICE, tracerService)
+
+    registerExtraService(tags['service.name'])
   }
 
   for (const tag in tags) {

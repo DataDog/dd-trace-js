@@ -75,7 +75,11 @@ class FakeAgent extends EventEmitter {
     })
   }
 
-  assertMessageReceived (fn, timeout, expectedMessageCount = 1) {
+  // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
+  // where multiple payloads are generated, and only one is expected to have the proper span (ie next.request),
+  // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
+  // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
     timeout = timeout || 5000
     let resultResolve
     let resultReject
@@ -101,7 +105,7 @@ class FakeAgent extends EventEmitter {
       try {
         msgCount += 1
         fn(msg)
-        if (msgCount === expectedMessageCount) {
+        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
           this.removeListener('message', messageHandler)
         }
@@ -188,7 +192,8 @@ function spawnProc (filename, options = {}, stdioHandler) {
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
+async function createSandbox (dependencies = [], isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -207,6 +212,10 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
     await exec(`cp -R ${path} ${folder}`)
     await exec(`sync ${folder}`)
   })
+
+  if (followUpCommand) {
+    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
+  }
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
@@ -247,8 +256,8 @@ async function curl (url, useHttp2 = false) {
   })
 }
 
-async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
-  const resultPromise = agent.assertMessageReceived(fn, timeout)
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMessageCount, resolveAtFirstSuccess) {
+  const resultPromise = agent.assertMessageReceived(fn, timeout, expectedMessageCount, resolveAtFirstSuccess)
   await curl(procOrUrl)
   return resultPromise
 }
@@ -257,7 +266,6 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...process.env,
     DD_API_KEY: '1',
-    DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init'

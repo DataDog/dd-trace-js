@@ -237,6 +237,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'mysql',
           () => pool.query('SELECT 1', (_) => {}),
           'db', 'db.name')
 
@@ -283,6 +284,78 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('comment injection interaction with peer service', () => {
+        let connection
+        let computeStub
+        let remapStub
+
+        before(async () => {
+          await agent.load('mysql', [{ dbmPropagationMode: 'service', service: 'serviced' }])
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        beforeEach(() => {
+          const plugin = tracer._pluginManager._pluginsByName['mysql']
+          computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
+          remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
+        })
+
+        afterEach(() => {
+          computeStub.restore()
+          remapStub.restore()
+        })
+
+        it('should use the service name when peer service is not available', done => {
+          computeStub.value(false)
+          remapStub.value({})
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+
+        it('should use the peer service when peer service is available', done => {
+          computeStub.value(true)
+          remapStub.value({})
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `/*dddbs='db',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+
+        it('should use the remapped peer service when peer service is available and remapped', done => {
+          computeStub.value(true)
+          remapStub.value({ db: 'remappedDB' })
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `/*dddbs='remappedDB',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+
       describe('with DBM propagation enabled with service using plugin configurations', () => {
         let connection
 
@@ -309,6 +382,7 @@ describe('Plugin', () => {
             done()
           })
         })
+
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
