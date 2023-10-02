@@ -1,5 +1,4 @@
 'use strict'
-
 const tracerVersion = require('../../../../package.json').version
 const dc = require('../../../diagnostics_channel')
 const os = require('os')
@@ -7,6 +6,7 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
+const { log } = require('console')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -20,7 +20,17 @@ let interval
 let heartbeatTimeout
 let heartbeatInterval
 let integrations
+let retryData = null
+
 const sentIntegrations = new Set()
+
+function updateRetryData (error, retryObj) {
+  if (error) {
+    retryData = retryObj
+  } else {
+    retryData = null
+  }
+}
 
 function getIntegrations () {
   const newIntegrations = []
@@ -85,8 +95,8 @@ function appStarted (config) {
 }
 
 function formatConfig (config) {
-  // format peerServiceMapping from an object to a string map in order for
-  // telemetry intake to accept the configuration
+// format peerServiceMapping from an object to a string map in order for
+// telemetry intake to accept the configuration
   config.peerServiceMapping = config.peerServiceMapping
     ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
     : ''
@@ -141,6 +151,20 @@ function createHostObject () {
 function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
+
+function createBatchPayload (payload) {
+  const batchPayload = []
+  payload.map(item => {
+    batchPayload.push({
+      'request_type': item.reqType,
+      'payload': item.payload
+    })
+  })
+  // eslint-disable-next-line no-console
+  // console.log(batchPayload)
+
+  return batchPayload
+}
 // function beat () {
 //   let timer = Date.now()
 
@@ -192,7 +216,9 @@ function start (aConfig, thePluginManager) {
   dependencies.start(config, application, host)
 
   sendData(config, application, host, 'app-started', appStarted(config))
-  sendData(config, application, host, 'app-integrations-change', { integrations })
+
+  sendData(config, application, host, 'app-integrations-change',
+    { 'integrations': integrations }, updateRetryData)
 
   heartbeat(config, application, host)
 
@@ -222,7 +248,18 @@ function updateIntegrations () {
   if (integrations.length === 0) {
     return
   }
-  sendData(config, application, host, 'app-integrations-change', { integrations })
+
+  let currPayload
+  if (retryData) {
+    currPayload = { reqType: 'app-integrations-change', payload: { 'integrations': integrations } }
+  } else {
+    currPayload = { 'integrations': integrations }
+  }
+
+  const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
+  const reqType = retryData ? 'message-batch' : 'app-integrations-change'
+
+  sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
 function updateConfig (changes, config) {
@@ -247,9 +284,17 @@ function updateConfig (changes, config) {
     origin: change.origin
   }))
 
-  sendData(config, application, host, 'app-client-configuration-change', {
-    configuration
-  })
+  let currPayload
+  if (retryData) {
+    currPayload = { reqType: 'app-integrations-change', payload: { configuration } }
+  } else {
+    currPayload = { 'integrations': integrations }
+  }
+
+  const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
+  const reqType = retryData ? 'message-batch' : 'app-integrations-change'
+
+  sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
 module.exports = {

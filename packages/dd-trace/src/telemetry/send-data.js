@@ -1,3 +1,5 @@
+
+const { log } = require('console')
 const request = require('../exporters/common/request')
 
 function getHeaders (config, application, reqType) {
@@ -28,13 +30,19 @@ function getPayload (payload) {
   }
 }
 
-function sendData (config, application, host, reqType, payload = {}) {
+function sendData (config, application, host, reqType, payload = {}, cb = () => {}) {
   const {
     hostname,
     port,
     url
   } = config
 
+  let namingSchemaVer
+  if (config.namingSchemaVer) {
+    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
+  } else {
+    namingSchemaVer = ''
+  }
   const options = {
     url,
     hostname,
@@ -43,14 +51,6 @@ function sendData (config, application, host, reqType, payload = {}) {
     path: '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType)
   }
-
-  let namingSchemaVer
-  if (config.namingSchemaVer) {
-    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
-  } else {
-    namingSchemaVer = ''
-  }
-
   const data = JSON.stringify({
     api_version: 'v2',
     naming_schema_version: namingSchemaVer,
@@ -62,7 +62,11 @@ function sendData (config, application, host, reqType, payload = {}) {
     application,
     host
   })
-
+  // log('passed in payload', payload)
+  // log('send Data payload', data)
+  // 1. check if there is data to retry
+  // 2. make sure it isn't the same request as current request type
+  // 3. assign data to a batch data type
   request(data, options, (error) => {
     if (error && process.env.DD_API_KEY) {
       const backendHeader = { 'DD-API-KEY': process.env.DD_API_KEY, ...options.headers }
@@ -73,6 +77,8 @@ function sendData (config, application, host, reqType, payload = {}) {
       }
       request(data, backendOptions, () => {})
     }
+    // call the callback function so that we can track the error and payload
+    cb(error, { 'payload': payload, reqType: reqType })
   })
 }
 
