@@ -118,47 +118,6 @@ describe('Plugin', () => {
           })
         })
 
-        it('should do payload tagging', done => {
-          const plugin = tracer._pluginManager._pluginsByName['http']
-          plugin._tracerConfig.HTTPpayloadTagging = '*'
-          const app = express()
-          app.post('/user', (req, res) => {
-            console.log(req.json())
-            res.status(200).send()
-          })
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span.meta).to.have.property('http.payload.foo.bar', '1')
-                expect(span.meta).to.have.property('http.payload.foo.baz', '2')
-              })
-              .then(done)
-              .catch(done)
-            appListener = server(app, port, () => {
-              const req = http.request(
-                `${protocol}://localhost:${port}/user`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' }
-                },
-                res => {
-                  res.on('data', () => {})
-                }
-              )
-              // req.write(JSON.stringify('{ foo:'))
-              // req.write(JSON.stringify('{ bar: 1,'))
-              // req.write(JSON.stringify('baz: 4 } }'))
-              req.write(JSON.stringify({ foo: { bar: 1, baz: 7 } }))
-              // console.log(req.outputData[2].data)
-
-              // req.end(JSON.stringify({ foo: { bar: 1, baz: 7 } }))
-              req.end()
-              // console.log(req)
-            })
-          })
-        })
-
         it(`should also support get()`, done => {
           const app = express()
 

@@ -1,15 +1,18 @@
 'use strict'
 
 const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
-const tagJsonPayload = require('../../dd-trace/src/payload-tagging/tagger')
+const { getBodyRequestTags } = require('../../dd-trace/src/payload-tagging/tagger')
 
 class FetchPlugin extends HttpClientPlugin {
   static get id () { return 'fetch' }
   static get prefix () { return `apm:fetch:request` }
 
   tagPayload (span, contentType, body) {
-    const payloadTags = tagJsonPayload(body, contentType, this._tracerConfig.httpPayloadTagging)
-    console.log(payloadTags)
+    const opts = {
+      filter: this._tracerConfig.httpPayloadTagging,
+      maxDepth: this._tracerConfig.httpPayloadMaxDepth
+    }
+    const payloadTags = getBodyRequestTags(body, contentType, opts)
     span.addTags(payloadTags)
   }
 
@@ -31,7 +34,6 @@ class FetchPlugin extends HttpClientPlugin {
     if (this._tracerConfig.httpPayloadTagging && body !== undefined) {
       const headers = Object.fromEntries(message.req.headers.entries())
       const contentType = headers['content-type']
-      console.log(`ctype: ${contentType}`)
       this.tagPayload(store.span, contentType, body)
     }
 

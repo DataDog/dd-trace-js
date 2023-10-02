@@ -1,4 +1,8 @@
-const { PAYLOAD_TAGGING_PREFIX, PAYLOAD_TAGGING_DEPTH, PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
+const {
+  PAYLOAD_TAG_REQUEST_PREFIX: PAYLOAD_REQUEST_PREFIX,
+  PAYLOAD_TAG_RESPONSE_PREFIX: PAYLOAD_RESPONSE_PREFIX,
+  PAYLOAD_TAGGING_MAX_TAGS
+} = require('../constants')
 
 const redactedKeys = [
   'authorization', 'x-authorization', 'password', 'token'
@@ -14,17 +18,18 @@ function isJSONContentType (contentType) {
   return contentType && typeof contentType === 'string' && contentType.slice(-4) === 'json'
 }
 
-function tagsFromObject (object, filter) {
+function tagsFromObject (object, filter, maxDepth, prefix) {
   let tagCount = 0
   const result = {}
 
   function tagRec (prefix, object, filterObj = filter.filterObj, depth = 0, indent) {
-    if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS) {
+    // Off by one: _dd.payload_tags_trimmed counts as 1 tag
+    if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS - 1) {
       result['_dd.payload_tags_trimmed'] = true
       return
     }
 
-    if (depth >= PAYLOAD_TAGGING_DEPTH && typeof object === 'object') {
+    if (depth >= maxDepth && typeof object === 'object') {
       result[prefix] = truncated
       tagCount += 1
       return
@@ -62,13 +67,16 @@ function tagsFromObject (object, filter) {
       }
     }
   }
-  tagRec(PAYLOAD_TAGGING_PREFIX, object)
+  tagRec(prefix, object)
   return result
 }
 
-function toTags (jsonString, contentType, filter) {
-  console.log(`computing tags for ${contentType} with filter ${filter}`)
-  console.log(`json ctype: ${isJSONContentType(contentType)}`)
+function getBodyTags (jsonString, contentType, opts) {
+  const {
+    filter,
+    maxDepth,
+    prefix = ''
+  } = opts
   if (!isJSONContentType(contentType)) {
     return {}
   }
@@ -79,7 +87,19 @@ function toTags (jsonString, contentType, filter) {
     return {}
   }
 
-  return tagsFromObject(object, filter)
+  return tagsFromObject(object, filter, maxDepth, prefix)
 }
 
-module.exports = toTags
+function getBodyRequestTags (jsonString, contentType, opts) {
+  return getBodyTags(jsonString, contentType, { ...opts, prefix: PAYLOAD_REQUEST_PREFIX })
+}
+
+function getBodyResponseTags (jsonString, contentType, opts) {
+  return getBodyTags(jsonString, contentType, { ...opts, prefix: PAYLOAD_RESPONSE_PREFIX })
+}
+
+module.exports = {
+  getBodyTags,
+  getBodyRequestTags,
+  getBodyResponseTags
+}
