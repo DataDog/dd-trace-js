@@ -128,11 +128,11 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    image: docker.io/williamconti549/dd-apm-test-agent:integration-versions
     ports:
         - "127.0.0.1:9126:9126"
     environment:
-        - LOG_LEVEL=DEBUG
+        - LOG_LEVEL=ERROR
         - TRACE_LANGUAGE=javascript
         - DISABLED_CHECKS=trace_content_length
         - PORT=9126
