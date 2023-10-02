@@ -10,6 +10,8 @@ const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
+const bodyParsedChannel = channel('apm:next:body-parsed')
+const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 
@@ -211,4 +213,42 @@ addHook({
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
+})
+
+addHook({
+  name: 'next',
+  versions: ['>=13'],
+  file: 'dist/server/web/spec-extension/request.js'
+}, request => {
+  const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
+  shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
+    return function wrappedGet () {
+      const nextUrl = originalGet.apply(this, arguments)
+      if (queryParsedChannel.hasSubscribers) {
+        const query = {}
+        for (const key of nextUrl.searchParams.keys()) {
+          if (!query[key]) {
+            query[key] = nextUrl.searchParams.getAll(key)
+          }
+        }
+
+        queryParsedChannel.publish({ query })
+      }
+      return nextUrl
+    }
+  })
+
+  Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
+
+  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+    return async function wrappedJson () {
+      const body = await originalMethod.apply(this, arguments)
+      bodyParsedChannel.publish({
+        body
+      })
+      return body
+    }
+  })
+
+  return request
 })
