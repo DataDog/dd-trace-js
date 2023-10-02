@@ -132,7 +132,7 @@ services:
     ports:
         - "127.0.0.1:9126:9126"
     environment:
-        - LOG_LEVEL=ERROR
+        - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
         - DISABLED_CHECKS=trace_content_length
         - PORT=9126
