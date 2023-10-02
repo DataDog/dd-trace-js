@@ -10,6 +10,7 @@ const path = require('path')
 const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')
 const sanitizedExecStub = sinon.stub().returns('')
+const execFileSyncStub = sinon.stub().returns('')
 
 const {
   GIT_COMMIT_SHA,
@@ -26,10 +27,13 @@ const {
   CI_WORKSPACE_PATH
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata } = proxyquire('../../../src/plugins/util/git',
+const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
   {
     './exec': {
-      'sanitizedExec': sanitizedExecStub
+      sanitizedExec: sanitizedExecStub
+    },
+    'child_process': {
+      execFileSync: execFileSyncStub
     }
   }
 )
@@ -237,5 +241,83 @@ describe('generatePackFilesForCommits', () => {
     )
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([])
+  })
+})
+
+describe('unshallowRepository', () => {
+  afterEach(() => {
+    sanitizedExecStub.reset()
+    execFileSyncStub.reset()
+  })
+  it('works for the usual case', () => {
+    sanitizedExecStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin',
+      'daede5785233abb1a3cb76b9453d4eb5b98290b3'
+    ]
+
+    unshallowRepository()
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+  it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
+    sanitizedExecStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+      .onCall(3).returns('origin/master')
+
+    execFileSyncStub
+      .onCall(0).throws()
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin',
+      'origin/master'
+    ]
+
+    unshallowRepository()
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+  it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
+    sanitizedExecStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+      .onCall(3).returns('origin/master')
+
+    execFileSyncStub
+      .onCall(0).throws()
+      .onCall(1).throws()
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin'
+    ]
+
+    unshallowRepository()
+    expect(sanitizedExecStub).to.have.been.calledWith('git', options)
   })
 })
