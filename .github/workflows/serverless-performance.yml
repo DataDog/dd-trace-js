@@ -22,10 +22,13 @@ jobs:
         with:
           repository: DataDog/datadog-lambda-js
           path: datadog-lambda-js
+      - name: Install node-gyp
+        run: |
+          yarn global add node-gyp
       - name: Update package.json to the current ref
         run: |
           cd datadog-lambda-js
-          yarn add https://github.com/DataDog/dd-trace-js#refs/heads/$GITHUB_HEAD_REF --save-dev
+          yarn add --dev https://github.com/DataDog/dd-trace-js#refs/heads/${GITHUB_HEAD_REF}
       - name: Build the layer
         env:
           NODE_VERSION: ${{ matrix.node-version }}
