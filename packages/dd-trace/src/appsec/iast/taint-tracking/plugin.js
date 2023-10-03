@@ -11,8 +11,8 @@ const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_PARAMETER,
-  HTTP_REQUEST_PATH,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_URI
 } = require('./source-types')
 
 class TaintTrackingPlugin extends SourceIastPlugin {
@@ -93,9 +93,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintUrl (req, iastContext) {
     this.execSource({
       handler: function () {
-        req.url = newTaintedString(iastContext, req.url, 'req.url', HTTP_REQUEST_PATH)
+        req.url = newTaintedString(iastContext, req.url, HTTP_REQUEST_URI, HTTP_REQUEST_URI)
       },
-      tag: [HTTP_REQUEST_PATH],
+      tag: [HTTP_REQUEST_URI],
       iastContext
     })
   }

@@ -232,7 +232,7 @@ describe('Telemetry', () => {
       it('should have url source execution metric', (done) => {
         agent
           .use(traces => {
-            expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_path']).to.be.equal(1)
+            expect(traces[0][0].metrics['_dd.iast.telemetry.executed.source.http_request_uri']).to.be.equal(1)
           })
           .then(done)
           .catch(done)
