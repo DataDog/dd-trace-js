@@ -2,6 +2,11 @@
 
 const log = require('../../log')
 const Reporter = require('../reporter')
+const addresses = require('../addresses')
+
+const addressesToPreventSendingMultipleTimes = new Set([
+  addresses.HTTP_INCOMING_QUERY
+])
 
 class WAFContextWrapper {
   constructor (ddwafContext, requiredAddresses, wafTimeout, wafVersion, rulesVersion) {
@@ -10,16 +15,18 @@ class WAFContextWrapper {
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
+    this.addressesToSkip = new Set()
   }
 
   run (params) {
     const inputs = {}
     let someInputAdded = false
-
+    const addresses = []
     // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
-      if (this.requiredAddresses.has(key)) {
+      if (this.requiredAddresses.has(key) && !this.addressesToSkip.has(key)) {
         inputs[key] = params[key]
+        addresses.push(key)
         someInputAdded = true
       }
     }
@@ -32,6 +39,12 @@ class WAFContextWrapper {
       const result = this.ddwafContext.run(inputs, this.wafTimeout)
 
       const end = process.hrtime.bigint()
+
+      addresses.forEach(address => {
+        if (addressesToPreventSendingMultipleTimes.has(address)) {
+          this.addressesToSkip.add(address)
+        }
+      })
 
       const ruleTriggered = !!result.events?.length
       const blockTriggered = result.actions?.includes('block')

@@ -121,7 +121,6 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.query !== undefined && req.query !== null) {
     payload[addresses.HTTP_INCOMING_QUERY] = req.query
   }
