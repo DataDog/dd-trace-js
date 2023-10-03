@@ -262,248 +262,245 @@ describe('telemetry', () => {
       }, HEARTBEAT_INTERVAL * 3)
     })
   })
-})
 
-describe('Telemetry retry', () => {
-  let clock
-  let telemetry
-  let capturedRequestType
-  let capturedPayload
-  let count = 0
-  let pluginsByName
-  const HEARTBEAT_INTERVAL = 60000
+  describe('Telemetry retry', () => {
+    let telemetry
+    let capturedRequestType
+    let capturedPayload
+    let count = 0
+    let pluginsByName
+    const HEARTBEAT_INTERVAL = 60000
 
-  beforeEach(() => {
-    pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false }
-    }
-    clock = sinon.useFakeTimers()
-  })
-  afterEach(() => {
-    clock.restore()
-    sinon.restore()
-  })
+    beforeEach(() => {
+      pluginsByName = {
+        foo2: { _enabled: true },
+        bar2: { _enabled: false }
+      }
+      // clock = sinon.useFakeTimers()
+    })
+    afterEach(() => {
 
-  it('should retry data on next cycle', () => {
-    const sendDataError = {
-      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
-        capturedRequestType = reqType
-        capturedPayload = payload
+    })
 
-        if (count < 2) {
-          count += 1
-          return
+    it('should retry data on next cycle', () => {
+      const sendDataError = {
+        sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+          capturedRequestType = reqType
+          capturedPayload = payload
+
+          if (count < 2) {
+            count += 1
+            return
+          }
+
+          // Simulate an HTTP error by calling the callback with an error
+          cb(new Error('HTTP request error'), {
+            payload: payload,
+            reqType: 'app-integrations-change'
+          })
         }
 
-        // Simulate an HTTP error by calling the callback with an error
-        cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: 'app-integrations-change'
-        })
       }
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        },
+        './send-data': sendDataError
+      })
 
-    }
-    telemetry = proxyquire('../../src/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: 0,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        appsec: { enabled: true },
+        profiling: { enabled: true },
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
         }
-      },
-      './send-data': sendDataError
-    })
+      }, {
+        _pluginsByName: pluginsByName
+      })
 
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: 0,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      }
-    }, {
-      _pluginsByName: pluginsByName
-    })
+      pluginsByName.boo3 = { _enabled: true }
+      telemetry.updateIntegrations()
+      expect(capturedRequestType).to.equal('app-integrations-change')
 
-    pluginsByName.boo3 = { _enabled: true }
-    telemetry.updateIntegrations()
-    expect(capturedRequestType).to.equal('app-integrations-change')
-
-    expect(capturedPayload).to.deep.equal({
-      'integrations': [{
-        name: 'boo3',
-        enabled: true,
-        auto_enabled: true
-      }]
-    })
-
-    clock.tick(3000)
-    pluginsByName.boo5 = { _enabled: true }
-    telemetry.updateIntegrations()
-    expect(capturedRequestType).to.equal('message-batch')
-    expect(capturedPayload).to.deep.equal([{
-      request_type: 'app-integrations-change',
-      payload: {
-        'integrations': [{
-          name: 'boo5',
-          enabled: true,
-          auto_enabled: true
-        }]
-      }
-
-    }, {
-      request_type: 'app-integrations-change',
-      payload: {
+      expect(capturedPayload).to.deep.equal({
         'integrations': [{
           name: 'boo3',
           enabled: true,
           auto_enabled: true
         }]
-      }
+      })
 
-    }]
-    )
-  })
-
-  it('should send regular request after completed batch request ', () => {
-    const sendDataError = {
-      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
-        capturedRequestType = reqType
-        capturedPayload = payload
-
-        // skipping startup command
-        if (reqType === 'app-started' || reqType === 'message-batch') {
-          cb()
-          return
+      pluginsByName.boo5 = { _enabled: true }
+      telemetry.updateIntegrations()
+      expect(capturedRequestType).to.equal('message-batch')
+      expect(capturedPayload).to.deep.equal([{
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'boo5',
+            enabled: true,
+            auto_enabled: true
+          }]
         }
 
-        // Simulate an HTTP error by calling the callback with an error
-        cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: 'app-integrations-change'
-        })
-      }
-
-    }
-    telemetry = proxyquire('../../src/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
+      }, {
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'boo3',
+            enabled: true,
+            auto_enabled: true
+          }]
         }
-      },
-      './send-data': sendDataError
-    })
 
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: 0,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      }
-    }, {
-      _pluginsByName: pluginsByName
-    })
-    pluginsByName.foo1 = { _enabled: true }
-    telemetry.updateIntegrations() // This sends an batch message and succeeds
-
-    pluginsByName.zoo1 = { _enabled: true }
-    telemetry.updateIntegrations()
-    expect(capturedRequestType).to.equal('app-integrations-change')
-
-    expect(capturedPayload).to.deep.equal({
-      'integrations': [{
-        name: 'zoo1',
-        enabled: true,
-        auto_enabled: true
       }]
+      )
     })
-  })
 
-  it('should updated batch request after previous fail', () => {
-    const sendDataError = {
-      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
-        capturedRequestType = reqType
-        capturedPayload = payload
+    it('should send regular request after completed batch request ', () => {
+      const sendDataError = {
+        sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+          capturedRequestType = reqType
+          capturedPayload = payload
 
-        // skipping startup command
-        if (reqType === 'app-started') {
-          cb()
-          return
+          // skipping startup command
+          if (reqType === 'app-started' || reqType === 'message-batch') {
+            cb()
+            return
+          }
+
+          // Simulate an HTTP error by calling the callback with an error
+          cb(new Error('HTTP request error'), {
+            payload: payload,
+            reqType: 'app-integrations-change'
+          })
         }
 
-        // Simulate an HTTP error by calling the callback with an error
-        cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: reqType
-        })
       }
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        },
+        './send-data': sendDataError
+      })
 
-    }
-    telemetry = proxyquire('../../src/telemetry', {
-      '../exporters/common/docker': {
-        id () {
-          return 'test docker id'
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: 0,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        appsec: { enabled: true },
+        profiling: { enabled: true },
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
         }
-      },
-      './send-data': sendDataError
-    })
+      }, {
+        _pluginsByName: pluginsByName
+      })
+      pluginsByName.foo1 = { _enabled: true }
+      telemetry.updateIntegrations() // This sends an batch message and succeeds
 
-    // Start function sends 2 messages app-started & app-integrations-change
-    telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-      hostname: 'localhost',
-      port: 0,
-      service: 'test service',
-      version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
-      env: 'preprod',
-      tags: {
-        'runtime-id': '1a2b3c'
-      }
-    }, {
-      _pluginsByName: pluginsByName
-    })
+      pluginsByName.zoo1 = { _enabled: true }
+      telemetry.updateIntegrations()
+      expect(capturedRequestType).to.equal('app-integrations-change')
 
-    pluginsByName.foo1 = { _enabled: true }
-    telemetry.updateIntegrations() // This sends an batch message and fails
-
-    pluginsByName.zoo1 = { _enabled: true }
-    telemetry.updateIntegrations()
-
-    expect(capturedRequestType).to.equal('message-batch')
-    expect(capturedPayload).to.deep.equal([{
-      request_type: 'app-integrations-change',
-      payload: {
+      expect(capturedPayload).to.deep.equal({
         'integrations': [{
           name: 'zoo1',
           enabled: true,
           auto_enabled: true
         }]
-      }
+      })
+    })
 
-    }, {
-      request_type: 'app-integrations-change',
-      payload: {
-        'integrations': [{
-          name: 'foo1',
-          enabled: true,
-          auto_enabled: true
-        }]
-      }
+    it('should updated batch request after previous fail', () => {
+      const sendDataError = {
+        sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+          capturedRequestType = reqType
+          capturedPayload = payload
 
-    }]
-    )
+          // skipping startup command
+          if (reqType === 'app-started') {
+            cb()
+            return
+          }
+
+          // Simulate an HTTP error by calling the callback with an error
+          cb(new Error('HTTP request error'), {
+            payload: payload,
+            reqType: reqType
+          })
+        }
+
+      }
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        },
+        './send-data': sendDataError
+      })
+
+      // Start function sends 2 messages app-started & app-integrations-change
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: 0,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        appsec: { enabled: true },
+        profiling: { enabled: true },
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
+        }
+      }, {
+        _pluginsByName: pluginsByName
+      })
+
+      pluginsByName.foo1 = { _enabled: true }
+      telemetry.updateIntegrations() // This sends an batch message and fails
+
+      pluginsByName.zoo1 = { _enabled: true }
+      telemetry.updateIntegrations()
+
+      expect(capturedRequestType).to.equal('message-batch')
+      expect(capturedPayload).to.deep.equal([{
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'zoo1',
+            enabled: true,
+            auto_enabled: true
+          }]
+        }
+
+      }, {
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'foo1',
+            enabled: true,
+            auto_enabled: true
+          }]
+        }
+
+      }]
+      )
+    })
   })
 })
 
