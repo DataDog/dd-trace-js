@@ -17,23 +17,15 @@ let traceAgent
 
 describe('telemetry', () => {
   const HEARTBEAT_INTERVAL = 60000
-  let origSetInterval
   let telemetry
   let pluginsByName
 
   before(done => {
-    origSetInterval = setInterval
-
-    global.setInterval = (fn, interval) => {
-      expect(interval).to.equal(1000 * 60 * 60 * 24)
-      // we only want one of these
-      return setTimeout(fn, 100)
-    }
-
     // I'm not sure how, but some other test in some other file keeps context
     // alive after it's done, meaning this test here runs in its async context.
     // If we don't no-op the server inside it, it will trace it, which will
     // screw up this test file entirely. -- bengl
+
     storage.run({ noop: true }, () => {
       traceAgent = http.createServer(async (req, res) => {
         const chunks = []
@@ -93,7 +85,6 @@ describe('telemetry', () => {
   after(() => {
     telemetry.stop()
     traceAgent.close()
-    global.setInterval = origSetInterval
   })
 
   it('should send app-started', () => {
@@ -162,7 +153,7 @@ describe('telemetry', () => {
   // TODO: make this work regardless of the test runner
   it.skip('should send app-closing', () => {
     process.emit('beforeExit')
-    return testSeq(6, 'app-closing', payload => {
+    return testSeq(5, 'app-closing', payload => {
       expect(payload).to.deep.equal({})
     })
   })
@@ -183,6 +174,92 @@ describe('telemetry', () => {
         server.close()
         done()
       }, 10)
+      clearTimeout()
+    })
+  })
+
+  describe('telemetry app-heartbeat', () => {
+    const HEARTBEAT_INTERVAL = 1000
+    let telemetry
+    let pluginsByName
+
+    before(done => {
+      storage.run({ noop: true }, () => {
+        traceAgent = http.createServer(async (req, res) => {
+          const chunks = []
+          for await (const chunk of req) {
+            chunks.push(chunk)
+          }
+          req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          traceAgent.reqs.push(req)
+          traceAgent.emit('handled-req')
+          res.end()
+        }).listen(0, done)
+      })
+
+      traceAgent.reqs = []
+
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        }
+      })
+
+      pluginsByName = {
+        foo2: { _enabled: true },
+        bar2: { _enabled: false }
+      }
+
+      const circularObject = {
+        child: { parent: null, field: 'child_value' },
+        field: 'parent_value'
+      }
+      circularObject.child.parent = circularObject
+
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: traceAgent.address().port,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
+        },
+        circularObject,
+        appsec: { enabled: false },
+        profiling: { enabled: false }
+      }, {
+        _pluginsByName: pluginsByName
+      })
+    })
+
+    after(() => {
+      setTimeout(() => {
+        telemetry.stop()
+        traceAgent.close()
+        clearTimeout()
+      }, 3000)
+    })
+
+    it('should send app-heartbeat at uniform intervals', () => {
+      // TODO: switch to clock.tick
+      setTimeout(() => {
+        const heartbeats = []
+        const reqCount = traceAgent.reqs.length
+        for (let i = 0; i < reqCount; i++) {
+          const req = traceAgent.reqs[i]
+          if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+            heartbeats.push(req.body.tracer_time)
+          }
+        }
+        expect(heartbeats.length).to.be.greaterThanOrEqual(2)
+        for (let k = 0; k < heartbeats.length - 1; k++) {
+          expect(heartbeats[k + 1] - heartbeats[k]).to.be.equal(1)
+        }
+      }, HEARTBEAT_INTERVAL * 3)
     })
   })
 })
@@ -432,11 +509,12 @@ describe('Telemetry retry', () => {
 
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {
+    // console.log('length', traceAgent.reqs.length)
+    // console.log('sequence', seqId)
     await once(traceAgent, 'handled-req')
   }
   const req = traceAgent.reqs[seqId - 1]
-  // console.log('SEQ ID', seqId)
-  // console.log(req.body.tracer_time)
+  // console.log('req', [seqId - 1])
   expect(req.method).to.equal('POST')
   expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
   expect(req.headers).to.include({
