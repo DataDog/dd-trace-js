@@ -316,7 +316,7 @@ describe('AppSec Index', () => {
           remotePort: 8080
         },
         body: null,
-        query: { queryKey: 'queryValue' },
+        query: 'string',
         route: {},
         params: 'string',
         cookies: 'string'
@@ -337,8 +337,7 @@ describe('AppSec Index', () => {
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.query': { queryKey: 'queryValue' }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
