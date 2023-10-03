@@ -75,7 +75,7 @@ function unshallowRepository () {
     execFileSync('git', [
       ...baseGitOptions,
       revParseHead
-    ])
+    ], { stdio: 'pipe' })
   } catch (e) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     log.error(e)
@@ -84,7 +84,7 @@ function unshallowRepository () {
       execFileSync('git', [
         ...baseGitOptions,
         upstreamRemote
-      ])
+      ], { stdio: 'pipe' })
     } catch (e) {
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
       log.error(e)
