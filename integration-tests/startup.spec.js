@@ -129,7 +129,9 @@ describe('startup', () => {
     })
 
     it('works for hostname and port', async () => {
-      proc = await spawnProc(startupTestFile)
+      proc = await spawnProc(startupTestFile, {
+        cwd
+      })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', '127.0.0.1:8126')
         assert.isArray(payload)
