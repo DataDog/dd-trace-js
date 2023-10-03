@@ -31,35 +31,33 @@ const startCh = channel('datadog:mongodb:collection:filter:start')
 
 addHook({ name: 'mongodb', versions: ['>=3.3'] }, mongodb => {
   [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
-    try {
-      const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+    if (!(methodName in mongodb.Collection.prototype)) return
 
-      shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
-        return function () {
-          if (!startCh.hasSubscribers) {
-            return method.apply(this, arguments)
+    const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+
+    shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
+      return function () {
+        if (!startCh.hasSubscribers) {
+          return method.apply(this, arguments)
+        }
+
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+        return asyncResource.runInAsyncScope(() => {
+          const filters = [arguments[0]]
+          if (useTwoArguments) {
+            filters.push(arguments[1])
           }
 
-          const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-          return asyncResource.runInAsyncScope(() => {
-            const filters = [arguments[0]]
-            if (useTwoArguments) {
-              filters.push(arguments[1])
-            }
-
-            startCh.publish({
-              filters,
-              methodName
-            })
-
-            return method.apply(this, arguments)
+          startCh.publish({
+            filters,
+            methodName
           })
-        }
-      })
-    } catch (e) {
-      // do nothing if the method wrap fails
-    }
+
+          return method.apply(this, arguments)
+        })
+      }
+    })
   })
   return mongodb
 })

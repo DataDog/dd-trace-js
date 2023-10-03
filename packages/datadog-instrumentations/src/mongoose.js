@@ -59,93 +59,90 @@ addHook({
 }, Model => {
   [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+    if (!(methodName in Model)) return
 
-    try {
-      shimmer.wrap(Model, methodName, method => {
-        return function wrappedModelMethod () {
-          if (!startCh.hasSubscribers) {
-            return method.apply(this, arguments)
-          }
+    shimmer.wrap(Model, methodName, method => {
+      return function wrappedModelMethod () {
+        if (!startCh.hasSubscribers) {
+          return method.apply(this, arguments)
+        }
 
-          const asyncResource = new AsyncResource('bound-anonymous-fn')
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-          const filters = [arguments[0]]
-          if (useTwoArguments) {
-            filters.push(arguments[1])
-          }
+        const filters = [arguments[0]]
+        if (useTwoArguments) {
+          filters.push(arguments[1])
+        }
 
-          const finish = asyncResource.bind(function () {
-            finishCh.publish()
+        const finish = asyncResource.bind(function () {
+          finishCh.publish()
+        })
+
+        let callbackWrapped = false
+        const lastArgumentIndex = arguments.length - 1
+
+        if (typeof arguments[lastArgumentIndex] === 'function') {
+          // is a callback, wrap it to execute finish()
+          shimmer.wrap(arguments, lastArgumentIndex, originalCb => {
+            return function () {
+              finish()
+
+              return originalCb.apply(this, arguments)
+            }
           })
 
-          let callbackWrapped = false
-          const lastArgumentIndex = arguments.length - 1
+          callbackWrapped = true
+        }
 
-          if (typeof arguments[lastArgumentIndex] === 'function') {
-            // is a callback, wrap it to execute finish()
-            shimmer.wrap(arguments, lastArgumentIndex, originalCb => {
-              return function () {
-                finish()
+        return asyncResource.runInAsyncScope(() => {
+          startCh.publish({
+            filters,
+            methodName
+          })
 
-                return originalCb.apply(this, arguments)
+          const res = method.apply(this, arguments)
+
+          // if it is not callback, wrap exec method and its then
+          if (!callbackWrapped) {
+            shimmer.wrap(res, 'exec', originalExec => {
+              return function wrappedExec () {
+                const execResult = originalExec.apply(this, arguments)
+
+                // wrap them method, wrap resolve and reject methods
+                shimmer.wrap(execResult, 'then', originalThen => {
+                  return function wrappedThen () {
+                    const resolve = arguments[0]
+                    const reject = arguments[1]
+
+                    // not using shimmer here because resolve/reject could be empty
+                    arguments[0] = function wrappedResolve () {
+                      finish()
+
+                      if (resolve) {
+                        return resolve.apply(this, arguments)
+                      }
+                    }
+
+                    arguments[1] = function wrappedReject () {
+                      finish()
+
+                      if (reject) {
+                        return reject.apply(this, arguments)
+                      }
+                    }
+
+                    return originalThen.apply(this, arguments)
+                  }
+                })
+
+                return execResult
               }
             })
-
-            callbackWrapped = true
           }
-
-          return asyncResource.runInAsyncScope(() => {
-            startCh.publish({
-              filters,
-              methodName
-            })
-
-            const res = method.apply(this, arguments)
-
-            // if it is not callback, wrap exec method and its then
-            if (!callbackWrapped) {
-              shimmer.wrap(res, 'exec', originalExec => {
-                return function wrappedExec () {
-                  const execResult = originalExec.apply(this, arguments)
-
-                  // wrap them method, wrap resolve and reject methods
-                  shimmer.wrap(execResult, 'then', originalThen => {
-                    return function wrappedThen () {
-                      const resolve = arguments[0]
-                      const reject = arguments[1]
-
-                      // not using shimmer here because resolve/reject could be empty
-                      arguments[0] = function wrappedResolve () {
-                        finish()
-
-                        if (resolve) {
-                          return resolve.apply(this, arguments)
-                        }
-                      }
-
-                      arguments[1] = function wrappedReject () {
-                        finish()
-
-                        if (reject) {
-                          return reject.apply(this, arguments)
-                        }
-                      }
-
-                      return originalThen.apply(this, arguments)
-                    }
-                  })
-
-                  return execResult
-                }
-              })
-            }
-            return res
-          })
-        }
-      })
-    } catch (e) {
-      // if method does not exist, do nothing
-    }
+          return res
+        })
+      }
+    })
   })
 
   return Model
