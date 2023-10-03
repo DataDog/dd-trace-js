@@ -4,7 +4,8 @@ const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
 
-const addressesToPreventSendingMultipleTimes = new Set([
+// TODO: remove once ephemeral addresses are implemented
+const preventDuplicateAddresses = new Set([
   addresses.HTTP_INCOMING_QUERY
 ])
 
@@ -21,12 +22,15 @@ class WAFContextWrapper {
   run (params) {
     const inputs = {}
     let someInputAdded = false
-    const addresses = []
+    const newAddressesToSkip = new Set(this.addressesToSkip)
+
     // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
       if (this.requiredAddresses.has(key) && !this.addressesToSkip.has(key)) {
         inputs[key] = params[key]
-        addresses.push(key)
+        if (preventDuplicateAddresses.has(key)) {
+          newAddressesToSkip.add(key)
+        }
         someInputAdded = true
       }
     }
@@ -40,11 +44,7 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
-      addresses.forEach(address => {
-        if (addressesToPreventSendingMultipleTimes.has(address)) {
-          this.addressesToSkip.add(address)
-        }
-      })
+      this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
       const blockTriggered = result.actions?.includes('block')
