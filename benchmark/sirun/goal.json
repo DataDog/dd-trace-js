@@ -3,7 +3,7 @@
   "async_hooks": {
     "no-hooks": {
       "instructions": 6562157820,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 91.7880786204972,
@@ -58,7 +58,7 @@
     },
     "init-only": {
       "instructions": 18066088623,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 142.16178251535194,
@@ -113,7 +113,7 @@
     },
     "all-hooks": {
       "instructions": 31655101048,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 121.48258784639538,
@@ -170,7 +170,7 @@
   "encoders": {
     "0.4": {
       "instructions": 10818124587,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 107.9773168830155,
@@ -211,7 +211,7 @@
     },
     "0.5": {
       "instructions": 6725320608,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 111.95457955589352,
@@ -254,7 +254,7 @@
   "exporting-pipeline": {
     "0.4": {
       "instructions": 30319059366,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 105.89922768177193,
@@ -295,7 +295,7 @@
     },
     "0.5": {
       "instructions": 14527746495,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 104.65799849318564,
@@ -338,7 +338,7 @@
   "log": {
     "without-log": {
       "instructions": 631069048,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 105.92360644022263,
@@ -379,7 +379,7 @@
     },
     "skip-log": {
       "instructions": 632678322,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 111.59812000353904,
@@ -420,7 +420,7 @@
     },
     "with-debug": {
       "instructions": 638894113,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 111.44376644616125,
@@ -461,7 +461,7 @@
     },
     "with-error": {
       "instructions": 668416739,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 110.8317010783871,
@@ -504,7 +504,7 @@
   "plugin-bluebird": {
     "control": {
       "instructions": 577847826,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 113.96090879335225,
@@ -545,7 +545,7 @@
     },
     "with-tracer": {
       "instructions": 1231859650,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 118.05403312511626,
@@ -588,7 +588,7 @@
   "plugin-http": {
     "client-control": {
       "instructions": 968846210,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 92.39010618295382,
@@ -629,7 +629,7 @@
     },
     "client-with-tracer": {
       "instructions": 2707188616,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 111.9035307562898,
@@ -670,7 +670,7 @@
     },
     "server-control": {
       "instructions": 731468683,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 47.907064276129105,
@@ -711,7 +711,7 @@
     },
     "server-with-tracer": {
       "instructions": 1972006039,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 44.28483030619971,
@@ -754,7 +754,7 @@
   "net": {
     "control": {
       "instructions": 553092455,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 108.42047549062463,
@@ -795,7 +795,7 @@
     },
     "with-tracer": {
       "instructions": 2235058934,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 111.93504461005914,
@@ -838,7 +838,7 @@
   "plugin-q": {
     "control": {
       "instructions": 5290628657,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 140.98361521385715,
@@ -879,7 +879,7 @@
     },
     "with-tracer": {
       "instructions": 6665623446,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 163.7343207242308,
@@ -922,7 +922,7 @@
   "profiler": {
     "control": {
       "instructions": 262727881,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 106.57015411819967,
@@ -977,7 +977,7 @@
     },
     "with-cpu-profiler": {
       "instructions": 488614286,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 105.64844815164402,
@@ -1032,7 +1032,7 @@
     },
     "with-space-profiler": {
       "instructions": 336410425,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 107.57483857004972,
@@ -1087,7 +1087,7 @@
     },
     "with-all-profilers": {
       "instructions": 496102202,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 106.2447135824611,
@@ -1144,7 +1144,7 @@
   "scope-manager": {
     "base": {
       "instructions": 525813893,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 3.017430233243299,
@@ -1185,7 +1185,7 @@
     },
     "async_hooks": {
       "instructions": 527344101,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 3.4957281551837056,
@@ -1226,7 +1226,7 @@
     },
     "async_local_storage": {
       "instructions": 525354201,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 3.0409640646732625,
@@ -1267,7 +1267,7 @@
     },
     "async_resource": {
       "instructions": 525441676,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 2.745876935589278,
@@ -1310,7 +1310,7 @@
   "spans": {
     "finish-immediately": {
       "instructions": 1933623425,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 113.86042568262553,
@@ -1351,7 +1351,7 @@
     },
     "finish-later": {
       "instructions": 5602093043,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 155.4723251733599,
@@ -1394,7 +1394,7 @@
   "startup": {
     "control": {
       "instructions": 100429947,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 101.06796629731095,
@@ -1435,7 +1435,7 @@
     },
     "with-tracer": {
       "instructions": 635234952,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 112.21615091055688,
@@ -1476,7 +1476,7 @@
     },
     "control-everything": {
       "instructions": 3420610500,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 115.78796597491005,
@@ -1517,7 +1517,7 @@
     },
     "with-tracer-everything": {
       "instructions": 4102521598,
-      "nodeVersion": "16.12.0",
+      "nodeVersion": "18.18.0",
       "summary": {
         "cpu.pct.wall.time": {
           "mean": 117.3524430950102,

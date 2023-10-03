@@ -101,7 +101,7 @@ describe('Plugin', () => {
             expect(traces[0][0]).to.have.property('type', 'web')
             expect(traces[0][0]).to.have.property('resource', 'GET /user/{id}')
             expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+            expect(traces[0][0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/user/123`)
             expect(traces[0][0].meta).to.have.property('http.method', 'GET')
             expect(traces[0][0].meta).to.have.property('http.status_code')
             expect(traces[0][0].meta).to.have.property('component', 'hapi')
@@ -111,7 +111,7 @@ describe('Plugin', () => {
           .catch(done)
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(done)
       })
 
@@ -127,7 +127,7 @@ describe('Plugin', () => {
         })
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(done)
       })
 
@@ -150,7 +150,7 @@ describe('Plugin', () => {
           })
 
           axios
-            .post(`http://localhost:${port}/user/123`, {})
+            .post(`http://127.0.0.1:${port}/user/123`, {})
             .catch(done)
         })
       }
@@ -172,7 +172,7 @@ describe('Plugin', () => {
         })
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(done)
       })
 
@@ -197,7 +197,7 @@ describe('Plugin', () => {
         })
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(done)
       })
 
@@ -229,7 +229,7 @@ describe('Plugin', () => {
           })
 
           axios
-            .get(`http://localhost:${port}/user/123`)
+            .get(`http://127.0.0.1:${port}/user/123`)
             .catch(done)
         })
       }
@@ -249,7 +249,7 @@ describe('Plugin', () => {
         })
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(done)
       })
 
@@ -269,7 +269,7 @@ describe('Plugin', () => {
           .catch(done)
 
         axios
-          .get(`http://localhost:${port}/user/123`, {
+          .get(`http://127.0.0.1:${port}/user/123`, {
             headers: {
               'x-datadog-trace-id': '1234',
               'x-datadog-parent-id': '5678',
@@ -288,7 +288,7 @@ describe('Plugin', () => {
           .catch(done)
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(() => {})
       })
 
@@ -319,7 +319,7 @@ describe('Plugin', () => {
           .catch(done)
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(() => {})
       })
 
@@ -348,7 +348,7 @@ describe('Plugin', () => {
           .catch(done)
 
         axios
-          .get(`http://localhost:${port}/user/123`)
+          .get(`http://127.0.0.1:${port}/user/123`)
           .catch(() => {})
       })
     })
