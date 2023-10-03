@@ -2,7 +2,7 @@ FROM scratch AS nodejs_agent
 COPY . /
 
 
-FROM node:16-alpine AS build
+FROM node:18-alpine AS build
 
 ARG npm_pkg
 ARG UID=10000

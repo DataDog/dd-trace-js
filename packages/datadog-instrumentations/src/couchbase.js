@@ -161,7 +161,7 @@ function wrapV3Query (query) {
 }
 
 // semver >=2 <3
-addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.2'] }, Bucket => {
+addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^4.2.5'] }, Bucket => {
   const startCh = channel('apm:couchbase:query:start')
   const finishCh = channel('apm:couchbase:query:finish')
   const errorCh = channel('apm:couchbase:query:error')
