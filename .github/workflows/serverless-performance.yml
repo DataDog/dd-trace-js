@@ -22,16 +22,16 @@ jobs:
         with:
           repository: DataDog/datadog-lambda-js
           path: datadog-lambda-js
-      - name: Try stuff
+      - name: Install node-gyp
         run: |
           yarn global add node-gyp
       - name: Update package.json to the current ref
         run: |
           cd datadog-lambda-js
-          yarn add https://github.com/DataDog/dd-trace-js#refs/heads/${GITHUB_HEAD_REF}
+          yarn add --dev https://github.com/DataDog/dd-trace-js#refs/heads/${GITHUB_HEAD_REF}
       - name: Check
         run: |
-          echo /home/runner/.config/yarn/global/yarn-error.log
+          cat /home/runner/.config/yarn/global/yarn-error.log
         if: always()
       - name: Build the layer
         env:
