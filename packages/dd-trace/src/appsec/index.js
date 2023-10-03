@@ -121,7 +121,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query !== undefined && req.query !== null) {
+  if (req.query !== undefined && req.query !== null && typeof req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
