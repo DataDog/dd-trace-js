@@ -350,6 +350,11 @@ function finishResolvers ({ fields }) {
   })
 }
 
+addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {
+  shimmer.wrap(execute, 'execute', wrapExecute(execute))
+  return execute
+})
+
 addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
   shimmer.wrap(execute, 'execute', wrapExecute(execute))
   return execute

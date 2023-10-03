@@ -12,5 +12,7 @@ module.exports = {
   paramsParser: dc.channel('datadog:express:process_params:start'),
   passportVerify: dc.channel('datadog:passport:verify:finish'),
   queryParser: dc.channel('datadog:query:read:finish'),
-  setCookieChannel: dc.channel('datadog:iast:set-cookie')
+  setCookieChannel: dc.channel('datadog:iast:set-cookie'),
+  nextBodyParsed: dc.channel('apm:next:body-parsed'),
+  nextQueryParsed: dc.channel('apm:next:query-parsed')
 }

@@ -13,7 +13,7 @@ describe('Legacy Plugin', () => {
   let sub
 
   describe('redis', () => {
-    withVersions('redis', 'redis', version => {
+    withVersions('redis', 'redis', '<4', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
       })
@@ -42,6 +42,7 @@ describe('Legacy Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'redis',
           () => client.get('foo'),
           '127.0.0.1',
           'out.host'

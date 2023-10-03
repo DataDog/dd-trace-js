@@ -146,3 +146,28 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v2
+
+  next:
+    strategy:
+      matrix:
+        node-version: [16]
+        range: ['>=9.5 <11.1', '>=11.1 <13.2']
+        include:
+          - node-version: 18
+            range: '>=13.2'
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: next
+      RANGE: ${{ matrix.range }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: yarn install
+      - run: yarn test:appsec:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2

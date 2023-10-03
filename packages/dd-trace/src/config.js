@@ -179,6 +179,11 @@ class Config {
       false
     )
 
+    const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
+      process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      false
+    )
+
     const DD_SERVICE = options.service ||
       process.env.DD_SERVICE ||
       process.env.DD_SERVICE_NAME ||
@@ -628,6 +633,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
 
     this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+
+    // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
+    this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(

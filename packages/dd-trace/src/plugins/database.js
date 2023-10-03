@@ -1,6 +1,7 @@
 'use strict'
 
 const StoragePlugin = require('./storage')
+const { PEER_SERVICE_KEY } = require('../constants')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
@@ -38,20 +39,29 @@ class DatabasePlugin extends StoragePlugin {
     `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
-  injectDbmQuery (query, serviceName, isPreparedStatement = false) {
+  getDbmServiceName (span, tracerService) {
+    if (this._tracerConfig.spanComputePeerService) {
+      const peerData = this.getPeerService(span.context()._tags)
+      return this.getPeerServiceRemap(peerData)[PEER_SERVICE_KEY] || tracerService
+    }
+    return tracerService
+  }
+
+  injectDbmQuery (span, query, serviceName, isPreparedStatement = false) {
     const mode = this.config.dbmPropagationMode
+    const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
       return query
     }
 
-    const servicePropagation = this.createDBMPropagationCommentService(serviceName)
+    const servicePropagation = this.createDBMPropagationCommentService(dbmService)
 
     if (isPreparedStatement || mode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
     } else if (mode === 'full') {
-      this.activeSpan.setTag('_dd.dbm_trace_injected', 'true')
-      const traceparent = this.activeSpan._spanContext.toTraceparent()
+      span.setTag('_dd.dbm_trace_injected', 'true')
+      const traceparent = span._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
     }
   }
