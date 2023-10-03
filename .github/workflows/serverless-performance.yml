@@ -22,14 +22,10 @@ jobs:
         with:
           repository: DataDog/datadog-lambda-js
           path: datadog-lambda-js
-      - name: See vars
-        run: |
-          echo $GITHUB_HEAD_REF
-          echo $GITHUB_SHA
       - name: Update package.json to the current ref
         run: |
           cd datadog-lambda-js
-          yarn add https://github.com/DataDog/dd-trace-js#${GITHUB_SHA}
+          yarn add https://github.com/DataDog/dd-trace-js#refs/heads/$GITHUB_HEAD_REF --save-dev
       - name: Build the layer
         env:
           NODE_VERSION: ${{ matrix.node-version }}
