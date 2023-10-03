@@ -6,7 +6,6 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
-const { log } = require('console')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -26,7 +25,13 @@ const sentIntegrations = new Set()
 
 function updateRetryData (error, retryObj) {
   if (error) {
-    retryData = retryObj
+    if (retryObj.reqType === 'message-batch') {
+      const payload = retryObj.payload[0].payload
+      const reqType = retryObj.payload[0].request_type
+      retryData = { payload: payload, reqType: reqType }
+    } else {
+      retryData = retryObj
+    }
   } else {
     retryData = null
   }

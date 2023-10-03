@@ -1,5 +1,4 @@
 
-const { log } = require('console')
 const request = require('../exporters/common/request')
 
 function getHeaders (config, application, reqType) {
@@ -62,11 +61,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     application,
     host
   })
-  // log('passed in payload', payload)
-  // log('send Data payload', data)
-  // 1. check if there is data to retry
-  // 2. make sure it isn't the same request as current request type
-  // 3. assign data to a batch data type
+
   request(data, options, (error) => {
     if (error && process.env.DD_API_KEY) {
       const backendHeader = { 'DD-API-KEY': process.env.DD_API_KEY, ...options.headers }
@@ -77,6 +72,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       }
       request(data, backendOptions, () => {})
     }
+
     // call the callback function so that we can track the error and payload
     cb(error, { 'payload': payload, reqType: reqType })
   })

@@ -8,7 +8,6 @@ const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
 const os = require('os')
-const { log, assert } = require('console')
 const { expect } = require('chai')
 const sinon = require('sinon')
 
@@ -194,24 +193,20 @@ describe('Telemetry retry', () => {
   let capturedRequestType
   let capturedPayload
   let count = 0
+  let pluginsByName
   const HEARTBEAT_INTERVAL = 60000
-  const pluginsByName = {
-    foo2: { _enabled: true },
-    bar2: { _enabled: false }
-  }
 
   beforeEach(() => {
+    pluginsByName = {
+      foo2: { _enabled: true },
+      bar2: { _enabled: false }
+    }
     clock = sinon.useFakeTimers()
   })
   afterEach(() => {
     clock.restore()
     sinon.restore()
   })
-
-  // after(() => {
-  //   // telemetry.telemetry.stop()
-  //   // traceAgent.close()
-  // })
 
   it('should retry data on next cycle', () => {
     const sendDataError = {
@@ -355,6 +350,83 @@ describe('Telemetry retry', () => {
         auto_enabled: true
       }]
     })
+  })
+
+  it('should updated batch request after previous fail', () => {
+    const sendDataError = {
+      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+        capturedRequestType = reqType
+        capturedPayload = payload
+
+        // skipping startup command
+        if (reqType === 'app-started') {
+          cb()
+          return
+        }
+
+        // Simulate an HTTP error by calling the callback with an error
+        cb(new Error('HTTP request error'), {
+          payload: payload,
+          reqType: reqType
+        })
+      }
+
+    }
+    telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      },
+      './send-data': sendDataError
+    })
+
+    // Start function sends 2 messages app-started & app-integrations-change
+    telemetry.start({
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { enabled: true },
+      profiling: { enabled: true },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c'
+      }
+    }, {
+      _pluginsByName: pluginsByName
+    })
+
+    pluginsByName.foo1 = { _enabled: true }
+    telemetry.updateIntegrations() // This sends an batch message and fails
+
+    pluginsByName.zoo1 = { _enabled: true }
+    telemetry.updateIntegrations()
+
+    expect(capturedRequestType).to.equal('message-batch')
+    expect(capturedPayload).to.deep.equal([{
+      request_type: 'app-integrations-change',
+      payload: {
+        'integrations': [{
+          name: 'zoo1',
+          enabled: true,
+          auto_enabled: true
+        }]
+      }
+
+    }, {
+      request_type: 'app-integrations-change',
+      payload: {
+        'integrations': [{
+          name: 'foo1',
+          enabled: true,
+          auto_enabled: true
+        }]
+      }
+
+    }]
+    )
   })
 })
 

@@ -114,9 +114,9 @@ describe('sendData', () => {
   })
 
   it('should send batch request with retryPayload', () => {
-    const retryObjData = { 'payload': { 'foo': 'bar' }, reqType: 'req-type-1' }
+    const retryObjData = { 'payload': { 'foo': 'bar' }, 'request_type': 'req-type-1' }
     const payload = [{
-      'reqType': 'req-type-2',
+      'request_type': 'req-type-2',
       'payload': {
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
@@ -126,13 +126,13 @@ describe('sendData', () => {
 
     }, retryObjData]
 
-    sendDataModule.sendBatchData({ tags: { 'runtime-id': '123' } },
-      { 'language': 'js' }, 'test', 'message-batch', payload)
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
+      { 'language': 'js' }, 'test', 'message-batch', payload) /
 
-    // expect(request).to.have.been.calledOnce
+    expect(request).to.have.been.calledOnce
 
     const data = JSON.parse(request.getCall(0).args[0])
-    const expectedPayload = JSON.stringify([{
+    const expectedPayload = [{
       'request_type': 'req-type-2',
       'payload': {
         integrations: [
@@ -143,7 +143,7 @@ describe('sendData', () => {
     }, {
       'request_type': 'req-type-1',
       'payload': { 'foo': 'bar' }
-    }])
+    }]
     expect(data.request_type).to.equal('message-batch')
     expect(data.payload).to.deep.equal(expectedPayload)
   })
