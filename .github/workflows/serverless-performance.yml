@@ -29,10 +29,6 @@ jobs:
         run: |
           cd datadog-lambda-js
           yarn add --dev https://github.com/DataDog/dd-trace-js#refs/heads/${GITHUB_HEAD_REF}
-      - name: Check
-        run: |
-          [ -f /home/runner/.config/yarn/global/yarn-error.log ] && cat /home/runner/.config/yarn/global/yarn-error.log
-        if: always()
       - name: Build the layer
         env:
           NODE_VERSION: ${{ matrix.node-version }}
