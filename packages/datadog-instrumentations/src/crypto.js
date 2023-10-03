@@ -11,11 +11,14 @@ const cryptoCipherCh = channel('datadog:crypto:cipher:start')
 
 const hashMethods = ['createHash', 'createHmac', 'createSign', 'createVerify', 'sign', 'verify']
 const cipherMethods = ['createCipheriv', 'createDecipheriv']
+const hookNames = ['crypto', 'node:crypto']
 
-addHook({ name: 'crypto' }, crypto => {
-  shimmer.massWrap(crypto, hashMethods, wrapCryptoMethod(cryptoHashCh))
-  shimmer.massWrap(crypto, cipherMethods, wrapCryptoMethod(cryptoCipherCh))
-  return crypto
+hookNames.forEach(name => {
+  addHook({ name }, crypto => {
+    shimmer.massWrap(crypto, hashMethods, wrapCryptoMethod(cryptoHashCh))
+    shimmer.massWrap(crypto, cipherMethods, wrapCryptoMethod(cryptoCipherCh))
+    return crypto
+  })
 })
 
 function wrapCryptoMethod (channel) {

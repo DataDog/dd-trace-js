@@ -10,6 +10,8 @@ const asyncStartChannel = channel('apm:http2:client:request:asyncStart')
 const asyncEndChannel = channel('apm:http2:client:request:asyncEnd')
 const errorChannel = channel('apm:http2:client:request:error')
 
+const hookNames = ['http2', 'node:http2']
+
 function createWrapEmit (ctx) {
   return function wrapEmit (emit) {
     return function (event, arg1) {
@@ -66,8 +68,10 @@ function wrapConnect (connect) {
   }
 }
 
-addHook({ name: 'http2' }, http2 => {
-  shimmer.wrap(http2, 'connect', wrapConnect)
+hookNames.forEach(name => {
+  addHook({ name }, http2 => {
+    shimmer.wrap(http2, 'connect', wrapConnect)
 
-  return http2
+    return http2
+  })
 })

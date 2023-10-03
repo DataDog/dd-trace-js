@@ -18,23 +18,26 @@ const rrtypes = {
 }
 
 const rrtypeMap = new WeakMap()
+const hookNames = ['dns', 'node:dns']
 
-addHook({ name: 'dns' }, dns => {
-  dns.lookup = wrap('apm:dns:lookup', dns.lookup, 2)
-  dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService, 3)
-  dns.resolve = wrap('apm:dns:resolve', dns.resolve, 2)
-  dns.reverse = wrap('apm:dns:reverse', dns.reverse, 2)
+hookNames.forEach(name => {
+  addHook({ name }, dns => {
+    dns.lookup = wrap('apm:dns:lookup', dns.lookup, 2)
+    dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService, 3)
+    dns.resolve = wrap('apm:dns:resolve', dns.resolve, 2)
+    dns.reverse = wrap('apm:dns:reverse', dns.reverse, 2)
 
-  patchResolveShorthands(dns)
+    patchResolveShorthands(dns)
 
-  if (dns.Resolver) {
-    dns.Resolver.prototype.resolve = wrap('apm:dns:resolve', dns.Resolver.prototype.resolve, 2)
-    dns.Resolver.prototype.reverse = wrap('apm:dns:reverse', dns.Resolver.prototype.reverse, 2)
+    if (dns.Resolver) {
+      dns.Resolver.prototype.resolve = wrap('apm:dns:resolve', dns.Resolver.prototype.resolve, 2)
+      dns.Resolver.prototype.reverse = wrap('apm:dns:reverse', dns.Resolver.prototype.reverse, 2)
 
-    patchResolveShorthands(dns.Resolver.prototype)
-  }
+      patchResolveShorthands(dns.Resolver.prototype)
+    }
 
-  return dns
+    return dns
+  })
 })
 
 function patchResolveShorthands (prototype) {

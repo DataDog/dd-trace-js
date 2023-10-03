@@ -14,10 +14,14 @@ const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const finishServerCh = channel('apm:http2:server:request:finish')
 
-addHook({ name: 'http2' }, http2 => {
-  shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
-  shimmer.wrap(http2, 'createServer', wrapCreateServer)
-  return http2
+const hookNames = ['http2', 'node:http2']
+
+hookNames.forEach(name => {
+  addHook({ name }, http2 => {
+    shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
+    shimmer.wrap(http2, 'createServer', wrapCreateServer)
+    return http2
+  })
 })
 
 function wrapCreateServer (createServer) {
