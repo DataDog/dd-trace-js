@@ -31,7 +31,7 @@ jobs:
           yarn add --dev https://github.com/DataDog/dd-trace-js#refs/heads/${GITHUB_HEAD_REF}
       - name: Check
         run: |
-          cat /home/runner/.config/yarn/global/yarn-error.log
+          [ -f /home/runner/.config/yarn/global/yarn-error.log ] && cat /home/runner/.config/yarn/global/yarn-error.log
         if: always()
       - name: Build the layer
         env:
