@@ -19,6 +19,7 @@ let host
 let interval
 let heartbeatTimeout
 let heartbeatInterval
+let extendedInterval
 let integrations
 const sentIntegrations = new Set()
 
@@ -141,33 +142,6 @@ function createHostObject () {
 function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
-// function beat () {
-//   let timer = Date.now()
-
-//   let nextDay = timer + 1000 * 60 * 60 * 24
-
-//   return () => {
-//     setInterval(() => {
-//       metricsManager.send(config, application, host)
-//       sendData(config, application, host, 'app-heartbeat')
-
-//       timer += heartbeatInterval
-
-//       if (timer >= nextDay) {
-//         timer = Date.now()
-//         nextDay = timer + 1000 * 60 * 60 * 24
-
-//         sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
-//       }
-//     }, heartbeatInterval)
-//   }
-// }
-
-function extendedHeartbeat (config) {
-  return setInterval(() => {
-    sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
-  }, 1000 * 60 * 60 * 24)
-}
 
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
@@ -176,6 +150,13 @@ function heartbeat (config, application, host) {
     heartbeat(config, application, host)
   }, heartbeatInterval).unref()
   return heartbeatTimeout
+}
+
+function extendedHeartbeat (config) {
+  extendedInterval = setTimeout(() => {
+    sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
+  }, 1000 * 60 * 60 * 24).unref()
+  return extendedInterval
 }
 
 function start (aConfig, thePluginManager) {
@@ -197,6 +178,7 @@ function start (aConfig, thePluginManager) {
   heartbeat(config, application, host)
 
   extendedHeartbeat(config)
+
   process.on('beforeExit', onBeforeExit)
   telemetryStartChannel.publish(getTelemetryData())
 }
