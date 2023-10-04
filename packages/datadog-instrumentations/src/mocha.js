@@ -52,6 +52,7 @@ let frameworkVersion
 let isSuitesSkipped = false
 let skippedSuites = []
 const unskippableSuites = []
+let isForcedToRun = false
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -154,7 +155,9 @@ function mochaHook (Runner) {
         status,
         isSuitesSkipped,
         testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length
+        numSkippedSuites: skippedSuites.length,
+        hasForcedToRunSuites: isForcedToRun,
+        hasUnskippableSuites: !!unskippableSuites.length
       })
     }))
 
@@ -176,7 +179,7 @@ function mochaHook (Runner) {
         asyncResource = new AsyncResource('bound-anonymous-fn')
         testFileToSuiteAr.set(suite.file, asyncResource)
         const isUnskippable = unskippableSuites.includes(suite.file)
-        const isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
+        isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
         asyncResource.runInAsyncScope(() => {
           testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
         })

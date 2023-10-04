@@ -243,7 +243,7 @@ testFrameworks.forEach(({
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'sharding-test/sharding-test',
+                TESTS_TO_RUN: 'sharding-test/sharding-test',
                 TEST_SHARD: '2/2'
               },
               stdio: 'inherit'
@@ -279,7 +279,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX: 'sharding-test/sharding-test',
+              TESTS_TO_RUN: 'sharding-test/sharding-test',
               TEST_SHARD: '1/2'
             },
             stdio: 'inherit'
@@ -398,7 +398,7 @@ testFrameworks.forEach(({
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '-r dd-trace/ci/init',
             RUN_IN_PARALLEL: true,
-            TEST_REGEX: 'timeout-test/timeout-test.js'
+            TESTS_TO_RUN: 'timeout-test/timeout-test.js'
           },
           stdio: 'pipe'
         })
@@ -828,11 +828,17 @@ testFrameworks.forEach(({
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const suites = payloads
-              .flatMap(({ payload }) => payload.events)
-              .filter(event => event.type === 'test_suite_end')
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
 
             assert.equal(suites.length, 2)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
 
             const skippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
@@ -850,9 +856,9 @@ testFrameworks.forEach(({
             assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
           }, 25000)
 
-        let TEST_REGEX = 'unskippable-test/test-'
+        let TESTS_TO_RUN = 'unskippable-test/test-'
         if (name === 'mocha') {
-          TEST_REGEX = JSON.stringify([
+          TESTS_TO_RUN = JSON.stringify([
             './unskippable-test/test-to-skip.js',
             './unskippable-test/test-unskippable.js'
           ])
@@ -864,7 +870,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX
+              TESTS_TO_RUN
             },
             stdio: 'inherit'
           }
@@ -888,30 +894,36 @@ testFrameworks.forEach(({
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const suites = payloads
-              .flatMap(({ payload }) => payload.events)
-              .filter(event => event.type === 'test_suite_end')
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
 
             assert.equal(suites.length, 2)
 
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+
             const skippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
-            )
+            ).content
             const nonSkippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
-            )
+            ).content
 
-            assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+            assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
 
-            assert.propertyVal(nonSkippedSuite.content.meta, TEST_STATUS, 'pass')
-            assert.propertyVal(nonSkippedSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(nonSkippedSuite.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(nonSkippedSuite.meta, TEST_ITR_UNSKIPPABLE, 'true')
             // it was not forced to run because it wasn't going to be skipped
-            assert.notProperty(nonSkippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+            assert.notProperty(nonSkippedSuite.meta, TEST_ITR_FORCED_RUN)
           }, 25000)
 
-        let TEST_REGEX = 'unskippable-test/test-'
+        let TESTS_TO_RUN = 'unskippable-test/test-'
         if (name === 'mocha') {
-          TEST_REGEX = JSON.stringify([
+          TESTS_TO_RUN = JSON.stringify([
             './unskippable-test/test-to-skip.js',
             './unskippable-test/test-unskippable.js'
           ])
@@ -923,7 +935,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX
+              TESTS_TO_RUN
             },
             stdio: 'inherit'
           }

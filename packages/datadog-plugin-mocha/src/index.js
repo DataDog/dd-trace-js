@@ -148,7 +148,9 @@ class MochaPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
-      numSkippedSuites
+      numSkippedSuites,
+      hasForcedToRunSuites,
+      hasUnskippableSuites
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
@@ -164,7 +166,9 @@ class MochaPlugin extends CiPlugin {
             isCodeCoverageEnabled,
             testCodeCoverageLinesTotal,
             skippingCount: numSkippedSuites,
-            skippingType: 'suite'
+            skippingType: 'suite',
+            hasForcedToRunSuites,
+            hasUnskippableSuites
           }
         )
 

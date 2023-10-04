@@ -46,6 +46,8 @@ let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
+let hasUnskippableSuites = false
+let hasForcedToRunSuites = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -205,15 +207,17 @@ addHook({
     const [test] = shardedTests
     const rootDir = test && test.context && test.context.config && test.context.config.rootDir
 
-    const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+    const jestSuitesToRun = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+    hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
+    hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
-    isSuitesSkipped = suitesToRun.length !== shardedTests.length
-    numSkippedSuites = skippedSuites.length
+    isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== shardedTests.length
+    numSkippedSuites = jestSuitesToRun.skippedSuites.length
 
-    itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+    itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
 
     skippableSuites = []
-    return suitesToRun
+    return jestSuitesToRun.suitesToRun
   })
   return sequencerPackage
 })
@@ -285,7 +289,9 @@ function cliWrapper (cli, jestVersion) {
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
         testCodeCoverageLinesTotal,
-        numSkippedSuites
+        numSkippedSuites,
+        hasUnskippableSuites,
+        hasForcedToRunSuites
       })
     })
 
@@ -500,16 +506,19 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
-    const { skippedSuites, suitesToRun } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    const jestSuitesToRun = getJestSuitesToRun(skippableSuites, tests, rootDir)
 
-    isSuitesSkipped = suitesToRun.length !== tests.length
-    numSkippedSuites = skippedSuites.length
+    hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
+    hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
-    itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+    isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== tests.length
+    numSkippedSuites = jestSuitesToRun.skippedSuites.length
+
+    itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
 
     skippableSuites = []
 
-    return { ...testPaths, tests: suitesToRun }
+    return { ...testPaths, tests: jestSuitesToRun.suitesToRun }
   })
 
   return searchSourcePackage
