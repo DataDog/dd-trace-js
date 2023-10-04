@@ -196,6 +196,10 @@ class SinkIastPlugin extends IastPlugin {
   addSub (iastPluginSub, handler) {
     return super.addSub({ tagKey: TagKey.VULNERABILITY_TYPE, ...iastPluginSub }, handler)
   }
+
+  addNotSinkSub (iastPluginSub, handler) {
+    return super.addSub(iastPluginSub, handler)
+  }
 }
 
 module.exports = {

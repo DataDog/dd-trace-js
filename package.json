@@ -70,7 +70,7 @@
   "dependencies": {
     "@datadog/native-appsec": "^4.0.0",
     "@datadog/native-iast-rewriter": "2.1.3",
-    "@datadog/native-iast-taint-tracking": "1.5.0",
+    "@datadog/native-iast-taint-tracking": "1.6.1",
     "@datadog/native-metrics": "^2.0.0",
     "@datadog/pprof": "4.0.0",
     "@datadog/sketches-js": "^2.1.0",
