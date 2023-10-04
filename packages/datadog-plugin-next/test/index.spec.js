@@ -45,7 +45,7 @@ describe('Plugin', function () {
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-              NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              NODE_OPTIONS: `--require ${__dirname}/datadog.js --openssl-legacy-provider`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0
             }
@@ -101,7 +101,8 @@ describe('Plugin', function () {
           cwd,
           env: {
             ...process.env,
-            version
+            version,
+            NODE_OPTIONS: '--openssl-legacy-provider'
           },
           stdio: ['pipe', 'ignore', 'pipe']
         })
