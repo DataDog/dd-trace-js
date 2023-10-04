@@ -622,7 +622,7 @@ versions.forEach(version => {
                   attributes: {
                     suite: `${featuresPath}farewell.feature`
                   }
-                },
+                }
               ])
 
               // TODO: add check for session and modules
