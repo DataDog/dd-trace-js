@@ -15,22 +15,19 @@ const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finis
 
 const requestFinishedSet = new WeakSet()
 
-const hookNames = ['http', 'https', 'node:http', 'node:https']
+const httpNames = ['http', 'node:http']
+const httpsNames = ['https', 'node:https']
 
-hookNames.forEach(name => {
-  if (name === 'http' || name === 'node:http') {
-    addHook({ name }, http => {
-      shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
-      shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
-      return http
-    })
-  } else {
-    addHook({ name }, http => {
-      // http.ServerResponse not present on https
-      shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
-      return http
-    })
-  }
+addHook({ name: httpNames }, http => {
+  shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+  return http
+})
+
+addHook({ name: httpsNames }, http => {
+  // http.ServerResponse not present on https
+  shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+  return http
 })
 
 function wrapResponseEmit (emit) {

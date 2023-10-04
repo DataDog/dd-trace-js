@@ -86,36 +86,36 @@ const paramsByFileHandleMethods = {
   writev: ['buffers', 'position']
 }
 const names = ['fs', 'node:fs']
-names.forEach(name => {
-  addHook({ name }, fs => {
-    const asyncMethods = Object.keys(paramsByMethod)
-    const syncMethods = asyncMethods.map(name => `${name}Sync`)
 
-    massWrap(fs, asyncMethods, createWrapFunction())
-    massWrap(fs, syncMethods, createWrapFunction())
-    massWrap(fs.promises, asyncMethods, createWrapFunction('promises.'))
+addHook({ name: names }, fs => {
+  const asyncMethods = Object.keys(paramsByMethod)
+  const syncMethods = asyncMethods.map(name => `${name}Sync`)
 
-    wrap(fs.realpath, 'native', createWrapFunction('', 'realpath.native'))
-    wrap(fs.realpathSync, 'native', createWrapFunction('', 'realpath.native'))
-    wrap(fs.promises.realpath, 'native', createWrapFunction('', 'realpath.native'))
+  massWrap(fs, asyncMethods, createWrapFunction())
+  massWrap(fs, syncMethods, createWrapFunction())
+  massWrap(fs.promises, asyncMethods, createWrapFunction('promises.'))
 
-    wrap(fs, 'createReadStream', wrapCreateStream)
-    wrap(fs, 'createWriteStream', wrapCreateStream)
-    if (fs.Dir) {
-      wrap(fs.Dir.prototype, 'close', createWrapFunction('dir.'))
-      wrap(fs.Dir.prototype, 'closeSync', createWrapFunction('dir.'))
-      wrap(fs.Dir.prototype, 'read', createWrapFunction('dir.'))
-      wrap(fs.Dir.prototype, 'readSync', createWrapFunction('dir.'))
-      wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator())
-    }
+  wrap(fs.realpath, 'native', createWrapFunction('', 'realpath.native'))
+  wrap(fs.realpathSync, 'native', createWrapFunction('', 'realpath.native'))
+  wrap(fs.promises.realpath, 'native', createWrapFunction('', 'realpath.native'))
 
-    wrap(fs, 'unwatchFile', createWatchWrapFunction())
-    wrap(fs, 'watch', createWatchWrapFunction())
-    wrap(fs, 'watchFile', createWatchWrapFunction())
+  wrap(fs, 'createReadStream', wrapCreateStream)
+  wrap(fs, 'createWriteStream', wrapCreateStream)
+  if (fs.Dir) {
+    wrap(fs.Dir.prototype, 'close', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'closeSync', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'read', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, 'readSync', createWrapFunction('dir.'))
+    wrap(fs.Dir.prototype, Symbol.asyncIterator, createWrapDirAsyncIterator())
+  }
 
-    return fs
-  })
+  wrap(fs, 'unwatchFile', createWatchWrapFunction())
+  wrap(fs, 'watch', createWatchWrapFunction())
+  wrap(fs, 'watchFile', createWatchWrapFunction())
+
+  return fs
 })
+
 function isFirstMethodReturningFileHandle (original) {
   return !kHandle && original.name === 'open'
 }

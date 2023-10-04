@@ -17,70 +17,68 @@ const errorTCPCh = channel('apm:net:tcp:error')
 
 const connectionCh = channel(`apm:net:tcp:connection`)
 
-const hookNames = ['net', 'node:net']
+const names = ['net', 'node:net']
 
-hookNames.forEach(name => {
-  addHook({ name }, net => {
-    if (!name.includes('node:')) {
-      require('dns')
-    } else {
-      require('node:dns')
+addHook({ name: names }, (net, version, name) => {
+  if (name === 'net') {
+    require('dns')
+  } else {
+    require('node:dns')
+  }
+
+  shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
+    if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
+      return connect.apply(this, arguments)
     }
 
-    shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
-      if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
-        return connect.apply(this, arguments)
+    const options = getOptions(arguments)
+    const lastIndex = arguments.length - 1
+    const callback = arguments[lastIndex]
+
+    if (!options) return connect.apply(this, arguments)
+
+    const callbackResource = new AsyncResource('bound-anonymous-fn')
+    const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+    if (typeof callback === 'function') {
+      arguments[lastIndex] = callbackResource.bind(callback)
+    }
+
+    const protocol = options.path ? 'ipc' : 'tcp'
+
+    return asyncResource.runInAsyncScope(() => {
+      if (protocol === 'ipc') {
+        startICPCh.publish({ options })
+        setupListeners(this, 'ipc', asyncResource)
+      } else {
+        startTCPCh.publish({ options })
+        setupListeners(this, 'tcp', asyncResource)
       }
 
-      const options = getOptions(arguments)
-      const lastIndex = arguments.length - 1
-      const callback = arguments[lastIndex]
-
-      if (!options) return connect.apply(this, arguments)
-
-      const callbackResource = new AsyncResource('bound-anonymous-fn')
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      if (typeof callback === 'function') {
-        arguments[lastIndex] = callbackResource.bind(callback)
-      }
-
-      const protocol = options.path ? 'ipc' : 'tcp'
-
-      return asyncResource.runInAsyncScope(() => {
-        if (protocol === 'ipc') {
-          startICPCh.publish({ options })
-          setupListeners(this, 'ipc', asyncResource)
-        } else {
-          startTCPCh.publish({ options })
-          setupListeners(this, 'tcp', asyncResource)
-        }
-
-        const emit = this.emit
-        this.emit = function (eventName) {
-          switch (eventName) {
-            case 'ready':
-            case 'connect':
-              return callbackResource.runInAsyncScope(() => {
-                return emit.apply(this, arguments)
-              })
-            default:
+      const emit = this.emit
+      this.emit = function (eventName) {
+        switch (eventName) {
+          case 'ready':
+          case 'connect':
+            return callbackResource.runInAsyncScope(() => {
               return emit.apply(this, arguments)
-          }
+            })
+          default:
+            return emit.apply(this, arguments)
         }
+      }
 
-        try {
-          return connect.apply(this, arguments)
-        } catch (err) {
-          protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
+      try {
+        return connect.apply(this, arguments)
+      } catch (err) {
+        protocol === 'ipc' ? errorICPCh.publish(err) : errorTCPCh.publish(err)
 
-          throw err
-        }
-      })
+        throw err
+      }
     })
-
-    return net
   })
+
+  return net
 })
 
 function getOptions (args) {
