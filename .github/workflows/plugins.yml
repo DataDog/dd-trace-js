@@ -670,7 +670,7 @@ jobs:
         ports:
           - 27017:27017
     env:
-      PLUGINS: mongodb-core
+      PLUGINS: mongodb-core|express-mongo-sanitize
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
