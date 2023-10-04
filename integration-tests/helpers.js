@@ -208,10 +208,10 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
-  integrationTestsPaths.forEach(async (path) => {
+  for (const path of integrationTestsPaths) {
     await exec(`cp -R ${path} ${folder}`)
     await exec(`sync ${folder}`)
-  })
+  }
 
   if (followUpCommand) {
     await exec(followUpCommand, { cwd: folder, env: restOfEnv })
@@ -266,7 +266,6 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...process.env,
     DD_API_KEY: '1',
-    DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init'

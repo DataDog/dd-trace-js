@@ -44,7 +44,6 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('span.kind', 'client')
               expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
               expect(traces[0][0].meta).to.have.property('network.destination.port', '11211')
-              expect(traces[0][0].meta).to.have.property('memcached.command', 'get test')
               expect(traces[0][0].meta).to.have.property('component', 'memcached')
             })
             .then(done)
@@ -160,7 +159,6 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(async () => {
           await agent.load('memcached', { service: 'custom' })
-          tracer = require('../../dd-trace')
           Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
           memcached = new Memcached('localhost:11211', { retries: 0 })
         })
@@ -174,6 +172,58 @@ describe('Plugin', () => {
             .catch(done)
 
           memcached.version(err => err && done(err))
+        })
+      })
+
+      describe('when changing env vars', () => {
+        describe('enabling command', () => {
+          beforeEach(async () => {
+            process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
+            tracer._initialized = false // force config read
+            await agent.load('memcached', { service: 'custom' })
+            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            memcached = new Memcached('localhost:11211', { retries: 0 })
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED
+          })
+
+          it('trace should contain memcached.command', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.have.property('memcached.command', 'version')
+              })
+              .then(done)
+              .catch(done)
+
+            memcached.version(err => err && done(err))
+          })
+        })
+
+        describe('disabling command', () => {
+          beforeEach(async () => {
+            process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'false'
+            tracer._initialized = false // force config read
+            await agent.load('memcached', { service: 'custom' })
+            Memcached = proxyquire(`../../../versions/memcached@${version}/node_modules/memcached`, {})
+            memcached = new Memcached('localhost:11211', { retries: 0 })
+          })
+
+          afterEach(() => {
+            delete process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED
+          })
+
+          it('trace should not contain memcached.command', done => {
+            agent
+              .use(traces => {
+                expect(traces[0][0].meta).to.not.have.property('memcached.command')
+              })
+              .then(done)
+              .catch(done)
+
+            memcached.version(err => err && done(err))
+          })
         })
       })
     })

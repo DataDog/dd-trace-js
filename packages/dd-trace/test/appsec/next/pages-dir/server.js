@@ -1,0 +1,24 @@
+'use strict'
+
+const { PORT, HOSTNAME } = process.env
+
+const { createServer } = require('http')
+const { parse } = require('url')
+const next = require('next') // eslint-disable-line import/no-extraneous-dependencies
+
+const app = next({ dir: __dirname, dev: false, quiet: true, hostname: HOSTNAME })
+const handle = app.getRequestHandler()
+
+app.prepare().then(() => {
+  const server = createServer((req, res) => {
+    const parsedUrl = parse(req.url, true)
+
+    if (parsedUrl.path === '/exit') {
+      server.close()
+    } else {
+      handle(req, res, parsedUrl)
+    }
+  }).listen(PORT, HOSTNAME, () => {
+    console.log(server.address()) // eslint-disable-line no-console
+  })
+})
