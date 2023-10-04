@@ -1,4 +1,7 @@
+'use strict'
+
 const sensitiveHandler = require('./evidence-redaction/sensitive-handler')
+const { stringifyWithRanges } = require('./utils')
 
 class VulnerabilityFormatter {
   constructor () {
@@ -38,6 +41,13 @@ class VulnerabilityFormatter {
   getUnredactedValueParts (evidence, sourcesIndexes) {
     const valueParts = []
     let fromIndex = 0
+
+    if (typeof evidence.value === 'object' && evidence.rangesToApply) {
+      const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
+      evidence.value = value
+      evidence.ranges = ranges
+    }
+
     evidence.ranges.forEach((range, rangeIndex) => {
       if (fromIndex < range.start) {
         valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
@@ -45,14 +55,16 @@ class VulnerabilityFormatter {
       valueParts.push({ value: evidence.value.substring(range.start, range.end), source: sourcesIndexes[rangeIndex] })
       fromIndex = range.end
     })
+
     if (fromIndex < evidence.value.length) {
       valueParts.push({ value: evidence.value.substring(fromIndex) })
     }
+
     return { valueParts }
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (!evidence.ranges) {
+    if (!evidence.ranges && !evidence.rangesToApply) {
       if (typeof evidence.value === 'undefined') {
         return undefined
       } else {
