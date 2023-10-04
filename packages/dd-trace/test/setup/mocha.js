@@ -1,4 +1,6 @@
 'use strict'
+const SegfaultHandler = require('segfault-handler');
+SegfaultHandler.registerHandler('crash.log');
 
 require('./core')
 
