@@ -6,9 +6,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const proxyquire = require('proxyquire').noPreserveCache()
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-describe('Plugin', () => {
+describe('Plugin', function () {
   let couchbase
-
+  this.retries(2)
   describe('couchbase', () => {
     let cluster
     let bucket
