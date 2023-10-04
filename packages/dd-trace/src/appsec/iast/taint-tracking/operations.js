@@ -18,15 +18,14 @@ let onRemoveTransaction = (transactionId, iastContext) => {}
 
 function onRemoveTransactionInformationTelemetry (transactionId, iastContext) {
   const metrics = TaintedUtils.getMetrics(transactionId, iastTelemetry.verbosity)
-  if (metrics && metrics.requestCount) {
+  if (metrics?.requestCount) {
     REQUEST_TAINTED.add(metrics.requestCount, null, iastContext)
   }
 }
 
 function removeTransaction (iastContext) {
-  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-    const transactionId = iastContext[IAST_TRANSACTION_ID]
-
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
     onRemoveTransaction(transactionId, iastContext)
 
     TaintedUtils.removeTransaction(transactionId)
@@ -36,8 +35,8 @@ function removeTransaction (iastContext) {
 
 function newTaintedString (iastContext, string, name, type) {
   let result = string
-  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-    const transactionId = iastContext[IAST_TRANSACTION_ID]
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
     result = TaintedUtils.newTaintedString(transactionId, string, name, type)
   } else {
     result = string
@@ -47,15 +46,17 @@ function newTaintedString (iastContext, string, name, type) {
 
 function taintObject (iastContext, object, type, keyTainting, keyType) {
   let result = object
-  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-    const transactionId = iastContext[IAST_TRANSACTION_ID]
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
     const queue = [{ parent: null, property: null, value: object }]
     const visited = new WeakSet()
+
     while (queue.length > 0) {
       const { parent, property, value, key } = queue.pop()
       if (value === null) {
         continue
       }
+
       try {
         if (typeof value === 'string') {
           const tainted = TaintedUtils.newTaintedString(transactionId, value, property, type)
@@ -71,11 +72,13 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
+
           const keys = Object.keys(value)
           for (let i = 0; i < keys.length; i++) {
             const key = keys[i]
             queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
           }
+
           if (parent && keyTainting && key) {
             const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
             parent[taintedProperty] = value
@@ -91,8 +94,8 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
 
 function isTainted (iastContext, string) {
   let result = false
-  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-    const transactionId = iastContext[IAST_TRANSACTION_ID]
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
     result = TaintedUtils.isTainted(transactionId, string)
   } else {
     result = false
@@ -102,13 +105,22 @@ function isTainted (iastContext, string) {
 
 function getRanges (iastContext, string) {
   let result = []
-  if (iastContext && iastContext[IAST_TRANSACTION_ID]) {
-    const transactionId = iastContext[IAST_TRANSACTION_ID]
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
     result = TaintedUtils.getRanges(transactionId, string)
   } else {
     result = []
   }
   return result
+}
+
+function addSecureMark (iastContext, string, mark) {
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
+    return TaintedUtils.addSecureMarksToTaintedString(transactionId, string, mark)
+  }
+
+  return string
 }
 
 function enableTaintOperations (telemetryVerbosity) {
@@ -132,6 +144,7 @@ function setMaxTransactions (transactions) {
 }
 
 module.exports = {
+  addSecureMark,
   createTransaction,
   removeTransaction,
   newTaintedString,
