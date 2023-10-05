@@ -85,9 +85,8 @@ const paramsByFileHandleMethods = {
   writeFile: ['data', 'options'],
   writev: ['buffers', 'position']
 }
-const names = ['fs', 'node:fs']
 
-addHook({ name: names }, fs => {
+addHook({ name: 'node:fs' }, fs => {
   const asyncMethods = Object.keys(paramsByMethod)
   const syncMethods = asyncMethods.map(name => `${name}Sync`)
 

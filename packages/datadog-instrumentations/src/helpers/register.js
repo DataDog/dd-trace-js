@@ -10,6 +10,14 @@ const log = require('../../../dd-trace/src/log')
 const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
 
 const hooks = require('./hooks')
+// for any node:* prefix's also add a hook for the package without the prefix
+// ie: node:dns, add a hook for dns
+for (const key in hooks) {
+  if (key.startsWith('node:')) {
+    const packageName = key.substring(5)
+    hooks[packageName] = hooks[key]
+  }
+}
 const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')

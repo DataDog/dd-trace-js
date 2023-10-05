@@ -18,9 +18,8 @@ const rrtypes = {
 }
 
 const rrtypeMap = new WeakMap()
-const names = ['dns', 'node:dns']
 
-addHook({ name: names }, dns => {
+addHook({ name: 'node:dns' }, dns => {
   dns.lookup = wrap('apm:dns:lookup', dns.lookup, 2)
   dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService, 3)
   dns.resolve = wrap('apm:dns:resolve', dns.resolve, 2)

@@ -15,23 +15,25 @@ exports.channel = function (name) {
 }
 
 /**
- * @param {string || Array} args.name module name or names
+ * @param {string} args.name module name
  * @param {string[]} args.versions array of semver range strings
  * @param {string} args.file path to file within package to instrument?
  * @param Function hook
  */
 exports.addHook = function addHook ({ name, versions, file }, hook) {
-  if (typeof name === 'string') {
-    name = [name]
+  if (!instrumentations[name]) {
+    instrumentations[name] = []
   }
-
-  name.forEach(val => {
-    if (!instrumentations[val]) {
-      instrumentations[val] = []
+  // if pkgName starts with node:* prefix add the part after the prefix as an instrumentation also
+  // ie: node:dns & dns
+  if (name.startsWith('node:')) {
+    const prefixExtractedName = name.substring(5)
+    if (!instrumentations[prefixExtractedName]) {
+      instrumentations[prefixExtractedName] = []
     }
-
-    instrumentations[val].push({ name: val, versions, file, hook })
-  })
+    instrumentations[prefixExtractedName].push({ name: prefixExtractedName, versions, file, hook })
+  }
+  instrumentations[name].push({ name, versions, file, hook })
 }
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.

@@ -8,9 +8,8 @@ const shimmer = require('../../datadog-shimmer')
 
 const childProcessChannel = channel('datadog:child_process:execution:start')
 const execMethods = ['exec', 'execFile', 'fork', 'spawn', 'execFileSync', 'execSync', 'spawnSync']
-const names = ['child_process', 'node:child_process']
 
-addHook({ name: names }, childProcess => {
+addHook({ name: 'node:child_process' }, childProcess => {
   shimmer.massWrap(childProcess, execMethods, wrapChildProcessMethod())
   return childProcess
 })
