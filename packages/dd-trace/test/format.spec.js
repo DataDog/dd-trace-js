@@ -5,6 +5,7 @@ require('./setup/tap')
 const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
+const { getExtraServices } = require('../src/service-naming/extra-services')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
@@ -103,6 +104,14 @@ describe('format', () => {
         trace = format(span)
 
         expect(span.setTag).to.not.have.been.called
+      })
+
+      it('should register extra service name', () => {
+        span.context()._tags['service.name'] = 'foo'
+
+        trace = format(span)
+
+        expect(getExtraServices()).to.deep.equal(['foo'])
       })
     })
 

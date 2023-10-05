@@ -23,7 +23,7 @@ function getStartedSpans (context) {
   return context._trace.started
 }
 
-function generateLabels ({ spanId, rootSpanId, webTags, endpoint }) {
+function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
   const labels = {}
   if (spanId) {
     labels['span id'] = spanId
@@ -37,6 +37,8 @@ function generateLabels ({ spanId, rootSpanId, webTags, endpoint }) {
     // fallback to endpoint computed when sample was taken
     labels['trace endpoint'] = endpoint
   }
+  // Incoming timestamps are in microseconds, we emit nanos.
+  labels['end_timestamp_ns'] = timestamp * 1000n
 
   return labels
 }
@@ -98,6 +100,10 @@ class NativeWallProfiler {
 
   codeHotspotsEnabled () {
     return this._codeHotspotsEnabled
+  }
+
+  endpointCollectionEnabled () {
+    return this._endpointCollectionEnabled
   }
 
   start ({ mapper } = {}) {

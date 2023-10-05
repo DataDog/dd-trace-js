@@ -62,6 +62,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'redis',
           (done) => client.get('bar').catch(done),
           '127.0.0.1', 'out.host')
 
@@ -146,6 +147,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'redis',
           (done) => client.get('bar').catch(done),
           'localhost', 'out.host')
 

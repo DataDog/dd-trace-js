@@ -58,6 +58,7 @@ describe('Plugin', () => {
 
           withPeerService(
             () => tracer,
+            'kafkajs',
             (done) => sendMessages(kafka, testTopic, messages).catch(done),
             '127.0.0.1:9092',
             'messaging.kafka.bootstrap.servers')

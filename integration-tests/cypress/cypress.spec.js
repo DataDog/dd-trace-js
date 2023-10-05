@@ -50,12 +50,11 @@ moduleType.forEach(({
   type,
   testCommand
 }) => {
+  // cypress only supports esm on versions >= 10.0.0
+  if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+    return
+  }
   describe(`cypress@${version} ${type}`, function () {
-    // cypress only supports esm on versions >= 10.0.0
-    if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
-      return
-    }
-
     this.retries(2)
     this.timeout(60000)
     let sandbox, cwd, receiver, childProcess, webAppPort
@@ -470,7 +469,6 @@ moduleType.forEach(({
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-            assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           })
 
         const {
@@ -573,7 +571,6 @@ moduleType.forEach(({
           .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
           .then(skippableRequest => {
             assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-            assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           })
 
         const {

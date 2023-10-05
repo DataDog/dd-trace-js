@@ -22,7 +22,9 @@ const {
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_SKIPPING_TYPE,
-  TEST_ITR_SKIPPING_COUNT
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../packages/dd-trace/src/plugins/util/test')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -130,8 +132,6 @@ testFrameworks.forEach(({
     })
 
     after(async function () {
-      // add an explicit timeout to make esm tests less flaky
-      this.timeout(50000)
       await sandbox.remove()
     })
 
@@ -590,7 +590,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
           assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(itrConfigRequest.headers, 'dd-application-key', '1')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
@@ -691,7 +690,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
           assert.propertyVal(skippableRequest.headers, 'dd-api-key', '1')
-          assert.propertyVal(skippableRequest.headers, 'dd-application-key', '1')
           const [coveragePayload] = coverageRequest.payload
           assert.propertyVal(coverageRequest.headers, 'dd-api-key', '1')
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
@@ -816,6 +814,118 @@ testFrameworks.forEach(({
           }
         )
       })
+      // TODO: remove conditional when support for mocha is done
+      if (name === 'jest') {
+        it('does not skip suites if suite is marked as unskippable', (done) => {
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/unskippable-test/test-to-skip.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/unskippable-test/test-unskippable.js'
+              }
+            }
+          ])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const suites = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
+
+              assert.equal(suites.length, 2)
+
+              const skippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+              )
+              const forcedToRunSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+              )
+
+              assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+              assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+              assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+
+              assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
+              assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+              assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
+            }, 25000)
+
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_REGEX: 'unskippable-test/test-'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+        it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+          receiver.setSuitesToSkip([
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/unskippable-test/test-to-skip.js'
+              }
+            }
+          ])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const suites = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test_suite_end')
+
+              assert.equal(suites.length, 2)
+
+              const skippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+              )
+              const nonSkippedSuite = suites.find(
+                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+              )
+
+              assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+
+              assert.propertyVal(nonSkippedSuite.content.meta, TEST_STATUS, 'pass')
+              assert.propertyVal(nonSkippedSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+              // it was not forced to run because it wasn't going to be skipped
+              assert.notProperty(nonSkippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+            }, 25000)
+
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_REGEX: 'unskippable-test/test-'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+      }
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -946,12 +1056,10 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
           assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
-          assert.notProperty(itrConfigRequest.headers, 'dd-application-key')
           assert.propertyVal(itrConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.notProperty(codeCovRequest.headers, 'dd-api-key')
-          assert.notProperty(codeCovRequest.headers, 'dd-application-key')
 
           assert.propertyVal(coveragePayload, 'name', 'coverage1')
           assert.propertyVal(coveragePayload, 'filename', 'coverage1.msgpack')
@@ -1045,7 +1153,6 @@ testFrameworks.forEach(({
           eventsRequestPromise
         ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
           assert.notProperty(skippableRequest.headers, 'dd-api-key')
-          assert.notProperty(skippableRequest.headers, 'dd-application-key')
           assert.propertyVal(skippableRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = coverageRequest.payload

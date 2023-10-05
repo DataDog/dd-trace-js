@@ -1,0 +1,33 @@
+{
+  "version": "2.2",
+    "metadata": {
+      "rules_version": "1.5.0"
+    },
+    "rules": [
+      {
+        "id": "test-rule-id-1",
+        "name": "test-rule-name-1",
+        "tags": {
+          "type": "security_scanner",
+          "category": "attack_attempt"
+        },
+        "conditions": [
+          {
+            "parameters": {
+              "inputs": [
+                {
+                  "address": "server.request.cookies"
+                }
+              ],
+              "list": [
+                "testattack"
+              ]
+            },
+            "operator": "phrase_match"
+          }
+        ],
+        "transformers": ["lowercase"],
+        "on_match": ["block"]
+      }
+    ]
+}

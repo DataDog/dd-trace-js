@@ -14,7 +14,7 @@ describe('OuboundPlugin', () => {
 
     beforeEach(() => {
       instance = new OutboundPlugin()
-      computePeerServiceStub = sinon.stub(instance, 'tracer')
+      computePeerServiceStub = sinon.stub(instance, '_tracerConfig')
       getPeerServiceStub = sinon.stub(instance, 'getPeerService')
       getRemapStub = sinon.stub(instance, 'getPeerServiceRemap')
     })
@@ -26,7 +26,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should attempt to remap when we found peer service', () => {
-      computePeerServiceStub.value({ _computePeerService: true })
+      computePeerServiceStub.value({ spanComputePeerService: true })
       getPeerServiceStub.returns({ foo: 'bar' })
       instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
 
@@ -35,7 +35,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should not attempt to remap if we found no peer service', () => {
-      computePeerServiceStub.value({ _computePeerService: true })
+      computePeerServiceStub.value({ spanComputePeerService: true })
       getPeerServiceStub.returns(undefined)
       instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
 
@@ -44,7 +44,7 @@ describe('OuboundPlugin', () => {
     })
 
     it('should do nothing when disabled', () => {
-      computePeerServiceStub.value({ _computePeerService: false })
+      computePeerServiceStub.value({ spanComputePeerService: false })
       instance.tagPeerService({ context: () => { return { _tags: {} } }, addTags: () => {} })
       expect(getPeerServiceStub).to.not.be.called
       expect(getRemapStub).to.not.be.called
@@ -118,20 +118,20 @@ describe('OuboundPlugin', () => {
     })
 
     it('should return peer data unchanged if there is no peer service', () => {
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({})
       const mappingData = instance.getPeerServiceRemap({ 'foo': 'bar' })
-      mappingStub = sinon.stub(instance, 'tracer')
       expect(mappingData).to.deep.equal({ 'foo': 'bar' })
     })
 
     it('should return peer data unchanged if no mapping is available', () => {
-      mappingStub = sinon.stub(instance, 'tracer').value({ _peerServiceMapping: {} })
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({ peerServiceMapping: {} })
       const mappingData = instance.getPeerServiceRemap(peerData)
       expect(mappingData).to.deep.equal(peerData)
     })
 
     it('should return peer data unchanged if no mapping item matches', () => {
-      mappingStub = sinon.stub(instance, 'tracer').value({
-        _peerServiceMapping: {
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({
+        peerServiceMapping: {
           barsvc: 'bar',
           bazsvc: 'baz'
         }
@@ -141,8 +141,8 @@ describe('OuboundPlugin', () => {
     })
 
     it('should remap if a mapping item matches', () => {
-      mappingStub = sinon.stub(instance, 'tracer').value({
-        _peerServiceMapping: {
+      mappingStub = sinon.stub(instance, '_tracerConfig').value({
+        peerServiceMapping: {
           foosvc: 'foo',
           bazsvc: 'baz'
         }

@@ -57,6 +57,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'elasticsearch',
           () => client.search({
             index: 'docs',
             sort: 'name',

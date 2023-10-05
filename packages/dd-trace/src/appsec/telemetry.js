@@ -51,7 +51,7 @@ function trackWafDurations (metrics, versionsTags) {
   }
 }
 
-function getOrCreateMetricTags ({ wafVersion, rulesVersion }, req, versionsTags) {
+function getOrCreateMetricTags (req, versionsTags) {
   const store = getStore(req)
 
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
@@ -75,7 +75,7 @@ function updateWafRequestsMetricTags (metrics, req) {
 
   trackWafDurations(metrics, versionsTags)
 
-  const metricTags = getOrCreateMetricTags(metrics, req, versionsTags)
+  const metricTags = getOrCreateMetricTags(req, versionsTags)
 
   const { blockTriggered, ruleTriggered, wafTimeout } = metrics
 

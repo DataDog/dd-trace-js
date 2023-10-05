@@ -81,27 +81,41 @@ describe('reporter', () => {
 
   describe('reportWafInit', () => {
     const wafVersion = '0.0.1'
-    const rulesInfo = {
-      loaded: 42,
-      failed: 1,
-      errors: { error: 'error parsing rule 2' },
-      version: '0.0.4'
+    const rulesVersion = '0.0.2'
+    const diagnosticsRules = {
+      loaded: ['1', '3', '4'],
+      failed: ['2'],
+      errors: { error: 'error parsing rule 2' }
     }
 
     it('should add some entries to metricsQueue', () => {
-      Reporter.reportWafInit(wafVersion, rulesInfo)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
 
       expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(42)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(3)
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
-      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors')).to.be.eq(JSON.stringify(rulesInfo.errors))
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors'))
+        .to.be.eq(JSON.stringify(diagnosticsRules.errors))
       expect(Reporter.metricsQueue.get('manual.keep')).to.be.eq('true')
     })
 
     it('should call incrementWafInitMetric', () => {
-      Reporter.reportWafInit(wafVersion, rulesInfo)
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesInfo.version)
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+    })
+
+    it('should not fail with undefined arguments', () => {
+      const wafVersion = undefined
+      const rulesVersion = undefined
+      const diagnosticsRules = undefined
+
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
+
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
     })
   })
 

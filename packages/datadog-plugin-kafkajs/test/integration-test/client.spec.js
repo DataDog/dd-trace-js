@@ -12,27 +12,25 @@ describe('esm', () => {
   let agent
   let proc
   let sandbox
+  withVersions('kafkajs', 'kafkajs', version => {
+    before(async function () {
+      this.timeout(20000)
+      sandbox = await createSandbox([`'kafkajs@${version}'`], false, [
+        `./packages/datadog-plugin-kafkajs/test/integration-test/*`])
+    })
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['kafkajs@>=1.4.0'], false, [
-      `./packages/datadog-plugin-kafkajs/test/integration-test/*`])
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
-
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
-
-  context('kafkajs', () => {
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

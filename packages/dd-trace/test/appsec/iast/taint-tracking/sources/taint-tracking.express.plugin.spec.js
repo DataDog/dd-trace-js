@@ -10,11 +10,11 @@ const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
 const {
-  HTTP_REQUEST_PATH,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_URI
 } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 
-describe('Path sourcing with express', () => {
+describe('URI sourcing with express', () => {
   let express
   let appListener
 
@@ -47,7 +47,7 @@ describe('Path sourcing with express', () => {
       iast.disable()
     })
 
-    it('should taint path', done => {
+    it('should taint uri', done => {
       const app = express()
       app.get('/path/*', (req, res) => {
         const store = storage.getStore()
@@ -55,7 +55,7 @@ describe('Path sourcing with express', () => {
         const isPathTainted = isTainted(iastContext, req.url)
         expect(isPathTainted).to.be.true
         const taintedPathValueRanges = getRanges(iastContext, req.url)
-        expect(taintedPathValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_PATH)
+        expect(taintedPathValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_URI)
         res.status(200).send()
       })
 
