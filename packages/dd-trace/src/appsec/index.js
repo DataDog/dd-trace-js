@@ -123,7 +123,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   delete responseHeaders['set-cookie']
 
   const payload = {
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: res.statusCode,
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: JSON.stringify(res.statusCode),
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
 
