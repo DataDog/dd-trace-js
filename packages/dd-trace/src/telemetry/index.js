@@ -21,8 +21,13 @@ let heartbeatInterval
 let extendedInterval
 let integrations
 let retryData = null
+const extendedHeartbeatPayload = {}
 
 const sentIntegrations = new Set()
+
+function getRetryData () {
+  return retryData
+}
 
 function updateRetryData (error, retryObj) {
   if (error) {
@@ -30,6 +35,26 @@ function updateRetryData (error, retryObj) {
       const payload = retryObj.payload[0].payload
       const reqType = retryObj.payload[0].request_type
       retryData = { payload: payload, reqType: reqType }
+
+      // Since this payload failed twice it now gets save in to the extended heartbeat
+      const failedPayload = retryObj.payload[1].payload
+      const failedReqType = retryObj.payload[1].request_type
+
+      // save away the dependencies and integration request for extended heartbeat.
+      if (failedReqType === 'app-integrations-change') {
+        if (extendedHeartbeatPayload['integrations']) {
+          extendedHeartbeatPayload['integrations'].push(failedPayload)
+        } else {
+          extendedHeartbeatPayload['integrations'] = [failedPayload]
+        }
+      }
+      if (failedReqType === 'app-dependencies-loaded') {
+        if (extendedHeartbeatPayload['dependencies']) {
+          extendedHeartbeatPayload['dependencies'].push(failedPayload)
+        } else {
+          extendedHeartbeatPayload['dependencies'] = [failedPayload]
+        }
+      }
     } else {
       retryData = retryObj
     }
@@ -111,7 +136,8 @@ function formatConfig (config) {
 
 function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
-  sendData(config, application, host, 'app-closing')
+  const { reqType, payload } = createPayload('app-closing')
+  sendData(config, application, host, reqType, payload)
 }
 
 function createAppObject (config) {
@@ -166,16 +192,26 @@ function createBatchPayload (payload) {
       'payload': item.payload
     })
   })
-  // eslint-disable-next-line no-console
-  // console.log(batchPayload)
 
   return batchPayload
+}
+
+function createPayload (currReqType, currPayload = {}) {
+  if (getRetryData()) {
+    const payload = { reqType: currReqType, payload: currPayload }
+    const batchPayload = createBatchPayload([payload, retryData])
+    return { 'reqType': 'message-batch', 'payload': batchPayload }
+  }
+
+  return { 'reqType': currReqType, 'payload': currPayload }
 }
 
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     metricsManager.send(config, application, host)
-    sendData(config, application, host, 'app-heartbeat')
+
+    const { reqType, payload } = createPayload('app-heartbeat')
+    sendData(config, application, host, reqType, payload, updateRetryData)
     heartbeat(config, application, host)
   }, heartbeatInterval).unref()
   return heartbeatTimeout
@@ -183,7 +219,13 @@ function heartbeat (config, application, host) {
 
 function extendedHeartbeat (config) {
   extendedInterval = setTimeout(() => {
-    sendData(config, application, host, 'app-extendedHeartbeat', appStarted(config))
+    const appPayload = appStarted(config)
+    const payload = {
+      ...appPayload,
+      ...extendedHeartbeatPayload
+    }
+    sendData(config, application, host, 'app-extendedHeartbeat', payload)
+    Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
   }, 1000 * 60 * 60 * 24).unref()
   return extendedInterval
 }
@@ -199,7 +241,7 @@ function start (aConfig, thePluginManager) {
   heartbeatInterval = config.telemetry.heartbeatInterval
   integrations = getIntegrations()
 
-  dependencies.start(config, application, host)
+  dependencies.start(config, application, host, getRetryData, updateRetryData)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -236,15 +278,7 @@ function updateIntegrations () {
     return
   }
 
-  let currPayload
-  if (retryData) {
-    currPayload = { reqType: 'app-integrations-change', payload: { 'integrations': integrations } }
-  } else {
-    currPayload = { 'integrations': integrations }
-  }
-
-  const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
-  const reqType = retryData ? 'message-batch' : 'app-integrations-change'
+  const { reqType, payload } = createPayload('app-integrations-change', { 'integrations': integrations })
 
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
@@ -271,15 +305,7 @@ function updateConfig (changes, config) {
     origin: change.origin
   }))
 
-  let currPayload
-  if (retryData) {
-    currPayload = { reqType: 'app-integrations-change', payload: { configuration } }
-  } else {
-    currPayload = { 'integrations': integrations }
-  }
-
-  const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
-  const reqType = retryData ? 'message-batch' : 'app-integrations-change'
+  const { reqType, payload } = createPayload('app-integrations-change', { configuration })
 
   sendData(config, application, host, reqType, payload, updateRetryData)
 }

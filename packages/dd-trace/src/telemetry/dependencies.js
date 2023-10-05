@@ -16,7 +16,22 @@ const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host, initialLoad
 let isFirstModule = true
+let getRetryData
+let updateRetryData
 
+function createBatchPayload (payload) {
+  const batchPayload = []
+  payload.map(item => {
+    batchPayload.push({
+      'request_type': item.reqType,
+      'payload': item.payload
+    })
+  })
+  // eslint-disable-next-line no-console
+  // console.log(batchPayload)
+
+  return batchPayload
+}
 function waitAndSend (config, application, host) {
   if (!immediate) {
     immediate = setImmediate(() => {
@@ -35,7 +50,19 @@ function waitAndSend (config, application, host) {
             const [name, version] = pair.split(' ')
             return { name, version }
           })
-        sendData(config, application, host, 'app-dependencies-loaded', { dependencies })
+        let currPayload
+        const retryData = getRetryData()
+        if (retryData) {
+          currPayload = { reqType: 'app-dependencies-loaded', payload: { dependencies } }
+        } else {
+          currPayload = { dependencies }
+        }
+
+        const payload = retryData ? createBatchPayload([currPayload, retryData]) : currPayload
+        const reqType = retryData ? 'message-batch' : 'app-dependencies-loaded'
+
+        sendData(config, application, host, reqType, payload, updateRetryData)
+
         if (savedDependenciesToSend.size > 0) {
           waitAndSend(config, application, host)
         }
@@ -97,11 +124,13 @@ function onModuleLoad (data) {
     }
   }
 }
-function start (_config = {}, _application, _host) {
+function start (_config = {}, _application, _host, getRetryDataFunction, updateRetryDatafunction) {
   config = _config
   application = _application
   host = _host
   initialLoad = true
+  getRetryData = getRetryDataFunction
+  updateRetryData = updateRetryDatafunction
   moduleLoadStartChannel.subscribe(onModuleLoad)
 
   // try and capture intially loaded modules in the first tick

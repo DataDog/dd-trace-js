@@ -8,7 +8,6 @@ const http = require('http')
 const { once } = require('events')
 const { storage } = require('../../../datadog-core')
 const os = require('os')
-const { expect } = require('chai')
 const sinon = require('sinon')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
@@ -269,9 +268,11 @@ describe('telemetry', () => {
     let capturedPayload
     let count = 0
     let pluginsByName
+    let clock
     const HEARTBEAT_INTERVAL = 60000
 
     beforeEach(() => {
+      clock = sinon.useFakeTimers()
       pluginsByName = {
         foo2: { _enabled: true },
         bar2: { _enabled: false }
@@ -279,10 +280,10 @@ describe('telemetry', () => {
       // clock = sinon.useFakeTimers()
     })
     afterEach(() => {
-
+      clock.restore()
     })
 
-    it('should retry data on next cycle', () => {
+    it('should retry data on next app change', () => {
       const sendDataError = {
         sendData: (config, application, host, reqType, payload, cb = () => {}) => {
           capturedRequestType = reqType
@@ -357,6 +358,78 @@ describe('telemetry', () => {
           'integrations': [{
             name: 'boo3',
             enabled: true,
+            auto_enabled: true
+          }]
+        }
+
+      }]
+      )
+    })
+
+    it('should retry data on next heartbeat', () => {
+      const sendDataError = {
+        sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+          // skipping startup command
+          if (reqType === 'app-started') {
+            cb()
+            return
+          }
+          // skipping startup command
+          if (reqType === 'message-batch') {
+            capturedRequestType = reqType
+            capturedPayload = payload
+            cb()
+            return
+          }
+          // Simulate an HTTP error by calling the callback with an error
+          cb(new Error('HTTP request error'), {
+            payload: payload,
+            reqType: reqType
+          })
+        }
+
+      }
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        },
+        './send-data': sendDataError
+      })
+
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: 0,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        appsec: { enabled: true },
+        profiling: { enabled: true },
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
+        }
+      }, {
+        _pluginsByName: pluginsByName
+      })
+      // jump to next heartbeat request
+      clock.tick(HEARTBEAT_INTERVAL)
+      expect(capturedRequestType).to.equal('message-batch')
+      expect(capturedPayload).to.deep.equal([{
+        request_type: 'app-heartbeat',
+        payload: {}
+      }, {
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'foo2',
+            enabled: true,
+            auto_enabled: true
+          },
+          {
+            name: 'bar2',
+            enabled: false,
             auto_enabled: true
           }]
         }
@@ -500,6 +573,70 @@ describe('telemetry', () => {
 
       }]
       )
+    })
+
+    it('should set extended heartbeat payload', async () => {
+      let extendedHeartbeatRequest
+      let extendedHeartbeatPayload
+      const sendDataError = {
+        sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+          // skipping startup command
+          if (reqType === 'app-started') {
+            cb()
+            return
+          }
+
+          if (reqType === 'app-extendedHeartbeat') {
+            extendedHeartbeatRequest = reqType
+            extendedHeartbeatPayload = payload
+            return
+          }
+
+          // Simulate an HTTP error by calling the callback with an error
+          cb(new Error('HTTP request error'), {
+            payload: payload,
+            reqType: reqType
+          })
+        }
+
+      }
+      telemetry = proxyquire('../../src/telemetry', {
+        '../exporters/common/docker': {
+          id () {
+            return 'test docker id'
+          }
+        },
+        './send-data': sendDataError
+      })
+
+      // Start function sends 2 messages app-started & app-integrations-change
+      telemetry.start({
+        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+        hostname: 'localhost',
+        port: 0,
+        service: 'test service',
+        version: '1.2.3-beta4',
+        appsec: { enabled: true },
+        profiling: { enabled: true },
+        env: 'preprod',
+        tags: {
+          'runtime-id': '1a2b3c'
+        }
+      }, {
+        _pluginsByName: pluginsByName
+      })
+      pluginsByName.foo1 = { _enabled: true }
+      telemetry.updateIntegrations() // This sends an batch message and fails
+      // Skip forward a day
+      clock.tick(86400000)
+      expect(extendedHeartbeatRequest).to.equal('app-extendedHeartbeat')
+      expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
+      expect(extendedHeartbeatPayload['integrations']).to.deep.include({
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      })
     })
   })
 })
