@@ -280,6 +280,43 @@ describe('reporter', () => {
     })
   })
 
+  describe('reportSchemas', () => {
+    it('should not call addTags if no parameter is passed', () => {
+      Reporter.reportSchemas()
+      expect(span.addTags).not.to.be.called
+    })
+
+    it('should not call addTags if parameter is undefined', () => {
+      Reporter.reportSchemas(undefined)
+      expect(span.addTags).not.to.be.called
+    })
+
+    it('should call addTags with an empty array', () => {
+      Reporter.reportSchemas([])
+      expect(span.addTags).to.be.calledOnceWithExactly({})
+    })
+
+    it('should call addTags with matched tags', () => {
+      const derivatives = [
+        { '_dd.appsec.s.req.headers': [8] },
+        { '_dd.appsec.s.req.query': [8] },
+        { '_dd.appsec.s.req.params': [8] },
+        { '_dd.appsec.s.req.cookies': [8] },
+        { '_dd.appsec.s.req.body': [8] },
+        { 'custom.processor.output': 'value' }
+      ]
+
+      Reporter.reportSchemas(derivatives)
+      expect(span.addTags).to.be.calledOnceWithExactly({
+        '_dd.appsec.s.req.headers': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
+        '_dd.appsec.s.req.query': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
+        '_dd.appsec.s.req.params': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
+        '_dd.appsec.s.req.cookies': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
+        '_dd.appsec.s.req.body': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA='
+      })
+    })
+  })
+
   describe('finishRequest', () => {
     let wafContext
 

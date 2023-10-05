@@ -28,7 +28,8 @@ describe('WAF Manager', () => {
     }
     DDWAF.prototype.requiredAddresses = new Map([
       ['server.request.headers.no_cookies', { 'header': 'value' }],
-      ['server.request.uri.raw', 'https://testurl']
+      ['server.request.uri.raw', 'https://testurl'],
+      ['server.request.body', 'value']
     ])
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
@@ -43,6 +44,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
+    sinon.stub(Reporter, 'reportSchemas')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -319,6 +321,25 @@ describe('WAF Manager', () => {
         const result = wafContextWrapper.run(params)
 
         expect(result).to.be.equals(actions)
+      })
+
+      it('should report schemas when ddwafContext returns schemas in the derivatives', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          derivatives: [{ '_dd.appsec.s.req.body': [8] }]
+        }
+        const params = {
+          'server.request.body': 'value',
+          'waf.context.processor': {
+            'extract-schema': true
+          }
+        }
+
+        ddwafContext.run.returns(result)
+
+        wafContextWrapper.run(params)
+        expect(Reporter.reportSchemas).to.be.calledOnceWithExactly(result.derivatives)
       })
     })
   })
