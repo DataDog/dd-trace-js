@@ -13,7 +13,7 @@ const taintTrackingPlugin = require('./plugin')
 
 module.exports = {
   enableTaintTracking (config, telemetryVerbosity) {
-    enableRewriter(telemetryVerbosity)
+    //enableRewriter(telemetryVerbosity)
     enableTaintOperations(telemetryVerbosity)
     taintTrackingPlugin.enable()
     setMaxTransactions(config.maxConcurrentRequests)
