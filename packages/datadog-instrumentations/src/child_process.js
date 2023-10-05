@@ -14,7 +14,7 @@ const childProcessChannelFinish = channel('datadog:child_process:execution:finis
 const childProcessChannelError = channel('datadog:child_process:execution:error')
 
 // ignored exec method because it calls to execFile directly
-const execAsyncMethods = ['execFile', 'spawn', 'fork']
+const execAsyncMethods = ['execFile', 'spawn']
 const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
 
 const names = ['child_process', 'node:child_process']
@@ -40,18 +40,28 @@ function wrapChildProcessSyncMethod () {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const command = arguments[0]
+      let command = arguments[0]
+      const args = arguments[1]
+      if (Array.isArray(args)) {
+        command = command + ' ' + args.join(' ')
+      }
       childProcessChannelStart.publish({ command })
 
       let error
+      let result
       try {
-        return childProcessMethod.apply(this, arguments)
+        result = childProcessMethod.apply(this, arguments)
+        return result
       } catch (err) {
-        childProcessChannelError.publish(err?.status)
+        childProcessChannelError.publish(err)
         error = err
         throw err
       } finally {
-        childProcessChannelFinish.publish({ exitCode: error?.status || error?.code || 0 })
+        const exitCode = error?.status || error?.code || result?.status || 0
+        if (exitCode !== 0) {
+          childProcessChannelError.publish()
+        }
+        childProcessChannelFinish.publish({ exitCode })
       }
     }
   }
@@ -87,7 +97,12 @@ function wrapChildProcessAsyncMethod () {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const command = arguments[0]
+      let command = arguments[0]
+      const args = arguments[1]
+      if (Array.isArray(args)) {
+        command = command + ' ' + args.join(' ')
+      }
+
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
         childProcessChannelStart.publish({ command })

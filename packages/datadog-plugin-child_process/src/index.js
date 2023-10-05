@@ -1,10 +1,10 @@
 'use strict'
 
-const TracingPlugin = require('../../../plugins/tracing')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const scrubChildProcessCmd = require('./scrub-cmd-params')
 
 class ChildProcessPlugin extends TracingPlugin {
-  static get id () { return 'subprocess' }
+  static get id () { return 'child_process' }
   static get prefix () { return 'datadog:child_process:execution' }
 
   get tracer () {

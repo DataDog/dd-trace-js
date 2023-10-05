@@ -1,6 +1,6 @@
 'use strict'
 
-const scrubCmdParams = require('../../../../src/appsec/plugins/child-process/scrub-cmd-params')
+const scrubCmdParams = require('../src/scrub-cmd-params')
 
 describe('scrub cmds', () => {
   it('Should not scrub single command', () => {

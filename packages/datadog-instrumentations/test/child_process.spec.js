@@ -8,6 +8,7 @@ describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
   const execAsyncMethods = ['exec', 'execFile', 'spawn']
   const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
+  // const execSyncMethods = ['spawnSync']
 
   const childProcessChannelStart = channel('datadog:child_process:execution:start')
   const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
@@ -44,7 +45,7 @@ describe('child process', () => {
       })
 
       describe('async methods', (done) => {
-        execAsyncMethods.forEach((methodName) => {
+        execAsyncMethods.forEach(methodName => {
           describe(`method ${methodName}`, () => {
             it('should execute success callbacks', (done) => {
               const res = childProcess[methodName]('ls')
@@ -118,8 +119,8 @@ describe('child process', () => {
         })
       })
 
-      describe('sync methods', (done) => {
-        execSyncMethods.forEach((methodName) => {
+      describe('sync methods', () => {
+        execSyncMethods.forEach(methodName => {
           describe(`method ${methodName}`, () => {
             it('should execute success callbacks', () => {
               childProcess[methodName]('ls')
@@ -132,7 +133,9 @@ describe('child process', () => {
             it('should execute error callback', () => {
               try {
                 childProcess[methodName]('invalid_command_test')
-              } catch (e) {
+              } catch {
+                // do nothing
+              } finally {
                 expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test' })
                 expect(finish).to.have.been.calledOnce
                 expect(error).to.have.been.calledOnce
@@ -142,7 +145,9 @@ describe('child process', () => {
             it('should execute error callback with `exit 1` command', () => {
               try {
                 childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
-              } catch (e) {
+              } catch {
+                // do nothing
+              } finally {
                 expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"' })
                 expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
                 expect(error).to.have.been.calledOnce
