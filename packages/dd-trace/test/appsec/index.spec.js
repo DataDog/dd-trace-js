@@ -47,12 +47,17 @@ describe('AppSec Index', () => {
         eventTracking: {
           enabled: true,
           mode: 'safe'
+        },
+        apiSecurity: {
+          enabled: false,
+          requestSampling: 0
         }
       }
     }
 
     web = {
-      root: sinon.stub()
+      root: sinon.stub(),
+      getContext: sinon.stub()
     }
 
     blocking = {
@@ -214,6 +219,7 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       sinon.stub(waf, 'run')
+      web.getContext.returns({})
     })
 
     it('should propagate incoming http start data', () => {
@@ -263,7 +269,13 @@ describe('AppSec Index', () => {
       const rootSpan = {
         addTags: sinon.stub()
       }
+
       web.root.returns(rootSpan)
+      web.getContext.returns({})
+    })
+
+    afterEach(() => {
+      AppSec.disable()
     })
 
     it('should propagate incoming http end data', () => {
@@ -397,6 +409,177 @@ describe('AppSec Index', () => {
     })
   })
 
+  describe('Api Security', () => {
+    beforeEach(() => {
+      sinon.stub(waf, 'run')
+
+      const rootSpan = {
+        addTags: sinon.stub()
+      }
+
+      web.root.returns(rootSpan)
+      web.getContext.returns({})
+    })
+
+    afterEach(() => {
+      AppSec.disable()
+    })
+
+    it('should not trigger schema extraction with sampling disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 0
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.body': { a: '1' }
+      }, req)
+    })
+
+    it('should not trigger schema extraction with feature disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: false,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.body': { a: '1' }
+      }, req)
+    })
+
+    it('should trigger schema extraction with sampling enabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        },
+        body: {
+          a: '1'
+        },
+        query: {
+          b: '2'
+        },
+        route: {
+          path: '/path/:c'
+        }
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-lenght': 42
+        }),
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledTwice
+      expect(waf.run.secondCall).to.have.been.calledWithExactly({
+        'server.response.status': 201,
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+        'server.request.body': { a: '1' },
+        'waf.context.processor': { 'extract-schema': true }
+      }, req)
+    })
+  })
+
   describe('Channel handlers', () => {
     let abortController, req, res, rootSpan
 
@@ -405,6 +588,7 @@ describe('AppSec Index', () => {
         addTags: sinon.stub()
       }
       web.root.returns(rootSpan)
+      web.getContext.returns({})
 
       abortController = { abort: sinon.stub() }
 

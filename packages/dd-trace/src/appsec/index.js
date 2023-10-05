@@ -23,11 +23,22 @@ const { block, setTemplates } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 
+const APPSEC_CONTEXT_KEY = Symbol('appsec.context')
+
 let isEnabled = false
 let config
 
-function sampleRequest (sampling) {
-  return true
+function sampleRequest ({ enabled, requestSampling }) {
+  if (!enabled) {
+    return false
+  }
+
+  if (!requestSampling) {
+    return false
+  }
+
+  const probability = requestSampling * 100
+  return Math.round(Math.random() * 100) <= probability
 }
 
 function enable (_config) {
@@ -69,6 +80,12 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
+  // TODO: use a WeakMap instead?
+  const topContext = web.getContext(req)
+  topContext[APPSEC_CONTEXT_KEY] = {
+    schemaExtraction: sampleRequest(config.appsec.apiSecurity)
+  }
+
   const clientIp = extractIp(config, req)
 
   rootSpan.addTags({
@@ -90,6 +107,10 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     payload[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
+  if (topContext[APPSEC_CONTEXT_KEY].schemaExtraction) {
+    payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+  }
+
   const actions = waf.run(payload, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
@@ -97,6 +118,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 
 function incomingHttpEndTranslator ({ req, res }) {
   // TODO: this doesn't support headers sent with res.writeHead()
+  const appsecContext = web.getContext(req)[APPSEC_CONTEXT_KEY]
   const responseHeaders = Object.assign({}, res.getHeaders())
   delete responseHeaders['set-cookie']
 
@@ -121,8 +143,8 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (config.appsec.apiSecurity.enabled && sampleRequest(config.appsec.apiSecurity.requestSampling)) {
-    payload['waf.context.settings'] = { 'extract-schema': true }
+  if (appsecContext?.schemaExtraction) {
+    payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
   waf.run(payload, req)
