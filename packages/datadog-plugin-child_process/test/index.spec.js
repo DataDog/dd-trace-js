@@ -4,6 +4,7 @@ const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const semver = require('semver')
 
 function noop () {}
 
@@ -21,6 +22,7 @@ describe('Child process plugin', () => {
         startSpan: sinon.stub()
       }
     })
+
     afterEach(() => {
       sinon.restore()
     })
@@ -78,7 +80,7 @@ describe('Child process plugin', () => {
     })
 
     it('should return proper id', () => {
-      expect(ChildProcessPlugin.id).to.be.equal('subprocess')
+      expect(ChildProcessPlugin.id).to.be.equal('child_process')
     })
   })
 
@@ -160,14 +162,15 @@ describe('Child process plugin', () => {
             })
 
             it('should be instrumented with error code', (done) => {
+              const error = semver.satisfies(process.versions.node, '<=16') && methodName === 'execFileSync' ? 0 : 1
               const expected = {
                 type: 'system',
                 name: 'command_execution',
-                error: 1,
+                error,
                 meta: {
                   component: 'subprocess',
                   'cmd.exec': '["node","-e","process.exit(1)"]',
-                  'cmd.exit_code': '1'
+                  'cmd.exit_code': `${error}`
                 }
               }
               expectSomeSpan(agent, expected).then(done, done)

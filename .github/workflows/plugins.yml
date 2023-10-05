@@ -182,10 +182,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
 
-  child-process:
+  child_process:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: child-process
+      PLUGINS: child_process
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup

@@ -58,7 +58,7 @@ function wrapChildProcessSyncMethod () {
         throw err
       } finally {
         const exitCode = error?.status || error?.code || result?.status || 0
-        if (exitCode !== 0) {
+        if (!error && (exitCode !== 0 || result?.error)) {
           childProcessChannelError.publish()
         }
         childProcessChannelFinish.publish({ exitCode })

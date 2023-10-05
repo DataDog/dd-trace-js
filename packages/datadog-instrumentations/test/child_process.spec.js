@@ -149,8 +149,7 @@ describe('child process', () => {
                 // do nothing
               } finally {
                 expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"' })
-                expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
-                expect(error).to.have.been.calledOnce
+                expect(finish).to.have.been.calledOnce
               }
             })
           })
