@@ -131,6 +131,8 @@ services:
     image: docker.io/williamconti549/dd-apm-test-agent:integration-versions
     ports:
         - "127.0.0.1:9126:9126"
+    volumes:
+      - "./artifacts:./artifacts"
     environment:
         - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript

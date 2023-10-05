@@ -15,3 +15,8 @@ runs:
           docker-compose logs testagent
         fi
       shell: bash
+    - name: Archive Test Agent Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: supported-integrations
+        path: ./artifacts
