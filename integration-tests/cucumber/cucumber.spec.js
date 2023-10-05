@@ -570,29 +570,35 @@ versions.forEach(version => {
                 }
               ])
 
-              // TODO: add check for session and modules
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                  const suites = payloads
-                    .flatMap(({ payload }) => payload.events)
-                    .filter(event => event.type === 'test_suite_end')
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const suites = events.filter(event => event.type === 'test_suite_end')
 
                   assert.equal(suites.length, 2)
 
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  const testModule = events.find(event => event.type === 'test_session_end').content
+
+                  assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+                  assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+
                   const skippedSuite = suites.find(
                     event => event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
-                  )
+                  ).content
                   const forcedToRunSuite = suites.find(
                     event => event.content.resource === 'test_suite.ci-visibility/features/greetings.feature'
-                  )
+                  ).content
 
-                  assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
-                  assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
-                  assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+                  assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+                  assert.notProperty(skippedSuite.meta, TEST_ITR_UNSKIPPABLE)
+                  assert.notProperty(skippedSuite.meta, TEST_ITR_FORCED_RUN)
 
-                  assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'fail')
-                  assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
-                  assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_STATUS, 'fail')
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_ITR_FORCED_RUN, 'true')
                 }, 25000)
 
               childProcess = exec(
@@ -625,14 +631,20 @@ versions.forEach(version => {
                 }
               ])
 
-              // TODO: add check for session and modules
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                  const suites = payloads
-                    .flatMap(({ payload }) => payload.events)
-                    .filter(event => event.type === 'test_suite_end')
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const suites = events.filter(event => event.type === 'test_suite_end')
 
                   assert.equal(suites.length, 2)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  const testModule = events.find(event => event.type === 'test_session_end').content
+
+                  assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+                  assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
 
                   const skippedSuite = suites.find(
                     event => event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
