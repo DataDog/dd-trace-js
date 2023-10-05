@@ -4,10 +4,5 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v2
-    - run: |
-        ls -a
-        [ -d "./artifacts" ] || mkdir -p "./artifacts"
-        ls -a
-      shell: bash
     - run: docker-compose up -d testagent
       shell: bash
