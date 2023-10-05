@@ -817,7 +817,7 @@ jobs:
   # TODO: Install the Oracle client on the host and test Node >=18.
   # TODO: Figure out why nyc stopped working with EACCESS errors.
   oracledb:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     container: bengl/node-12-with-oracle-client
     services:
       oracledb:
