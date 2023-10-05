@@ -17,8 +17,7 @@ runs:
       shell: bash
     - run: |
         [ -d "./artifacts" ] || mkdir -p "./artifacts"
-        response=$(curl -s http://127.0.0.1:9126/test/integrations/tested_versions)
-        echo "$response" > ./artifacts/response.txt
+        curl -o "$(curl -s -I http://127.0.0.1:9126/test/integrations/tested_versions | awk -F': ' './artifacts/file-name/{print $2}' | tr -d '\r\n')" http://127.0.0.1:9126/test/integrations/tested_versions
       shell: bash
     - name: Archive Test Agent Artifacts
       uses: actions/upload-artifact@v3
