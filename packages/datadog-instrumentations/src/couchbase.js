@@ -209,7 +209,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^4.2.5'] }, Buck
   return Bucket
 })
 
-addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cluster => {
+addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^4.2.5'] }, Cluster => {
   Cluster.prototype._maybeInvoke = wrapMaybeInvoke(Cluster.prototype._maybeInvoke)
   Cluster.prototype.query = wrapQuery(Cluster.prototype.query)
 
@@ -226,7 +226,7 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^2.6.12'] }, Cl
 
 // semver >=3 <3.2.0
 
-addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.7', '^3.1.3'] }, Bucket => {
+addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^4.2.5'] }, Bucket => {
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
       const collection = getCollection.apply(this, arguments)
@@ -239,7 +239,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^3.0.7', '^3.1.3
   return Bucket
 })
 
-addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['^3.0.7', '^3.1.3'] }, Collection => {
+addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['^4.2.5'] }, Collection => {
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
     shimmer.wrap(Collection.prototype, name, wrapWithName(name))
   })
@@ -247,14 +247,14 @@ addHook({ name: 'couchbase', file: 'lib/collection.js', versions: ['^3.0.7', '^3
   return Collection
 })
 
-addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^3.0.7', '^3.1.3'] }, Cluster => {
+addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^4.2.5'] }, Cluster => {
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
   return Cluster
 })
 
 // semver >=3.2.0
 
-addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }, collection => {
+addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['^4.2.5'] }, collection => {
   const Collection = collection.Collection
 
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
@@ -264,7 +264,7 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   return collection
 })
 
-addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bucket => {
+addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['^4.2.5'] }, bucket => {
   const Bucket = bucket.Bucket
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
@@ -278,7 +278,7 @@ addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bu
   return bucket
 })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, (cluster) => {
+addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['^4.2.5'] }, (cluster) => {
   const Cluster = cluster.Cluster
 
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)
