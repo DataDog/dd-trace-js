@@ -18,7 +18,7 @@ const errorTCPCh = channel('apm:net:tcp:error')
 const connectionCh = channel(`apm:net:tcp:connection`)
 
 addHook({ name: 'node:net' }, (net, version, name) => {
-  require('node:dns')
+  require('dns')
 
   shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
