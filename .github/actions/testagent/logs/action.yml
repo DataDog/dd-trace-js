@@ -15,6 +15,22 @@ runs:
           docker-compose logs testagent
         fi
       shell: bash
+    - run: |
+        directory="./artifacts"
+
+        # Check if the directory exists
+        if [ -d "$directory" ]; then
+            # Loop through each file in the directory
+            for file in "$directory"/*; do
+                # Check if the file is a regular file
+                if [ -f "$file" ]; then
+                    echo "$file is a file"
+                fi
+            done
+        else
+            echo "Directory does not exist"
+        fi
+      shell: bash
     - name: Archive Test Agent Artifacts
       uses: actions/upload-artifact@v3
       with:
