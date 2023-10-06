@@ -307,7 +307,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
@@ -348,7 +348,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
@@ -399,7 +399,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
@@ -444,35 +444,17 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
-        },
-        body: {
-          a: '1'
-        },
-        query: {
-          b: '2'
-        },
-        route: {
-          path: '/path/:c'
         }
       }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        statusCode: 201
-      }
+      const res = {}
 
-      web.patch(req)
+      AppSec.incomingHttpStartTranslator({ req, res })
 
-      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' }
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1'
       }, req)
     })
 
@@ -495,35 +477,17 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
-        },
-        body: {
-          a: '1'
-        },
-        query: {
-          b: '2'
-        },
-        route: {
-          path: '/path/:c'
         }
       }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        statusCode: 201
-      }
+      const res = {}
 
-      web.patch(req)
+      AppSec.incomingHttpStartTranslator({ req, res })
 
-      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' }
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1'
       }, req)
     })
 
@@ -546,35 +510,17 @@ describe('AppSec Index', () => {
         socket: {
           remoteAddress: '127.0.0.1',
           remotePort: 8080
-        },
-        body: {
-          a: '1'
-        },
-        query: {
-          b: '2'
-        },
-        route: {
-          path: '/path/:c'
         }
       }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-lenght': 42
-        }),
-        statusCode: 201
-      }
+      const res = {}
 
-      web.patch(req)
+      AppSec.incomingHttpStartTranslator({ req, res })
 
-      AppSec.incomingHttpStartTranslator({ req, res, abortController: {} })
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledTwice
-      expect(waf.run.secondCall).to.have.been.calledWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' },
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1',
         'waf.context.processor': { 'extract-schema': true }
       }, req)
     })
