@@ -17,9 +17,7 @@ describe('Hardcoded Secret Analyzer', () => {
   afterEach(sinon.restore)
 
   suite.forEach((testCase) => {
-    testCase.samples.forEach(base64Sample => {
-      const sample = Buffer.from(base64Sample, 'hex').toString('utf-8')
-
+    testCase.samples.forEach(sample => {
       it(`should match rule ${testCase.id} with value ${sample}`, () => {
         hardcodedSecretAnalyzer.analyze({
           file,
