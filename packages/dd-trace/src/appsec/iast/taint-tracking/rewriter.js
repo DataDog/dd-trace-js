@@ -50,7 +50,8 @@ function getRewriter (telemetryVerbosity) {
           getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
       }
 
-      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
+      //rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
+      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), hardcodedSecret: true })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -80,12 +81,6 @@ function getCompileMethodFn (compileMethod) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
-        const times = 1e4
-        for (let i=0; i<times; i++) {
-          for (let j=0; j<times; j++) {
-            (j + i + 1) / j + 1
-          }
-        }
         if (rewritten && rewritten.content) {
           return compileMethod.apply(this, [rewritten.content, filename])
         }
