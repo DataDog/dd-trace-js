@@ -18,6 +18,18 @@ function endOfQuantum (t, q) {
   return (Math.floor(t / q) + 1) * q
 }
 
+// NOTE on time measurement. We use performance.now(). It returns millis since
+// process start as an ordinary 64-bit IEEE double precision floating point
+// number. It encodes nanos in its fractional part. 1e9 nanos needs about 30
+// bits, and a FP double has a 53 bit mantissa, so it'll retain 1ns resolution
+// for about 2^23 seconds, or 97 days, after which it'll lose one bit of
+// precision, and this one bit precision loss will happens every 97 days.
+// Monotonic CPU performance counters on most architectures don't provide better
+// than 30ns or so resolution (measured 41ns on Apple M1 Max) so a process can
+// stay up for 5x97 days, or about 16 months before this number's resolution
+// drops to 2^5=32ns, close to the actual timer's resolution. This seems like an
+// acceptable upper limit on process uptime.
+
 class Timeline {
   constructor (options = {}) {
     this.type = 'timeline'
@@ -42,8 +54,8 @@ class Timeline {
       "8902676252807731318": { "rootSpanId": "6976680365829768426", "ref": 1,
             "FSREQCALLBACK": [{ "end": 8231.456460, "duration": 1220918},
                               { "end": 8241.557470, "duration": 774915}, ...],
-            "ZLIB": [{ "end": 8342.567570n, "duration": 397250},
-                     { "end": 8352.668580n, "duration": 237210}, ...]
+            "ZLIB": [{ "end": 8342.567570, "duration": 397250},
+                     { "end": 8352.668580, "duration": 237210}, ...]
       },
       ...
     }
@@ -77,7 +89,7 @@ class Timeline {
   }
 
   profile () {
-    const hrNow = this._hrnow()
+    const hrNow = performance.now()
     return this._createProfileFromReport(this._reportUntil(hrNow), performance.timeOrigin, hrNow)
   }
 
@@ -98,7 +110,7 @@ class Timeline {
   _before (asyncId) {
     const activity = this._active.get(asyncId)
     if (activity) {
-      this._startActivity(activity, this._hrnow())
+      this._startActivity(activity, performance.now())
     }
   }
 
@@ -106,7 +118,7 @@ class Timeline {
   _after (asyncId) {
     const activity = this._active.get(asyncId)
     if (activity) {
-      this._stopActivity(activity, this._hrnow())
+      this._stopActivity(activity, performance.now())
     }
   }
 
@@ -115,22 +127,6 @@ class Timeline {
     if (activity) {
       --activity.spanData.ref
     }
-  }
-
-  _hrnow() {
-    // We could've used process.hrtime.bigint() but it's a bigint so it'll need
-    // more storage. performance.now() returns millis since process start as an
-    // ordinary 64-bit IEEE double precision floating point number. It encodes
-    // nanos in its fractional part. 1e9 nanos needs about 30 bits, and a FP
-    // double has a 53 bit mantissa, so it'll retain 1ns resolution for about
-    // 2^23 seconds, or 97 days, after which it'll lose one bit of precision,
-    // and this one bit precision loss will happens every 97 days. Monotonic
-    // CPU performance counters on most architectures don't provide better than
-    // 30ns or so resolution (measured 41ns on Apple M1 Max) so a process can
-    // stay up for 5x97 days, or about 16 months before this number's resolution
-    // drops to 2^5=32ns, close to the actual timer's resolution. This seems
-    // like an acceptable upper limit on process uptime.
-    return performance.now()
   }
 
   _createActivity (type, spanId, ctx) {
@@ -274,10 +270,10 @@ class Timeline {
       }
     }
 
-    let durationFrom = hrNow + this._samplingIntervalNanos
+    let durationFrom = hrNow + this._samplingIntervalMillis
     let durationTo = 0
 
-    const dateOffset = BigInt(timeOrigin * MS_TO_NS)
+    const dateOffset = BigInt(Math.round(timeOrigin * MS_TO_NS))
 
     for (;;) {
       const next = accs.next()
@@ -307,7 +303,7 @@ class Timeline {
         if (rootSpanLabel) labels.push(rootSpanLabel)
         samples.push(new Sample({
           locationId: [location.id],
-          value: [q.duration * MS_TO_NS],
+          value: [Math.round(q.duration * MS_TO_NS)],
           label: labels
         }))
       }
@@ -320,7 +316,7 @@ class Timeline {
 
     return new Profile({
       sampleType: [timeValueType],
-      timeNanos: dateNow,
+      timeNanos: BigInt(durationFrom * MS_TO_NS) + dateOffset,
       periodType: timeValueType,
       period: this._flushIntervalNanos,
       durationNanos: Math.max(0, Number(durationTo - durationFrom)),
