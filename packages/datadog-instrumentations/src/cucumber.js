@@ -334,8 +334,8 @@ addHook({
         isSuitesSkipped,
         testCodeCoverageLinesTotal,
         numSkippedSuites: skippedSuites.length,
-        isUnskippable,
-        isForcedToRun
+        hasUnskippableSuites: isUnskippable,
+        hasForcedToRunSuites: isForcedToRun
       })
     })
     return success

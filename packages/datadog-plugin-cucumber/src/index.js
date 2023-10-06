@@ -32,8 +32,8 @@ class CucumberPlugin extends CiPlugin {
       isSuitesSkipped,
       numSkippedSuites,
       testCodeCoverageLinesTotal,
-      isUnskippable,
-      isForcedToRun
+      hasUnskippableSuites,
+      hasForcedToRunSuites
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -46,8 +46,8 @@ class CucumberPlugin extends CiPlugin {
           testCodeCoverageLinesTotal,
           skippingCount: numSkippedSuites,
           skippingType: 'suite',
-          isUnskippable,
-          isForcedToRun
+          hasUnskippableSuites,
+          hasForcedToRunSuites
         }
       )
 
