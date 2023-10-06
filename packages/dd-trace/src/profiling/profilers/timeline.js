@@ -323,7 +323,7 @@ class Timeline {
       timeNanos: dateNow,
       periodType: timeValueType,
       period: this._flushIntervalNanos,
-      duration: Math.max(0, Number(durationTo - durationFrom)),
+      durationNanos: Math.max(0, Number(durationTo - durationFrom)),
       sample: samples,
       location: locations,
       function: functions,
