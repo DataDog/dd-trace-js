@@ -11,7 +11,9 @@ const {
   getTestParametersString,
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -47,14 +49,21 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
-    this.addSub('ci:mocha:test-suite:start', (suite) => {
+    this.addSub('ci:mocha:test-suite:start', ({ testSuite, isUnskippable, isForcedToRun }) => {
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(suite.file, this.sourceRoot),
+        getTestSuitePath(testSuite, this.sourceRoot),
         'mocha'
       )
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+      }
+
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
@@ -64,7 +73,7 @@ class MochaPlugin extends CiPlugin {
         }
       })
       this.enter(testSuiteSpan, store)
-      this._testSuites.set(suite.file, testSuiteSpan)
+      this._testSuites.set(testSuite, testSuiteSpan)
     })
 
     this.addSub('ci:mocha:test-suite:finish', (status) => {
@@ -139,7 +148,9 @@ class MochaPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
-      numSkippedSuites
+      numSkippedSuites,
+      hasForcedToRunSuites,
+      hasUnskippableSuites
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
@@ -155,7 +166,9 @@ class MochaPlugin extends CiPlugin {
             isCodeCoverageEnabled,
             testCodeCoverageLinesTotal,
             skippingCount: numSkippedSuites,
-            skippingType: 'suite'
+            skippingType: 'suite',
+            hasForcedToRunSuites,
+            hasUnskippableSuites
           }
         )
 
