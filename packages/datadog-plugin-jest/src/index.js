@@ -52,7 +52,9 @@ class JestPlugin extends CiPlugin {
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
       testCodeCoverageLinesTotal,
-      numSkippedSuites
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -66,7 +68,9 @@ class JestPlugin extends CiPlugin {
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
           skippingType: 'suite',
-          skippingCount: numSkippedSuites
+          skippingCount: numSkippedSuites,
+          hasUnskippableSuites,
+          hasForcedToRunSuites
         }
       )
 
