@@ -630,7 +630,6 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_ENV = 'test'
     process.env.DD_API_KEY = '123'
-    process.env.DD_APP_KEY = '456'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v0'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'false'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'false'
@@ -1235,6 +1234,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'true'
         const config = new Config(options)
         expect(config).to.have.property('isManualApiEnabled', true)
+      })
+      it('should disable memcached command tagging by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('memcachedCommandEnabled', false)
+      })
+      it('should enable memcached command tagging if DD_TRACE_MEMCACHED_COMMAND_ENABLED is enabled', () => {
+        process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED = 'true'
+        const config = new Config(options)
+        expect(config).to.have.property('memcachedCommandEnabled', true)
       })
     })
     context('ci visibility mode is not enabled', () => {

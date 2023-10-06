@@ -759,6 +759,20 @@ describe('TextMapPropagator', () => {
         expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-4')
         expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-4')
       })
+
+      it('should maintain hyphen prefix when a default mechanism of 0 is received', () => {
+        textMap['traceparent'] = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-0'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+
+        propagator.inject(spanContext, carrier)
+
+        expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
+        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
+      })
     })
   })
 })

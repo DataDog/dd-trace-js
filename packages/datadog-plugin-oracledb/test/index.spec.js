@@ -47,6 +47,7 @@ describe('Plugin', () => {
 
           withPeerService(
             () => tracer,
+            'oracledb',
             () => connection.execute(dbQuery),
             expectedPeerService,
             'db.instance'
@@ -173,6 +174,7 @@ describe('Plugin', () => {
 
           withPeerService(
             () => tracer,
+            'oracledb',
             () => connection.execute(dbQuery),
             expectedPeerService,
             'db.instance'

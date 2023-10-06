@@ -28,25 +28,12 @@ function getItrConfiguration ({
   if (isEvpProxy) {
     options.path = '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
-    options.headers['X-Datadog-NeedsAppKey'] = 'true'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
-    const appKey = process.env.DATADOG_APP_KEY ||
-      process.env.DD_APP_KEY ||
-      process.env.DATADOG_APPLICATION_KEY ||
-      process.env.DD_APPLICATION_KEY
-
-    const messagePrefix = 'Request to settings endpoint was not done because Datadog'
-
-    if (!appKey) {
-      return done(new Error(`${messagePrefix} application key is not defined.`))
-    }
     if (!apiKey) {
-      return done(new Error(`${messagePrefix} API key is not defined.`))
+      return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-
     options.headers['dd-api-key'] = apiKey
-    options.headers['dd-application-key'] = appKey
   }
 
   const data = JSON.stringify({

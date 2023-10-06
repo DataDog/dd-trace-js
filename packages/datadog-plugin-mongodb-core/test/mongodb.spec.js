@@ -78,6 +78,7 @@ describe('Plugin', () => {
         describe('server', () => {
           withPeerService(
             () => tracer,
+            'mongodb-core',
             () => collection.insertOne({ a: 1 }, {}, () => {}),
             'test', 'peer.service'
           )

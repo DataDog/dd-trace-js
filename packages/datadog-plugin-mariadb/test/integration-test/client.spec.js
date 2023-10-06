@@ -13,26 +13,27 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['mariadb'], false, [
-      `./packages/datadog-plugin-mariadb/test/integration-test/*`])
-  })
+  // test against later versions because server.mjs uses newer package syntax
+  withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
+    before(async function () {
+      this.timeout(20000)
+      sandbox = await createSandbox([`'mariadb@${version}'`], false, [
+        `./packages/datadog-plugin-mariadb/test/integration-test/*`])
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('mariadb', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

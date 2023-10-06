@@ -12,25 +12,26 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['pino'], false, [`./packages/datadog-plugin-pino/test/integration-test/*`])
-  })
+  withVersions('pino', 'pino', version => {
+    before(async function () {
+      this.timeout(20000)
+      sandbox = await createSandbox([`'pino@${version}'`],
+        false, [`./packages/datadog-plugin-pino/test/integration-test/*`])
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('pino', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,

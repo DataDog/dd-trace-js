@@ -64,10 +64,11 @@ class OutboundPlugin extends TracingPlugin {
      * peer service and add the value we overrode.
      */
     const peerService = peerData[PEER_SERVICE_KEY]
-    if (peerService && this.tracer._peerServiceMapping[peerService]) {
+    const mappedService = this._tracerConfig.peerServiceMapping?.[peerService]
+    if (peerService && mappedService) {
       return {
         ...peerData,
-        [PEER_SERVICE_KEY]: this.tracer._peerServiceMapping[peerService],
+        [PEER_SERVICE_KEY]: mappedService,
         [PEER_SERVICE_REMAP_KEY]: peerService
       }
     }
@@ -80,7 +81,7 @@ class OutboundPlugin extends TracingPlugin {
   }
 
   tagPeerService (span) {
-    if (this.tracer._computePeerService) {
+    if (this._tracerConfig.spanComputePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
       if (peerData !== undefined) {
         span.addTags(this.getPeerServiceRemap(peerData))

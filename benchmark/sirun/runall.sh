@@ -25,13 +25,13 @@ nvm use 18
 # run each test in parallel for a given version of Node.js
 # once all of the tests have complete move on to the next version
 
-export CPU_AFFINITY=24 # Benchmarking Platform convention
+export CPU_AFFINITY="${CPU_START_ID:-24}" # Benchmarking Platform convention
 
 nvm use $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-CPU_AFFINITY=24 # reset for each node.js version
+CPU_AFFINITY="${CPU_START_ID:-24}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 BENCH_COUNT=0
