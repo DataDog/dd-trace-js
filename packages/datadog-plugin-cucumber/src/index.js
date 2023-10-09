@@ -10,7 +10,9 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  addIntelligentTestRunnerSpanTags
+  addIntelligentTestRunnerSpanTags,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -29,7 +31,9 @@ class CucumberPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       numSkippedSuites,
-      testCodeCoverageLinesTotal
+      testCodeCoverageLinesTotal,
+      hasUnskippableSuites,
+      hasForcedToRunSuites
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -41,7 +45,9 @@ class CucumberPlugin extends CiPlugin {
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
           skippingCount: numSkippedSuites,
-          skippingType: 'suite'
+          skippingType: 'suite',
+          hasUnskippableSuites,
+          hasForcedToRunSuites
         }
       )
 
@@ -55,13 +61,19 @@ class CucumberPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', (testSuiteFullPath) => {
+    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun }) => {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
-        getTestSuitePath(testSuiteFullPath, this.sourceRoot),
+        testSuitePath,
         'cucumber'
       )
+      if (isUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+      }
+      if (isForcedToRun) {
+        testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+      }
       this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
