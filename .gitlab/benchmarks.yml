@@ -1,5 +1,5 @@
 variables:
-  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js-iast-startup-test-2
+  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "5.0"
