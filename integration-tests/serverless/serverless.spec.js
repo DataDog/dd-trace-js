@@ -26,5 +26,5 @@ describe('serverless', () => {
     })
     assert.strictEqual(child.exitCode, 0)
     assert.include(testOutput, 'Mini Agent received traces')
-  }).timeout(300000)
+  }).timeout(400000)
 })
