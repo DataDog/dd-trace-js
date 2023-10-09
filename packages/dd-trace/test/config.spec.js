@@ -155,6 +155,26 @@ describe('Config', () => {
     expect(config.tags).to.have.property('version', '1.2.3')
   })
 
+  it('should serialize version from integer to string', () => {
+    const config = new Config({
+      version: 1
+    })
+
+    expect(config).to.have.property('version', '1')
+    expect(config.tags).to.have.property('version', '1')
+  })
+
+  it('should serialize version from object to string', () => {
+    const config = new Config({
+      version: {
+        v: '1.2.3'
+      }
+    })
+
+    expect(config).to.have.property('version', '{"v":"1.2.3"}')
+    expect(config.tags).to.have.property('version', '{"v":"1.2.3"}')
+  })
+
   it('should initialize from environment variables', () => {
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'

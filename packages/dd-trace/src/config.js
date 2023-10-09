@@ -555,7 +555,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.plugins = !!coalesce(options.plugins, true)
     this.service = DD_SERVICE
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.version = DD_VERSION
+    this.version = typeof DD_VERSION === 'object' ? JSON.stringify(DD_VERSION) : String(DD_VERSION)
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
