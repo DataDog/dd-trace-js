@@ -31,6 +31,10 @@ const {
   getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 
+const isMarkedAsUnskippable = (pickle) => {
+  return !!pickle.tags.find(tag => tag.name === '@datadog:unskippable')
+}
+
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
 
@@ -39,6 +43,9 @@ const patched = new WeakSet()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
+let skippableSuites = []
+let isForcedToRun = false
+let isUnskippable = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -91,7 +98,11 @@ function wrapRun (pl, isLatestVersion) {
       const testSuiteFullPath = this.pickle.uri
 
       if (!pickleResultByFile[testSuiteFullPath]) { // first test in suite
-        testSuiteStartCh.publish(testSuiteFullPath)
+        isUnskippable = isMarkedAsUnskippable(this.pickle)
+        const testSuitePath = getTestSuitePath(testSuiteFullPath, process.cwd())
+        isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
+
+        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun })
       }
 
       const testSourceLine = this.gherkinDocument &&
@@ -221,8 +232,11 @@ function getFilteredPickles (runtime, suitesToSkip) {
   return runtime.pickleIds.reduce((acc, pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
     const testSuitePath = getTestSuitePath(test.uri, process.cwd())
+
+    const isUnskippable = isMarkedAsUnskippable(test)
     const isSkipped = suitesToSkip.includes(testSuitePath)
-    if (isSkipped) {
+
+    if (isSkipped && !isUnskippable) {
       acc.skippedSuites.add(testSuitePath)
     } else {
       acc.picklesToRun.push(pickleId)
@@ -270,7 +284,11 @@ addHook({
       skippableSuitesCh.publish({ onDone })
     })
 
-    const { err, skippableSuites } = await skippableSuitesPromise
+    const skippableResponse = await skippableSuitesPromise
+
+    const err = skippableResponse.err
+    skippableSuites = skippableResponse.skippableSuites
+
     let skippedSuites = []
     let isSuitesSkipped = false
 
@@ -315,7 +333,9 @@ addHook({
         status: success ? 'pass' : 'fail',
         isSuitesSkipped,
         testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length
+        numSkippedSuites: skippedSuites.length,
+        hasUnskippableSuites: isUnskippable,
+        hasForcedToRunSuites: isForcedToRun
       })
     })
     return success
