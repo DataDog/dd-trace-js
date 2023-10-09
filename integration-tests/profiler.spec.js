@@ -9,6 +9,7 @@ const { fork } = childProcess
 const path = require('path')
 const { assert } = require('chai')
 const fs = require('node:fs/promises')
+const fsync = require('node:fs')
 const zlib = require('node:zlib')
 const { Profile } = require('pprof-format')
 
@@ -87,19 +88,19 @@ describe('profiler', () => {
 
     await processExitPromise(proc, 5000)
     const procEnd = BigInt(Date.now() * 1000000)
-    const dir = await fs.opendir(cwd)
-    let pprofEntry
-    for await (const entry of dir) {
-      const name = entry.name
-      if (/^wall_.+\.pprof$/.test(name)) {
-        pprofEntry = entry
-        break
-      }
-    }
-    assert.isDefined(pprofEntry, `No wall_*.pprof file found in ${cwd}`)
-    const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry.name))
+
+    const dirEntries = await fs.readdir(cwd)
+    // Get the latest wall_*.pprof file
+    const pprofEntries = dirEntries.filter(name => /^wall_.+\.pprof$/.test(name))
+    assert.isTrue(pprofEntries.length > 0, `No wall_*.pprof file found in ${cwd}`)
+    const pprofEntry = pprofEntries
+      .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
+      .reduce((a, b) => a.modified > b.modified ? a : b)
+      .name
+    const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
     const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
     const prof = Profile.decode(pprofUnzipped)
+
     // We check the profile for following invariants:
     // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
     //   epoch) between process start and end.
@@ -109,6 +110,7 @@ describe('profiler', () => {
     //   'endpoint-1', or 'endpoint-2'
     // - every occurrence of a span must have the same root span and endpoint
     const rootSpans = new Set()
+    const endpoints = new Set()
     const spans = new Map()
     const strings = prof.stringTable
     const tsKey = strings.dedup('end_timestamp_ns')
@@ -151,6 +153,7 @@ describe('profiler', () => {
             case 'endpoint-0':
             case 'endpoint-1':
             case 'endpoint-2':
+              endpoints.add(endpoint)
               break
             default:
               assert.fail(`Unexpected endpoint value ${endpointVal}`)
@@ -159,8 +162,10 @@ describe('profiler', () => {
       }
     }
     // Need to have a total of 9 different spans, with 3 different root spans
+    // and 3 different endpoints.
     assert.equal(spans.size, 9)
     assert.equal(rootSpans.size, 3)
+    assert.equal(endpoints.size, 3)
   })
 
   context('shutdown', () => {
