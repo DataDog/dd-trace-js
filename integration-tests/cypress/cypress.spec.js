@@ -546,7 +546,7 @@ moduleType.forEach(({
           }).catch(done)
         })
       })
-      it('does not skip suites if suite is marked as unskippable', (done) => {
+      it('does not skip tests if suite is marked as unskippable', (done) => {
         receiver.setSettings({
           code_coverage: true,
           tests_skipping: true
@@ -571,6 +571,15 @@ moduleType.forEach(({
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+
             const unskippablePassedTest = events.find(event =>
               event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
             )
@@ -580,6 +589,74 @@ moduleType.forEach(({
             assert.propertyVal(unskippablePassedTest.content.meta, TEST_STATUS, 'pass')
             assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
             assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_FORCED_RUN, 'true')
+
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // This was not going to be skipped
+            assert.notProperty(unskippableFailedTest.content.meta, TEST_ITR_FORCED_RUN)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('only sets forced to run if test was going to be skipped by ITR', (done) => {
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: true
+        })
+
+        receiver.setSuitesToSkip([
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/other.cy.js'
+            }
+          }
+        ])
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
+
+            const unskippablePassedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
+            )
+            const unskippableFailedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
+            )
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // This was not going to be skipped
+            assert.notProperty(unskippablePassedTest.content.meta, TEST_ITR_FORCED_RUN)
 
             assert.propertyVal(unskippableFailedTest.content.meta, TEST_STATUS, 'fail')
             assert.propertyVal(unskippableFailedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')

@@ -189,8 +189,8 @@ module.exports = (on, config) => {
   let isCodeCoverageEnabled = false
   let testsToSkip = []
   const unskippableSuites = []
-  let hasForcedToRunTests = false
-  let hasUnskippableTests = false
+  let hasForcedToRunSuites = false
+  let hasUnskippableSuites = false
 
   function getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
     const testSuiteTags = {
@@ -219,12 +219,12 @@ module.exports = (on, config) => {
     }
 
     if (isUnskippable) {
-      hasForcedToRunTests = true
+      hasUnskippableSuites = true
       testSpanMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
     }
 
     if (isForcedToRun) {
-      hasUnskippableTests = true
+      hasForcedToRunSuites = true
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
     }
 
@@ -365,8 +365,8 @@ module.exports = (on, config) => {
           isCodeCoverageEnabled,
           skippingType: 'test',
           skippingCount: skippedTests.length,
-          hasForcedToRunTests,
-          hasUnskippableTests
+          hasForcedToRunSuites,
+          hasUnskippableSuites
         }
       )
 
