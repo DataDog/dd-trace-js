@@ -6,7 +6,7 @@ const { port } = require('./common')
 app.set('port', port)
 const server = http.createServer(app)
 
-function onListening() {
+function onListening () {
   server.close()
 }
 
