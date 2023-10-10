@@ -651,7 +651,7 @@ describe('AppSec Index', () => {
       appsec.disable()
     })
 
-    it('should increment waf.init metric', () => {
+    it('should call reportWafInit', () => {
       sinon.restore()
 
       sinon.stub(Reporter, 'reportWafInit')
