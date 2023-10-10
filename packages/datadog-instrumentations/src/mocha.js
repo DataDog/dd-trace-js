@@ -1,9 +1,10 @@
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -50,6 +51,8 @@ let suitesToSkip = []
 let frameworkVersion
 let isSuitesSkipped = false
 let skippedSuites = []
+const unskippableSuites = []
+let isForcedToRun = false
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -104,7 +107,8 @@ function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
     const testPath = getTestSuitePath(suite.file, process.cwd())
     const shouldSkip = suitesToSkip.includes(testPath)
-    if (shouldSkip) {
+    const isUnskippable = unskippableSuites.includes(suite.file)
+    if (shouldSkip && !isUnskippable) {
       acc.skippedSuites.add(testPath)
     } else {
       acc.suitesToRun.push(suite)
@@ -151,7 +155,9 @@ function mochaHook (Runner) {
         status,
         isSuitesSkipped,
         testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length
+        numSkippedSuites: skippedSuites.length,
+        hasForcedToRunSuites: isForcedToRun,
+        hasUnskippableSuites: !!unskippableSuites.length
       })
     }))
 
@@ -172,8 +178,10 @@ function mochaHook (Runner) {
       if (!asyncResource) {
         asyncResource = new AsyncResource('bound-anonymous-fn')
         testFileToSuiteAr.set(suite.file, asyncResource)
+        const isUnskippable = unskippableSuites.includes(suite.file)
+        isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
         asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish(suite)
+          testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
         })
       }
     })
@@ -369,6 +377,13 @@ addHook({
     this.options.delay = true
 
     const runner = run.apply(this, arguments)
+
+    this.files.forEach(path => {
+      const isUnskippable = isMarkedAsUnskippable({ path })
+      if (isUnskippable) {
+        unskippableSuites.push(path)
+      }
+    })
 
     const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
       if (err) {
