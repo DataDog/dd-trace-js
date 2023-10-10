@@ -370,7 +370,9 @@ function addIntelligentTestRunnerSpanTags (
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
     skippingCount,
-    skippingType = 'suite'
+    skippingType = 'suite',
+    hasUnskippableSuites,
+    hasForcedToRunSuites
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -384,6 +386,15 @@ function addIntelligentTestRunnerSpanTags (
   testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
   testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  if (hasUnskippableSuites) {
+    testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+    testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+  }
+  if (hasForcedToRunSuites) {
+    testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+    testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+  }
 
   // If suites have been skipped we don't want to report the total coverage, as it will be wrong
   if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {

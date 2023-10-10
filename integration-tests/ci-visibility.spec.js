@@ -30,11 +30,13 @@ const {
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 const mochaCommonOptions = {
+  name: 'mocha',
   expectedStdout: '2 passing',
   extraStdout: 'end event: can add event listeners to mocha'
 }
 
 const jestCommonOptions = {
+  name: 'jest',
   dependencies: ['jest', 'chai', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
@@ -47,7 +49,6 @@ const jestCommonOptions = {
 const testFrameworks = [
   {
     ...mochaCommonOptions,
-    name: 'mocha',
     testFile: 'ci-visibility/run-mocha.js',
     dependencies: ['mocha', 'chai', 'nyc'],
     expectedCoverageFiles: [
@@ -57,12 +58,10 @@ const testFrameworks = [
       'ci-visibility/test/ci-visibility-test-2.js'
     ],
     runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    coverageMessage: 'Lines        : 80%',
     type: 'commonJS'
   },
   {
     ...mochaCommonOptions,
-    name: 'mocha',
     testFile: 'ci-visibility/run-mocha.mjs',
     dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
@@ -75,19 +74,16 @@ const testFrameworks = [
       `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
       `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
       `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
-    coverageMessage: 'Lines        : 78.57%',
     type: 'esm'
   },
   {
     ...jestCommonOptions,
-    name: 'jest',
     testFile: 'ci-visibility/run-jest.js',
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
     type: 'commonJS'
   },
   {
     ...jestCommonOptions,
-    name: 'jest',
     testFile: 'ci-visibility/run-jest.mjs',
     runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
     type: 'esm'
@@ -102,7 +98,6 @@ testFrameworks.forEach(({
   extraStdout,
   expectedCoverageFiles,
   runTestsWithCoverageCommand,
-  coverageMessage,
   type
 }) => {
   // temporary fix for failing esm tests on the CI, skip for now for the release and comeback to solve the issue
@@ -248,7 +243,7 @@ testFrameworks.forEach(({
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'sharding-test/sharding-test',
+                TESTS_TO_RUN: 'sharding-test/sharding-test',
                 TEST_SHARD: '2/2'
               },
               stdio: 'inherit'
@@ -284,7 +279,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_REGEX: 'sharding-test/sharding-test',
+              TESTS_TO_RUN: 'sharding-test/sharding-test',
               TEST_SHARD: '1/2'
             },
             stdio: 'inherit'
@@ -403,7 +398,7 @@ testFrameworks.forEach(({
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '-r dd-trace/ci/init',
             RUN_IN_PARALLEL: true,
-            TEST_REGEX: 'timeout-test/timeout-test.js'
+            TESTS_TO_RUN: 'timeout-test/timeout-test.js'
           },
           stdio: 'pipe'
         })
@@ -632,8 +627,9 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          if (coverageMessage) {
-            assert.include(testOutput, coverageMessage)
+          // coverage report
+          if (name === 'mocha') {
+            assert.include(testOutput, 'Lines        ')
           }
           done()
         })
@@ -814,118 +810,143 @@ testFrameworks.forEach(({
           }
         )
       })
-      // TODO: remove conditional when support for mocha is done
-      if (name === 'jest') {
-        it('does not skip suites if suite is marked as unskippable', (done) => {
-          receiver.setSuitesToSkip([
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/unskippable-test/test-to-skip.js'
-              }
+      it('does not skip suites if suite is marked as unskippable', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-to-skip.js'
+            }
+          },
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-unskippable.js'
+            }
+          }
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+
+            assert.equal(suites.length, 2)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+
+            const skippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+            )
+            const forcedToRunSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+            )
+
+            assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+            assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+            assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
+          }, 25000)
+
+        let TESTS_TO_RUN = 'unskippable-test/test-'
+        if (name === 'mocha') {
+          TESTS_TO_RUN = JSON.stringify([
+            './unskippable-test/test-to-skip.js',
+            './unskippable-test/test-unskippable.js'
+          ])
+        }
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN
             },
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/unskippable-test/test-unskippable.js'
-              }
-            }
-          ])
+            stdio: 'inherit'
+          }
+        )
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const suites = payloads
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.type === 'test_suite_end')
-
-              assert.equal(suites.length, 2)
-
-              const skippedSuite = suites.find(
-                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
-              )
-              const forcedToRunSuite = suites.find(
-                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
-              )
-
-              assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
-              assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
-              assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
-
-              assert.propertyVal(forcedToRunSuite.content.meta, TEST_STATUS, 'pass')
-              assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
-              assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
-            }, 25000)
-
-          childProcess = exec(
-            runTestsWithCoverageCommand,
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'unskippable-test/test-'
-              },
-              stdio: 'inherit'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            eventsPromise.then(() => {
-              done()
-            }).catch(done)
-          })
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
         })
-        it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
-          receiver.setSuitesToSkip([
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/unskippable-test/test-to-skip.js'
-              }
+      })
+      it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/unskippable-test/test-to-skip.js'
             }
+          }
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+
+            assert.equal(suites.length, 2)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+
+            const skippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
+            ).content
+            const nonSkippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
+            ).content
+
+            assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+
+            assert.propertyVal(nonSkippedSuite.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(nonSkippedSuite.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // it was not forced to run because it wasn't going to be skipped
+            assert.notProperty(nonSkippedSuite.meta, TEST_ITR_FORCED_RUN)
+          }, 25000)
+
+        let TESTS_TO_RUN = 'unskippable-test/test-'
+        if (name === 'mocha') {
+          TESTS_TO_RUN = JSON.stringify([
+            './unskippable-test/test-to-skip.js',
+            './unskippable-test/test-unskippable.js'
           ])
+        }
 
-          const eventsPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-              const suites = payloads
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.type === 'test_suite_end')
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN
+            },
+            stdio: 'inherit'
+          }
+        )
 
-              assert.equal(suites.length, 2)
-
-              const skippedSuite = suites.find(
-                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
-              )
-              const nonSkippedSuite = suites.find(
-                event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
-              )
-
-              assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
-
-              assert.propertyVal(nonSkippedSuite.content.meta, TEST_STATUS, 'pass')
-              assert.propertyVal(nonSkippedSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
-              // it was not forced to run because it wasn't going to be skipped
-              assert.notProperty(nonSkippedSuite.content.meta, TEST_ITR_FORCED_RUN)
-            }, 25000)
-
-          childProcess = exec(
-            runTestsWithCoverageCommand,
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_REGEX: 'unskippable-test/test-'
-              },
-              stdio: 'inherit'
-            }
-          )
-
-          childProcess.on('exit', () => {
-            eventsPromise.then(() => {
-              done()
-            }).catch(done)
-          })
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
         })
-      }
+      })
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1099,9 +1120,9 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          // check that reported coverage is still the same
-          if (coverageMessage) {
-            assert.include(testOutput, coverageMessage)
+          // coverage report
+          if (name === 'mocha') {
+            assert.include(testOutput, 'Lines        ')
           }
           done()
         })
