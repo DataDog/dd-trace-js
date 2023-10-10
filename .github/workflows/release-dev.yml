@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - juan-fernandez/fix-dev-release
 
 jobs:
   dev_release:
@@ -26,7 +27,7 @@ jobs:
       - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
       - run: npm publish --tag dev --provenance
       - run: |
-          git tag --force dev
+          git tag dev
           git push origin :refs/tags/dev
           git push origin --tags
 
