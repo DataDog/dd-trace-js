@@ -602,6 +602,23 @@ module.exports = {
       tags[refKey] = ref
     }
 
+    if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
+      const {
+        CODEBUILD_BUILD_ARN,
+        DD_ACTION_EXECUTION_ID,
+        DD_PIPELINE_EXECUTION_ID
+      } = env
+      tags = {
+        [CI_PROVIDER_NAME]: 'awscodepipeline',
+        [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,
+        [CI_ENV_VARS]: JSON.stringify({
+          CODEBUILD_BUILD_ARN,
+          DD_PIPELINE_EXECUTION_ID,
+          DD_ACTION_EXECUTION_ID
+        })
+      }
+    }
+
     normalizeTag(tags, CI_WORKSPACE_PATH, resolveTilde)
     normalizeTag(tags, GIT_REPOSITORY_URL, filterSensitiveInfoFromRepository)
     normalizeTag(tags, GIT_BRANCH, normalizeRef)
