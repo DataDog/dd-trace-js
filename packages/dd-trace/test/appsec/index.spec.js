@@ -645,6 +645,26 @@ describe('AppSec Index', () => {
       })
     })
   })
+
+  describe('Metrics', () => {
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('should increment waf.init metric', () => {
+      sinon.restore()
+
+      sinon.stub(Reporter, 'reportWafInit')
+
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true
+        }
+      }))
+
+      expect(Reporter.reportWafInit).to.be.calledOnce
+    })
+  })
 })
 
 describe('IP blocking', () => {
