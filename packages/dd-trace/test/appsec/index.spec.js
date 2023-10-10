@@ -649,6 +649,17 @@ describe('AppSec Index', () => {
 
   describe('Metrics', () => {
     const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+    let config
+
+    beforeEach(() => {
+      sinon.restore()
+
+      config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+    })
 
     afterEach(() => {
       appsec.disable()
@@ -657,14 +668,6 @@ describe('AppSec Index', () => {
     })
 
     it('should increment waf.init metric', () => {
-      sinon.restore()
-
-      const config = new Config({
-        appsec: {
-          enabled: true
-        }
-      })
-
       config.telemetry.enabled = true
       config.telemetry.metrics = true
 
@@ -676,17 +679,20 @@ describe('AppSec Index', () => {
       expect(metrics.series[0].metric).to.equal('waf.init')
     })
 
-    it('should not increment waf.init metric', () => {
-      sinon.restore()
-
-      const config = new Config({
-        appsec: {
-          enabled: true
-        }
-      })
-
+    it('should not increment waf.init metric if metrics are not enabled', () => {
       config.telemetry.enabled = true
       config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
+    })
+
+    it('should not increment waf.init metric if telemetry is not enabled', () => {
+      config.telemetry.enabled = false
+      config.telemetry.metrics = true
 
       appsec.enable(config)
 
