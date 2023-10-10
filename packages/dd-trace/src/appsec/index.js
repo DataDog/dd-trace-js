@@ -5,11 +5,14 @@ const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
 const {
   bodyParser,
+  cookieParser,
   graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
-  queryParser
+  queryParser,
+  nextBodyParsed,
+  nextQueryParsed
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -42,7 +45,10 @@ function enable (_config) {
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
     bodyParser.subscribe(onRequestBodyParsed)
+    nextBodyParsed.subscribe(onRequestBodyParsed)
+    nextQueryParsed.subscribe(onRequestQueryParsed)
     queryParser.subscribe(onRequestQueryParsed)
+    cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
 
     if (_config.appsec.eventTracking.enabled) {
@@ -110,12 +116,13 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
+  // we need to keep this to support other cookie parsers
   if (req.cookies && typeof req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = {}
+    payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
+  }
 
-    for (const k of Object.keys(req.cookies)) {
-      payload[addresses.HTTP_INCOMING_COOKIES][k] = [req.cookies[k]]
-    }
+  if (req.query && typeof req.query === 'object') {
+    payload[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
   waf.run(payload, req)
@@ -125,27 +132,50 @@ function incomingHttpEndTranslator ({ req, res }) {
   Reporter.finishRequest(req, res)
 }
 
-function onRequestBodyParsed ({ req, res, abortController }) {
+function onRequestBodyParsed ({ req, res, body, abortController }) {
+  if (body === undefined || body === null) return
+
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (req.body === undefined || req.body === null) return
-
   const results = waf.run({
-    [addresses.HTTP_INCOMING_BODY]: req.body
+    [addresses.HTTP_INCOMING_BODY]: body
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onRequestQueryParsed ({ req, res, abortController }) {
+function onRequestQueryParsed ({ req, res, query, abortController }) {
+  if (!query || typeof query !== 'object') return
+
+  if (!req) {
+    const store = storage.getStore()
+    req = store?.req
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  if (!req.query || typeof req.query !== 'object') return
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_QUERY]: query
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onRequestCookieParser ({ req, res, abortController, cookies }) {
+  if (!cookies || typeof cookies !== 'object') return
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_QUERY]: req.query
+    [addresses.HTTP_INCOMING_COOKIES]: cookies
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
@@ -201,6 +231,7 @@ function disable () {
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
+  if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
 

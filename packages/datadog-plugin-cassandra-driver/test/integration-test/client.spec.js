@@ -7,32 +7,37 @@ const {
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../../../../version')
+
+// newer packages are not supported on older node versions
+const range = NODE_MAJOR < 16 ? '<3' : '>=4.4.0'
 
 describe('esm', () => {
   let agent
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['cassandra-driver'], false, [
-      `./packages/datadog-plugin-cassandra-driver/test/integration-test/*`])
-  })
+  // test against later versions because server.mjs uses newer package syntax
+  withVersions('cassandra-driver', 'cassandra-driver', range, version => {
+    before(async function () {
+      this.timeout(20000)
+      sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
+        `./packages/datadog-plugin-cassandra-driver/test/integration-test/*`])
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async () => {
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('cassandra-driver', () => {
     it('is instrumented', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)

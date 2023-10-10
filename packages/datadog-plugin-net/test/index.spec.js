@@ -77,6 +77,7 @@ describe('Plugin', () => {
 
     withPeerService(
       () => tracer,
+      'net',
       () => {
         const socket = new net.Socket()
         socket.connect(port, 'localhost')

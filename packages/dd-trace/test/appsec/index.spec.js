@@ -6,6 +6,7 @@ const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
 const {
   bodyParser,
+  cookieParser,
   graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
@@ -123,6 +124,7 @@ describe('AppSec Index', () => {
 
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
+      expect(cookieParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(graphqlFinishExecute.hasSubscribers).to.be.false
@@ -130,6 +132,7 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
+      expect(cookieParser.hasSubscribers).to.be.true
       expect(graphqlFinishExecute.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
@@ -191,6 +194,7 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(bodyParser.hasSubscribers).to.be.false
+      expect(cookieParser.hasSubscribers).to.be.false
       expect(graphqlFinishExecute.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
@@ -387,7 +391,8 @@ describe('AppSec Index', () => {
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: ['4'], e: ['5'] }
+        'server.request.cookies': { d: '4', e: '5' },
+        'server.request.query': { b: '2' }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -445,10 +450,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with body by default', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run')
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -458,13 +464,52 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run').returns(['block'])
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
+    })
+
+    describe('onRequestCookieParsed', () => {
+      it('Should not block without cookie', () => {
+        sinon.stub(waf, 'run')
+
+        cookieParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with cookie by default', () => {
+        const cookies = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        cookieParser.publish({ req, res, abortController, cookies })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.cookies': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        const cookies = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        cookieParser.publish({ req, res, abortController, cookies })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.cookies': { key: 'value' }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -483,10 +528,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with query by default', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run')
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -496,10 +542,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run').returns(['block'])
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }

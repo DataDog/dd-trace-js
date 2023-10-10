@@ -104,6 +104,7 @@ describe('Sns', () => {
 
     withPeerService(
       () => tracer,
+      'aws-sdk',
       (done) => sns.publish({
         TopicArn,
         Message: 'message 1'

@@ -46,12 +46,21 @@ describe('Plugin', function () {
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
-              HOSTNAME: '127.0.0.1'
+              HOSTNAME: '127.0.0.1',
+              TIMES_HOOK_CALLED: 0
             }
           })
 
           server.once('error', done)
-          server.stdout.once('data', () => done())
+          server.stdout.once('data', () => {
+            // first log outputted isn't always the server started log
+            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/next-server/server/config-utils.ts#L39
+            // these are webpack related logs that run during execution time and not build
+
+            // additionally, next.js sets timeouts in 10.x when displaying extra logs
+            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/server/next.ts#L132-L133
+            setTimeout(done, 100) // relatively high timeout chosen to be safe
+          })
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
@@ -72,10 +81,6 @@ describe('Plugin', function () {
         const cwd = __dirname
         const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
         const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
-
-        if (realVersion.startsWith('10')) {
-          return this.skip() // TODO: Figure out why 10.x tests fail.
-        }
 
         delete pkg.workspaces
 
@@ -284,11 +289,11 @@ describe('Plugin', function () {
             ['/hello', '/hello'],
             ['/hello/world', '/hello/[name]'],
             ['/hello/other', '/hello/other'],
-            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=11') ? 404 : 500],
+            ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=10') ? 404 : 500],
             ['/error/get_server_side_props', '/error/get_server_side_props', 500]
           ]
           pathTests.forEach(([url, expectedPath, statusCode]) => {
-            it(`should infer the corrrect resource (${expectedPath})`, done => {
+            it(`should infer the correct resource (${expectedPath})`, done => {
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -350,12 +355,27 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('name', 'next.request')
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
-                expect(spans[1]).to.have.property('resource',
-                  satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET')
+                expect(spans[1]).to.have.property('resource', 'GET /test.txt')
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
                 expect(spans[1].meta).to.have.property('component', 'next')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/test.txt`)
+              .catch(done)
+          })
+
+          it('should pass resource path to parent span', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[0]).to.have.property('name', 'web.request')
+                expect(spans[0]).to.have.property('resource', 'GET /test.txt')
               })
               .then(done)
               .catch(done)
@@ -382,10 +402,45 @@ describe('Plugin', function () {
         })
       })
 
+      if (satisfies(pkg.version, '>=13.4.0')) {
+        describe('with app directory', () => {
+          startServer({ withConfig: false, standalone: false })
+
+          it('should infer the correct resource path for appDir routes', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('resource', `GET /api/appDir/[name]`)
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/hello`)
+              .catch(done)
+          })
+
+          it('should infer the correct resource path for appDir pages', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('resource', `GET /appDir/[name]`)
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://127.0.0.1:${port}/appDir/hello`)
+          })
+        })
+      }
+
       describe('with configuration', () => {
         startServer({ withConfig: true, standalone: false })
 
-        it('should execute the hook and validate the status', done => {
+        it('should execute the hook and validate the status only once', done => {
           agent
             .use(traces => {
               const spans = traces[0]
@@ -401,6 +456,9 @@ describe('Plugin', function () {
               expect(spans[1].meta).to.have.property('foo', 'bar')
               expect(spans[1].meta).to.have.property('req', 'IncomingMessage')
               expect(spans[1].meta).to.have.property('component', 'next')
+
+              // assert request hook was only called once across the whole request
+              expect(spans[1].meta).to.have.property('times_hook_called', '1')
             })
             .then(done)
             .catch(done)
@@ -411,7 +469,11 @@ describe('Plugin', function () {
         })
       })
 
-      if (satisfiesStandalone(pkg.version)) {
+      // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
+      // which affects how the tracer is passed down through NODE_OPTIONS, making tests fail
+      // https://github.com/vercel/next.js/issues/53367
+      // TODO investigate this further - traces appear in the UI for a small test app
+      if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
         describe('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
@@ -419,7 +481,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', satisfies(pkg.version, '>=13.4.13') ? 'GET /test.txt' : 'GET']
+            ['static files', '/test.txt', 'GET /test.txt']
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {

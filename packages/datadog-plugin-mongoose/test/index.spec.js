@@ -40,6 +40,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'mongodb-core',
           (done) => {
             const PeerCat = mongoose.model('PeerCat', { name: String })
             new PeerCat({ name: 'PeerCat' }).save().catch(done)

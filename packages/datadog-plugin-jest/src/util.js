@@ -1,4 +1,8 @@
+const { readFileSync } = require('fs')
+const { parse, extract } = require('jest-docblock')
+
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const log = require('../../dd-trace/src/log')
 
 /**
  * There are two ways to call `test.each` in `jest`:
@@ -47,10 +51,47 @@ function getJestTestName (test) {
   return titles.join(' ')
 }
 
+function isMarkedAsUnskippable (test) {
+  let docblocks
+
+  try {
+    const testSource = readFileSync(test.path, 'utf8')
+    docblocks = parse(extract(testSource))
+  } catch (e) {
+    // If we have issues parsing the file, we'll assume no unskippable was passed
+    return false
+  }
+
+  // docblocks were correctly parsed but it does not include a @datadog block
+  if (!docblocks?.datadog) {
+    return false
+  }
+
+  try {
+    return JSON.parse(docblocks.datadog).unskippable
+  } catch (e) {
+    // If the @datadog block comment is present but malformed, we'll run the suite
+    log.warn('@datadog block comment is malformed.')
+    return true
+  }
+}
+
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   return originalTests.reduce((acc, test) => {
     const relativePath = getTestSuitePath(test.path, rootDir)
     const shouldBeSkipped = skippableSuites.includes(relativePath)
+
+    if (isMarkedAsUnskippable(test)) {
+      acc.suitesToRun.push(test)
+      if (test?.context?.config?.testEnvironmentOptions) {
+        test.context.config.testEnvironmentOptions['_ddUnskippable'] = true
+        if (shouldBeSkipped) {
+          test.context.config.testEnvironmentOptions['_ddForcedToRun'] = true
+        }
+      }
+      return acc
+    }
+
     if (shouldBeSkipped) {
       acc.skippedSuites.push(relativePath)
     } else {

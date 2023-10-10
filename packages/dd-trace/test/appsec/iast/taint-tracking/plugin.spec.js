@@ -9,8 +9,8 @@ const {
   HTTP_REQUEST_COOKIE_NAME,
   HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_HEADER_VALUE,
-  HTTP_REQUEST_PATH,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_URI
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 const middlewareNextChannel = dc.channel('apm:express:middleware:next')
@@ -251,8 +251,8 @@ describe('IAST Taint tracking plugin', () => {
       expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
         iastContext,
         req.url,
-        'req.url',
-        HTTP_REQUEST_PATH
+        HTTP_REQUEST_URI,
+        HTTP_REQUEST_URI
       )
     })
   })

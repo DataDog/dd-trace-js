@@ -45,6 +45,7 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
+          'cassandra-driver',
           (done) => client.execute('SELECT now() FROM local;', err => err && done(err)),
           '127.0.0.1', 'db.cassandra.contact.points'
         )

@@ -1,3 +1,4 @@
+
 const request = require('../exporters/common/request')
 
 function getHeaders (config, application, reqType) {
@@ -28,13 +29,19 @@ function getPayload (payload) {
   }
 }
 
-function sendData (config, application, host, reqType, payload = {}) {
+function sendData (config, application, host, reqType, payload = {}, cb = () => {}) {
   const {
     hostname,
     port,
     url
   } = config
 
+  let namingSchemaVer
+  if (config.namingSchemaVer) {
+    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
+  } else {
+    namingSchemaVer = ''
+  }
   const options = {
     url,
     hostname,
@@ -43,14 +50,6 @@ function sendData (config, application, host, reqType, payload = {}) {
     path: '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType)
   }
-
-  let namingSchemaVer
-  if (config.namingSchemaVer) {
-    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
-  } else {
-    namingSchemaVer = ''
-  }
-
   const data = JSON.stringify({
     api_version: 'v2',
     naming_schema_version: namingSchemaVer,
@@ -73,6 +72,9 @@ function sendData (config, application, host, reqType, payload = {}) {
       }
       request(data, backendOptions, () => {})
     }
+
+    // call the callback function so that we can track the error and payload
+    cb(error, { 'payload': payload, reqType: reqType })
   })
 }
 

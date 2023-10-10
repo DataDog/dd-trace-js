@@ -15,9 +15,9 @@ In order to run benchmarks using Docker, issue the following commands from the r
 $ docker build -t dd-trace-benchmark -f benchmark/sirun/Dockerfile .
 
 # Run the Docker Container
-$ docker run -it -v "$(pwd)":/app --platform=linux/amd64 dd-trace-benchmark bash
+$ docker run -it -v "$(pwd)":/app -e CPU_START_ID=0 -e SPLITS=10 --platform=linux/amd64 dd-trace-benchmark bash
 cd /app/benchmark/sirun
-./runall.sh
+for i in {1..SPLITS}; do GROUP=i ./runall.sh; done
 cat results.ndjson
 ```
 

@@ -26,8 +26,6 @@ class DatadogTracer {
     this._version = config.version
     this._env = config.env
     this._tags = config.tags
-    this._computePeerService = config.spanComputePeerService
-    this._peerServiceMapping = config.peerServiceMapping
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = new PrioritySampler(config.env, config.sampler)

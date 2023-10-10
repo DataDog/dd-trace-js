@@ -1,5 +1,9 @@
 variables:
-  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/relenv-microbenchmarking-platform:dd-trace-js
+  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+
+  # Benchmark's env variables. Modify to tweak benchmark parameters.
+  UNCONFIDENCE_THRESHOLD: "5.0"
+  MD_REPORT_ONLY_CHANGES: "1"
 
 .benchmarks:
   stage: benchmarks
@@ -7,26 +11,18 @@ variables:
   tags: ["runner:apm-k8s-tweaked-metal"]
   image: $BASE_CI_IMAGE
   interruptible: true
-  timeout: 10m
+  timeout: 15m
   script:
-    - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
-    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
-    - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
-    - ./steps/capture-hardware-software-info.sh
-    - ./steps/run-benchmarks.sh
-    - ./steps/analyze-results.sh
-    - "./steps/upload-results-to-s3.sh || :"
+    - git clone --branch dd-trace-js https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
+    - bp-runner bp-runner.yml --debug
   artifacts:
-    name: "reports"
+    name: "artifacts"
+    when: always
     paths:
-      - reports/
+      - platform/artifacts/
     expire_in: 3 months
   variables:
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID # The ID of the current project. This ID is unique across all projects on the GitLab instance.
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME # "dd-trace-js"
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME # The branch or tag name for which project is built.
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA # The commit revision the project is built for.
-
+    # Gitlab and BP specific env vars. Do not modify.
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
 
@@ -36,17 +32,11 @@ benchmarks-pr-comment:
   tags: ["arch:amd64"]
   image: $BASE_CI_IMAGE
   script:
-    - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
-    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
-    - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
-    - ./steps/post-pr-comment.sh
+    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
+    - bp-runner bp-runner.pr-comment.yml --debug
   allow_failure: true
   variables:
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID # The ID of the current project. This ID is unique across all projects on the GitLab instance.
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME # "dd-trace-js"
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME # The branch or tag name for which project is built.
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA # The commit revision the project is built for.
-
+    # Gitlab and BP specific env vars. Do not modify.
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
 check-big-regressions:
@@ -55,16 +45,10 @@ check-big-regressions:
   tags: ["arch:amd64"]
   image: $BASE_CI_IMAGE
   script:
-    - export REPORTS_DIR="$(pwd)/reports/" && (mkdir "${REPORTS_DIR}" || :)
-    - git config --global url."https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/".insteadOf "https://github.com/DataDog/"
-    - git clone --branch dd-trace-js https://github.com/DataDog/relenv-microbenchmarking-platform /platform && cd /platform
-    - ./steps/fail-on-regression.sh
+    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
+    - bp-runner bp-runner.fail-on-regression.yml --debug
   variables:
-    UPSTREAM_PROJECT_ID: $CI_PROJECT_ID # The ID of the current project. This ID is unique across all projects on the GitLab instance.
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME # "dd-trace-js"
-    UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME # The branch or tag name for which project is built.
-    UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA # The commit revision the project is built for.
-
+    # Gitlab and BP specific env vars. Do not modify.
     KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: dd-trace-js
 
 benchmark:
