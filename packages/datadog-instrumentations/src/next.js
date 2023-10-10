@@ -1,7 +1,5 @@
 'use strict'
 
-// TODO: either instrument all or none of the render functions
-
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { DD_MAJOR } = require('../../../version')
@@ -56,30 +54,6 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
   }
 }
 
-function wrapRenderToResponse (renderToResponse) {
-  return function (ctx) {
-    return instrument(ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
-  }
-}
-
-function wrapRenderErrorToResponse (renderErrorToResponse) {
-  return function (ctx) {
-    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
-  }
-}
-
-function wrapRenderToHTML (renderToHTML) {
-  return function (req, res, pathname, query, parsedUrl) {
-    return instrument(req, res, () => renderToHTML.apply(this, arguments))
-  }
-}
-
-function wrapRenderErrorToHTML (renderErrorToHTML) {
-  return function (err, req, res, pathname, query) {
-    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
-  }
-}
-
 function wrapFindPageComponents (findPageComponents) {
   return function (pathname, query) {
     const result = findPageComponents.apply(this, arguments)
@@ -114,7 +88,8 @@ function instrument (req, res, handler) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
-  if (requests.has(req)) return handler()
+  const isMiddleware = req.headers['x-middleware-invoke']
+  if (isMiddleware || requests.has(req)) return handler()
 
   requests.add(req)
 
@@ -180,8 +155,6 @@ addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js'
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
-  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
-  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
@@ -192,8 +165,6 @@ addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-serv
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
-  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
-  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
@@ -208,8 +179,6 @@ addHook({
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
-  shimmer.wrap(Server.prototype, 'renderToHTML', wrapRenderToHTML)
-  shimmer.wrap(Server.prototype, 'renderErrorToHTML', wrapRenderErrorToHTML)
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
