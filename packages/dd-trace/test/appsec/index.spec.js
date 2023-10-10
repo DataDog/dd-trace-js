@@ -21,6 +21,7 @@ const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
   let config
@@ -647,22 +648,51 @@ describe('AppSec Index', () => {
   })
 
   describe('Metrics', () => {
+    const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+
     afterEach(() => {
       appsec.disable()
+
+      appsecNamespace.reset()
     })
 
-    it('should call reportWafInit', () => {
+    it('should increment waf.init metric', () => {
       sinon.restore()
 
-      sinon.stub(Reporter, 'reportWafInit')
-
-      appsec.enable(new Config({
+      const config = new Config({
         appsec: {
           enabled: true
         }
-      }))
+      })
 
-      expect(Reporter.reportWafInit).to.be.calledOnce
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
+    })
+
+    it('should not increment waf.init metric', () => {
+      sinon.restore()
+
+      const config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+
+      config.telemetry.enabled = true
+      config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
     })
   })
 })
