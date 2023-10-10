@@ -654,6 +654,8 @@ describe('AppSec Index', () => {
     beforeEach(() => {
       sinon.restore()
 
+      appsecNamespace.reset()
+
       config = new Config({
         appsec: {
           enabled: true
@@ -663,7 +665,9 @@ describe('AppSec Index', () => {
 
     afterEach(() => {
       appsec.disable()
+    })
 
+    after(() => {
       appsecNamespace.reset()
     })
 
