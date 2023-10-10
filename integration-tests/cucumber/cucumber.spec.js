@@ -29,8 +29,8 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-const isOldNode = semver.satisfies(process.version, '<=12')
-const versions = ['7.0.0', isOldNode ? '8' : 'latest']
+const isOldNode = semver.satisfies(process.version, '<=16')
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
