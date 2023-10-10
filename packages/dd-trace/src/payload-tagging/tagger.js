@@ -101,5 +101,6 @@ function getBodyResponseTags (jsonString, contentType, opts) {
 module.exports = {
   getBodyTags,
   getBodyRequestTags,
-  getBodyResponseTags
+  getBodyResponseTags,
+  isJSONContentType
 }

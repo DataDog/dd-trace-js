@@ -8,6 +8,7 @@ const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
+const { filterFromString } = require('../../dd-trace/src/payload-tagging/filter')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -90,34 +91,85 @@ describe('Plugin', () => {
         })
       })
 
-      it('should do payload tagging', done => {
-        const tracer = require('../../dd-trace')
-        const plugin = tracer._pluginManager._pluginsByName['fetch']
-        plugin._tracerConfig.httpPpayloadTagging = '*'
-        const app = express()
-        app.post('/user', (req, res) => {
-          res.status(200).send()
-        })
-        getPort().then(port => {
-          agent
-            .use(traces => {
-              const span = traces[0][0]
-              expect(span.meta).to.have.property('http.payload.foo.bar', '1')
-              expect(span.meta).to.have.property('http.payload.foo.baz', '2')
+      describe('body extraction', () => {
+        const data = JSON.stringify({ foo: { bar: 1, baz: 2 } })
+
+        const bodies = {
+          'string': data,
+          'string object': String(data),
+          'Blob': new Blob([data], { type: 'application/json' }),
+          'TypedArray': Uint16Array.from(Buffer.from(data)),
+          'ArrayBuffer View': Buffer.from(data)
+        }
+
+        for (const entry of Object.entries(bodies)) {
+          const [bodyType, body] = entry
+          if (!body) continue
+
+          it(`should tag payloads of type ${bodyType}`, done => {
+            const tracer = require('../../dd-trace')
+            const plugin = tracer._pluginManager._pluginsByName['fetch']
+            plugin._tracerConfig.httpPayloadTagging = filterFromString('*')
+            const app = express()
+            app.post('/user', (req, res) => {
+              res.status(200).send()
             })
-            .then(done)
-            .catch(done)
-          appListener = server(app, port, () => {
-            fetch(
-              new URL(`http://localhost:${port}/user`),
-              {
-                method: 'POST',
-                body: JSON.stringify({ foo: { bar: 1, baz: 2 } }),
-                headers: {
-                  'Content-Type': 'application/json'
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  const span = traces[0][0]
+                  expect(span.meta).to.have.property('http.request.body.contents.foo.bar', '1')
+                  expect(span.meta).to.have.property('http.request.body.contents.foo.baz', '2')
+                })
+                .then(done)
+                .catch(done)
+              appListener = server(app, port, () => {
+                fetch(
+                  new URL(`http://localhost:${port}/user`),
+                  {
+                    method: 'POST',
+                    body: body,
+                    headers: {
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                )
+              })
+            })
+          })
+        }
+
+        it('should support being created with a Request object', done => {
+          const tracer = require('../../dd-trace')
+          const plugin = tracer._pluginManager._pluginsByName['fetch']
+          plugin._tracerConfig.httpPayloadTagging = filterFromString('*')
+          const app = express()
+          app.post('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span.meta).to.have.property('http.request.body.contents.foo.bar', '1')
+                expect(span.meta).to.have.property('http.request.body.contents.foo.baz', '2')
+              })
+              .then(done)
+              .catch(done)
+            appListener = server(app, port, () => {
+              const request = new Request(
+                new URL(`http://localhost:${port}/user`),
+                {
+                  method: 'POST',
+                  body: data,
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  duplex: 'half'
                 }
-              }
-            )
+              )
+              fetch(request)
+            })
           })
         })
       })

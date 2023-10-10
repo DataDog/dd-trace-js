@@ -17,9 +17,24 @@ function wrapFetch (fetch, Request) {
     const headers = req.headers
     const message = { req, headers }
 
-    return startChannel.runStores({ message, body: init?.body }, () => {
+    let body
+    // We don't want to stream bodies if they involve complex logic.
+    // NodeJS fetch implementation forces `duplex` whenever ReadableStream
+    // instances are passed, so that's a good marker that we want to leave these alone.
+    if (init?.duplex) {
+      body = undefined
+    } else if (init?.body) {
+      body = init.body
+    } else if (input instanceof Request && input.body) {
+      body = req.clone().body
+    } else {
+      body = undefined
+    }
+
+    return startChannel.runStores({ message, body }, () => {
       // Request object is read-only so we need new objects to change headers.
       arguments[0] = message.req
+      message.req = message.req.clone()
       arguments[1] = { headers: message.headers }
 
       return fetch.apply(this, arguments)
