@@ -8,6 +8,10 @@ const childProcess = require('child_process')
 const { fork } = childProcess
 const path = require('path')
 const { assert } = require('chai')
+const fs = require('node:fs/promises')
+const fsync = require('node:fs')
+const zlib = require('node:zlib')
+const { Profile } = require('pprof-format')
 
 async function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
@@ -20,7 +24,12 @@ async function checkProfiles (agent, proc, timeout,
     }
   }, timeout, multiplicity)
 
-  await new Promise((resolve, reject) => {
+  await processExitPromise(proc, timeout, expectBadExit)
+  return resultPromise
+}
+
+function processExitPromise (proc, timeout, expectBadExit = false) {
+  return new Promise((resolve, reject) => {
     const timeoutObj = setTimeout(() => {
       reject(new Error('Process timed out'))
     }, timeout)
@@ -39,7 +48,6 @@ async function checkProfiles (agent, proc, timeout,
       .on('error', reject)
       .on('exit', checkExitCode)
   })
-  return resultPromise
 }
 
 describe('profiler', () => {
@@ -63,6 +71,101 @@ describe('profiler', () => {
 
   after(async () => {
     await sandbox.remove()
+  })
+
+  it('code hotspots and endpoint tracing works', async () => {
+    const procStart = BigInt(Date.now() * 1000000)
+    const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
+      cwd,
+      env: {
+        DD_PROFILING_PROFILERS: 'wall',
+        DD_PROFILING_EXPORTERS: 'file',
+        DD_PROFILING_ENABLED: 1,
+        DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
+        DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1
+      }
+    })
+
+    await processExitPromise(proc, 5000)
+    const procEnd = BigInt(Date.now() * 1000000)
+
+    const dirEntries = await fs.readdir(cwd)
+    // Get the latest wall_*.pprof file
+    const pprofEntries = dirEntries.filter(name => /^wall_.+\.pprof$/.test(name))
+    assert.isTrue(pprofEntries.length > 0, `No wall_*.pprof file found in ${cwd}`)
+    const pprofEntry = pprofEntries
+      .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
+      .reduce((a, b) => a.modified > b.modified ? a : b)
+      .name
+    const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
+    const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
+    const prof = Profile.decode(pprofUnzipped)
+
+    // We check the profile for following invariants:
+    // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
+    //   epoch) between process start and end.
+    // - it needs to have samples with 9 total different 'span id's, and 3 different
+    //   'local root span id's
+    // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
+    //   'endpoint-1', or 'endpoint-2'
+    // - every occurrence of a span must have the same root span and endpoint
+    const rootSpans = new Set()
+    const endpoints = new Set()
+    const spans = new Map()
+    const strings = prof.stringTable
+    const tsKey = strings.dedup('end_timestamp_ns')
+    const spanKey = strings.dedup('span id')
+    const rootSpanKey = strings.dedup('local root span id')
+    const endpointKey = strings.dedup('trace endpoint')
+    for (const sample of prof.sample) {
+      let ts, spanId, rootSpanId, endpoint
+      for (const label of sample.label) {
+        switch (label.key) {
+          case tsKey: ts = label.num; break
+          case spanKey: spanId = label.str; break
+          case rootSpanKey: rootSpanId = label.str; break
+          case endpointKey: endpoint = label.str; break
+          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
+        }
+      }
+      // Timestamp must be defined and be between process start and end time
+      assert.isDefined(ts)
+      assert.isTrue(ts <= procEnd)
+      assert.isTrue(ts >= procStart)
+      // Either all or none of span-related labels are defined
+      if (spanId || rootSpanId || endpoint) {
+        assert.isDefined(spanId)
+        assert.isDefined(rootSpanId)
+        assert.isDefined(endpoint)
+
+        rootSpans.add(rootSpanId)
+        const spanData = { rootSpanId, endpoint }
+        const existingSpanData = spans.get(spanId)
+        if (existingSpanData) {
+          // Span's root span and endpoint must be consistent across samples
+          assert.deepEqual(spanData, existingSpanData)
+        } else {
+          // New span id, store span data
+          spans.set(spanId, spanData)
+          // Verify endpoint value
+          const endpointVal = strings.strings[endpoint]
+          switch (endpointVal) {
+            case 'endpoint-0':
+            case 'endpoint-1':
+            case 'endpoint-2':
+              endpoints.add(endpoint)
+              break
+            default:
+              assert.fail(`Unexpected endpoint value ${endpointVal}`)
+          }
+        }
+      }
+    }
+    // Need to have a total of 9 different spans, with 3 different root spans
+    // and 3 different endpoints.
+    assert.equal(spans.size, 9)
+    assert.equal(rootSpans.size, 3)
+    assert.equal(endpoints.size, 3)
   })
 
   context('shutdown', () => {
