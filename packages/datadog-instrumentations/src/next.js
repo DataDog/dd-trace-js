@@ -13,6 +13,8 @@ const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 
+const MIDDLEWARE_HEADER = 'x-middleware-invoke'
+
 function wrapHandleRequest (handleRequest) {
   return function (req, res, pathname, query) {
     return instrument(req, res, () => handleRequest.apply(this, arguments))
@@ -88,7 +90,8 @@ function instrument (req, res, handler) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
-  const isMiddleware = req.headers['x-middleware-invoke']
+  // TODO support middleware if a FR comes up?
+  const isMiddleware = req.headers[MIDDLEWARE_HEADER]
   if (isMiddleware || requests.has(req)) return handler()
 
   requests.add(req)
