@@ -19,6 +19,7 @@ const fromEntries = Object.fromEntries || (entries =>
 
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+const configOriginMap = {}
 
 function maybeFile (filepath) {
   if (!filepath) return
@@ -95,9 +96,7 @@ function propagationStyle (key, option, defaultValue) {
   return defaultValue
 }
 
-const configOriginMap = {}
-
-function getConfigOrigin (code, env, def = undefined) {
+function getConfigOrigin (code, env, def) {
   for (const value in code) {
     if (value) {
       return 'code'
@@ -108,48 +107,49 @@ function getConfigOrigin (code, env, def = undefined) {
       return 'env_var'
     }
   }
-  return 'default'
+  if (def) return 'default'
+  return 'unknown'
 }
 
 class Config {
   constructor (options) {
     options = options || {}
 
-    const configWithOrigin = {}
+    this.configWithOrigin = []
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
       false
     ))
-    // this.configWithOrigin.push({
-    //   name: 'debug',
-    //   value: this.debug,
-    //   origin: process.env.DD_TRACE_DEBUG ? 'env_var' : 'default'
-    // })
+    this.configWithOrigin.push({
+      name: 'debug',
+      value: this.debug,
+      origin: process.env.DD_TRACE_DEBUG ? 'env_var' : 'default'
+    })
 
     this.logger = options.logger
-    // this.configWithOrigin.push({
-    //   name: 'logger',
-    //   value: this.logger,
-    //   origin: 'code'
-    // })
+    this.configWithOrigin.push({
+      name: 'logger',
+      value: this.logger,
+      origin: 'code'
+    })
 
     this.logLevel = coalesce(
       options.logLevel,
       process.env.DD_TRACE_LOG_LEVEL,
       'debug'
     )
-    // let logLevelOrigin = 'default'
-    // if (options.logLevel) {
-    //   logLevelOrigin = 'code'
-    // } else if (process.env.DD_TRACE_LOG_LEVEL) {
-    //   logLevelOrigin = 'env_var'
-    // }
-    // this.configWithOrigin.push({
-    //   name: 'logLevel',
-    //   value: this.logLevel,
-    //   origin: logLevelOrigin
-    // })
+    let logLevelOrigin = 'default'
+    if (options.logLevel) {
+      logLevelOrigin = 'code'
+    } else if (process.env.DD_TRACE_LOG_LEVEL) {
+      logLevelOrigin = 'env_var'
+    }
+    this.configWithOrigin.push({
+      name: 'logLevel',
+      value: this.logLevel,
+      origin: logLevelOrigin
+    })
 
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
@@ -183,7 +183,7 @@ class Config {
     configOriginMap.DD_PROFILING_EXPORTERS = getConfigOrigin([], [process.env.DD_PROFILING_EXPORTERS], 'agent')
 
     const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP
-    configOriginMap.DD_PROFILING_SOURCE_MAP = new ConfigOrigin(process.env.DD_PROFILING_SOURCE_MAP, 'env_var')
+    configOriginMap.DD_PROFILING_SOURCE_MAP = getConfigOrigin([], [process.env.DD_PROFILING_SOURCE_MAP])
 
     const DD_RUNTIME_METRICS_ENABLED = coalesce(
       options.runtimeMetrics, // TODO: remove when enabled by default
@@ -259,11 +259,6 @@ class Config {
     )
     configOriginMap.DD_CIVISIBILITY_MANUAL_API_ENABLED = getConfigOrigin(
       [], [process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED], false
-    )
-
-    const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
-      process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
-      false
     )
 
     const DD_SERVICE = options.service ||
@@ -451,7 +446,7 @@ class Config {
       false
     )
     const defaultPropagationStyle = ['datadog', 'tracecontext']
-    if (isTrue(configWithOrigin.DD_TRACE_B3_ENABLED.value)) {
+    if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')
     }
@@ -675,7 +670,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
       !inServerlessEnvironment
     )
-    configWithOrigin.DD_REMOTE_CONFIGURATION_ENABLED = getConfigOrigin(
+    configOriginMap.DD_REMOTE_CONFIGURATION_ENABLED = getConfigOrigin(
       [process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
         !inServerlessEnvironment]
     )
@@ -684,7 +679,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
       5 // seconds
     )
-    configWithOrigin.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = getConfigOrigin(
+    configOriginMap.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = getConfigOrigin(
       [parseFloat(remoteConfigOptions.pollInterval)],
       [parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)],
       5 // seconds
@@ -856,7 +851,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.apiKey = DD_API_KEY
     this.configWithOrigin.push({
       name: 'DD_API_KEY',
-      value: '',
+      value: '<redacted>',
       origin: configOriginMap.DD_API_KEY
     })
     this.env = DD_ENV
@@ -867,13 +862,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     })
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    let urlOrigin
+    let urlOrigin = 'default'
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       urlOrigin = configOriginMap.DD_CIVISIBILITY_AGENTLESS_URL
     } else if (DD_TRACE_AGENT_URL) {
       urlOrigin = configOriginMap.DD_TRACE_AGENT_URL
-    } else {
-      urlOrigin = 'default'
     }
     this.configWithOrigin.push({
       name: 'url',
@@ -887,44 +880,230 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       origin: getConfigOrigin([options.site], [process.env.DD_SITE], 'datadoghq.com')
     })
     this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
+    let hostnameOrigin = urlOrigin
+    if (DD_AGENT_HOST) hostnameOrigin = configOriginMap.DD_AGENT_HOST
+    this.configWithOrigin.push({
+      name: 'hostname',
+      value: this.hostname,
+      origin: hostnameOrigin
+    })
     this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
+    let portOrigin = urlOrigin
+    if (DD_TRACE_AGENT_PORT) portOrigin = configOriginMap.DD_TRACE_AGENT_PORT
+    this.configWithOrigin.push({
+      name: 'port',
+      value: this.port,
+      origin: portOrigin
+    })
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    this.configWithOrigin.push({
+      name: 'flushInterval',
+      value: this.flushInterval,
+      origin: options.flushInterval ? 'code' : 'default'
+    })
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    this.configWithOrigin.push({
+      name: 'flushMinSpans',
+      value: this.flushMinSpans,
+      origin: configOriginMap.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    })
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    this.configWithOrigin.push({
+      name: 'queryStringObfuscation',
+      value: this.queryStringObfuscation,
+      origin: configOriginMap.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    })
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
+    this.configWithOrigin.push({
+      name: 'clientIpEnabled',
+      value: this.clientIpEnabled,
+      origin: configOriginMap.DD_TRACE_CLIENT_IP_ENABLED
+    })
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
+    this.configWithOrigin.push({
+      name: 'clientIpHeader',
+      value: this.clientIpHeader,
+      origin: configOriginMap.DD_TRACE_CLIENT_IP_HEADER
+    })
     this.plugins = !!coalesce(options.plugins, true)
+    let pluginsOrigin = 'default'
+    if (options.plugins) pluginsOrigin = 'code'
+    this.configWithOrigin.push({
+      name: 'plugins',
+      value: this.plugins,
+      origin: pluginsOrigin
+    })
     this.service = DD_SERVICE
+    this.configWithOrigin.push({
+      name: 'service',
+      value: this.service,
+      origin: configOriginMap.DD_SERVICE
+    })
     this.serviceMapping = DD_SERVICE_MAPPING
+    this.configWithOrigin.push({
+      name: 'serviceMapping',
+      value: this.serviceMapping,
+      origin: configOriginMap.DD_SERVICE_MAPPING
+    })
     this.version = DD_VERSION
+    this.configWithOrigin.push({
+      name: 'version',
+      value: this.version,
+      origin: configOriginMap.DD_VERSION
+    })
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
+    let dogstatsdHostnameOrigin = hostnameOrigin
+    if (dogstatsd.hostname) {
+      dogstatsdHostnameOrigin = 'code'
+    } else if (process.env.DD_DOGSTATSD_HOSTNAME) {
+      dogstatsdHostnameOrigin = 'env_var'
+    }
+    let dogstatsdPortOrigin = 'default'
+    if (dogstatsd.port) {
+      dogstatsdPortOrigin = 'code'
+    } else if (process.env.DD_DOGSTATSD_PORT) {
+      dogstatsdPortOrigin = 'env_var'
+    }
+    this.configWithOrigin.push({
+      name: 'dogstatsd.hostname',
+      value: this.dogstatsd.hostname,
+      origin: dogstatsdHostnameOrigin
+    })
+    this.configWithOrigin.push({
+      name: 'dogstatsd.port',
+      value: this.dogstatsd.port,
+      origin: dogstatsdPortOrigin
+    })
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
+    this.configWithOrigin.push({
+      name: 'runtimeMetrics',
+      value: this.runtimeMetrics,
+      origin: configOriginMap.DD_RUNTIME_METRICS_ENABLED
+    })
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
+    this.configWithOrigin.push({
+      name: 'tracePropagationStyle.inject',
+      value: this.tracePropagationStyle.inject,
+      origin: configOriginMap.DD_TRACE_PROPAGATION_STYLE_INJECT
+    })
+    this.configWithOrigin.push({
+      name: 'tracePropagationStyle.extract',
+      value: this.tracePropagationStyle.extract,
+      origin: configOriginMap.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+    })
     this.experimental = {
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
       enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
     }
+    this.configWithOrigin.push({
+      name: 'experimental.runtimeId',
+      value: this.experimental.runtimeId,
+      origin: configOriginMap.DD_TRACE_RUNTIME_ID_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'experimental.exporter',
+      value: this.experimental.exporter,
+      origin: configOriginMap.DD_TRACE_EXPORTER
+    })
+    this.configWithOrigin.push({
+      name: 'experimental.enableGetRumData',
+      value: this.experimental.enableGetRumData,
+      origin: configOriginMap.DD_TRACE_GET_RUM_DATA_ENABLED
+    })
     this.sampler = sampler
+    const samplerOrigin = { rateLimit: 'code', rules: 'default', spanSamplingRules: 'default' }
+    if (!options.rateLimit && process.env.DD_TRACE_RATE_LIMIT) samplerOrigin.rateLimit = 'env_var'
+    if (options.samplingRules) {
+      samplerOrigin.rules = 'code'
+    } else if (process.env.DD_TRACE_SAMPLING_RULES) {
+      samplerOrigin.rules = 'env_var'
+    }
+    if (options.spanSamplingRules) {
+      samplerOrigin.spanSamplingRules = 'code'
+    } else if (process.env.DD_TRACE_SAMPLING_RULES || process.env.DD_SPAN_SAMPLING_RULES) {
+      samplerOrigin.spanSamplingRules = 'env_var'
+    }
+    this.configWithOrigin.push({
+      name: 'sampler.rateLimit',
+      value: this.sampler.rateLimit,
+      origin: samplerOrigin.rateLimit
+    })
+    this.configWithOrigin.push({
+      name: 'sampler.rules',
+      value: this.sampler.rules,
+      origin: samplerOrigin.rules
+    })
+    this.configWithOrigin.push({
+      name: 'sampler.spanSamplingRules',
+      value: this.sampler.spanSamplingRules,
+      origin: samplerOrigin.spanSamplingRules
+    })
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
+    let reportHostnameOrigin = 'default'
+    if (options.reportHostname) {
+      reportHostnameOrigin = 'code'
+    } else if (process.env.DD_TRACE_REPORT_HOSTNAME) {
+      reportHostnameOrigin = 'env_var'
+    }
+    this.configWithOrigin.push({
+      name: 'reportHostname',
+      value: this.reportHostname,
+      origin: reportHostnameOrigin
+    })
     this.scope = process.env.DD_TRACE_SCOPE
+    this.configWithOrigin.push({
+      name: 'scope',
+      value: this.scope,
+      origin: configOriginMap.DD_TRACE_SCOPE
+    })
     this.profiling = {
       enabled: isTrue(DD_PROFILING_ENABLED),
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    this.configWithOrigin.push({
+      name: 'spanAttributeSchema',
+      value: this.spanAttributeSchema,
+      origin: configOriginMap.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    })
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    this.configWithOrigin.push({
+      name: 'spanComputePeerService',
+      value: this.spanComputePeerService,
+      origin: configOriginMap.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    })
     this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    this.configWithOrigin.push({
+      name: 'spanRemoveIntegrationFromService',
+      value: this.spanRemoveIntegrationFromService,
+      origin: configOriginMap.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    })
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+    this.configWithOrigin.push({
+      name: 'peerServiceMapping',
+      value: formatConfig(this),
+      origin: configOriginMap.DD_TRACE_PEER_SERVICE_MAPPING
+    })
     this.lookup = options.lookup
+    this.configWithOrigin.push({
+      name: 'lookup',
+      value: this.lookup,
+      origin: 'code'
+    })
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
+    this.configWithOrigin.push({
+      name: 'startupLogs',
+      value: this.startupLogs,
+      origin: configOriginMap.DD_TRACE_STARTUP_LOGS
+    })
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
@@ -934,8 +1113,39 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
       dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     }
+    this.configWithOrigin.push({
+      name: 'telemetry.enabled',
+      value: this.telemetry.enabled,
+      origin: configOriginMap.DD_TRACE_EXPORTER === configOriginMap.DD_TRACE_TELEMETRY_ENABLED
+        ? configOriginMap.DD_TRACE_EXPORTER : 'code, env_var'
+    })
+    this.configWithOrigin.push({
+      name: 'telemetry.heartbeatInterval',
+      value: this.telemetry.heartbeatInterval,
+      origin: configOriginMap.DD_TELEMETRY_HEARTBEAT_INTERVAL
+    })
+    this.configWithOrigin.push({
+      name: 'telemetry.logCollection',
+      value: this.telemetry.logCollection,
+      origin: configOriginMap.DD_TELEMETRY_LOG_COLLECTION_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'telemetry.debug',
+      value: this.telemetry.debug,
+      origin: configOriginMap.DD_TELEMETRY_DEBUG
+    })
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
+    this.configWithOrigin.push({
+      name: 'protocolVersion',
+      value: this.protocolVersion,
+      origin: configOriginMap.DD_TRACE_AGENT_PROTOCOL_VERSION
+    })
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
+    this.configWithOrigin.push({
+      name: 'tagsHeaderMaxLength',
+      value: this.tagsHeaderMaxLength,
+      origin: configOriginMap.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+    })
     this.appsec = {
       enabled: DD_APPSEC_ENABLED,
       rules: DD_APPSEC_RULES ? safeJsonParse(maybeFile(DD_APPSEC_RULES)) : require('./appsec/recommended.json'),
@@ -955,6 +1165,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
       pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
+    this.configWithOrigin.push({
+      name: 'remoteConfig.enabled',
+      value: this.remoteConfig.enabled,
+      origin: configOriginMap.DD_REMOTE_CONFIGURATION_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'remoteConfig.pollInterval',
+      value: this.remoteConfig.pollInterval,
+      origin: configOriginMap.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+    })
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
       requestSampling: DD_IAST_REQUEST_SAMPLING,
@@ -964,8 +1184,48 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       redactionEnabled: DD_IAST_REDACTION_ENABLED,
       telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
+    this.configWithOrigin.push({
+      name: 'iast.enabled',
+      value: this.iast.enabled,
+      origin: configOriginMap.DD_IAST_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'iast.requestSampling',
+      value: this.iast.requestSampling,
+      origin: configOriginMap.DD_IAST_REQUEST_SAMPLING
+    })
+    this.configWithOrigin.push({
+      name: 'iast.maxConcurrentRequests',
+      value: this.iast.maxConcurrentRequests,
+      origin: configOriginMap.DD_IAST_MAX_CONCURRENT_REQUESTS
+    })
+    this.configWithOrigin.push({
+      name: 'iast.maxContextOperations',
+      value: this.iast.maxContextOperations,
+      origin: configOriginMap.DD_IAST_MAX_CONTEXT_OPERATIONS
+    })
+    this.configWithOrigin.push({
+      name: 'iast.deduplicationEnabled',
+      value: this.iast.deduplicationEnabled,
+      origin: configOriginMap.DD_IAST_DEDUPLICATION_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'iast.redactionEnabled',
+      value: this.iast.redactionEnabled,
+      origin: configOriginMap.DD_IAST_REDACTION_ENABLED
+    })
+    this.configWithOrigin.push({
+      name: 'iast.telemetryVerbosity',
+      value: this.iast.telemetryVerbosity,
+      origin: configOriginMap.DD_IAST_TELEMETRY_VERBOSITY
+    })
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
+    this.configWithOrigin.push({
+      name: 'isCiVisibility',
+      value: this.isCiVisibility,
+      origin: configOriginMap.DD_IS_CIVISIBILITY
+    })
 
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
@@ -975,9 +1235,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
 
     this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
-
-    // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
-    this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = coalesce(
@@ -1177,6 +1434,15 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
+}
+
+function formatConfig (config) {
+  // format peerServiceMapping from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  config.peerServiceMapping = config.peerServiceMapping
+    ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+  return config
 }
 
 module.exports = Config
