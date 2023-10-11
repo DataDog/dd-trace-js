@@ -224,7 +224,7 @@ function extendedHeartbeat (config) {
       ...appPayload,
       ...extendedHeartbeatPayload
     }
-    sendData(config, application, host, 'app-extendedHeartbeat', payload)
+    sendData(config, application, host, 'app-extended-heartbeat', payload)
     Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
   }, 1000 * 60 * 60 * 24).unref()
   return extendedInterval
