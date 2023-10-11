@@ -218,7 +218,7 @@ function heartbeat (config, application, host) {
 }
 
 function extendedHeartbeat (config) {
-  extendedInterval = setTimeout(() => {
+  extendedInterval = setInterval(() => {
     const appPayload = appStarted(config)
     const payload = {
       ...appPayload,
