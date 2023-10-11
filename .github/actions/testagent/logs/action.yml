@@ -15,7 +15,8 @@ runs:
           docker-compose logs testagent
         fi
       shell: bash
-    - run: |
+    - name: Get Tested Integrations from Test Agent
+      run: |
         # create artifacts directory if it doesn't exist
         [ -d "./artifacts" ] || mkdir -p "./artifacts"
 
