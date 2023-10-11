@@ -298,7 +298,7 @@ describe('Telemetry extended heartbeat', () => {
           return
         }
 
-        if (reqType === 'app-extendedHeartbeat') {
+        if (reqType === 'app-extended-heartbeat') {
           beats++
           extendedHeartbeatRequest = reqType
         }
@@ -330,7 +330,7 @@ describe('Telemetry extended heartbeat', () => {
       _pluginsByName: pluginsByName
     })
     clock.tick(86400000)
-    expect(extendedHeartbeatRequest).to.equal('app-extendedHeartbeat')
+    expect(extendedHeartbeatRequest).to.equal('app-extended-heartbeat')
     expect(beats).to.equal(1)
     clock.tick(86400000)
     expect(beats).to.equal(2)
@@ -664,7 +664,7 @@ describe('Telemetry retry', () => {
           return
         }
 
-        if (reqType === 'app-extendedHeartbeat') {
+        if (reqType === 'app-extended-heartbeat') {
           extendedHeartbeatRequest = reqType
           extendedHeartbeatPayload = payload
           return
@@ -708,7 +708,7 @@ describe('Telemetry retry', () => {
     telemetry.updateIntegrations() // This sends an batch message and fails
     // Skip forward a day
     clock.tick(86400000)
-    expect(extendedHeartbeatRequest).to.equal('app-extendedHeartbeat')
+    expect(extendedHeartbeatRequest).to.equal('app-extended-heartbeat')
     expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
     expect(extendedHeartbeatPayload['integrations']).to.deep.include({
       integrations: [
