@@ -53,7 +53,9 @@ function crashFlush () {
     log.debug('An impending timeout was reached, but no root span was found. No error will be tagged.')
   }
 
-  tracer._processor.killAll()
+  if(tracer._processor){
+    tracer._processor.killAll()
+  }
   if (activeSpan !== null) {
     activeSpan.finish()
   }
