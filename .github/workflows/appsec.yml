@@ -132,6 +132,15 @@ jobs:
       - uses: codecov/codecov-action@v2
 
   mongodb-core:
+    strategy:
+      matrix:
+        node-version: [14]
+        range: ['>=3.3 <5']
+        include:
+          - node-version: 16
+            range: '>=5 <6'
+          - node-version: 18
+            range: '>6'
     runs-on: ubuntu-latest
     services:
       mongodb:
@@ -141,9 +150,13 @@ jobs:
     env:
       PLUGINS: express-mongo-sanitize
       SERVICES: mongo
+      RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
