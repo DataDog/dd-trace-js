@@ -32,6 +32,8 @@ function enable (_config) {
   if (isEnabled) return
 
   try {
+    appsecTelemetry.enable(_config.telemetry)
+
     setTemplates(_config)
 
     RuleManager.applyRules(_config.appsec.rules, _config.appsec)
@@ -39,8 +41,6 @@ function enable (_config) {
     remoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
-
-    appsecTelemetry.enable(_config.telemetry)
 
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -121,8 +121,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  // TODO: no need to analyze it if it was already done by the body-parser hook
-  if (req.query !== undefined && req.query !== null) {
+  if (req.query && typeof req.query === 'object') {
     payload[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 

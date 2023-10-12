@@ -80,7 +80,7 @@ jobs:
           - 5432:5432
     env:
       PG_TEST_NATIVE: 'true'
-      PLUGINS: pg
+      PLUGINS: pg|knex
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v2
@@ -121,6 +121,46 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express|body-parser|cookie-parser
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
+
+  mongodb-core:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: express-mongo-sanitize
+      SERVICES: mongo
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:plugins:ci
+      - uses: codecov/codecov-action@v2
+
+  mongoose:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: mongoose
+      SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup

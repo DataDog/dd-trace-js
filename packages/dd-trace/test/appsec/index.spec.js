@@ -21,6 +21,7 @@ const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
   let config
@@ -316,7 +317,7 @@ describe('AppSec Index', () => {
           remotePort: 8080
         },
         body: null,
-        query: { queryKey: 'queryValue' },
+        query: 'string',
         route: {},
         params: 'string',
         cookies: 'string'
@@ -337,8 +338,7 @@ describe('AppSec Index', () => {
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.query': { queryKey: 'queryValue' }
+        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -644,6 +644,65 @@ describe('AppSec Index', () => {
           {}
         )
       })
+    })
+  })
+
+  describe('Metrics', () => {
+    const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+    let config
+
+    beforeEach(() => {
+      sinon.restore()
+
+      appsecNamespace.reset()
+
+      config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    after(() => {
+      appsecNamespace.reset()
+    })
+
+    it('should increment waf.init metric', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
+    })
+
+    it('should not increment waf.init metric if metrics are not enabled', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
+    })
+
+    it('should not increment waf.init metric if telemetry is not enabled', () => {
+      config.telemetry.enabled = false
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
     })
   })
 })
