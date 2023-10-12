@@ -641,7 +641,7 @@ export declare interface User {
   /**
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
-  [key: string]: string | undefined
+  [key: string]: any;
 }
 
 export declare interface DogStatsD {
