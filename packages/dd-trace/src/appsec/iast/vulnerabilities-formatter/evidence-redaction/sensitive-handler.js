@@ -1,5 +1,6 @@
 'use strict'
 
+const iastLog = require('../../iast-log')
 const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
@@ -261,6 +262,20 @@ class SensitiveHandler {
       }
     } else {
       valueParts.push({ redacted: true })
+    }
+  }
+
+  setRedactionPatterns (redactionNamePattern, redactionValuePattern) {
+    try {
+      if (redactionNamePattern) this._namePattern = new RegExp(redactionNamePattern, 'gmi')
+    } catch (e) {
+      iastLog.warn('Redaction name pattern is not valid')
+    }
+
+    try {
+      if (redactionValuePattern) this._valuePattern = new RegExp(redactionValuePattern, 'gmi')
+    } catch (e) {
+      iastLog.warn('Redaction value pattern is not valid')
     }
   }
 }

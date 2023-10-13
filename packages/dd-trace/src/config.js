@@ -492,6 +492,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
+      iastOptions && iastOptions.redactionNamePattern,
+      process.env.DD_IAST_REDACTION_NAME_PATTERN,
+      null
+    )
+
+    const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
+      iastOptions && iastOptions.redactionValuePattern,
+      process.env.DD_IAST_REDACTION_VALUE_PATTERN,
+      null
+    )
+
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
       iastOptions && iastOptions.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
@@ -620,6 +632,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
       redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
+      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN,
       telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 

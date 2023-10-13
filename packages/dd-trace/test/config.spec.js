@@ -115,6 +115,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', null)
+    expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
   })
 
@@ -215,6 +217,8 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
+    process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
@@ -291,6 +295,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
   })
 
@@ -411,6 +417,8 @@ describe('Config', () => {
           maxContextOperations: 5,
           deduplicationEnabled: false,
           redactionEnabled: false,
+          redactionNamePattern: 'REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
           telemetryVerbosity: 'DEBUG'
         }
       },
@@ -467,6 +475,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
@@ -761,6 +771,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', null)
+    expect(config).to.have.nested.property('iast.redactionValuePattern', null)
   })
 
   it('should give priority to non-experimental options', () => {
