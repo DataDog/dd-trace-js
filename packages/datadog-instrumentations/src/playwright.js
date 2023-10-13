@@ -181,6 +181,15 @@ function dispatcherHook (dispatcherExport) {
   return dispatcherExport
 }
 
+function getTestByTestId (dispatcher, testId) {
+  if (dispatcher._testById) {
+    return dispatcher._testById.get(testId)?.test
+  }
+  if (dispatcher._allTests) {
+    return dispatcher._allTests.find(({ id }) => id === testId)
+  }
+}
+
 function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
@@ -188,11 +197,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const worker = createWorker.apply(this, arguments)
 
     worker.on('testBegin', ({ testId }) => {
-      const { test } = dispatcher._testById.get(testId)
+      const test = getTestByTestId(dispatcher, testId)
       testBeginHandler(test)
     })
     worker.on('testEnd', ({ testId, status, errors }) => {
-      const { test } = dispatcher._testById.get(testId)
+      const test = getTestByTestId(dispatcher, testId)
 
       testEndHandler(test, STATUS_TO_TEST_STATUS[status], errors && errors[0])
     })
