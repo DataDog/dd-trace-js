@@ -16,7 +16,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       const satisfiesNodeVersionForMongo3and4 =
         (semver.satisfies(process.version, '<14.20.1') && semver.satisfies(mongodb.version(), '>=3.3 <5'))
       const satisfiesNodeVersionForMongo5 =
-        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '>=5 <6'))
+        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '5'))
       const satisfiesNodeVersionForMongo6 =
         (semver.satisfies(process.version, '>=16.20.1') && semver.satisfies(mongodb.version(), '>=6'))
 
