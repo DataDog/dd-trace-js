@@ -13,11 +13,13 @@ const pathLine = {
 }
 
 const EXCLUDED_PATHS = [
-  path.join(path.sep, 'node_modules', 'diagnostics_channel')
+  path.join(path.sep, 'node_modules', 'dc-polyfill'),
+  path.join(path.sep, 'node_modules', 'dc-polyfill', 'dc-polyfill.js')
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
   'diagnostics_channel',
+  'dc-polyfill',
   'node:child_process',
   'child_process',
   'node:async_hooks',

@@ -32,8 +32,10 @@ describe('path-line', function () {
   const rootPath = tmpdir.slice(0, firstSep + 1)
 
   const DIAGNOSTICS_CHANNEL_PATHS = [
-    path.join(rootPath, 'path', 'node_modules', 'diagnostics_channel', 'index.js'),
+    path.join(rootPath, 'path', 'node_modules', 'dc-polyfill'),
+    path.join(rootPath, 'path', 'node_modules', 'dc-polyfill', 'dc-polyfill.js'),
     'node:diagnostics_channel',
+    'dc-polyfill',
     'diagnostics_channel'
   ]
   let mockPath, pathLine, mockProcess
