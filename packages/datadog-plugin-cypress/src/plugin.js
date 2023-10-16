@@ -21,11 +21,14 @@ const {
   getCoveredFilenamesFromCoverage,
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags,
-  TEST_SKIPPED_BY_ITR
+  TEST_SKIPPED_BY_ITR,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -185,8 +188,11 @@ module.exports = (on, config) => {
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
+  const unskippableSuites = []
+  let hasForcedToRunSuites = false
+  let hasUnskippableSuites = false
 
-  function getTestSpan (testName, testSuite) {
+  function getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
     const testSuiteTags = {
       [TEST_COMMAND]: command,
       [TEST_COMMAND]: command,
@@ -212,6 +218,16 @@ module.exports = (on, config) => {
       testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
     }
 
+    if (isUnskippable) {
+      hasUnskippableSuites = true
+      testSpanMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+    }
+
+    if (isForcedToRun) {
+      hasForcedToRunSuites = true
+      testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
+    }
+
     return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
       tags: {
@@ -233,12 +249,20 @@ module.exports = (on, config) => {
         isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
       }
 
-      getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
+      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
         if (err) {
           log.error(err)
         } else {
           testsToSkip = skippableTests || []
         }
+
+        // `details.specs` are test files
+        details.specs.forEach(({ absolute, relative }) => {
+          const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+          if (isUnskippableSuite) {
+            unskippableSuites.push(relative)
+          }
+        })
 
         const childOf = getTestParentSpan(tracer)
         rootDir = getRootDir(details)
@@ -340,7 +364,9 @@ module.exports = (on, config) => {
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled,
           skippingType: 'test',
-          skippingCount: skippedTests.length
+          skippingCount: skippedTests.length,
+          hasForcedToRunSuites,
+          hasUnskippableSuites
         }
       )
 
@@ -384,17 +410,21 @@ module.exports = (on, config) => {
     },
     'dd:beforeEach': (test) => {
       const { testName, testSuite } = test
-      // skip test
-      if (testsToSkip.find(test => {
+      const shouldSkip = !!testsToSkip.find(test => {
         return testName === test.name && testSuite === test.suite
-      })) {
+      })
+      const isUnskippable = unskippableSuites.includes(testSuite)
+      const isForcedToRun = shouldSkip && isUnskippable
+
+      // skip test
+      if (shouldSkip && !isUnskippable) {
         skippedTests.push(test)
         isTestsSkipped = true
         return { shouldSkip: true }
       }
 
       if (!activeSpan) {
-        activeSpan = getTestSpan(testName, testSuite)
+        activeSpan = getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
       }
 
       return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}

@@ -33,8 +33,9 @@ function publishQueryParsedAndNext (req, res, next) {
   return function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
+      const query = req.query
 
-      queryParserReadCh.publish({ req, res, abortController })
+      queryParserReadCh.publish({ req, res, query, abortController })
 
       if (abortController.signal.aborted) return
     }

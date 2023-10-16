@@ -21,6 +21,7 @@ const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
   let config
@@ -391,7 +392,8 @@ describe('AppSec Index', () => {
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4', e: '5' }
+        'server.request.cookies': { d: '4', e: '5' },
+        'server.request.query': { b: '2' }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -449,10 +451,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with body by default', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run')
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -462,10 +465,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run').returns(['block'])
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -525,10 +529,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with query by default', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run')
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -538,10 +543,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run').returns(['block'])
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -638,6 +644,65 @@ describe('AppSec Index', () => {
           {}
         )
       })
+    })
+  })
+
+  describe('Metrics', () => {
+    const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+    let config
+
+    beforeEach(() => {
+      sinon.restore()
+
+      appsecNamespace.reset()
+
+      config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    after(() => {
+      appsecNamespace.reset()
+    })
+
+    it('should increment waf.init metric', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
+    })
+
+    it('should not increment waf.init metric if metrics are not enabled', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
+    })
+
+    it('should not increment waf.init metric if telemetry is not enabled', () => {
+      config.telemetry.enabled = false
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
     })
   })
 })
