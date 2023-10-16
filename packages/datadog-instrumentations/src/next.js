@@ -55,6 +55,37 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
     })
   }
 }
+// All render methods provided from Next.js top-level API
+
+function wrapRender (render) {
+  return function (req, res) {
+    return instrument(req, res, () => render.apply(this, arguments))
+  }
+}
+
+function wrapRenderError (renderError) {
+  return function (err, req, res) {
+    return instrument(req, res, () => renderError.apply(this, arguments))
+  }
+}
+
+function wrapRender404 (render404) {
+  return function (req, res) {
+    return instrument(req, res, () => render404.apply(this, arguments))
+  }
+}
+
+function wrapRenderToHTML (renderToHTML) {
+  return function (req, res, pathname, query, parsedUrl) {
+    return instrument(req, res, () => renderToHTML.apply(this, arguments))
+  }
+}
+
+function wrapRenderErrorToHTML (renderErrorToHTML) {
+  return function (err, req, res, pathname, query) {
+    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
+  }
+}
 
 function wrapFindPageComponents (findPageComponents) {
   return function (pathname, query) {
@@ -90,7 +121,7 @@ function instrument (req, res, handler) {
   req = req.originalRequest || req
   res = res.originalResponse || res
 
-  // TODO support middleware if a FR comes up?
+  // TODO support middleware properly in the future?
   const isMiddleware = req.headers[MIDDLEWARE_HEADER]
   if (isMiddleware || requests.has(req)) return handler()
 
@@ -153,23 +184,31 @@ addHook({
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
-  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+
+  shimmer.wrap(Server.prototype, 'render', wrapRender)
+  shimmer.wrap(Server.prototype, 'renderToHTML', wrapRenderToHTML)
+  shimmer.wrap(Server.prototype, 'renderError', wrapRenderError)
+  shimmer.wrap(Server.prototype, 'renderErrorToHTML', wrapRenderErrorToHTML)
+  shimmer.wrap(Server.prototype, 'render404', wrapRender404)
+
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
 })
 
+addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+  const Server = nextServer.default
+  shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
+  return nextServer
+})
+
 addHook({ name: 'next', versions: ['>=11.1 <13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
-
-  shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
-  shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
-
   return nextServer
 })
 
@@ -182,6 +221,13 @@ addHook({
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
+
+  shimmer.wrap(Server.prototype, 'render', wrapRender)
+  shimmer.wrap(Server.prototype, 'renderToHTML', wrapRenderToHTML)
+  shimmer.wrap(Server.prototype, 'renderError', wrapRenderError)
+  shimmer.wrap(Server.prototype, 'renderErrorToHTML', wrapRenderErrorToHTML)
+  shimmer.wrap(Server.prototype, 'render404', wrapRender404)
+
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
