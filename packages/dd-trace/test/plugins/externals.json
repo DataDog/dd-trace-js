@@ -44,7 +44,7 @@
   "express-mongo-sanitize": [
     {
       "name": "mongodb",
-      "versions": [">=3.3"]
+      "versions": [">=3.3 <5", "5", ">=6"]
     },
     {
       "name": "mongodb-core",
