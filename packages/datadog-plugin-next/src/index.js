@@ -51,16 +51,16 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const error = span.context()._tags['error']
 
-    if (!this.config.validateStatus(res.statusCode) && !error) {
-      span.setTag('error', true)
+    iif (!this.config.validateStatus(res.statusCode) && !error) {
+      span.setTag('error', req.error || nextRequest.error || true)
+      web.addError(req, req.error || nextRequest.error || true)
     }
 
     span.addTags({
       'http.status_code': res.statusCode
     })
 
-    // TODO add something in index.d.ts for nextRequest, or add to separate hook?
-    this.config.hooks.request(span, req, res, nextRequest)
+    this.config.hooks.request(span, req, res)
 
     span.finish()
   }
