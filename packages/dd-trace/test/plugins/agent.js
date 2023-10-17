@@ -16,6 +16,7 @@ let agent = null
 let listener = null
 let tracer = null
 let plugins = []
+const testedPlugins = []
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -44,9 +45,10 @@ function addEnvironmentVariablesToHeaders (headers) {
 
   // add plugin name and plugin version to headers, this is used for verifying tested
   // integration version ranges
-  if (global.testAgent.pluginName && global.testAgent.pluginVersion) {
-    ddEnvVars.set('DD_INTEGRATION', global.testAgent.pluginName)
-    ddEnvVars.set('DD_INTEGRATION_VERSION', global.testAgent.pluginVersion)
+  const currentPlugin = testedPlugins[testedPlugins.length - 1]
+  if (currentPlugin && currentPlugin.pluginName && currentPlugin.pluginVersion) {
+    ddEnvVars.set('DD_INTEGRATION', currentPlugin.pluginName)
+    ddEnvVars.set('DD_INTEGRATION_VERSION', currentPlugin.pluginVersion)
   }
 
   // add the DD environment variables to the header if any exist
@@ -350,5 +352,7 @@ module.exports = {
       .forEach(name => {
         delete require.cache[name]
       })
-  }
+  },
+
+  testedPlugins
 }

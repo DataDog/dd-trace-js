@@ -17,10 +17,8 @@ global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
-global.testAgent = {
-  pluginName: null,
-  pluginVersion: null
-}
+
+const testedPlugins = agent.testedPlugins
 
 const packageVersionFailures = Object.create({})
 
@@ -216,15 +214,17 @@ function withVersions (plugin, modules, range, cb) {
         // after doesn't contain test data nor know if any tests passed/failed
         let moduleVersionDidFail = false
 
-        // set plugin name and version to later report to test agent regarding tested integrations and
-        // their tested range of versions
-        global.testAgent.pluginName = plugin
-
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
 
           before(() => {
-            global.testAgent.pluginVersion = v.version
+            // set plugin name and version to later report to test agent regarding tested integrations and
+            // their tested range of versions
+            const lastPlugin = testedPlugins[testedPlugins.length - 1]
+            if (!lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== v.version) {
+              testedPlugins.push({ pluginName: plugin, pluginVersion: v.version })
+            }
+
             nodePath = process.env.NODE_PATH
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
               .filter(x => x && x !== 'undefined')
@@ -252,7 +252,6 @@ function withVersions (plugin, modules, range, cb) {
 
             process.env.NODE_PATH = nodePath
             require('module').Module._initPaths()
-            global.testAgent.pluginVersion = null
           })
         })
       })
