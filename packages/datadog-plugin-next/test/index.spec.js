@@ -467,6 +467,30 @@ describe('Plugin', function () {
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
+
+        if (satisfies(pkg.version, '>=13.3.0')) {
+          it('should attach the error to the span from a NextRequest', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('error', 1)
+
+                expect(spans[1].meta).to.have.property('error.message', 'error in app dir api route')
+                expect(spans[1].meta).to.have.property('error.type', 'Error')
+                expect(spans[1].meta['error.stack']).to.exist
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/error`)
+              .catch(err => {
+                if (err.response.status !== 500) done(err)
+              })
+          })
+        }
       })
 
       // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode

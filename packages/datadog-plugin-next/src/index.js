@@ -51,7 +51,7 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const error = span.context()._tags['error']
 
-    iif (!this.config.validateStatus(res.statusCode) && !error) {
+    if (!this.config.validateStatus(res.statusCode) && !error) {
       span.setTag('error', req.error || nextRequest.error || true)
       web.addError(req, req.error || nextRequest.error || true)
     }

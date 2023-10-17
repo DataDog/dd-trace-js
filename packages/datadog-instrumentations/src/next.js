@@ -157,7 +157,7 @@ function finish (ctx, result, err) {
 
   const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
   if (maybeNextRequest) {
-    ctx = { nextRequest: maybeNextRequest, ...ctx }
+    ctx.nextRequest = maybeNextRequest
   }
 
   finishChannel.publish(ctx)
@@ -169,6 +169,9 @@ function finish (ctx, result, err) {
   return result
 }
 
+// also wrapped in dist/server/future/route-handlers/app-route-route-handler.js
+// in versions below 13.3.0 that support middleware,
+// however, it is not provided as a class function or exported property
 addHook({
   name: 'next',
   versions: ['>=13.3.0'],
