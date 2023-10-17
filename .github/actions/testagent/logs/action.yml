@@ -21,7 +21,7 @@ runs:
         response=$(mktemp) && headers=$(mktemp)
 
         # create artifacts directory if it doesn't exist
-        [ -d "./artifacts" ] || mkdir -p "./artifacts"
+        mkdir -p "./artifacts"
 
         # get tested integrations
         curl -o "$response" -D "$headers" http://127.0.0.1:9126/test/integrations/tested_versions
