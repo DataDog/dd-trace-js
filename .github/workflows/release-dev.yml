@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - master
-      - juan-fernandez/fix-dev-release
 
 jobs:
   dev_release:
