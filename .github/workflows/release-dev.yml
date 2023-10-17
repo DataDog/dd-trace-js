@@ -12,6 +12,7 @@ jobs:
     environment: npm
     permissions:
       id-token: write
+      contents: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
@@ -27,7 +28,7 @@ jobs:
       - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
       - run: npm publish --tag dev --provenance
       - run: |
-          git tag dev
+          git tag --force dev
           git push origin :refs/tags/dev
           git push origin --tags
 
