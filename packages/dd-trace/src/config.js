@@ -461,7 +461,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
-      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
@@ -469,43 +469,43 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(iastOptions?.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
     const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(iastOptions?.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      iastOptions && iastOptions.deduplicationEnabled,
+      iastOptions?.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
-      iastOptions && iastOptions.redactionEnabled,
+      iastOptions?.redactionEnabled,
       !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
-      iastOptions && iastOptions.redactionNamePattern,
+      iastOptions?.redactionNamePattern,
       process.env.DD_IAST_REDACTION_NAME_PATTERN,
       null
     )
 
     const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
-      iastOptions && iastOptions.redactionValuePattern,
+      iastOptions?.redactionValuePattern,
       process.env.DD_IAST_REDACTION_VALUE_PATTERN,
       null
     )
 
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      iastOptions && iastOptions.telemetryVerbosity,
+      iastOptions?.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
       'INFORMATION'
     )
