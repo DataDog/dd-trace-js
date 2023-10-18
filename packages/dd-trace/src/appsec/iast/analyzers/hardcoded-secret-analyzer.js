@@ -36,6 +36,7 @@ class HardcodedSecretAnalyzer extends Analyzer {
           .forEach(location => this._report({
             file,
             line: location.line,
+            column: location.column,
             data: match.ruleId
           }))
       })
@@ -50,6 +51,7 @@ class HardcodedSecretAnalyzer extends Analyzer {
     return {
       path: value.file,
       line: value.line,
+      column: value.column,
       isInternal: false
     }
   }
