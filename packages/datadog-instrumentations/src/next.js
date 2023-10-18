@@ -55,25 +55,6 @@ function wrapHandleApiRequestWithMatch (handleApiRequest) {
     })
   }
 }
-// All render methods provided from Next.js top-level API
-
-function wrapRender (render) {
-  return function (req, res) {
-    return instrument(req, res, () => render.apply(this, arguments))
-  }
-}
-
-function wrapRenderError (renderError) {
-  return function (err, req, res) {
-    return instrument(req, res, () => renderError.apply(this, arguments))
-  }
-}
-
-function wrapRender404 (render404) {
-  return function (req, res) {
-    return instrument(req, res, () => render404.apply(this, arguments))
-  }
-}
 
 function wrapRenderToHTML (renderToHTML) {
   return function (req, res, pathname, query, parsedUrl) {
@@ -84,6 +65,18 @@ function wrapRenderToHTML (renderToHTML) {
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
     return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
+  }
+}
+
+function wrapRenderToResponse (renderToResponse) {
+  return function (ctx) {
+    return instrument(ctx.req, ctx.res, () => renderToResponse.apply(this, arguments))
+  }
+}
+
+function wrapRenderErrorToResponse (renderErrorToResponse) {
+  return function (ctx) {
+    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
   }
 }
 
@@ -189,17 +182,18 @@ addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js'
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
 
-  shimmer.wrap(Server.prototype, 'render', wrapRender)
-  shimmer.wrap(Server.prototype, 'renderToHTML', wrapRenderToHTML)
-  shimmer.wrap(Server.prototype, 'renderError', wrapRenderError)
-  shimmer.wrap(Server.prototype, 'renderErrorToHTML', wrapRenderErrorToHTML)
-  shimmer.wrap(Server.prototype, 'render404', wrapRender404)
+  // Wrapping these makes sure any public API render methods called in a custom server
+  // are traced properly
+  // (instead of wrapping the top-level API methods, just wrapping these covers them all)
+  shimmer.wrap(Server.prototype, 'renderToResponse', wrapRenderToResponse)
+  shimmer.wrap(Server.prototype, 'renderErrorToResponse', wrapRenderErrorToResponse)
 
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
 })
 
+// `handleApiRequest` changes parameters/implementation at 13.2.0
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
@@ -222,11 +216,10 @@ addHook({
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequest)
 
-  shimmer.wrap(Server.prototype, 'render', wrapRender)
+  // Likewise with newer versions, these correlate to public API render methods for custom servers
+  // all public ones use these methods somewhere in their code path
   shimmer.wrap(Server.prototype, 'renderToHTML', wrapRenderToHTML)
-  shimmer.wrap(Server.prototype, 'renderError', wrapRenderError)
   shimmer.wrap(Server.prototype, 'renderErrorToHTML', wrapRenderErrorToHTML)
-  shimmer.wrap(Server.prototype, 'render404', wrapRender404)
 
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
