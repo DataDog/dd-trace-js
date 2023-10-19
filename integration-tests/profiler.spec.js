@@ -117,14 +117,17 @@ describe('profiler', () => {
     const spanKey = strings.dedup('span id')
     const rootSpanKey = strings.dedup('local root span id')
     const endpointKey = strings.dedup('trace endpoint')
+    const threadNameKey = strings.dedup('thread name')
+    const threadNameValue = strings.dedup('Main Event Loop')
     for (const sample of prof.sample) {
-      let ts, spanId, rootSpanId, endpoint
+      let ts, spanId, rootSpanId, endpoint, threadName
       for (const label of sample.label) {
         switch (label.key) {
           case tsKey: ts = label.num; break
           case spanKey: spanId = label.str; break
           case rootSpanKey: rootSpanId = label.str; break
           case endpointKey: endpoint = label.str; break
+          case threadNameKey: threadName = label.str; break
           default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
         }
       }
@@ -132,6 +135,8 @@ describe('profiler', () => {
       assert.isDefined(ts)
       assert.isTrue(ts <= procEnd)
       assert.isTrue(ts >= procStart)
+      // Thread name must be defined and exactly equal "Main Event Loop"
+      assert.equal(threadName, threadNameValue)
       // Either all or none of span-related labels are defined
       if (spanId || rootSpanId || endpoint) {
         assert.isDefined(spanId)
