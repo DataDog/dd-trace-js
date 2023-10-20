@@ -64,31 +64,6 @@ function endpointNameFromTags (tags) {
   ].filter(v => v).join(' ')
 }
 
-function updateContext (context, span, startedSpans, hotspotsEnabled, endpointCollectionEnabled) {
-  if (hotspotsEnabled) {
-    context.spanId = span.context().toSpanId()
-    const rootSpan = startedSpans[0]
-    if (rootSpan) {
-      context.rootSpanId = rootSpan.context().toSpanId()
-    }
-  }
-  if (endpointCollectionEnabled) {
-    // Find the first webspan starting from the end:
-    // There might be several webspans, for example with next.js, http plugin creates a first span
-    // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
-    for (let i = startedSpans.length - 1; i >= 0; i--) {
-      const tags = getSpanContextTags(startedSpans[i])
-      if (isWebServerSpan(tags)) {
-        context.webTags = tags
-        // endpoint may not be determined yet, but keep it as fallback
-        // if tags are not available anymore during serialization
-        context.endpoint = endpointNameFromTags(tags)
-        break
-      }
-    }
-  }
-}
-
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
@@ -164,10 +139,7 @@ class NativeWallProfiler {
       this._currentContext = {}
       this._pprof.time.setContext(this._currentContext)
 
-      if (this._lastSpan) {
-        updateContext(context, this._lastSpan, this._lastStartedSpans,
-          this._codeHotspotsEnabled, this._endpointCollectionEnabled)
-      }
+      this._updateContext(context)
     }
 
     const span = getActiveSpan()
@@ -177,6 +149,35 @@ class NativeWallProfiler {
     } else {
       this._lastStartedSpans = undefined
       this._lastSpan = undefined
+    }
+  }
+
+  _updateContext (context) {
+    if (!this._lastSpan) {
+      return
+    }
+    if (this._codeHotspotsEnabled) {
+      context.spanId = this._lastSpan.context().toSpanId()
+      const rootSpan = this._lastStartedSpans[0]
+      if (rootSpan) {
+        context.rootSpanId = rootSpan.context().toSpanId()
+      }
+    }
+    if (this._endpointCollectionEnabled) {
+      const startedSpans = this._lastStartedSpans
+      // Find the first webspan starting from the end:
+      // There might be several webspans, for example with next.js, http plugin creates a first span
+      // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
+      for (let i = startedSpans.length - 1; i >= 0; i--) {
+        const tags = getSpanContextTags(startedSpans[i])
+        if (isWebServerSpan(tags)) {
+          context.webTags = tags
+          // endpoint may not be determined yet, but keep it as fallback
+          // if tags are not available anymore during serialization
+          context.endpoint = endpointNameFromTags(tags)
+          break
+        }
+      }
     }
   }
 
