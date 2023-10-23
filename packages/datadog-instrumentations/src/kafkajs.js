@@ -8,12 +8,52 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
+const producerCommitCh = channel('apm:kafkajs:produce:commit')
 const producerFinishCh = channel('apm:kafkajs:produce:finish')
 const producerErrorCh = channel('apm:kafkajs:produce:error')
 
 const consumerStartCh = channel('apm:kafkajs:consume:start')
+const consumerCommitCh = channel('apm:kafkajs:consume:commit')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
+
+function commitFromPayload (event) {
+  const groupIdKey = 'consumer_group'
+  const type = 'kafka_commit'
+  const { payload: { groupId, topics } } = event
+  console.log(`commit payload ${JSON.stringify(event.payload)}`)
+  for (const { topic, partitions } of topics) {
+    for (const { partition, offset } of partitions) {
+      const offsetData = {
+        [groupIdKey]: groupId,
+        partition,
+        type,
+        offset,
+        topic
+      }
+      console.log(`publishing ${JSON.stringify(offsetData)}`)
+      consumerCommitCh.publish(offsetData)
+    }
+  }
+}
+
+let consumerCommitOffsetEvent
+addHook({ name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4'] }, instrumentation => {
+  consumerCommitOffsetEvent = instrumentation.events.COMMIT_OFFSETS
+  return instrumentation
+})
+
+addHook({ name: 'kafkajs', file: 'src/consumer/offsetManager/index.js', versions: ['>=1.4'] }, BaseOffsetManager => {
+  class OffsetManager extends BaseOffsetManager {
+    constructor () {
+      super(...arguments)
+      if (consumerCommitCh.hasSubscribers) {
+        this.instrumentationEmitter.addListener(consumerCommitOffsetEvent, commitFromPayload)
+      }
+    }
+  }
+  return OffsetManager
+})
 
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {

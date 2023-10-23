@@ -1,6 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -40,11 +41,12 @@ describe('Plugin', () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
-          Kafka = require(`../../../versions/kafkajs@${version}`).get().Kafka
-
+          const lib = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = lib.Kafka
           kafka = new Kafka({
             clientId: `kafkajs-test-${version}`,
-            brokers: ['127.0.0.1:9092']
+            brokers: ['127.0.0.1:9092'],
+            logLevel: lib.logLevel.WARN
           })
         })
         describe('producer', () => {
@@ -328,6 +330,18 @@ describe('Plugin', () => {
               }
             })
           })
+
+          if (semver.intersects(version, '>=1.10')) {
+            it('Should add metrics on explicit commit', async () => {
+              await consumer.run({
+                eachMessage: async ({ topic, partition, message }) => {
+                  await consumer.commitOffsets([{ topic, partition, offset: (Number(message.offset) + 1).toString() }])
+                },
+                autoCommit: false
+              })
+              await sendMessages(kafka, testTopic, messages)
+            })
+          }
         })
       })
     })

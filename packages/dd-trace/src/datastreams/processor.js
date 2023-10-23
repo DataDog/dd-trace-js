@@ -45,14 +45,58 @@ class StatsPoint {
   }
 }
 
-class StatsBucket extends Map {
+class Backlog {
+  constructor ({ offset, ...tags }) {
+    this._sortedTags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this._offset = offset
+    this._timestamp = Date.now() * 1e6
+  }
+
+  get offset () { return this._offset }
+
+  get tags () { return this._tags }
+
+  get timestamp () { return this._timestamp }
+
+  get sortedTags () {
+    return this._sortedTags
+  }
+}
+
+class StatsBucket {
+  constructor () {
+    this._checkpoints = new Map()
+    this._backlogs = new Map()
+  }
+
   forCheckpoint (checkpoint) {
     const key = checkpoint.hash
-    if (!this.has(key)) {
-      this.set(key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)) // StatsPoint
+    if (!this._checkpoints.has(key)) {
+      this._checkpoints.set(
+        key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)
+      )
     }
 
-    return this.get(key)
+    return this._checkpoints.get(key)
+  }
+
+  addBacklog (backlog) {
+    /**
+     * Conditionally add a backlog to the bucket. If there is currently an offset
+     * matching the backlog's tags, overwrite the offset IFF the backlog's offset
+     * is greater than the recorded offset.
+     *
+     * @param backlog: Backlog
+     */
+    const key = backlog.sortedTags
+    const existingOffset = this._backlogs.get(key)
+    if (existingOffset !== undefined) {
+      if (backlog.offset < existingOffset) {
+        return existingOffset
+      }
+    }
+    this._backlogs.set(key, backlog.offset)
+    return backlog
   }
 }
 
@@ -122,12 +166,13 @@ class DataStreamsProcessor {
   }
 
   onInterval () {
-    const serialized = this._serializeBuckets()
-    if (!serialized) return
+    const { Stats, Backlogs } = this._serializeBuckets()
+    if ([ Stats, Backlogs ].every(arr => arr.length === 0)) return
     const payload = {
       Env: this.env,
       Service: this.service,
-      Stats: serialized,
+      Stats,
+      Backlogs,
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript'
@@ -207,13 +252,25 @@ class DataStreamsProcessor {
     return dataStreamsContext
   }
 
+  commitOffset (offsetObj) {
+    const backlog = new Backlog(offsetObj)
+    if (!this.enabled) return
+    return this.buckets
+      .forTime(backlog.timestamp)
+      .addBacklog(backlog)
+  }
+
   _serializeBuckets () {
+    // TimeBuckets
     const serializedBuckets = []
+    const serializedBacklogs = []
 
     for (const [ timeNs, bucket ] of this.buckets.entries()) {
       const points = []
 
-      for (const stats of bucket.values()) {
+      // bucket: StatsBucket
+      // stats: StatsPoint
+      for (const stats of bucket._checkpoints.values()) {
         points.push(stats.encode())
       }
 
@@ -222,11 +279,20 @@ class DataStreamsProcessor {
         Duration: new Uint64(this.bucketSizeNs),
         Stats: points
       })
+
+      if (bucket._backlogs.size > 0) {
+        for (const backlog of Object.values(bucket._backlogs)) {
+          serializedBacklogs.push(backlog.encode())
+        }
+      }
     }
 
     this.buckets.clear()
 
-    return serializedBuckets
+    return {
+      Stats: serializedBuckets,
+      Backlogs: serializedBacklogs
+    }
   }
 }
 

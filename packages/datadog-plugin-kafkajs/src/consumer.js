@@ -7,6 +7,29 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume' }
 
+  constructor () {
+    super(...arguments)
+    this.addSub('apm:kafkajs:consume:commit', this.commit)
+  }
+
+  commit (offsetData) {
+    const keys = [
+      'consumer_group',
+      'type',
+      'partition',
+      'offset',
+      'topic'
+    ]
+
+    if (!this.config.dsmEnabled) return
+
+    // TODO log instead of returning
+    if (keys.some(key => !offsetData.hasOwnProperty(key))) return
+
+    console.log(`metric ${JSON.stringify(offsetData)}`)
+    return this.tracer.commitOffset(offsetData)
+  }
+
   start ({ topic, partition, message, groupId }) {
     const childOf = extract(this.tracer, message.headers)
     const span = this.startSpan({
