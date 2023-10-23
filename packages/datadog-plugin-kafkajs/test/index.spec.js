@@ -8,7 +8,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -298,6 +298,35 @@ describe('Plugin', () => {
               }
             })
             setDataStreamsContextSpy.restore()
+          })
+
+          it('Should set a message payload size when producing a message', async () => {
+            const messages = [{ key: 'pro123', value: 'test-message' }]
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+            await sendMessages(kafka, testTopic, messages)
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(52)
+            recordCheckpointSpy.restore()
+          })
+
+          it('Should set a message payload size when consuming a message', async () => {
+            const messages = [{ key: 'pro123', value: 'test-message' }]
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+            await sendMessages(kafka, testTopic, messages)
+            await consumer.run({
+              eachMessage: async () => {
+                expect(recordCheckpointSpy.args[1][0].payloadSize).to.equal(261)
+              }
+            })
+            recordCheckpointSpy.restore()
+          })
+
+          it('Should set a message payload size with unicode characters', async () => {
+            // not sure if this message length is correct, prbably need to fix length function
+            const messages = [{ key: 'pro123', value: 'test-message😎' }]
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+            await sendMessages(kafka, testTopic, messages)
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(54)
+            recordCheckpointSpy.restore()
           })
         })
       })
