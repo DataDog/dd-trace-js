@@ -415,10 +415,10 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@4.0.0":
-  version "4.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-4.0.0.tgz#2ef48977292496f7b300ff97605f0853f7340586"
-  integrity sha512-1rQV6arh5fp7BWshjHgKmhNzXELAIod1Y4ydkI7XRcRim35uBoxQgPy1VgMCuLjfzco7112Vt8bkfQxo9bIdoA==
+"@datadog/pprof@4.0.1":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-4.0.1.tgz#f8629ecb62646d90ed49b6252dd0583d8d5001d3"
+  integrity sha512-TavqyiyQZOaUM9eQB07r8+K/T1CqKyOdsUGxpN79+BF+eOQBpTj/Cte6KdlhcUSKL3h5hSjC+vlgA7uW2qtVhA==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
