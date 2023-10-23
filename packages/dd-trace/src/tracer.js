@@ -44,6 +44,10 @@ class DatadogTracer extends Tracer {
     return ctx
   }
 
+  commitOffset (offsetData) {
+    return this._dataStreamsProcessor.commitOffset(offsetData)
+  }
+
   trace (name, options, fn) {
     options = Object.assign({
       childOf: this.scope().active()
