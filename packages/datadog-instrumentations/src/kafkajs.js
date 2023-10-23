@@ -17,38 +17,46 @@ const consumerCommitCh = channel('apm:kafkajs:consume:commit')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
-function commitFromPayload (event) {
+function commitsFromEvent (event) {
   const groupIdKey = 'consumer_group'
   const type = 'kafka_commit'
   const { payload: { groupId, topics } } = event
-  console.log(`commit payload ${JSON.stringify(event.payload)}`)
+  const commitList = []
   for (const { topic, partitions } of topics) {
     for (const { partition, offset } of partitions) {
-      const offsetData = {
+      commitList.push({
         [groupIdKey]: groupId,
         partition,
         type,
         offset,
         topic
-      }
-      console.log(`publishing ${JSON.stringify(offsetData)}`)
-      consumerCommitCh.publish(offsetData)
+      })
     }
   }
+  consumerCommitCh.publish(commitList)
 }
 
 let consumerCommitOffsetEvent
-addHook({ name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4'] }, instrumentation => {
-  consumerCommitOffsetEvent = instrumentation.events.COMMIT_OFFSETS
-  return instrumentation
-})
+addHook(
+  { name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4'] },
+  instrumentation => {
+    consumerCommitOffsetEvent = instrumentation.events.COMMIT_OFFSETS
+    return instrumentation
+  })
+
+addHook(
+  { name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4 <1.5.0'] },
+  instrumentation => {
+    consumerCommitOffsetEvent = instrumentation.COMMIT_OFFSETS
+    return instrumentation
+  })
 
 addHook({ name: 'kafkajs', file: 'src/consumer/offsetManager/index.js', versions: ['>=1.4'] }, BaseOffsetManager => {
   class OffsetManager extends BaseOffsetManager {
     constructor () {
       super(...arguments)
       if (consumerCommitCh.hasSubscribers) {
-        this.instrumentationEmitter.addListener(consumerCommitOffsetEvent, commitFromPayload)
+        this.instrumentationEmitter.addListener(consumerCommitOffsetEvent, commitsFromEvent)
       }
     }
   }
