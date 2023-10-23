@@ -36,33 +36,6 @@ function commitsFromEvent (event) {
   consumerCommitCh.publish(commitList)
 }
 
-let consumerCommitOffsetEvent
-addHook(
-  { name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4'] },
-  instrumentation => {
-    consumerCommitOffsetEvent = instrumentation.events.COMMIT_OFFSETS
-    return instrumentation
-  })
-
-addHook(
-  { name: 'kafkajs', file: 'src/consumer/instrumentationEvents.js', versions: ['>=1.4 <1.5.0'] },
-  instrumentation => {
-    consumerCommitOffsetEvent = instrumentation.COMMIT_OFFSETS
-    return instrumentation
-  })
-
-addHook({ name: 'kafkajs', file: 'src/consumer/offsetManager/index.js', versions: ['>=1.4'] }, BaseOffsetManager => {
-  class OffsetManager extends BaseOffsetManager {
-    constructor () {
-      super(...arguments)
-      if (consumerCommitCh.hasSubscribers) {
-        this.instrumentationEmitter.addListener(consumerCommitOffsetEvent, commitsFromEvent)
-      }
-    }
-  }
-  return OffsetManager
-})
-
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {
     constructor (options) {
@@ -123,6 +96,9 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
 
     const consumer = createConsumer.apply(this, arguments)
+
+    consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
+
     const run = consumer.run
 
     const groupId = arguments[0].groupId
