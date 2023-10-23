@@ -97,7 +97,8 @@ services:
       - START_WEB=0
       - LAMBDA_EXECUTOR=local
   kafka:
-    image: debezium/kafka:1.7
+    platform: linux/arm64
+    image: wurstmeister/kafka:2.13-2.8.1
     ports:
       - "127.0.0.1:9092:9092"
       - "127.0.0.1:9093:9093"
@@ -105,9 +106,17 @@ services:
       - CLUSTER_ID=5Yr1SIgYQz-b-dgRabWx4g
       - NODE_ID=1
       - CREATE_TOPICS="test-topic:1:1"
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+    depends_on:
+      - zookeeper
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
   opensearch:
     image: opensearchproject/opensearch:2
     environment:
