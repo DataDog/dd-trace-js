@@ -8,10 +8,10 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   constructor () {
     super(...arguments)
-    this.addSub('apm:kafkajs:consume:commit', this.commit)
+    this.addSub('apm:kafkajs:consume:commit', message => this.commit(message))
   }
 
-  commit (offsetData) {
+  commit (commitList) {
     const keys = [
       'consumer_group',
       'type',
@@ -19,14 +19,12 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       'offset',
       'topic'
     ]
-
     if (!this.config.dsmEnabled) return
-
     // TODO log instead of returning
-    if (keys.some(key => !offsetData.hasOwnProperty(key))) return
-
-    console.log(`metric ${JSON.stringify(offsetData)}`)
-    return this.tracer.commitOffset(offsetData)
+    for (const commit of commitList) {
+      if (keys.some(key => !commit.hasOwnProperty(key))) return
+      this.tracer.commitOffset(commit)
+    }
   }
 
   start ({ topic, partition, message, groupId }) {
