@@ -58,7 +58,7 @@ function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPat
 }
 
 function getRelativePath (filepath) {
-  return `${path.relative(process.cwd(), filepath)}`
+  return path.relative(process.cwd(), filepath)
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {

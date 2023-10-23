@@ -8,6 +8,7 @@ const { suite } = require('./resources/hardcoded-secrets-suite.json')
 describe('Hardcoded Secret Analyzer', () => {
   const file = path.join(process.cwd(), '/path/to/file.js')
   const line = 42
+  const column = 3
 
   let report
   beforeEach(() => {
@@ -24,12 +25,13 @@ describe('Hardcoded Secret Analyzer', () => {
           literals: [{
             value: sample,
             locations: [{
-              line
+              line,
+              column
             }]
           }]
         })
 
-        expect(report).to.be.calledOnceWithExactly({ file: 'path/to/file.js', line, data: testCase.id })
+        expect(report).to.be.calledOnceWithExactly({ file: 'path/to/file.js', line, column, data: testCase.id })
       })
     })
   })

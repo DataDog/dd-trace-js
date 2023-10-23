@@ -52,14 +52,10 @@ function getRewriter (telemetryVerbosity) {
           getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
       }
 
-      // TODO: remove this
-      const hardcodedSecret = process.env.DD_HARDCODED_SECRET_ENABLED !== '0'
-
       rewriter = new Rewriter({
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
-        chainSourceMap,
-        hardcodedSecret
+        chainSourceMap
       })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
@@ -91,8 +87,8 @@ function getCompileMethodFn (compileMethod) {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
 
-        if (rewritten?.hardcodedSecretResult && hardcodedSecretCh.hasSubscribers) {
-          hardcodedSecretCh.publish(rewritten.hardcodedSecretResult)
+        if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+          hardcodedSecretCh.publish(rewritten.literalsResult)
         }
 
         if (rewritten?.content) {
