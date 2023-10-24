@@ -1,4 +1,4 @@
-name: Node 18
+name: Node 20
 runs:
   using: composite
   steps:
