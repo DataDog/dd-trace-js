@@ -54,10 +54,16 @@ class JestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       numSkippedSuites,
       hasUnskippableSuites,
-      hasForcedToRunSuites
+      hasForcedToRunSuites,
+      error
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+
+      if (error) {
+        this.testSessionSpan.setTag('error', error)
+        this.testModuleSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
