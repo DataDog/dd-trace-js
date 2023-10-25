@@ -398,7 +398,7 @@ addHook({
       isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
 
       log.debug(
-        () => `Out of ${runner.suite.suites.length} suites ${suitesToRun.length} suites are going to run.`
+        () => `${suitesToRun.length} out of ${runner.suite.suites.length} suites are going to run.`
       )
 
       runner.suite.suites = suitesToRun

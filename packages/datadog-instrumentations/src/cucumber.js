@@ -298,7 +298,7 @@ addHook({
       isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
 
       log.debug(
-        () => `Out of ${this.pickleIds.length} suites, ${picklesToRun.length} suites are going to run.`
+        () => `${picklesToRun.length} out of ${this.pickleIds.length} suites are going to run.`
       )
 
       this.pickleIds = picklesToRun
