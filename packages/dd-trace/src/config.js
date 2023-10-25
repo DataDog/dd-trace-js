@@ -447,7 +447,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       5 // seconds
     )
 
-    const iastOptions = options.experimental && options.experimental.iast
+    const iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
       (iastOptions === true || iastOptions.enabled === true),
