@@ -208,6 +208,11 @@ addHook({
     const rootDir = test && test.context && test.context.config && test.context.config.rootDir
 
     const jestSuitesToRun = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+
+    log.debug(
+      () => `Out of ${shardedTests.length} suites, ${jestSuitesToRun.suitesToRun.length} suites are going to run.`
+    )
+
     hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
     hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
@@ -507,6 +512,8 @@ addHook({
     const { tests } = testPaths
 
     const jestSuitesToRun = getJestSuitesToRun(skippableSuites, tests, rootDir)
+
+    log.debug(() => `Out of ${tests.length} suites, ${jestSuitesToRun.suitesToRun.length} suites are going to run.`)
 
     hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
     hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites

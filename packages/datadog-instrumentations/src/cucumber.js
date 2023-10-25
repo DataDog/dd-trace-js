@@ -296,6 +296,11 @@ addHook({
       const filteredPickles = getFilteredPickles(this, skippableSuites)
       const { picklesToRun } = filteredPickles
       isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
+
+      log.debug(
+        () => `Out of ${this.pickleIds.length} suites, ${picklesToRun.length} suites are going to run.`
+      )
+
       this.pickleIds = picklesToRun
 
       skippedSuites = Array.from(filteredPickles.skippedSuites)
