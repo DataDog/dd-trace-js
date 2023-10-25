@@ -15,7 +15,8 @@ const { testInRequest } = require('../utils')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
-    const file = path.join(process.cwd(), '/path/to/file.js')
+    const relFile = path.join('path', 'to', 'file.js')
+    const file = path.join(process.cwd(), relFile)
     const line = 42
     const column = 3
 
@@ -40,7 +41,7 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          expect(report).to.be.calledOnceWithExactly({ file: 'path/to/file.js', line, column, data: testCase.id })
+          expect(report).to.be.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
         })
       })
     })
