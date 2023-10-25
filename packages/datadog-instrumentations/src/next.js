@@ -10,6 +10,8 @@ const startChannel = channel('apm:next:request:start')
 const finishChannel = channel('apm:next:request:finish')
 const errorChannel = channel('apm:next:request:error')
 const pageLoadChannel = channel('apm:next:page:load')
+const bodyParsedChannel = channel('apm:next:body-parsed')
+const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
 
@@ -28,9 +30,9 @@ function wrapHandleApiRequest (handleApiRequest) {
         if (!handled) return handled
 
         return this.hasPage(pathname).then(pageFound => {
-          const page = pageFound ? pathname : getPageFromPath(pathname, this.dynamicRoutes)
+          const pageData = pageFound ? { page: pathname } : getPageFromPath(pathname, this.dynamicRoutes)
 
-          pageLoadChannel.publish({ page })
+          pageLoadChannel.publish(pageData)
 
           return handled
         })
@@ -83,15 +85,19 @@ function wrapFindPageComponents (findPageComponents) {
     const result = findPageComponents.apply(this, arguments)
 
     if (result) {
-      pageLoadChannel.publish({ page: getPagePath(pathname) })
+      pageLoadChannel.publish(getPagePath(pathname))
     }
 
     return result
   }
 }
 
-function getPagePath (page) {
-  return typeof page === 'object' ? page.pathname : page
+function getPagePath (maybePage) {
+  if (typeof maybePage !== 'object') return { page: maybePage }
+
+  const isAppPath = maybePage.isAppPath
+  const page = maybePage.pathname || maybePage.page
+  return { page, isAppPath }
 }
 
 function getPageFromPath (page, dynamicRoutes = []) {
@@ -132,6 +138,16 @@ function instrument (req, res, handler) {
   })
 }
 
+function wrapServeStatic (serveStatic) {
+  return function (req, res, path) {
+    return instrument(req, res, () => {
+      if (pageLoadChannel.hasSubscribers && path) pageLoadChannel.publish({ page: path })
+
+      return serveStatic.apply(this, arguments)
+    })
+  }
+}
+
 function finish (ctx, result, err) {
   if (err) {
     ctx.error = err
@@ -146,6 +162,18 @@ function finish (ctx, result, err) {
 
   return result
 }
+
+addHook({
+  name: 'next',
+  versions: ['>=11.1'],
+  file: 'dist/server/serve-static.js'
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
+
+addHook({
+  name: 'next',
+  versions: DD_MAJOR >= 4 ? ['>=10.2 <11.1'] : ['>=9.5 <11.1'],
+  file: 'dist/next-server/server/serve-static.js'
+}, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
 addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
@@ -185,4 +213,42 @@ addHook({
   shimmer.wrap(Server.prototype, 'findPageComponents', wrapFindPageComponents)
 
   return nextServer
+})
+
+addHook({
+  name: 'next',
+  versions: ['>=13'],
+  file: 'dist/server/web/spec-extension/request.js'
+}, request => {
+  const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
+  shimmer.wrap(nextUrlDescriptor, 'get', function (originalGet) {
+    return function wrappedGet () {
+      const nextUrl = originalGet.apply(this, arguments)
+      if (queryParsedChannel.hasSubscribers) {
+        const query = {}
+        for (const key of nextUrl.searchParams.keys()) {
+          if (!query[key]) {
+            query[key] = nextUrl.searchParams.getAll(key)
+          }
+        }
+
+        queryParsedChannel.publish({ query })
+      }
+      return nextUrl
+    }
+  })
+
+  Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
+
+  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
+    return async function wrappedJson () {
+      const body = await originalMethod.apply(this, arguments)
+      bodyParsedChannel.publish({
+        body
+      })
+      return body
+    }
+  })
+
+  return request
 })

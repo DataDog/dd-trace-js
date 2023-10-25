@@ -5,9 +5,11 @@ const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
 const {
+  bodyParser,
+  cookieParser,
+  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
-  bodyParser,
   queryParser,
   passportVerify
 } = require('../../src/appsec/channels')
@@ -18,6 +20,8 @@ const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
+const addresses = require('../../src/appsec/addresses')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
   let config
@@ -26,6 +30,7 @@ describe('AppSec Index', () => {
   let blocking
   let passport
   let log
+  let appsecTelemetry
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -65,11 +70,17 @@ describe('AppSec Index', () => {
       error: sinon.stub()
     }
 
+    appsecTelemetry = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
-      './passport': passport
+      './passport': passport,
+      './telemetry': appsecTelemetry
     })
 
     sinon.stub(waf, 'init').callThrough()
@@ -114,12 +125,16 @@ describe('AppSec Index', () => {
 
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
+      expect(cookieParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+      expect(graphqlFinishExecute.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
+      expect(cookieParser.hasSubscribers).to.be.true
+      expect(graphqlFinishExecute.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
     })
@@ -131,6 +146,16 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(passportVerify.hasSubscribers).to.be.false
+    })
+
+    it('should call appsec telemetry enable', () => {
+      config.telemetry = {
+        enabled: true,
+        metrics: true
+      }
+      AppSec.enable(config)
+
+      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
     })
   })
 
@@ -170,8 +195,18 @@ describe('AppSec Index', () => {
       AppSec.disable()
 
       expect(bodyParser.hasSubscribers).to.be.false
+      expect(cookieParser.hasSubscribers).to.be.false
+      expect(graphqlFinishExecute.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
+    })
+
+    it('should call appsec telemetry disable', () => {
+      AppSec.enable(config)
+
+      AppSec.disable()
+
+      expect(appsecTelemetry.disable).to.be.calledOnce
     })
   })
 
@@ -357,7 +392,8 @@ describe('AppSec Index', () => {
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: ['4'], e: ['5'] }
+        'server.request.cookies': { d: '4', e: '5' },
+        'server.request.query': { b: '2' }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -415,10 +451,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with body by default', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run')
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
@@ -428,13 +465,52 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.body = { key: 'value' }
+        const body = { key: 'value' }
+        req.body = body
         sinon.stub(waf, 'run').returns(['block'])
 
-        bodyParser.publish({ req, res, abortController })
+        bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.body': { key: 'value' }
+        })
+        expect(abortController.abort).to.have.been.called
+        expect(res.end).to.have.been.called
+      })
+    })
+
+    describe('onRequestCookieParsed', () => {
+      it('Should not block without cookie', () => {
+        sinon.stub(waf, 'run')
+
+        cookieParser.publish({ req, res, abortController })
+
+        expect(waf.run).not.to.have.been.called
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should not block with cookie by default', () => {
+        const cookies = { key: 'value' }
+        sinon.stub(waf, 'run')
+
+        cookieParser.publish({ req, res, abortController, cookies })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.cookies': { key: 'value' }
+        })
+        expect(abortController.abort).not.to.have.been.called
+        expect(res.end).not.to.have.been.called
+      })
+
+      it('Should block when it is detected as attack', () => {
+        const cookies = { key: 'value' }
+        sinon.stub(waf, 'run').returns(['block'])
+
+        cookieParser.publish({ req, res, abortController, cookies })
+
+        expect(waf.run).to.have.been.calledOnceWith({
+          'server.request.cookies': { key: 'value' }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -453,10 +529,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should not block with query by default', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run')
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -466,10 +543,11 @@ describe('AppSec Index', () => {
       })
 
       it('Should block when it is detected as attack', () => {
-        req.query = { key: 'value' }
+        const query = { key: 'value' }
+        req.query = query
         sinon.stub(waf, 'run').returns(['block'])
 
-        queryParser.publish({ req, res, abortController })
+        queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
           'server.request.query': { key: 'value' }
@@ -506,6 +584,125 @@ describe('AppSec Index', () => {
         expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
         expect(passport.passportTrackEvent).not.to.have.been.called
       })
+    })
+
+    describe('onGraphqlQueryParse', () => {
+      it('Should not call waf if resolvers is undefined', () => {
+        const resolvers = undefined
+        const rootSpan = {}
+
+        sinon.stub(waf, 'run')
+        sinon.stub(storage, 'getStore').returns({ req: {} })
+        web.root.returns(rootSpan)
+
+        graphqlFinishExecute.publish({ resolvers })
+
+        expect(waf.run).not.to.have.been.called
+      })
+
+      it('Should not call waf if resolvers is not an object', () => {
+        const resolvers = ''
+        const rootSpan = {}
+
+        sinon.stub(waf, 'run')
+        sinon.stub(storage, 'getStore').returns({ req: {} })
+        web.root.returns(rootSpan)
+
+        graphqlFinishExecute.publish({ resolvers })
+
+        expect(waf.run).not.to.have.been.called
+      })
+
+      it('Should not call waf if req is unavailable', () => {
+        const resolvers = { user: [ { id: '1234' } ] }
+        sinon.stub(waf, 'run')
+        sinon.stub(storage, 'getStore').returns({})
+
+        graphqlFinishExecute.publish({ resolvers })
+
+        expect(waf.run).not.to.have.been.called
+      })
+
+      it('Should call waf if resolvers is well formatted', () => {
+        const context = {
+          resolvers: {
+            user: [ { id: '1234' } ]
+          }
+        }
+        const rootSpan = {}
+
+        sinon.stub(waf, 'run')
+        sinon.stub(storage, 'getStore').returns({ req: {} })
+        web.root.returns(rootSpan)
+
+        graphqlFinishExecute.publish({ context })
+
+        expect(waf.run).to.have.been.calledOnceWithExactly(
+          {
+            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: context.resolvers
+          },
+          {}
+        )
+      })
+    })
+  })
+
+  describe('Metrics', () => {
+    const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+    let config
+
+    beforeEach(() => {
+      sinon.restore()
+
+      appsecNamespace.reset()
+
+      config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    after(() => {
+      appsecNamespace.reset()
+    })
+
+    it('should increment waf.init metric', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
+    })
+
+    it('should not increment waf.init metric if metrics are not enabled', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
+    })
+
+    it('should not increment waf.init metric if telemetry is not enabled', () => {
+      config.telemetry.enabled = false
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
     })
   })
 })

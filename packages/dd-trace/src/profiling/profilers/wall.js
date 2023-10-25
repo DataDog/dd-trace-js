@@ -5,9 +5,12 @@ const { storage } = require('../../../../datadog-core')
 const dc = require('../../../../diagnostics_channel')
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
 const { WEB } = require('../../../../../ext/types')
+const runtimeMetrics = require('../../runtime_metrics')
+const telemetryMetrics = require('../../telemetry/metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 let kSampleCount
 
@@ -20,7 +23,7 @@ function getStartedSpans (context) {
   return context._trace.started
 }
 
-function generateLabels ({ spanId, rootSpanId, webTags, endpoint }) {
+function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
   const labels = {}
   if (spanId) {
     labels['span id'] = spanId
@@ -34,6 +37,8 @@ function generateLabels ({ spanId, rootSpanId, webTags, endpoint }) {
     // fallback to endpoint computed when sample was taken
     labels['trace endpoint'] = endpoint
   }
+  // Incoming timestamps are in microseconds, we emit nanos.
+  labels['end_timestamp_ns'] = timestamp * 1000n
 
   return labels
 }
@@ -83,6 +88,7 @@ class NativeWallProfiler {
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
+    this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
@@ -94,6 +100,10 @@ class NativeWallProfiler {
 
   codeHotspotsEnabled () {
     return this._codeHotspotsEnabled
+  }
+
+  endpointCollectionEnabled () {
+    return this._endpointCollectionEnabled
   }
 
   start ({ mapper } = {}) {
@@ -122,7 +132,8 @@ class NativeWallProfiler {
       durationMillis: this._flushIntervalMillis,
       sourceMapper: this._mapper,
       withContexts: this._codeHotspotsEnabled,
-      lineNumbers: false
+      lineNumbers: false,
+      workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
     })
 
     if (this._codeHotspotsEnabled) {
@@ -165,6 +176,16 @@ class NativeWallProfiler {
     }
   }
 
+  _reportV8bug (maybeBug) {
+    const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
+    const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
+    this._logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    // report as runtime metric (can be removed in the future when telemetry is mature)
+    runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
+    // report as telemetry metric
+    profilerTelemetryMetrics.count(metric, [tag]).inc()
+  }
+
   _stop (restart) {
     if (!this._started) return
     if (this._codeHotspotsEnabled) {
@@ -172,7 +193,14 @@ class NativeWallProfiler {
       this._enter()
       this._lastSampleCount = 0
     }
-    return this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
+    const profile = this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
+    if (restart) {
+      const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
+      if (v8BugDetected !== 0) {
+        this._reportV8bug(v8BugDetected === 1)
+      }
+    }
+    return profile
   }
 
   profile () {

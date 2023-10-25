@@ -79,7 +79,7 @@ services:
     ports:
       - "127.0.0.1:9231:9231"
   google-cloud-pubsub:
-    image: ridedott/pubsub-emulator
+    image: ghcr.io/ridedott/pubsub-emulator
     ports:
       - "127.0.0.1:8081:8081"
   localstack:
@@ -128,7 +128,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.13.1
     ports:
         - "127.0.0.1:9126:9126"
     environment:

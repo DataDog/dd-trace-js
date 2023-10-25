@@ -7,6 +7,7 @@ describe('reporter', () => {
   let Reporter
   let span
   let web
+  let telemetry
 
   beforeEach(() => {
     span = {
@@ -21,8 +22,16 @@ describe('reporter', () => {
       root: sinon.stub().returns(span)
     }
 
+    telemetry = {
+      incrementWafInitMetric: sinon.stub(),
+      updateWafRequestsMetricTags: sinon.stub(),
+      incrementWafUpdatesMetric: sinon.stub(),
+      incrementWafRequestsMetric: sinon.stub()
+    }
+
     Reporter = proxyquire('../../src/appsec/reporter', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
+      './telemetry': telemetry
     })
   })
 
@@ -70,6 +79,46 @@ describe('reporter', () => {
     })
   })
 
+  describe('reportWafInit', () => {
+    const wafVersion = '0.0.1'
+    const rulesVersion = '0.0.2'
+    const diagnosticsRules = {
+      loaded: ['1', '3', '4'],
+      failed: ['2'],
+      errors: { error: 'error parsing rule 2' }
+    }
+
+    it('should add some entries to metricsQueue', () => {
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+
+      expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(3)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(1)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.errors'))
+        .to.be.eq(JSON.stringify(diagnosticsRules.errors))
+      expect(Reporter.metricsQueue.get('manual.keep')).to.be.eq('true')
+    })
+
+    it('should call incrementWafInitMetric', () => {
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+    })
+
+    it('should not fail with undefined arguments', () => {
+      const wafVersion = undefined
+      const rulesVersion = undefined
+      const diagnosticsRules = undefined
+
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.loaded')).to.be.eq(0)
+      expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
+
+      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
+    })
+  })
+
   describe('reportMetrics', () => {
     let req
 
@@ -109,6 +158,15 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+    })
+
+    it('should call updateWafRequestsMetricTags', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage.getStore()
+
+      Reporter.reportMetrics(metrics)
+
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
     })
   })
 
@@ -214,6 +272,14 @@ describe('reporter', () => {
     })
   })
 
+  describe('reportWafUpdate', () => {
+    it('should call incrementWafUpdatesMetric', () => {
+      Reporter.reportWafUpdate('0.0.1', '0.0.2')
+
+      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
+    })
+  })
+
   describe('finishRequest', () => {
     let wafContext
 
@@ -306,6 +372,14 @@ describe('reporter', () => {
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
+    })
+
+    it('should call incrementWafRequestsMetric', () => {
+      const req = {}
+      const res = {}
+      Reporter.finishRequest(req, res)
+
+      expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
     })
   })
 })

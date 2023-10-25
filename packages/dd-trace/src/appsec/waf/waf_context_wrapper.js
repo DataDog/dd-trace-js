@@ -2,23 +2,35 @@
 
 const log = require('../../log')
 const Reporter = require('../reporter')
+const addresses = require('../addresses')
+
+// TODO: remove once ephemeral addresses are implemented
+const preventDuplicateAddresses = new Set([
+  addresses.HTTP_INCOMING_QUERY
+])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, requiredAddresses, wafTimeout, rulesInfo) {
+  constructor (ddwafContext, requiredAddresses, wafTimeout, wafVersion, rulesVersion) {
     this.ddwafContext = ddwafContext
     this.requiredAddresses = requiredAddresses
     this.wafTimeout = wafTimeout
-    this.rulesInfo = rulesInfo
+    this.wafVersion = wafVersion
+    this.rulesVersion = rulesVersion
+    this.addressesToSkip = new Set()
   }
 
   run (params) {
     const inputs = {}
     let someInputAdded = false
+    const newAddressesToSkip = new Set(this.addressesToSkip)
 
     // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
-      if (this.requiredAddresses.has(key)) {
+      if (this.requiredAddresses.has(key) && !this.addressesToSkip.has(key)) {
         inputs[key] = params[key]
+        if (preventDuplicateAddresses.has(key)) {
+          newAddressesToSkip.add(key)
+        }
         someInputAdded = true
       }
     }
@@ -32,14 +44,23 @@ class WAFContextWrapper {
 
       const end = process.hrtime.bigint()
 
+      this.addressesToSkip = newAddressesToSkip
+
+      const ruleTriggered = !!result.events?.length
+      const blockTriggered = result.actions?.includes('block')
+
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
         durationExt: parseInt(end - start) / 1e3,
-        rulesVersion: this.rulesInfo.version
+        rulesVersion: this.rulesVersion,
+        ruleTriggered,
+        blockTriggered,
+        wafVersion: this.wafVersion,
+        wafTimeout: result.timeout
       })
 
-      if (result.data && result.data !== '[]') {
-        Reporter.reportAttack(result.data)
+      if (ruleTriggered) {
+        Reporter.reportAttack(JSON.stringify(result.events))
       }
 
       return result.actions

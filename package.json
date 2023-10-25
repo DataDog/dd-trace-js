@@ -18,7 +18,7 @@
     "test:appsec": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
     "test:appsec:ci": "nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" -- npm run test:appsec",
     "test:appsec:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\"",
-    "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\" -- npm run test:appsec:plugins",
+    "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
     "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:instrumentations": "mocha --colors -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
@@ -37,7 +37,8 @@
     "test:integration:cypress": "mocha --colors --timeout 30000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 \"integration-tests/playwright/*.spec.js\"",
     "test:integration:serverless": "mocha --colors --timeout 30000 \"integration-tests/serverless/*.spec.js\"",
-    "test:integration:plugins": "mocha --colors --timeout 30000 \"packages/datadog-plugin-*/test/integration-test/*.spec.js\"",
+    "test:integration:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
+    "test:unit:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:shimmer": "mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'",
     "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
     "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
@@ -58,7 +59,7 @@
     "apm"
   ],
   "author": "Datadog Inc. <info@datadoghq.com>",
-  "license": "BSD-3-Clause",
+  "license": "(Apache-2.0 OR BSD-3-Clause)",
   "bugs": {
     "url": "https://github.com/DataDog/dd-trace-js/issues"
   },
@@ -67,11 +68,11 @@
     "node": ">=16"
   },
   "dependencies": {
-    "@datadog/native-appsec": "^3.2.0",
-    "@datadog/native-iast-rewriter": "2.0.1",
-    "@datadog/native-iast-taint-tracking": "1.5.0",
+    "@datadog/native-appsec": "^4.0.0",
+    "@datadog/native-iast-rewriter": "2.1.3",
+    "@datadog/native-iast-taint-tracking": "1.6.3",
     "@datadog/native-metrics": "^2.0.0",
-    "@datadog/pprof": "3.1.0",
+    "@datadog/pprof": "4.0.1",
     "@datadog/sketches-js": "^2.1.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^1.14.0",
@@ -82,6 +83,7 @@
     "int64-buffer": "^0.1.9",
     "ipaddr.js": "^2.1.0",
     "istanbul-lib-coverage": "3.2.0",
+    "jest-docblock": "^29.7.0",
     "koalas": "^1.0.2",
     "limiter": "^1.1.4",
     "lodash.kebabcase": "^4.1.1",
@@ -102,6 +104,7 @@
   "devDependencies": {
     "@types/node": ">=16",
     "autocannon": "^4.5.2",
+    "aws-sdk": "^2.1446.0",
     "axios": "^0.21.2",
     "benchmark": "^2.1.4",
     "body-parser": "^1.20.2",

@@ -181,6 +181,15 @@ function dispatcherHook (dispatcherExport) {
   return dispatcherExport
 }
 
+function getTestByTestId (dispatcher, testId) {
+  if (dispatcher._testById) {
+    return dispatcher._testById.get(testId)?.test
+  }
+  if (dispatcher._allTests) {
+    return dispatcher._allTests.find(({ id }) => id === testId)
+  }
+}
+
 function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
@@ -188,11 +197,11 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const worker = createWorker.apply(this, arguments)
 
     worker.on('testBegin', ({ testId }) => {
-      const { test } = dispatcher._testById.get(testId)
+      const test = getTestByTestId(dispatcher, testId)
       testBeginHandler(test)
     })
     worker.on('testEnd', ({ testId, status, errors }) => {
-      const { test } = dispatcher._testById.get(testId)
+      const test = getTestByTestId(dispatcher, testId)
 
       testEndHandler(test, STATUS_TO_TEST_STATUS[status], errors && errors[0])
     })
@@ -254,7 +263,7 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/dispatcher.js',
-  versions: ['>=1.18.0  <1.30.0']
+  versions: ['>=1.18.0 <1.30.0']
 }, dispatcherHook)
 
 addHook({
@@ -266,11 +275,23 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.31.0']
+  versions: ['>=1.31.0 <1.38.0']
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 addHook({
   name: '@playwright/test',
   file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0']
+  versions: ['>=1.31.0 <1.38.0']
 }, runnerHook)
+
+// From >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/runner.js',
+  versions: ['>=1.38.0']
+}, runnerHook)
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/dispatcher.js',
+  versions: ['>=1.38.0']
+}, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))

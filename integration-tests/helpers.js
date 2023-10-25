@@ -75,7 +75,11 @@ class FakeAgent extends EventEmitter {
     })
   }
 
-  assertMessageReceived (fn, timeout, expectedMessageCount = 1) {
+  // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
+  // where multiple payloads are generated, and only one is expected to have the proper span (ie next.request),
+  // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
+  // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
+  assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
     timeout = timeout || 5000
     let resultResolve
     let resultReject
@@ -101,7 +105,7 @@ class FakeAgent extends EventEmitter {
       try {
         msgCount += 1
         fn(msg)
-        if (msgCount === expectedMessageCount) {
+        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
           this.removeListener('message', messageHandler)
         }
@@ -158,7 +162,7 @@ class FakeAgent extends EventEmitter {
 }
 
 function spawnProc (filename, options = {}, stdioHandler) {
-  const proc = fork(filename, options)
+  const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
       .on('message', ({ port }) => {
@@ -172,15 +176,24 @@ function spawnProc (filename, options = {}, stdioHandler) {
         }
         resolve()
       })
-    if (stdioHandler) {
-      proc.stdout.on('data', (data) => {
+
+    proc.stdout.on('data', data => {
+      if (stdioHandler) {
         stdioHandler(data)
-      })
-    }
+      }
+      // eslint-disable-next-line no-console
+      console.log(data.toString())
+    })
+
+    proc.stderr.on('data', data => {
+      // eslint-disable-next-line no-console
+      console.error(data.toString())
+    })
   })
 }
 
-async function createSandbox (dependencies = [], isGitRepo = false, integrationTestsPaths = ['./integration-tests/*']) {
+async function createSandbox (dependencies = [], isGitRepo = false,
+  integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   /* To execute integration tests without a sandbox uncomment the next line
    * and do `yarn link && yarn link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
@@ -195,9 +208,14 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
-  integrationTestsPaths.forEach(async (path) => {
+  for (const path of integrationTestsPaths) {
     await exec(`cp -R ${path} ${folder}`)
-  })
+    await exec(`sync ${folder}`)
+  }
+
+  if (followUpCommand) {
+    await exec(followUpCommand, { cwd: folder, env: restOfEnv })
+  }
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
@@ -206,7 +224,7 @@ async function createSandbox (dependencies = [], isGitRepo = false, integrationT
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
     await exec(
-      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example',
+      'git add -A && git commit -m "first commit" --no-verify && git remote add origin git@git.com:datadog/example.git',
       { cwd: folder }
     )
   }
@@ -238,8 +256,8 @@ async function curl (url, useHttp2 = false) {
   })
 }
 
-async function curlAndAssertMessage (agent, procOrUrl, fn, timeout) {
-  const resultPromise = agent.assertMessageReceived(fn, timeout)
+async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMessageCount, resolveAtFirstSuccess) {
+  const resultPromise = agent.assertMessageReceived(fn, timeout, expectedMessageCount, resolveAtFirstSuccess)
   await curl(procOrUrl)
   return resultPromise
 }
@@ -248,7 +266,6 @@ function getCiVisAgentlessConfig (port) {
   return {
     ...process.env,
     DD_API_KEY: '1',
-    DD_APP_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: 1,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init'
@@ -276,8 +293,7 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(path.join(cwd, serverFile), {
     cwd,
-    env,
-    stdio: stdioHandler ? 'pipe' : 'inherit'
+    env
   }, stdioHandler)
 }
 

@@ -10,7 +10,9 @@ const {
   TEST_PARAMETERS,
   TEST_COMMAND,
   TEST_FRAMEWORK_VERSION,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -50,7 +52,9 @@ class JestPlugin extends CiPlugin {
       isSuitesSkippingEnabled,
       isCodeCoverageEnabled,
       testCodeCoverageLinesTotal,
-      numSkippedSuites
+      numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -64,7 +68,9 @@ class JestPlugin extends CiPlugin {
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
           skippingType: 'suite',
-          skippingCount: numSkippedSuites
+          skippingCount: numSkippedSuites,
+          hasUnskippableSuites,
+          hasForcedToRunSuites
         }
       )
 
@@ -89,7 +95,9 @@ class JestPlugin extends CiPlugin {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
-        _ddTestModuleId: testModuleId
+        _ddTestModuleId: testModuleId,
+        _ddForcedToRun,
+        _ddUnskippable
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -98,6 +106,13 @@ class JestPlugin extends CiPlugin {
       })
 
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+
+      if (_ddUnskippable) {
+        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        if (_ddForcedToRun) {
+          testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        }
+      }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
         childOf: testSessionSpanContext,

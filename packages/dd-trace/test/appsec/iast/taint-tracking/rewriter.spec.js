@@ -58,4 +58,63 @@ describe('IAST Rewriter', () => {
       expect(shimmer.unwrap.getCall(0).args[1]).eq('_compile')
     })
   })
+
+  describe('getOriginalPathAndLineFromSourceMap', () => {
+    let rewriter, getOriginalPathAndLineFromSourceMap, argvs
+    beforeEach(() => {
+      getOriginalPathAndLineFromSourceMap = sinon.spy()
+      rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
+        '@datadog/native-iast-rewriter': {
+          getOriginalPathAndLineFromSourceMap
+        }
+      })
+      argvs = [...process.execArgv].filter(arg => arg !== '--enable-source-maps')
+    })
+
+    afterEach(() => {
+      sinon.restore()
+      rewriter.disableRewriter()
+    })
+
+    it('should call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is not present', () => {
+      sinon.stub(process, 'execArgv').value(argvs)
+
+      rewriter.enableRewriter()
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      expect(getOriginalPathAndLineFromSourceMap).to.be.calledOnceWithExactly('test', 42, 4)
+    })
+
+    it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {
+      sinon.stub(process, 'execArgv').value([...argvs, '--enable-source-maps'])
+
+      rewriter.enableRewriter()
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+    })
+
+    it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps as NODE_OPTION', () => {
+      sinon.stub(process, 'execArgv').value(argvs)
+
+      const origNodeOptions = process.env.NODE_OPTIONS
+
+      process.env.NODE_OPTIONS = process.env.NODE_OPTIONS
+        ? process.env.NODE_OPTIONS + ' --enable-source-maps'
+        : '--enable-source-maps'
+
+      rewriter.enableRewriter()
+
+      const location = { path: 'test', line: 42, column: 4 }
+      rewriter.getOriginalPathAndLineFromSourceMap(location)
+
+      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+
+      process.env.NODE_OPTIONS = origNodeOptions
+    })
+  })
 })

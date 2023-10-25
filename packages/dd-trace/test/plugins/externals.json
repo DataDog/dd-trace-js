@@ -41,6 +41,24 @@
       "versions": [">=1.4.6"]
     }
   ],
+  "express-mongo-sanitize": [
+    {
+      "name": "mongodb",
+      "versions": [">=3.3 <5", "5", ">=6"]
+    },
+    {
+      "name": "mongodb-core",
+      "versions": ["3.2.7"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.3.0"]
+    },
+    {
+      "name": "body-parser",
+      "versions": ["1.20.1"]
+    }
+  ],
   "fastify": [
     {
       "name": "fastify",
@@ -71,6 +89,14 @@
     {
       "name": "graphql-tools",
       "versions": ["3.1.1"]
+    },
+    {
+      "name": "graphql-yoga",
+      "versions": ["^3.6.0"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^15.2.0"]
     }
   ],
   "grpc": [
@@ -127,6 +153,16 @@
       "versions": ["6.1.0"]
     }
   ],
+  "ldapjs": [
+    {
+      "name": "ldapjs",
+      "versions": [">= 2"]
+    },
+    {
+      "name": "ldapjs-promise",
+      "versions": [">=2"]
+    }
+  ],
   "mariadb": [
     {
       "name": "mariadb",
@@ -159,6 +195,14 @@
     {
       "name": "mongodb-core",
       "versions": ["3.2.7"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4", ">=4.0.0 <4.3.0", ">=4.3.0"]
+    },
+    {
+      "name": "body-parser",
+      "versions": ["1.20.1"]
     }
   ],
   "next": [
@@ -182,15 +226,14 @@
      }
    ],
    "passport-local": [
-    {
-      "name": "passport",
-      "versions": [">=0.4.1"]
-    },
+     {
+       "name": "passport",
+       "versions": [">=0.4.1"]
+     },
      {
        "name": "express",
        "versions": [">=4.16.2"]
      }
-
   ],
   "pg": [
     {
@@ -213,6 +256,12 @@
     {
       "name": "q",
       "versions": ["2"]
+    }
+  ],
+  "redis": [
+    {
+      "name": "redis",
+      "versions": ["^4"]
     }
   ]
 }

@@ -15,12 +15,13 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(20000)
+    this.timeout(50000)
     sandbox = await createSandbox(['get-port'], false, [
       `./packages/datadog-plugin-fetch/test/integration-test/*`])
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(50000)
     await sandbox.remove()
   })
 
@@ -45,6 +46,6 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })

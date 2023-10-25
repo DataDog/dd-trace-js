@@ -12,25 +12,28 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  before(async function () {
-    this.timeout(20000)
-    sandbox = await createSandbox(['winston'], false, [`./packages/datadog-plugin-winston/test/integration-test/*`])
-  })
+  // test against later versions because server.mjs uses newer package syntax
+  withVersions('winston', 'winston', '>=3', version => {
+    before(async function () {
+      this.timeout(50000)
+      sandbox = await createSandbox([`'winston@${version}'`]
+        , false, [`./packages/datadog-plugin-winston/test/integration-test/*`])
+    })
 
-  after(async () => {
-    await sandbox.remove()
-  })
+    after(async function () {
+      this.timeout(50000)
+      await sandbox.remove()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  afterEach(async () => {
-    proc && proc.kill()
-    await agent.stop()
-  })
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
 
-  context('winston', () => {
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,
@@ -41,6 +44,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(20000)
+    }).timeout(50000)
   })
 })

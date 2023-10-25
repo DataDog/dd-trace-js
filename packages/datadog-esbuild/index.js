@@ -23,11 +23,12 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const NAMESPACE = 'datadog'
 const NM = 'node_modules/'
 const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
+const path = require('path')
+const fs = require('fs')
 
 const builtins = new Set()
 
@@ -53,7 +54,22 @@ module.exports.setup = function (build) {
   const externalModules = new Set(build.initialOptions.external || [])
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
+      // Internal Node.js packages will still be instrumented via require()
       if (DEBUG) console.log(`EXTERNAL: ${args.path}`)
+      return
+    }
+
+    // TODO: Should this also check for namespace === 'file'?
+    if (args.path.startsWith('.') && !args.importer.includes('node_modules/')) {
+      // This is local application code, not an instrumented package
+      if (DEBUG) console.log(`LOCAL: ${args.path}`)
+      return
+    }
+
+    // TODO: Should this also check for namespace === 'file'?
+    if (args.path.startsWith('@') && !args.importer.includes('node_modules/')) {
+      // This is the Next.js convention for loading local files
+      if (DEBUG) console.log(`@LOCAL: ${args.path}`)
       return
     }
 
@@ -65,12 +81,11 @@ module.exports.setup = function (build) {
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
-    const packageName = args.path
 
     const internal = builtins.has(args.path)
 
     if (args.namespace === 'file' && (
-      modulesOfInterest.has(packageName) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+      modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
     ) {
       // The file namespace is used when requiring files from disk in userland
 
@@ -90,60 +105,64 @@ module.exports.setup = function (build) {
 
       const packageJson = require(pathToPackageJson)
 
-      if (DEBUG) console.log(`RESOLVE: ${packageName}@${packageJson.version}`)
+      if (DEBUG) console.log(`RESOLVE: ${args.path}@${packageJson.version}`)
 
       // https://esbuild.github.io/plugins/#on-resolve-arguments
       return {
         path: fullPathToModule,
-        namespace: NAMESPACE,
         pluginData: {
           version: packageJson.version,
           pkg: extracted.pkg,
           path: extracted.path,
           full: fullPathToModule,
-          raw: packageName,
+          raw: args.path,
+          pkgOfInterest: true,
           internal
         }
-      }
-    } else if (args.namespace === NAMESPACE) {
-      // The datadog namespace is used when requiring files that are injected during the onLoad stage
-
-      if (builtins.has(packageName)) return
-
-      return {
-        path: require.resolve(packageName, { paths: [ args.resolveDir ] }),
-        namespace: 'file'
       }
     }
   })
 
-  build.onLoad({ filter: /.*/, namespace: NAMESPACE }, args => {
+  build.onLoad({ filter: /.*/ }, args => {
+    if (!args.pluginData?.pkgOfInterest) {
+      return
+    }
+
     const data = args.pluginData
 
     if (DEBUG) console.log(`LOAD: ${data.pkg}@${data.version}, pkg "${data.path}"`)
 
-    const path = data.raw !== data.pkg
+    const pkgPath = data.raw !== data.pkg
       ? `${data.pkg}/${data.path}`
       : data.pkg
 
+    // Read the content of the module file of interest
+    const fileCode = fs.readFileSync(args.path, 'utf8')
+
     const contents = `
-      const dc = require('diagnostics_channel');
-      const ch = dc.channel('${CHANNEL}');
-      const mod = require('${args.path}');
-      const payload = {
-        module: mod,
-        version: '${data.version}',
-        package: '${data.pkg}',
-        path: '${path}'
-      };
-      ch.publish(payload);
-      module.exports = payload.module;
+      (function() {
+        ${fileCode}
+      })(...arguments);
+      {
+        const dc = require('diagnostics_channel');
+        const ch = dc.channel('${CHANNEL}');
+        const mod = module.exports
+        const payload = {
+          module: mod,
+          version: '${data.version}',
+          package: '${data.pkg}',
+          path: '${pkgPath}'
+        };
+        ch.publish(payload);
+        module.exports = payload.module;
+    }
     `
 
     // https://esbuild.github.io/plugins/#on-load-results
     return {
       contents,
-      loader: 'js'
+      loader: 'js',
+      resolveDir: path.dirname(args.path)
     }
   })
 }

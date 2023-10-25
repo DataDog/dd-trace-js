@@ -65,7 +65,6 @@ describe('metrics', () => {
                 type: 'count',
                 tags: [
                   'bar:baz',
-                  'lib_language:nodejs',
                   `version:${process.version}`
                 ],
                 common: true
@@ -85,7 +84,6 @@ describe('metrics', () => {
                 type: 'count',
                 tags: [
                   'bux:bax',
-                  'lib_language:nodejs',
                   `version:${process.version}`
                 ],
                 common: true
@@ -131,7 +129,6 @@ describe('metrics', () => {
               type: 'count',
               tags: [
                 'bar:baz',
-                'lib_language:nodejs',
                 `version:${process.version}`
               ],
               common: true
@@ -149,7 +146,6 @@ describe('metrics', () => {
               type: 'count',
               tags: [
                 'bux:bax',
-                'lib_language:nodejs',
                 `version:${process.version}`
               ],
               common: true
@@ -255,7 +251,6 @@ describe('metrics', () => {
               type: 'count',
               tags: [
                 'bar:baz',
-                'lib_language:nodejs',
                 `version:${process.version}`
               ],
               common: true
@@ -267,7 +262,6 @@ describe('metrics', () => {
               type: 'count',
               tags: [
                 'bux:bax',
-                'lib_language:nodejs',
                 `version:${process.version}`
               ],
               common: true
@@ -305,7 +299,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true,
@@ -396,7 +389,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true
@@ -419,7 +411,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true,
@@ -470,7 +461,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ]
       })
@@ -492,7 +482,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true,
@@ -562,7 +551,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true
@@ -585,7 +573,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true,
@@ -635,7 +622,6 @@ describe('metrics', () => {
         tags: [
           'foo:bar',
           'baz:buz',
-          'lib_language:nodejs',
           `version:${process.version}`
         ],
         common: true

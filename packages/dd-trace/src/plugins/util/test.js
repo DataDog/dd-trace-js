@@ -58,6 +58,8 @@ const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
 const TEST_ITR_SKIPPING_TYPE = 'test.itr.tests_skipping.type'
 const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
+const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
+const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -107,6 +109,8 @@ module.exports = {
   TEST_ITR_SKIPPING_COUNT,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -139,13 +143,13 @@ function removeInvalidMetadata (metadata) {
   return Object.keys(metadata).reduce((filteredTags, tag) => {
     if (tag === GIT_REPOSITORY_URL) {
       if (!validateGitRepositoryUrl(metadata[GIT_REPOSITORY_URL])) {
-        log.error('DD_GIT_REPOSITORY_URL must be a valid URL')
+        log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
         return filteredTags
       }
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
-        log.error('DD_GIT_COMMIT_SHA must be a full-length git SHA')
+        log.error(`Git commit SHA must be a full-length git SHA: ${metadata[GIT_COMMIT_SHA]}.`)
         return filteredTags
       }
     }
@@ -366,7 +370,9 @@ function addIntelligentTestRunnerSpanTags (
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
     skippingCount,
-    skippingType = 'suite'
+    skippingType = 'suite',
+    hasUnskippableSuites,
+    hasForcedToRunSuites
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -380,6 +386,15 @@ function addIntelligentTestRunnerSpanTags (
   testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
   testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+
+  if (hasUnskippableSuites) {
+    testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+    testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+  }
+  if (hasForcedToRunSuites) {
+    testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+    testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+  }
 
   // If suites have been skipped we don't want to report the total coverage, as it will be wrong
   if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {

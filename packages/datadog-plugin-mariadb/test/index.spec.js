@@ -57,7 +57,8 @@ describe('Plugin', () => {
 
         withPeerService(
           () => tracer,
-          (done) => connection.query('SELECT 1', (_) => { done() }),
+          'mariadb',
+          done => connection.query('SELECT 1', (err) => { err && done(err) }),
           'db', 'db.name')
 
         it('should propagate context to callbacks, with correct callback args', done => {

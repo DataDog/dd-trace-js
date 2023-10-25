@@ -7,7 +7,7 @@ const path = require('path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const slackReport = require('./slack-report')
-const metrics = require('../../src/metrics')
+const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
@@ -17,6 +17,8 @@ global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
+
+const testedPlugins = agent.testedPlugins
 
 const packageVersionFailures = Object.create({})
 
@@ -139,13 +141,12 @@ function withNamingSchema (
   })
 }
 
-function withPeerService (tracer, spanGenerationFn, service, serviceSource, opts = {}) {
+function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
     beforeEach(() => {
-      // FIXME: workaround due to the evaluation order of mocha beforeEach
-      const tracerObj = typeof tracer === 'function' ? tracer() : tracer
-      computePeerServiceSpy = sinon.stub(tracerObj._tracer, '_computePeerService').value(true)
+      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
     afterEach(() => {
       computePeerServiceSpy.restore()
@@ -217,6 +218,13 @@ function withVersions (plugin, modules, range, cb) {
           let nodePath
 
           before(() => {
+            // set plugin name and version to later report to test agent regarding tested integrations and
+            // their tested range of versions
+            const lastPlugin = testedPlugins[testedPlugins.length - 1]
+            if (!lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== v.version) {
+              testedPlugins.push({ pluginName: plugin, pluginVersion: v.version })
+            }
+
             nodePath = process.env.NODE_PATH
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
               .filter(x => x && x !== 'undefined')
@@ -275,7 +283,7 @@ exports.mochaHooks = {
 
   afterEach () {
     agent.reset()
-    metrics.stop()
+    runtimeMetrics.stop()
     storage.enterWith(undefined)
   }
 }

@@ -85,6 +85,7 @@ describe('Plugin', () => {
 
       withPeerService(
         () => tracer,
+        'tedious',
         (done) => connection.execSql(new tds.Request('SELECT 1', (err) => {
           if (err) return done(err)
         })), 'master', 'db.name'
