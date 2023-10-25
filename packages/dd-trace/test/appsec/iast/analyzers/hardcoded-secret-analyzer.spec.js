@@ -1,55 +1,114 @@
 'use strict'
 
 const path = require('path')
+const axios = require('axios')
+const fs = require('fs')
+const os = require('os')
+
+const agent = require('../../../plugins/agent')
+const Config = require('../../../../src/config')
 
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
 const { suite } = require('./resources/hardcoded-secrets-suite.json')
+const iast = require('../../../../src/appsec/iast')
+const { testInRequest } = require('../utils')
 
 describe('Hardcoded Secret Analyzer', () => {
-  const file = path.join(process.cwd(), '/path/to/file.js')
-  const line = 42
-  const column = 3
+  describe('unit test', () => {
+    const file = path.join(process.cwd(), '/path/to/file.js')
+    const line = 42
+    const column = 3
 
-  let report
-  beforeEach(() => {
-    report = sinon.stub(hardcodedSecretAnalyzer, '_report')
-  })
+    let report
+    beforeEach(() => {
+      report = sinon.stub(hardcodedSecretAnalyzer, '_report')
+    })
 
-  afterEach(sinon.restore)
+    afterEach(sinon.restore)
 
-  suite.forEach((testCase) => {
-    testCase.samples.forEach(sample => {
-      it(`should match rule ${testCase.id} with value ${sample}`, () => {
-        hardcodedSecretAnalyzer.analyze({
-          file,
-          literals: [{
-            value: sample,
-            locations: [{
-              line,
-              column
+    suite.forEach((testCase) => {
+      testCase.samples.forEach(sample => {
+        it(`should match rule ${testCase.id} with value ${sample}`, () => {
+          hardcodedSecretAnalyzer.analyze({
+            file,
+            literals: [{
+              value: sample,
+              locations: [{
+                line,
+                column
+              }]
             }]
-          }]
-        })
+          })
 
-        expect(report).to.be.calledOnceWithExactly({ file: 'path/to/file.js', line, column, data: testCase.id })
+          expect(report).to.be.calledOnceWithExactly({ file: 'path/to/file.js', line, column, data: testCase.id })
+        })
       })
     })
-  })
 
-  it('should not fail with an malformed secrets', () => {
-    expect(() => hardcodedSecretAnalyzer.analyze(undefined)).not.to.throw()
-    expect(() => hardcodedSecretAnalyzer.analyze({ file: undefined })).not.to.throw()
-    expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
-    expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
-    expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
-  })
-
-  it('should not report secrets in line 0', () => {
-    hardcodedSecretAnalyzer.analyze({
-      file,
-      literals: [{ value: 'test', line: 0 }]
+    it('should not fail with an malformed secrets', () => {
+      expect(() => hardcodedSecretAnalyzer.analyze(undefined)).not.to.throw()
+      expect(() => hardcodedSecretAnalyzer.analyze({ file: undefined })).not.to.throw()
+      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
+      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
+      expect(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
     })
 
-    expect(report).to.not.be.called
+    it('should not report secrets in line 0', () => {
+      hardcodedSecretAnalyzer.analyze({
+        file,
+        literals: [{ value: 'test', line: 0 }]
+      })
+
+      expect(report).to.not.be.called
+    })
+  })
+
+  describe('full feature', () => {
+    const filename = 'hardcoded-secret-functions'
+    const functionsPath = path.join(os.tmpdir(), filename)
+
+    before(() => {
+      fs.copyFileSync(path.join(__dirname, 'resources', `${filename}.js`), functionsPath)
+    })
+
+    after(() => {
+      fs.unlinkSync(functionsPath)
+    })
+
+    function app () {
+      require(functionsPath)
+    }
+
+    function tests (config) {
+      describe('with iast enabled', () => {
+        beforeEach(() => {
+          const tracer = require('../../../../')
+          iast.enable(new Config({
+            experimental: {
+              iast: {
+                enabled: true,
+                requestSampling: 100
+              }
+            }
+          }), tracer)
+        })
+
+        afterEach(() => {
+          iast.disable()
+        })
+
+        it('should detect vulnerability', (done) => {
+          agent
+            .use(traces => {
+              expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
+            })
+            .then(done)
+            .catch(done)
+          axios.get(`http://localhost:${config.port}/`).catch(done)
+        })
+      })
+    }
+
+    testInRequest(app, tests)
   })
 })
