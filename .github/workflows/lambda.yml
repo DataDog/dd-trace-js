@@ -23,6 +23,8 @@ jobs:
       - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:lambda:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:lambda:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:lambda:ci
       - if: always()
