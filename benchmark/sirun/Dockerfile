@@ -42,7 +42,6 @@ RUN mkdir /opt/insecure-bank-js
 RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecure-bank-js
 
 WORKDIR /opt/insecure-bank-js
-RUN sed -i "s#global.sequelize = new Sequelize('sqlite::memory:', {#global.sequelize = new Sequelize('sqlite::memory:', {\nlogging:false,\n#g" app.js
 RUN . $NVM_DIR/nvm.sh \
     && npm ci \
     && npm cache clean --force
