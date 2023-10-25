@@ -705,7 +705,7 @@ describe('Config', () => {
         iast: {
           enabled: true,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+          redactionValuePattern: 'REDACTION_VALUE_PATTERN'
         }
       },
       appsec: {
