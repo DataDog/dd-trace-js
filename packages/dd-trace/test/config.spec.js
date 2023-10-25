@@ -658,6 +658,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
+    process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -701,7 +703,9 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false,
         iast: {
-          enabled: true
+          enabled: true,
+          redactionNamePattern: 'REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         }
       },
       appsec: {
@@ -771,8 +775,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
-    expect(config).to.have.nested.property('iast.redactionNamePattern', null)
-    expect(config).to.have.nested.property('iast.redactionValuePattern', null)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
   })
 
   it('should give priority to non-experimental options', () => {
