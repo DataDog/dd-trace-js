@@ -12,7 +12,7 @@ const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
-const threadName = (function() {
+const threadName = (function () {
   const { isMainThread, threadId } = require('node:worker_threads')
   const name = isMainThread ? 'Main' : `Worker #${threadId}`
   return `${name} Event Loop`
