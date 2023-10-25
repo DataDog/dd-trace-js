@@ -5,7 +5,7 @@ function removeUserSensitiveInfo (repositoryUrl) {
   try {
     // repository URLs can contain username and password, so we want to filter those out
     const parsedUrl = new URL(repositoryUrl)
-    if (parsedUrl.password) {
+    if (parsedUrl.username || parsedUrl.password) {
       return `${parsedUrl.origin}${parsedUrl.pathname}`
     }
     return repositoryUrl
