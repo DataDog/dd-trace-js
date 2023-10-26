@@ -15,7 +15,7 @@ const childProcessChannelError = channel('datadog:child_process:execution:error'
 
 // ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn']
-const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
+const execSyncMethods = ['execFileSync', 'spawnSync']
 
 const names = ['child_process', 'node:child_process']
 
@@ -27,13 +27,14 @@ names.forEach(name => {
       patched = true
       shimmer.massWrap(childProcess, execAsyncMethods, wrapChildProcessAsyncMethod())
       shimmer.massWrap(childProcess, execSyncMethods, wrapChildProcessSyncMethod())
+      shimmer.wrap(childProcess, 'execSync', wrapChildProcessSyncMethod(true))
     }
 
     return childProcess
   })
 })
 
-function wrapChildProcessSyncMethod () {
+function wrapChildProcessSyncMethod (shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
       if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
@@ -54,9 +55,9 @@ function wrapChildProcessSyncMethod () {
         childProcessInfo.options = arguments[1]
       }
 
-      if (childProcessInfo?.options?.shell === true ||
-        typeof childProcessInfo?.options?.shell === 'string' ||
-        childProcessMethod.name === 'execSync') {
+      if (shell ||
+        childProcessInfo?.options?.shell === true ||
+        typeof childProcessInfo?.options?.shell === 'string') {
         childProcessInfo.shell = true
       }
 
