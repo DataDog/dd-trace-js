@@ -7,6 +7,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { encodePathwayContext } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
+const { types } = require('util')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -37,7 +38,8 @@ class StatsPoint {
       ParentHash: this.parentHash,
       EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(),
-      PathwayLatency: this.pathwayLatency.toProto()
+      PathwayLatency: this.pathwayLatency.toProto(),
+      PayloadSize: this.payloadSize.toProto()
     }
   }
 }
@@ -53,24 +55,27 @@ class StatsBucket extends Map {
   }
 }
 
-function calculateByteSize (data) {
-  if (typeof data === 'string') {
-    // Should probably add handling for unicode & non-ascii characters
-    return data.length
-  } else if (typeof data === 'object') {
-    if (data instanceof Array) {
-      return data.length
-    } else if (data instanceof Buffer) {
-      return data.byteLength
-    } else {
-      let total = 0
-      for (const key in data) {
-        total += calculateByteSize(key)
-        total += calculateByteSize(data[key])
-      }
-      return total
-    }
+function getSizeOrZero(obj) {
+  if (typeof obj === 'string') {
+    return Buffer.from(obj, 'utf-8').length
   }
+  if (types.isArrayBuffer(obj)) {
+    return obj.byteLength
+  }
+  if (Buffer.isBuffer(obj)) {
+    return obj.length
+  }
+  return 0
+}
+
+function getHeadersSize(headers) {
+  if (headers === undefined) return 0
+  return Object.entries(headers).reduce((prev, [key, val]) => getSizeOrZero(key) + getSizeOrZero(val) + prev, 0)
+}
+
+function getMessageSize(message) {
+  const { key, value, headers } = message
+  return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
 }
 
 class TimeBuckets extends Map {
@@ -181,7 +186,7 @@ class DataStreamsProcessor {
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
-      payloadSize += calculateByteSize(encodePathwayContext(dataStreamsContext))
+      payloadSize += getSizeOrZero(encodePathwayContext(dataStreamsContext))
       payloadSize += CONTEXT_PROPAGATION_KEY.length
     }
     const checkpoint = {
@@ -225,7 +230,7 @@ module.exports = {
   StatsPoint: StatsPoint,
   StatsBucket: StatsBucket,
   TimeBuckets,
-  calculateByteSize,
+  getMessageSize,
   ENTRY_PARENT_HASH,
   CONTEXT_PROPAGATION_KEY
 }

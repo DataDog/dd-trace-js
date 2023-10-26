@@ -1,6 +1,7 @@
 'use strict'
 
-const { calculateByteSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
+const { constants } = require('fs/promises')
+const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
@@ -9,10 +10,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   start ({ topic, partition, message, groupId }) {
     if (this.config.dsmEnabled) {
-      let payloadSize = 0
-      payloadSize += calculateByteSize(message.key)
-      payloadSize += calculateByteSize(message.value)
-      payloadSize += calculateByteSize(message.headers)
+      const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(message.headers[CONTEXT_PROPAGATION_KEY])
       this.tracer
         .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], payloadSize)

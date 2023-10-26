@@ -304,7 +304,7 @@ describe('Plugin', () => {
             const messages = [{ key: 'pro123', value: 'test-message' }]
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(52)
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(270)
             recordCheckpointSpy.restore()
           })
 
@@ -325,7 +325,7 @@ describe('Plugin', () => {
             const messages = [{ key: 'pro123', value: 'test-message😎' }]
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(54)
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(274)
             recordCheckpointSpy.restore()
           })
         })

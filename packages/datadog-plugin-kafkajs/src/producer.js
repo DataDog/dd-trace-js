@@ -2,7 +2,7 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { encodePathwayContext } = require('../../dd-trace/src/datastreams/pathway')
-const { calculateByteSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
+const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 
@@ -13,17 +13,6 @@ class KafkajsProducerPlugin extends ProducerPlugin {
 
   start ({ topic, messages, bootstrapServers }) {
     let pathwayCtx
-    if (this.config.dsmEnabled) {
-      let payloadSize = 0
-      for (const message of messages) {
-        payloadSize += calculateByteSize(message.key)
-        payloadSize += calculateByteSize(message.value)
-        payloadSize += calculateByteSize(message.headers)
-      }
-      const dataStreamsContext = this.tracer
-        .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], payloadSize)
-      pathwayCtx = encodePathwayContext(dataStreamsContext)
-    }
     const span = this.startSpan({
       resource: topic,
       meta: {
@@ -39,8 +28,14 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
     for (const message of messages) {
       if (typeof message === 'object') {
-        if (this.config.dsmEnabled) message.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
         this.tracer.inject(span, 'text_map', message.headers)
+        if (this.config.dsmEnabled) {
+          const payloadSize = getMessageSize(message)
+          const dataStreamsContext = this.tracer
+            .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], payloadSize)
+          pathwayCtx = encodePathwayContext(dataStreamsContext)
+          message.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
+        }
       }
     }
   }
