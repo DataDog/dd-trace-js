@@ -1,5 +1,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { parseAnnotations } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -103,7 +104,11 @@ function testBeginHandler (test) {
   })
 }
 
-function testEndHandler (test, testStatus, error) {
+function testEndHandler (test, annotations, testStatus, error) {
+  let annotationTags
+  if (annotations.length) {
+    annotationTags = parseAnnotations(annotations)
+  }
   const { _requireFile: testSuiteAbsolutePath, results, _type } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
@@ -113,7 +118,7 @@ function testEndHandler (test, testStatus, error) {
   const testResult = results[results.length - 1]
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
-    testFinishCh.publish({ testStatus, steps: testResult.steps, error })
+    testFinishCh.publish({ testStatus, steps: testResult.steps, error, extraTags: annotationTags })
   })
 
   if (!testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
@@ -172,7 +177,7 @@ function dispatcherHook (dispatcherExport) {
         const { results } = test
         const testResult = results[results.length - 1]
 
-        testEndHandler(test, STATUS_TO_TEST_STATUS[testResult.status], testResult.error)
+        testEndHandler(test, params.annotations, STATUS_TO_TEST_STATUS[testResult.status], testResult.error)
       }
     })
 
@@ -200,10 +205,10 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
       const test = getTestByTestId(dispatcher, testId)
       testBeginHandler(test)
     })
-    worker.on('testEnd', ({ testId, status, errors }) => {
+    worker.on('testEnd', ({ testId, status, errors, annotations }) => {
       const test = getTestByTestId(dispatcher, testId)
 
-      testEndHandler(test, STATUS_TO_TEST_STATUS[status], errors && errors[0])
+      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0])
     })
 
     return worker
@@ -230,7 +235,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       // because they were skipped
       tests.forEach(test => {
         testBeginHandler(test)
-        testEndHandler(test, 'skip')
+        testEndHandler(test, [], 'skip')
       })
     })
 
