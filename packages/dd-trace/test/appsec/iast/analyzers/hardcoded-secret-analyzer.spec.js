@@ -76,40 +76,41 @@ describe('Hardcoded Secret Analyzer', () => {
       fs.unlinkSync(functionsPath)
     })
 
-    function app () {
-      require(functionsPath)
-    }
-
-    function tests (config) {
-      describe('with iast enabled', () => {
-        beforeEach(() => {
-          const tracer = require('../../../../')
-          iast.enable(new Config({
-            experimental: {
-              iast: {
-                enabled: true,
-                requestSampling: 100
-              }
-            }
-          }), tracer)
-        })
-
-        afterEach(() => {
-          iast.disable()
-        })
-
-        it('should detect vulnerability', (done) => {
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
-            })
-            .then(done)
-            .catch(done)
-          axios.get(`http://localhost:${config.port}/`).catch(done)
-        })
+    describe('with iast enabled', () => {
+      beforeEach(() => {
+        return agent.load('http', undefined, { flushInterval: 1 })
       })
-    }
 
-    testInRequest(app, tests)
+      beforeEach(() => {
+        const tracer = require('../../../../')
+        iast.enable(new Config({
+          experimental: {
+            iast: {
+              enabled: true,
+              requestSampling: 100
+            }
+          }
+        }), tracer)
+      })
+
+      afterEach(() => {
+        iast.disable()
+      })
+
+      afterEach(() => {
+        return agent.close({ ritmReset: false })
+      })
+
+      it('should detect vulnerability', (done) => {
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_SECRET"')
+          })
+          .then(done)
+          .catch(done)
+
+        require(functionsPath)
+      })
+    })
   })
 })
