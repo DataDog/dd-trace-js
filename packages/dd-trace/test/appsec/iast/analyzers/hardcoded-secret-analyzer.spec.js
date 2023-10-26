@@ -78,7 +78,7 @@ describe('Hardcoded Secret Analyzer', () => {
 
     describe('with iast enabled', () => {
       beforeEach(() => {
-        return agent.load('http', undefined, { flushInterval: 1 })
+        return agent.load(undefined, undefined, { flushInterval: 1 })
       })
 
       beforeEach(() => {
