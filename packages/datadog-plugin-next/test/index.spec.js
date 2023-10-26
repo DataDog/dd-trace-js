@@ -101,7 +101,7 @@ describe('Plugin', function () {
           cwd,
           env: {
             ...process.env,
-            version
+            VERSION: realVersion
           },
           stdio: ['pipe', 'ignore', 'pipe']
         })
