@@ -22,3 +22,11 @@
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
+
+### Security 
+Datadog employees:
+- [ ] If this PR touches code that signs or publishes builds or packages, or handles credentials of any kind, I've requested a review from `@DataDog/security-design-and-guidance`.
+- [ ] This PR doesn't touch any of that.
+
+Unsure? Have a question? Request a review!
+
