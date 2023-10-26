@@ -54,10 +54,16 @@ class JestPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       numSkippedSuites,
       hasUnskippableSuites,
-      hasForcedToRunSuites
+      hasForcedToRunSuites,
+      error
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+
+      if (error) {
+        this.testSessionSpan.setTag('error', error)
+        this.testModuleSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -150,9 +156,11 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
+    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
-      if (errorMessage) {
+      if (error) {
+        this.testSuiteSpan.setTag('error', error)
+      } else if (errorMessage) {
         this.testSuiteSpan.setTag('error', new Error(errorMessage))
       }
       this.testSuiteSpan.finish()

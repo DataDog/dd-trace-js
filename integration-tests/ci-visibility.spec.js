@@ -26,6 +26,7 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN
 } = require('../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -413,6 +414,38 @@ testFrameworks.forEach(({
           done()
         })
       })
+      it('reports parsing errors in the test file', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.equal(suites.length, 2)
+
+            const resourceNames = suites.map(suite => suite.content.resource)
+
+            assert.includeMembers(resourceNames, [
+              'test_suite.ci-visibility/test-parsing-error/parsing-error-2.js',
+              'test_suite.ci-visibility/test-parsing-error/parsing-error.js'
+            ])
+            suites.forEach(suite => {
+              assert.equal(suite.content.meta[TEST_STATUS], 'fail')
+              assert.include(suite.content.meta[ERROR_MESSAGE], 'chao')
+            })
+          })
+        childProcess = fork(testFile, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-parsing-error/parsing-error'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
     }
 
     it('can run tests and report spans', (done) => {
@@ -512,6 +545,40 @@ testFrameworks.forEach(({
     })
 
     describe('agentless', () => {
+      it('reports errors in test sessions', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
+            const errorMessage = name === 'mocha' ? 'Failed tests: 1' : 'Failed test suites: 1. Failed tests: 1'
+            assert.include(testSession.meta[ERROR_MESSAGE], errorMessage)
+          })
+
+        let TESTS_TO_RUN = 'test/fail-test'
+        if (name === 'mocha') {
+          TESTS_TO_RUN = JSON.stringify([
+            './test/fail-test.js'
+          ])
+        }
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN
+            },
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
       it('does not init if DD_API_KEY is not set', (done) => {
         receiver.assertMessageReceived(() => {
           done(new Error('Should not create spans'))
@@ -728,6 +795,44 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('marks the test session as skipped if every suite is skipped', (done) => {
+        receiver.setSuitesToSkip(
+          [
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test-2.js'
+              }
+            }
+          ]
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
+          })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.setSuitesToSkip([{
@@ -1024,6 +1129,40 @@ testFrameworks.forEach(({
           })
         })
       })
+      it('reports errors in test sessions', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
+            const errorMessage = name === 'mocha' ? 'Failed tests: 1' : 'Failed test suites: 1. Failed tests: 1'
+            assert.include(testSession.meta[ERROR_MESSAGE], errorMessage)
+          })
+
+        let TESTS_TO_RUN = 'test/fail-test'
+        if (name === 'mocha') {
+          TESTS_TO_RUN = JSON.stringify([
+            './test/fail-test.js'
+          ])
+        }
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              TESTS_TO_RUN
+            },
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
       it('can report git metadata', (done) => {
         const infoRequestPromise = receiver.payloadReceived(({ url }) => url === '/info')
         const searchCommitsRequestPromise = receiver.payloadReceived(
@@ -1208,6 +1347,82 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+      it('marks the test session as skipped if every suite is skipped', (done) => {
+        receiver.setSuitesToSkip(
+          [
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test-2.js'
+              }
+            }
+          ]
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
+          })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('marks the test session as skipped if every suite is skipped', (done) => {
+        receiver.setSuitesToSkip(
+          [
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test.js'
+              }
+            },
+            {
+              type: 'suite',
+              attributes: {
+                suite: 'ci-visibility/test/ci-visibility-test-2.js'
+              }
+            }
+          ]
+        )
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
+          })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.assertPayloadReceived(() => {
