@@ -396,6 +396,11 @@ addHook({
       const { suitesToRun } = filteredSuites
 
       isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+
+      log.debug(
+        () => `${suitesToRun.length} out of ${runner.suite.suites.length} suites are going to run.`
+      )
+
       runner.suite.suites = suitesToRun
 
       skippedSuites = Array.from(filteredSuites.skippedSuites)
