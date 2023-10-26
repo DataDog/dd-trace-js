@@ -1,7 +1,6 @@
 'use strict'
 
 const path = require('path')
-const axios = require('axios')
 const fs = require('fs')
 const os = require('os')
 
@@ -11,7 +10,6 @@ const Config = require('../../../../src/config')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
 const { suite } = require('./resources/hardcoded-secrets-suite.json')
 const iast = require('../../../../src/appsec/iast')
-const { testInRequest } = require('../utils')
 
 describe('Hardcoded Secret Analyzer', () => {
   describe('unit test', () => {
