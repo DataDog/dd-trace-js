@@ -1,5 +1,6 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
+const log = require('../../log')
 
 function getItrConfiguration ({
   url,
@@ -72,8 +73,9 @@ function getItrConfiguration ({
             }
           }
         } = JSON.parse(res)
-
-        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled })
+        const config = { isCodeCoverageEnabled, isSuitesSkippingEnabled }
+        log.debug(() => `Received settings: ${config}`)
+        done(null, config)
       } catch (err) {
         done(err)
       }
