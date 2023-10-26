@@ -1,4 +1,5 @@
 const request = require('../../exporters/common/request')
+const log = require('../../log')
 
 function getSkippableSuites ({
   url,
@@ -73,6 +74,7 @@ function getSkippableSuites ({
             }
             return { suite, name }
           })
+        log.debug(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
         done(null, skippableSuites)
       } catch (err) {
         done(err)
