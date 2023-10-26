@@ -133,11 +133,20 @@ function mochaHook (Runner) {
 
     this.once('end', testRunAsyncResource.bind(function () {
       let status = 'pass'
+      let error
       if (this.stats) {
         status = this.stats.failures === 0 ? 'pass' : 'fail'
+        if (this.stats.tests === 0) {
+          status = 'skip'
+        }
       } else if (this.failures !== 0) {
         status = 'fail'
       }
+
+      if (status === 'fail') {
+        error = new Error(`Failed tests: ${this.failures}.`)
+      }
+
       testFileToSuiteAr.clear()
 
       let testCodeCoverageLinesTotal
@@ -157,7 +166,8 @@ function mochaHook (Runner) {
         testCodeCoverageLinesTotal,
         numSkippedSuites: skippedSuites.length,
         hasForcedToRunSuites: isForcedToRun,
-        hasUnskippableSuites: !!unskippableSuites.length
+        hasUnskippableSuites: !!unskippableSuites.length,
+        error
       })
     }))
 
