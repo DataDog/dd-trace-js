@@ -26,6 +26,7 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN
 } = require('../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -411,6 +412,38 @@ testFrameworks.forEach(({
         childProcess.on('message', () => {
           assert.include(testOutput, 'Exceeded timeout of 100 ms for a test')
           done()
+        })
+      })
+      it('reports parsing errors in the test file', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.equal(suites.length, 2)
+
+            const resourceNames = suites.map(suite => suite.content.resource)
+
+            assert.includeMembers(resourceNames, [
+              'test_suite.ci-visibility/test-parsing-error/parsing-error-2.js',
+              'test_suite.ci-visibility/test-parsing-error/parsing-error.js'
+            ])
+            suites.forEach(suite => {
+              assert.equal(suite.content.meta[TEST_STATUS], 'fail')
+              assert.include(suite.content.meta[ERROR_MESSAGE], 'chao')
+            })
+          })
+        childProcess = fork(testFile, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-parsing-error/parsing-error'
+          },
+          stdio: 'pipe'
+        })
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
         })
       })
     }
