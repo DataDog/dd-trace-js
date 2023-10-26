@@ -208,6 +208,11 @@ addHook({
     const rootDir = test && test.context && test.context.config && test.context.config.rootDir
 
     const jestSuitesToRun = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
+
+    log.debug(
+      () => `${jestSuitesToRun.suitesToRun.length} out of ${shardedTests.length} suites are going to run.`
+    )
+
     hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
     hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
 
@@ -385,23 +390,23 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           status = 'fail'
         }
 
-        const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
-          .map(filename => getTestSuitePath(filename, environment.rootDir))
-
         /**
          * Child processes do not each request ITR configuration, so the jest's parent process
          * needs to pass them the configuration. This is done via _ddTestCodeCoverageEnabled, which
          * controls whether coverage is reported.
-         */
-        if (coverageFiles &&
-          environment.testEnvironmentOptions &&
-          environment.testEnvironmentOptions._ddTestCodeCoverageEnabled) {
+        */
+        if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
+            .map(filename => getTestSuitePath(filename, environment.rootDir))
           asyncResource.runInAsyncScope(() => {
             testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
         return suiteResults
+      }).catch(error => {
+        testSuiteFinishCh.publish({ status: 'fail', error })
+        throw error
       })
     })
   })
@@ -529,6 +534,8 @@ addHook({
     const { tests } = testPaths
 
     const jestSuitesToRun = getJestSuitesToRun(skippableSuites, tests, rootDir)
+
+    log.debug(() => `${jestSuitesToRun.suitesToRun.length} out of ${tests.length} suites are going to run.`)
 
     hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
     hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
