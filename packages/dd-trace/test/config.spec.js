@@ -935,7 +935,7 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
-    expect(config.telemetry.metrics).to.be.false
+    expect(config.telemetry.metrics).to.be.true
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -960,13 +960,13 @@ describe('Config', () => {
     process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
   })
 
-  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+  it('should not set DD_TELEMETRY_METRICS_ENABLED', () => {
     const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
-    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'false'
 
     const config = new Config()
 
-    expect(config.telemetry.metrics).to.be.true
+    expect(config.telemetry.metrics).to.be.false
 
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
