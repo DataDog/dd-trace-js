@@ -150,9 +150,11 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage }) => {
+    this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error }) => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
-      if (errorMessage) {
+      if (error) {
+        this.testSuiteSpan.setTag('error', error)
+      } else if (errorMessage) {
         this.testSuiteSpan.setTag('error', new Error(errorMessage))
       }
       this.testSuiteSpan.finish()
