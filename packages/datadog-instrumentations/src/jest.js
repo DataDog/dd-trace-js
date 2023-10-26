@@ -277,7 +277,16 @@ function cliWrapper (cli, jestVersion) {
 
     const result = await runCLI.apply(this, arguments)
 
-    const { results: { success, coverageMap } } = result
+    const {
+      results: {
+        success,
+        coverageMap,
+        numFailedTestSuites,
+        numFailedTests,
+        numTotalTests,
+        numTotalTestSuites
+      }
+    } = result
 
     let testCodeCoverageLinesTotal
     try {
@@ -286,17 +295,30 @@ function cliWrapper (cli, jestVersion) {
     } catch (e) {
       // ignore errors
     }
+    let status, error
+
+    if (success) {
+      if (numTotalTests === 0 && numTotalTestSuites === 0) {
+        status = 'skip'
+      } else {
+        status = 'pass'
+      }
+    } else {
+      status = 'fail'
+      error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+    }
 
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
-        status: success ? 'pass' : 'fail',
+        status,
         isSuitesSkipped,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
         testCodeCoverageLinesTotal,
         numSkippedSuites,
         hasUnskippableSuites,
-        hasForcedToRunSuites
+        hasForcedToRunSuites,
+        error
       })
     })
 

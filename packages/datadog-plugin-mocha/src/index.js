@@ -150,12 +150,18 @@ class MochaPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       numSkippedSuites,
       hasForcedToRunSuites,
-      hasUnskippableSuites
+      hasUnskippableSuites,
+      error
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
+
+        if (error) {
+          this.testSessionSpan.setTag('error', error)
+          this.testModuleSpan.setTag('error', error)
+        }
 
         addIntelligentTestRunnerSpanTags(
           this.testSessionSpan,
