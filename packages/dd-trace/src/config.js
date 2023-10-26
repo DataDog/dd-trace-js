@@ -10,7 +10,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
@@ -638,9 +638,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
     if (this.gitMetadataEnabled) {
-      this.repositoryUrl = coalesce(
-        process.env.DD_GIT_REPOSITORY_URL,
-        this.tags[GIT_REPOSITORY_URL]
+      this.repositoryUrl = removeUserSensitiveInfo(
+        coalesce(
+          process.env.DD_GIT_REPOSITORY_URL,
+          this.tags[GIT_REPOSITORY_URL]
+        )
       )
       this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,
