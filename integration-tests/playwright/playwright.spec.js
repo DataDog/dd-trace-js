@@ -110,6 +110,7 @@ versions.forEach((version) => {
             )
 
             assert.propertyVal(annotatedTest.content.meta, 'test.memory.usage', 'low')
+            assert.propertyVal(annotatedTest.content.metrics, 'test.memory.allocations', 16)
             assert.notProperty(annotatedTest.content.meta, 'test.invalid')
           }).then(() => done()).catch(done)
 
