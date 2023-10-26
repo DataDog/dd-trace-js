@@ -4,9 +4,21 @@ const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const semver = require('semver')
 
 function noop () {}
+
+function normalizeArgs (methodName, command, options) {
+  const args = []
+  if (methodName === 'exec' || methodName === 'execSync') {
+    args.push(command.join(' '))
+  } else {
+    args.push(command[0], command.slice(1))
+  }
+
+  args.push(options)
+
+  return args
+}
 
 describe('Child process plugin', () => {
   describe('unit tests', () => {
@@ -49,6 +61,102 @@ describe('Child process plugin', () => {
       )
     })
 
+    it('should call startSpan with cmd.shell property', () => {
+      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+      shellPlugin.start({ command: 'ls -l', shell: true })
+
+      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        'command_execution',
+        {
+          childOf: undefined,
+          tags: {
+            component: 'subprocess',
+            'service.name': undefined,
+            'resource.name': 'ls',
+            'span.kind': undefined,
+            'span.type': 'system',
+            'cmd.shell': JSON.stringify([ 'ls', '-l' ])
+          },
+          integrationName: 'system'
+        }
+      )
+    })
+
+    it('should truncate path and blank last argument', () => {
+      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+      const path = '/home/'.padEnd(4000 * 8, '/')
+      const command = 'ls -l' + ' ' + path + ' -t'
+
+      shellPlugin.start({ command, shell: true })
+
+      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        'command_execution',
+        {
+          childOf: undefined,
+          tags: {
+            component: 'subprocess',
+            'service.name': undefined,
+            'resource.name': 'ls',
+            'span.kind': undefined,
+            'span.type': 'system',
+            'cmd.shell': JSON.stringify([ 'ls', '-l', '/h', '' ])
+          },
+          integrationName: 'system'
+        }
+      )
+    })
+
+    it('should truncate first argument and blank the rest', () => {
+      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+      const option = '-l'.padEnd(4000 * 8, 't')
+      const path = '/home'
+      const command = 'ls' + ' ' + option + ' ' + path + ' -t'
+
+      shellPlugin.start({ command, shell: true })
+
+      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        'command_execution',
+        {
+          childOf: undefined,
+          tags: {
+            component: 'subprocess',
+            'service.name': undefined,
+            'resource.name': 'ls',
+            'span.kind': undefined,
+            'span.type': 'system',
+            'cmd.shell': JSON.stringify([ 'ls', '-l', '', '' ])
+          },
+          integrationName: 'system'
+        }
+      )
+    })
+
+    it('should truncate last argument', () => {
+      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+      const option = '-t'.padEnd(4000 * 8, 'u')
+      const path = '/home'
+      const command = 'ls' + ' -l' + ' ' + path + ' ' + option
+
+      shellPlugin.start({ command, shell: true })
+
+      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+        'command_execution',
+        {
+          childOf: undefined,
+          tags: {
+            component: 'subprocess',
+            'service.name': undefined,
+            'resource.name': 'ls',
+            'span.kind': undefined,
+            'span.type': 'system',
+            'cmd.shell': JSON.stringify([ 'ls', '-l', '/home', '-t' ])
+          },
+          integrationName: 'system'
+        }
+      )
+    })
+
     it('should not crash if command is not a string', () => {
       const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
@@ -84,107 +192,262 @@ describe('Child process plugin', () => {
     })
   })
 
-  describe('integration', () => {
-    const execAsyncMethods = ['exec', 'execFile', 'spawn']
-    const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
-    let childProcess, tracer
+  describe('Integration', () => {
+    describe('Methods which spawn a shell by default', () => {
+      const execAsyncMethods = ['exec']
+      const execSyncMethods = ['execSync']
+      let childProcess, tracer
 
-    beforeEach(() => {
-      return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
-        tracer = require('../../dd-trace')
-        childProcess = require('child_process')
-        tracer.use('child_process', { enabled: true })
+      beforeEach(() => {
+        return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
+          tracer = require('../../dd-trace')
+          childProcess = require('child_process')
+          tracer.use('child_process', { enabled: true })
+        })
+      })
+
+      afterEach(() => agent.close({ ritmReset: false }))
+      const parentSpanList = [true, false]
+      parentSpanList.forEach(parentSpan => {
+        describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
+          const methods = [
+            ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
+            ...execSyncMethods.map(methodName => ({ methodName, async: false }))
+          ]
+          if (parentSpan) {
+            beforeEach((done) => {
+              const parentSpan = tracer.startSpan('parent')
+              parentSpan.finish()
+              tracer.scope().activate(parentSpan, done)
+            })
+          }
+
+          methods.forEach(({ methodName, async }) => {
+            describe(methodName, () => {
+              it('should be instrumented', (done) => {
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': '["ls"]',
+                    'cmd.exit_code': '0'
+                  }
+                }
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const res = childProcess[methodName]('ls')
+                if (async) {
+                  res.on('close', noop)
+                }
+              })
+
+              it('command should be scrubbed', (done) => {
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': '["echo","password","?"]',
+                    'cmd.exit_code': '0'
+                  }
+                }
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const args = []
+                if (methodName === 'exec' || methodName === 'execSync') {
+                  args.push('echo password 123')
+                } else {
+                  args.push('echo')
+                  args.push(['password', '123'])
+                }
+
+                const res = childProcess[methodName](...args)
+                if (async) {
+                  res.on('close', noop)
+                }
+              })
+
+              it('should be instrumented with error code', (done) => {
+                const command = [ 'node', '-badOption' ]
+                const options = {
+                  stdio: 'pipe'
+                }
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 1,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const args = normalizeArgs(methodName, command, options)
+
+                if (async) {
+                  const res = childProcess[methodName].apply(null, args)
+                  res.on('close', noop)
+                } else {
+                  try {
+                    childProcess[methodName].apply(null, args)
+                  } catch {
+                    // process exit with code 1, exceptions are expected
+                  }
+                }
+              })
+            })
+          })
+        })
       })
     })
 
-    afterEach(() => agent.close({ ritmReset: false }))
-    const parentSpanList = [true, false]
-    parentSpanList.forEach(parentSpan => {
-      describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
-        const methods = [
-          ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
-          ...execSyncMethods.map(methodName => ({ methodName, async: false }))
-        ]
-        if (parentSpan) {
-          beforeEach((done) => {
-            const parentSpan = tracer.startSpan('parent')
-            parentSpan.finish()
-            tracer.scope().activate(parentSpan, done)
-          })
-        }
+    describe('Methods which do not spawn a shell by default', () => {
+      const execAsyncMethods = ['execFile', 'spawn']
+      const execSyncMethods = ['execFile', 'spawnSync']
+      let childProcess, tracer
 
-        methods.forEach(({ methodName, async }) => {
-          describe(methodName, () => {
-            it('should be instrumented', (done) => {
-              const expected = {
-                type: 'system',
-                name: 'command_execution',
-                error: 0,
-                meta: {
-                  component: 'subprocess',
-                  'cmd.exec': '["ls"]',
-                  'cmd.exit_code': '0'
-                }
-              }
-              expectSomeSpan(agent, expected).then(done, done)
+      beforeEach(() => {
+        return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
+          tracer = require('../../dd-trace')
+          childProcess = require('child_process')
+          tracer.use('child_process', { enabled: true })
+        })
+      })
 
-              const res = childProcess[methodName]('ls')
-              if (async) {
-                res.on('close', noop)
-              }
+      afterEach(() => agent.close({ ritmReset: false }))
+      const parentSpanList = [true, false]
+      parentSpanList.forEach(parentSpan => {
+        describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
+          const methods = [
+            ...execAsyncMethods.map(methodName => ({ methodName, async: true })),
+            ...execSyncMethods.map(methodName => ({ methodName, async: false }))
+          ]
+          if (parentSpan) {
+            beforeEach((done) => {
+              const parentSpan = tracer.startSpan('parent')
+              parentSpan.finish()
+              tracer.scope().activate(parentSpan, done)
             })
+          }
 
-            it('command should be scrubbed', (done) => {
-              const expected = {
-                type: 'system',
-                name: 'command_execution',
-                error: 0,
-                meta: {
-                  component: 'subprocess',
-                  'cmd.exec': '["echo","password","?"]',
-                  'cmd.exit_code': '0'
+          methods.forEach(({ methodName, async }) => {
+            describe(methodName, () => {
+              it('should be instrumented', (done) => {
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.exec': '["ls"]',
+                    'cmd.exit_code': '0'
+                  }
                 }
-              }
-              expectSomeSpan(agent, expected).then(done, done)
+                expectSomeSpan(agent, expected).then(done, done)
 
-              const args = []
-              if (methodName === 'exec' || methodName === 'execSync') {
-                args.push('echo password 123')
-              } else {
-                args.push('echo')
-                args.push(['password', '123'])
-              }
-
-              const res = childProcess[methodName](...args)
-              if (async) {
-                res.on('close', noop)
-              }
-            })
-
-            it('should be instrumented with error code', (done) => {
-              const error = semver.satisfies(process.versions.node, '<=16') && methodName === 'execFileSync' ? 0 : 1
-              const expected = {
-                type: 'system',
-                name: 'command_execution',
-                error,
-                meta: {
-                  component: 'subprocess',
-                  'cmd.exec': '["node","-e","process.exit(1)"]',
-                  'cmd.exit_code': `${error}`
+                const res = childProcess[methodName]('ls')
+                if (async) {
+                  res.on('close', noop)
                 }
-              }
-              expectSomeSpan(agent, expected).then(done, done)
+              })
 
-              if (async) {
-                const res = childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
-                res.on('close', noop)
-              } else {
-                try {
-                  childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
-                } catch {
-                  // process exit with code 1, exceptions are expected
+              it('command should be scrubbed', (done) => {
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.exec': '["echo","password","?"]',
+                    'cmd.exit_code': '0'
+                  }
                 }
-              }
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const args = []
+                if (methodName === 'exec' || methodName === 'execSync') {
+                  args.push('echo password 123')
+                } else {
+                  args.push('echo')
+                  args.push(['password', '123'])
+                }
+
+                const res = childProcess[methodName](...args)
+                if (async) {
+                  res.on('close', noop)
+                }
+              })
+
+              it('should be instrumented with error code', (done) => {
+                const command = [ 'node', '-badOption' ]
+                const options = {
+                  stdio: 'pipe'
+                }
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 1,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.exec': '["node","-badOption"]',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const args = normalizeArgs(methodName, command, options)
+
+                if (async) {
+                  const res = childProcess[methodName].apply(null, args)
+                  res.on('close', noop)
+                } else {
+                  try {
+                    childProcess[methodName].apply(null, args)
+                  } catch {
+                    // process exit with code 1, exceptions are expected
+                  }
+                }
+              })
+
+              it('should be instrumented with error code (override shell default behavior)', (done) => {
+                const command = [ 'node', '-badOption' ]
+                const options = {
+                  stdio: 'pipe',
+                  shell: true
+                }
+                const expected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 1,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
+                expectSomeSpan(agent, expected).then(done, done)
+
+                const args = normalizeArgs(methodName, command, options)
+
+                if (async) {
+                  const res = childProcess[methodName].apply(null, args)
+                  res.on('close', noop)
+                } else {
+                  try {
+                    childProcess[methodName].apply(null, args)
+                  } catch {
+                    // process exit with code 1, exceptions are expected
+                  }
+                }
+              })
             })
           })
         })

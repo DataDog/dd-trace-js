@@ -40,12 +40,27 @@ function wrapChildProcessSyncMethod () {
         return childProcessMethod.apply(this, arguments)
       }
 
-      let command = arguments[0]
-      const args = arguments[1]
-      if (Array.isArray(args)) {
-        command = command + ' ' + args.join(' ')
+      const childProcessInfo = {
+        command: arguments[0],
+        args: arguments[1],
+        options: arguments[2]
       }
-      childProcessChannelStart.publish({ command })
+
+      if (Array.isArray(childProcessInfo.args)) {
+        childProcessInfo.command = childProcessInfo.command + ' ' + childProcessInfo.args.join(' ')
+      } else if (childProcessInfo.args == null) {
+        childProcessInfo.args = []
+      } else {
+        childProcessInfo.options = arguments[1]
+      }
+
+      if (childProcessInfo?.options?.shell === true ||
+        typeof childProcessInfo?.options?.shell === 'string' ||
+        childProcessMethod.name === 'execSync') {
+        childProcessInfo.shell = true
+      }
+
+      childProcessChannelStart.publish(childProcessInfo)
 
       let error
       let result
@@ -97,15 +112,27 @@ function wrapChildProcessAsyncMethod () {
         return childProcessMethod.apply(this, arguments)
       }
 
-      let command = arguments[0]
-      const args = arguments[1]
-      if (Array.isArray(args)) {
-        command = command + ' ' + args.join(' ')
+      const childProcessInfo = {
+        command: arguments[0],
+        args: arguments[1],
+        options: arguments[2]
+      }
+
+      if (Array.isArray(childProcessInfo.args)) {
+        childProcessInfo.command = childProcessInfo.command + ' ' + childProcessInfo.args.join(' ')
+      } else if (childProcessInfo.args == null) {
+        childProcessInfo.args = []
+      } else {
+        childProcessInfo.options = arguments[1]
+      }
+
+      if (childProcessInfo?.options?.shell === true || typeof childProcessInfo?.options?.shell === 'string') {
+        childProcessInfo.shell = true
       }
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        childProcessChannelStart.publish({ command })
+        childProcessChannelStart.publish(childProcessInfo)
 
         const childProcess = childProcessMethod.apply(this, arguments)
         if (childProcess) {
