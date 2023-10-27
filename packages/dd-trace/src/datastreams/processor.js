@@ -231,6 +231,8 @@ module.exports = {
   StatsBucket: StatsBucket,
   TimeBuckets,
   getMessageSize,
+  getHeadersSize,
+  getSizeOrZero,
   ENTRY_PARENT_HASH,
   CONTEXT_PROPAGATION_KEY
 }
