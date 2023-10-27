@@ -1266,6 +1266,11 @@ describe('Config', () => {
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
     })
+    it('reads DD_GIT_* env vars and filters out user data', () => {
+      process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('repositoryUrl', 'https://github.com/DataDog/dd-trace-js.git')
+    })
     it('reads DD_TAGS env var', () => {
       process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`
       process.env.DD_GIT_REPOSITORY_URL = DUMMY_REPOSITORY_URL

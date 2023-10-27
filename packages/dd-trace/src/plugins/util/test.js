@@ -118,7 +118,8 @@ module.exports = {
   fromCoverageMapToCoverage,
   getTestLineStart,
   getCallSites,
-  removeInvalidMetadata
+  removeInvalidMetadata,
+  parseAnnotations
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -491,4 +492,31 @@ function getCallSites () {
   Error.stackTraceLimit = oldLimit
 
   return v8StackTrace
+}
+
+/**
+ * Gets an object of test tags from an Playwright annotations array.
+ * @param {Object[]} annotations - Annotations from a Playwright test.
+ * @param {string} annotations[].type - Type of annotation. A string of the shape DD_TAGS[$tag_name].
+ * @param {string} annotations[].description - Value of the tag.
+ */
+function parseAnnotations (annotations) {
+  return annotations.reduce((tags, annotation) => {
+    if (!annotation?.type) {
+      return tags
+    }
+    const { type, description } = annotation
+    if (type.startsWith('DD_TAGS')) {
+      const regex = /\[(.*?)\]/
+      const match = regex.exec(type)
+      let tagValue = ''
+      if (match) {
+        tagValue = match[1]
+      }
+      if (tagValue) {
+        tags[tagValue] = description
+      }
+    }
+    return tags
+  }, {})
 }
