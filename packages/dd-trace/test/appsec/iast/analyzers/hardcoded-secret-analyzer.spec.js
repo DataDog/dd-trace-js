@@ -58,7 +58,7 @@ describe('Hardcoded Secret Analyzer', () => {
         literals: [{ value: 'test', line: 0 }]
       })
 
-      expect(report).to.not.be.called
+      expect(report).not.to.have.been.called
     })
   })
 
