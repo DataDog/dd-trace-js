@@ -1,7 +1,5 @@
 'use strict'
 
-require('../setup/tap')
-
 const { hostname } = require('os')
 const Uint64 = require('int64-buffer').Uint64BE
 
