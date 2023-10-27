@@ -18,16 +18,13 @@ const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
 function commitsFromEvent (event) {
-  const groupIdKey = 'consumer_group'
-  const type = 'kafka_commit'
   const { payload: { groupId, topics } } = event
   const commitList = []
   for (const { topic, partitions } of topics) {
     for (const { partition, offset } of partitions) {
       commitList.push({
-        [groupIdKey]: groupId,
+        groupId,
         partition,
-        type,
         offset,
         topic
       })
@@ -78,6 +75,12 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
               producerFinishCh.publish(undefined)
             })
           )
+
+          result.then(res => {
+            if (producerCommitCh.hasSubscribers) {
+              producerCommitCh.publish(res)
+            }
+          })
 
           return result
         } catch (e) {
