@@ -39,7 +39,7 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          expect(report).to.be.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
+          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
         })
       })
     })
