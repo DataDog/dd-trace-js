@@ -1,6 +1,5 @@
 'use strict'
 
-const { constants } = require('fs/promises')
 const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 

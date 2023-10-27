@@ -55,7 +55,7 @@ class StatsBucket extends Map {
   }
 }
 
-function getSizeOrZero(obj) {
+function getSizeOrZero (obj) {
   if (typeof obj === 'string') {
     return Buffer.from(obj, 'utf-8').length
   }
@@ -68,12 +68,12 @@ function getSizeOrZero(obj) {
   return 0
 }
 
-function getHeadersSize(headers) {
+function getHeadersSize (headers) {
   if (headers === undefined) return 0
   return Object.entries(headers).reduce((prev, [key, val]) => getSizeOrZero(key) + getSizeOrZero(val) + prev, 0)
 }
 
-function getMessageSize(message) {
+function getMessageSize (message) {
   const { key, value, headers } = message
   return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
 }

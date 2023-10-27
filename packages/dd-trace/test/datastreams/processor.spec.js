@@ -21,7 +21,15 @@ const writer = {
   flush: sinon.stub()
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
-const { StatsPoint, StatsBucket, TimeBuckets, DataStreamsProcessor, getHeadersSize, getMessageSize, getSizeOrZero } = proxyquire('../src/datastreams/processor', {
+const {
+  StatsPoint,
+  StatsBucket,
+  TimeBuckets,
+  DataStreamsProcessor,
+  getHeadersSize,
+  getMessageSize,
+  getSizeOrZero
+} = proxyquire('../src/datastreams/processor', {
   './writer': { DataStreamsWriter }
 })
 
@@ -219,7 +227,7 @@ describe('getHeadersSize', () => {
   it('should return the total size of all headers', () => {
     const headers = {
       'Content-Type': 'application/json',
-      'Content-Length': '100',
+      'Content-Length': '100'
     }
     expect(getHeadersSize(headers)).to.equal(45)
   })
@@ -232,8 +240,8 @@ describe('getMessageSize', () => {
       value: 'value',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': '100',
-      },
+        'Content-Length': '100'
+      }
     }
     expect(getMessageSize(message)).to.equal(53)
   })
