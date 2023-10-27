@@ -8,7 +8,6 @@ describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
   const execAsyncMethods = ['exec', 'execFile', 'spawn']
   const execSyncMethods = ['execFileSync', 'execSync', 'spawnSync']
-  // const execSyncMethods = ['spawnSync']
 
   const childProcessChannelStart = channel('datadog:child_process:execution:start')
   const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
