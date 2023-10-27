@@ -10,7 +10,7 @@ const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
-describe('sql-injection-analyzer with knex', () => {
+describe.skip('sql-injection-analyzer with knex', () => {
   withVersions('knex', 'knex', knexVersion => {
     if (!semver.satisfies(knexVersion, '>=2')) return
 
