@@ -302,6 +302,9 @@ describe('Plugin', () => {
 
           it('Should set a message payload size when producing a message', async () => {
             const messages = [{ key: 'key1', value: 'test2' }]
+            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+              DataStreamsProcessor.prototype.recordCheckpoint.restore()
+            }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
@@ -310,6 +313,9 @@ describe('Plugin', () => {
 
           it('Should set a message payload size when consuming a message', async () => {
             const messages = [{ key: 'key1', value: 'test2' }]
+            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+              DataStreamsProcessor.prototype.recordCheckpoint.restore()
+            }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
             await consumer.run({
