@@ -64,7 +64,7 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath }) {
+  pageLoad ({ page, isAppPath = false }) {
     const store = storage.getStore()
 
     if (!store) return
