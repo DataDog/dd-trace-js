@@ -251,7 +251,7 @@ class Config {
     )
     const DD_TELEMETRY_METRICS_ENABLED = coalesce(
       process.env.DD_TELEMETRY_METRICS_ENABLED,
-      false
+      true
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
