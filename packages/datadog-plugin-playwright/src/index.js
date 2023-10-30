@@ -72,7 +72,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -81,6 +81,9 @@ class PlaywrightPlugin extends CiPlugin {
 
       if (error) {
         span.setTag('error', error)
+      }
+      if (extraTags) {
+        span.addTags(extraTags)
       }
 
       steps.forEach(step => {
