@@ -8,8 +8,9 @@ class VulnerabilityFormatter {
     this._redactVulnearbilities = true
   }
 
-  setRedactVulnerabilities (shouldRedactVulnerabilities) {
+  setRedactVulnerabilities (shouldRedactVulnerabilities, redactionNamePattern, redactionValuePattern) {
     this._redactVulnearbilities = shouldRedactVulnerabilities
+    sensitiveHandler.setRedactionPatterns(redactionNamePattern, redactionValuePattern)
   }
 
   extractSourcesFromVulnerability (vulnerability) {
