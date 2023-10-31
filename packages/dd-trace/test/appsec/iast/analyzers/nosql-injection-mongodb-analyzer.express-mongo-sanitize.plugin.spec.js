@@ -48,6 +48,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       })
 
       prepareTestServerForIastInExpress('Test without sanitization middlewares', expressVersion,
+        (expressApp) => {
+          expressApp.get('/path/:parameter', async function (req, res) {
+            await collection.find({
+              key: req.params.parameter
+            })
+            res.end()
+          })
+        },
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
           testThatRequestHasVulnerability({
             fn: async (req, res) => {
@@ -70,6 +78,15 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with path params',
+            fn: function noop () {},
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
             }
           })
 
