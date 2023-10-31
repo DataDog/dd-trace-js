@@ -1,7 +1,6 @@
 'use strict'
 
 const telemetryMetrics = require('../../../telemetry/metrics')
-const telemetryLogs = require('./log')
 const { Verbosity, getVerbosity } = require('./verbosity')
 const { initRequestNamespace, finalizeRequestNamespace, globalNamespace } = require('./namespaces')
 
@@ -15,15 +14,11 @@ class Telemetry {
     if (this.enabled) {
       telemetryMetrics.manager.set('iast', globalNamespace)
     }
-
-    telemetryLogs.start()
   }
 
   stop () {
     this.enabled = false
     telemetryMetrics.manager.delete('iast')
-
-    telemetryLogs.stop()
   }
 
   isEnabled () {
