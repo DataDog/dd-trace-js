@@ -6,6 +6,7 @@ const requirePackageJson = require('../require-package-json')
 const { sendData } = require('./send-data')
 const dc = require('../../../diagnostics_channel')
 const { fileURLToPath } = require('url')
+const { isTrue } = require('../../src/util')
 
 const savedDependenciesToSend = new Set()
 const detectedDependencyKeys = new Set()
@@ -41,8 +42,11 @@ function waitAndSend (config, application, host) {
           // if a depencdency is from the initial load, *always* send the event
           // Otherwise, only send if dependencyCollection is enabled
           .filter(dep => {
-            const initialLoadModule = dep.split(' ')[2]
-            return initialLoadModule || (config.telemetry?.dependencyCollection)
+            const initialLoadModule = isTrue(dep.split(' ')[2])
+            const sendModule = initialLoadModule || (config.telemetry?.dependencyCollection)
+
+            if (!sendModule) savedDependenciesToSend.delete(dep) // we'll never send it
+            return sendModule
           })
           .splice(0, 2000) // v2 documentation specifies up to 2000 dependencies can be sent at once
           .map(pair => {
@@ -55,6 +59,7 @@ function waitAndSend (config, application, host) {
         if (retryData) {
           currPayload = { reqType: 'app-dependencies-loaded', payload: { dependencies } }
         } else {
+          if (!dependencies.length) return // no retry data and no dependencies, nothing to send
           currPayload = { dependencies }
         }
 
@@ -136,7 +141,7 @@ function start (_config = {}, _application, _host, getRetryDataFunction, updateR
   // try and capture intially loaded modules in the first tick
   // since, ideally, the tracer (and this module) should be loaded first,
   // this should capture any first-tick dependencies
-  setTimeout(() => { initialLoad = false }, 0)
+  queueMicrotask(() => { initialLoad = false })
 }
 
 function isDependency (filename, request) {
