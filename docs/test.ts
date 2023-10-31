@@ -122,7 +122,9 @@ tracer.init({
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
       deduplicationEnabled: true,
-      redactionEnabled: true
+      redactionEnabled: true,
+      redactionNamePattern: 'password',
+      redactionValuePattern: 'bearer'
     }
   }
 })
