@@ -83,6 +83,15 @@ describe('hsts header missing analyzer', () => {
 
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('content-type', ['text/html'])
+        res.setHeader('Strict-Transport-Security', [])
+        res.end('<html><body><h1>Test</h1></body></html>')
+      }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
+        expect(vulnerabilities[0].evidence).to.be.undefined
+        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('HSTS_HEADER_MISSING:mocha'))
+      }, makeRequestWithXFordwardedProtoHeader)
+
+      testThatRequestHasVulnerability((req, res) => {
+        res.setHeader('content-type', ['text/html'])
         res.setHeader('Strict-Transport-Security', ['invalid1', 'invalid2'])
         res.end('<html><body><h1>Test</h1></body></html>')
       }, HSTS_HEADER_MISSING, 1, function (vulnerabilities) {
