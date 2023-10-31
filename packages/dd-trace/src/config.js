@@ -10,7 +10,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
@@ -251,7 +251,7 @@ class Config {
     )
     const DD_TELEMETRY_METRICS_ENABLED = coalesce(
       process.env.DD_TELEMETRY_METRICS_ENABLED,
-      false
+      true
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
@@ -447,7 +447,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       5 // seconds
     )
 
-    const iastOptions = options.experimental && options.experimental.iast
+    const iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
       (iastOptions === true || iastOptions.enabled === true),
@@ -461,7 +461,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
-      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
@@ -469,31 +469,43 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(iastOptions?.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
     const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(iastOptions?.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      iastOptions && iastOptions.deduplicationEnabled,
+      iastOptions?.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
-      iastOptions && iastOptions.redactionEnabled,
+      iastOptions?.redactionEnabled,
       !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
+    const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
+      iastOptions?.redactionNamePattern,
+      process.env.DD_IAST_REDACTION_NAME_PATTERN,
+      null
+    )
+
+    const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
+      iastOptions?.redactionValuePattern,
+      process.env.DD_IAST_REDACTION_VALUE_PATTERN,
+      null
+    )
+
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      iastOptions && iastOptions.telemetryVerbosity,
+      iastOptions?.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
       'INFORMATION'
     )
@@ -588,8 +600,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
-      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
@@ -620,6 +632,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
       redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
+      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN,
       telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
@@ -638,9 +652,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
     if (this.gitMetadataEnabled) {
-      this.repositoryUrl = coalesce(
-        process.env.DD_GIT_REPOSITORY_URL,
-        this.tags[GIT_REPOSITORY_URL]
+      this.repositoryUrl = removeUserSensitiveInfo(
+        coalesce(
+          process.env.DD_GIT_REPOSITORY_URL,
+          this.tags[GIT_REPOSITORY_URL]
+        )
       )
       this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,
