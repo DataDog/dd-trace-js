@@ -61,6 +61,21 @@
         "DD_IAST_MAX_CONCURRENT_REQUESTS": "1000",
         "DD_IAST_MAX_CONTEXT_OPERATIONS": "100"
       }
+    },
+    "startup-time-control": {
+      "run": "node --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "env": {
+        "DD_IAST_ENABLED": "0"
+      }
+    },
+    "startup-time-iast-enabled": {
+      "run": "node --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "baseline": "startup-time-control",
+      "env": {
+        "DD_IAST_ENABLED": "1"
+      }
     }
   }
 }
