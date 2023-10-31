@@ -50,7 +50,14 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _getEvidence ({ res }) {
-    return { value: res.getHeader(this.headerName) }
+    const headerValues = this._getHeaderValues(res, this.headerName)
+    let value
+    if (headerValues.length === 1) {
+      value = headerValues[0]
+    } else if (headerValues.length > 0) {
+      value = JSON.stringify(headerValues)
+    }
+    return { value }
   }
 
   _isVulnerable ({ req, res }, context) {
