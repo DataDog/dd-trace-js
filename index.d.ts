@@ -453,7 +453,15 @@ export declare interface TracerOptions {
        * Whether to enable vulnerability redaction
        * @default true
        */
-      redactionEnabled?: boolean
+      redactionEnabled?: boolean,
+      /**
+       * Specifies a regex that will redact sensitive source names in vulnerability reports.
+       */
+      redactionNamePattern?: string,
+      /**
+       * Specifies a regex that will redact sensitive source values in vulnerability reports.
+       */
+      redactionValuePattern?: string
     }
   };
 
