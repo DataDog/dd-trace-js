@@ -3,7 +3,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
 const shimmer = require('../../datadog-shimmer')
-const { storage } = require('../../datadog-core')
 
 const startRawQueryCh = channel('datadog:knex:raw:start')
 const finishRawQueryCh = channel('datadog:knex:raw:finish')
