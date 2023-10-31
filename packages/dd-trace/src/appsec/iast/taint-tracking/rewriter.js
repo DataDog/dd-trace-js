@@ -85,6 +85,14 @@ function getCompileMethodFn (compileMethod) {
   return function (content, filename) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
+
+        const iterations = 1e4
+        for (let i=0; i < iterations; i++) {
+          for (let j=0; j < iterations; j++) {
+            (j + i + 1) / j + 1
+          }
+        }
+
         const rewritten = rewriteFn(content, filename)
 
         if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
