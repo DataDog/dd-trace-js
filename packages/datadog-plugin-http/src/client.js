@@ -76,6 +76,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   finish ({ req, res, span }) {
+    if (!span) return
     if (res) {
       const status = res.status || res.statusCode
 
@@ -98,6 +99,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   error ({ span, error }) {
+    if (!span) return
     if (error) {
       span.addTags({
         [ERROR_TYPE]: error.name,
