@@ -7,6 +7,7 @@ const { getNodeModulesPaths } = require('../path-line')
 const { getNextSecureMark } = require('../taint-tracking/secure-marks-generator')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
+const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
@@ -113,6 +114,12 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     })
   }
 
+  _isVulnerableRange (range) {
+    const rangeType = range?.iinfo?.type
+    const isVulnerableType = rangeType === HTTP_REQUEST_PARAMETER || rangeType === HTTP_REQUEST_BODY
+    return isVulnerableType && (range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK
+  }
+
   _isVulnerable (value, iastContext) {
     if (value?.filter && iastContext) {
       let isVulnerable = false
@@ -124,13 +131,13 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const rangesByKey = {}
       const allRanges = []
 
-      iterateObjectStrings(value.filter, function (val, nextLevelKeys) {
+      iterateObjectStrings(value.filter, (val, nextLevelKeys) => {
         const ranges = getRanges(iastContext, val)
         if (ranges?.length) {
           const filteredRanges = []
 
           for (const range of ranges) {
-            if ((range.secureMarks & MONGODB_NOSQL_SECURE_MARK) !== MONGODB_NOSQL_SECURE_MARK) {
+            if (this._isVulnerableRange(range)) {
               isVulnerable = true
               filteredRanges.push(range)
             }
