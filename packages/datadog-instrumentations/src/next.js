@@ -12,6 +12,7 @@ const bodyParsedChannel = channel('apm:next:body-parsed')
 const queryParsedChannel = channel('apm:next:query-parsed')
 
 const requests = new WeakSet()
+const nodeNextRequestsToNextRequests = new WeakMap()
 
 const MIDDLEWARE_HEADER = 'x-middleware-invoke'
 
@@ -156,6 +157,11 @@ function finish (ctx, result, err) {
     errorChannel.publish(ctx)
   }
 
+  const maybeNextRequest = nodeNextRequestsToNextRequests.get(ctx.req)
+  if (maybeNextRequest) {
+    ctx.nextRequest = maybeNextRequest
+  }
+
   finishChannel.publish(ctx)
 
   if (err) {
@@ -164,6 +170,24 @@ function finish (ctx, result, err) {
 
   return result
 }
+
+// also wrapped in dist/server/future/route-handlers/app-route-route-handler.js
+// in versions below 13.3.0 that support middleware,
+// however, it is not provided as a class function or exported property
+addHook({
+  name: 'next',
+  versions: ['>=13.3.0'],
+  file: 'dist/server/web/spec-extension/adapters/next-request.js'
+}, NextRequestAdapter => {
+  shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
+    return function (nodeNextRequest) {
+      const nextRequest = fromNodeNextRequest.apply(this, arguments)
+      nodeNextRequestsToNextRequests.set(nodeNextRequest.originalRequest, nextRequest)
+      return nextRequest
+    }
+  })
+  return NextRequestAdapter
+})
 
 addHook({
   name: 'next',
