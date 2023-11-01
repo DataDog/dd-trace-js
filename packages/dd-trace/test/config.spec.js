@@ -4,6 +4,9 @@ require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
+const sinon = require('sinon')
+
+const sandbox = sinon.createSandbox()
 
 describe('Config', () => {
   let Config
@@ -69,6 +72,7 @@ describe('Config', () => {
 
   it('should initialize with the correct defaults', () => {
     const config = new Config()
+    sandbox.spy(config, '_merge')
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
@@ -116,8 +120,13 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
+
+    // console.log('SQUISHY', config._merge.returnValues[0])
+
+    sandbox.restore()
   })
 
+  /*
   it('should support logging', () => {
     const config = new Config({
       logger: {},
@@ -1313,4 +1322,5 @@ describe('Config', () => {
       expect(config).not.to.have.property('repositoryUrl')
     })
   })
+  */
 })

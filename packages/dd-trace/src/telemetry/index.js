@@ -293,14 +293,14 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const names = {
-    sampleRate: 'DD_TRACE_SAMPLE_RATE',
-    logInjection: 'DD_LOG_INJECTION',
-    headerTags: 'DD_TRACE_HEADER_TAGS'
-  }
+  // const names = {
+  //   sampleRate: 'DD_TRACE_SAMPLE_RATE',
+  //   logInjection: 'DD_LOG_INJECTION',
+  //   headerTags: 'DD_TRACE_HEADER_TAGS'
+  // }
 
   const configuration = changes.map(change => ({
-    name: names[change.name],
+    name: change.name,
     value: Array.isArray(change.value) ? change.value.join(',') : change.value,
     origin: change.origin
   }))
