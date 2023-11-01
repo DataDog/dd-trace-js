@@ -37,7 +37,7 @@ function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, t
     labels['local root span id'] = rootSpanId
   }
   if (endpoint) {
-    // Already computed by _spanFinished()
+    // Already computed by either _updateContext() or _spanFinished()
     labels['trace endpoint'] = endpoint
   } else if (webTags && Object.keys(webTags).length !== 0) {
     // The span has not finished yet, or finished before we could register this context with it in
@@ -231,19 +231,25 @@ class NativeWallProfiler {
       context.rootSpanId = this._lastRootSpan.context().toSpanId()
     }
     if (this._lastWebTags) {
-      // Store a reference to the tags object; we'll use it to try to compute the endpoint name if
-      // we serialize the profile before the span ended in generateLabels.
-      context.webTags = this._lastWebTags
-    }
-    if (this._lastWebContext && !this._lastWebContext._isFinished) {
-      // Store a reference to this sample context in the webspan's context. We'll use those to
-      // compute the endpoint name if the span ended before we serialized the profile in
-      // _spanFinished()
-      const sampleContexts = this._lastWebContext[SampleContextsSymbol]
-      if (!sampleContexts) {
-        this._lastWebContext[SampleContextsSymbol] = [context]
+      // Try to eagerly compute the endpoint name here
+      const endpoint = endpointNameFromTags(this._lastWebTags)
+      if (endpoint) {
+        context.endpoint = endpoint
       } else {
-        sampleContexts.push(context)
+        // Store a reference to the tags object; we'll use it to try to compute the endpoint name if
+        // we serialize the profile before the span ended in generateLabels().
+        context.webTags = this._lastWebTags
+        // Also store a reference to the sample context in the webspan's context. We'll use those to
+        // compute the endpoint name in _spanFinished() if the span ends before we serialized the
+        // profile.
+        if (this._lastWebContext && !this._lastWebContext._isFinished) {
+          const sampleContexts = this._lastWebContext[SampleContextsSymbol]
+          if (!sampleContexts) {
+            this._lastWebContext[SampleContextsSymbol] = [context]
+          } else {
+            sampleContexts.push(context)
+          }
+        }
       }
     }
   }
