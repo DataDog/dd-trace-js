@@ -13,6 +13,7 @@ const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 const SampleContextsSymbol = Symbol('NativeWallProfiler.SampleContexts')
+const WebContextSymbol = Symbol('NativeWallProfiler.WebContext')
 
 const threadName = (function () {
   const { isMainThread, threadId } = require('node:worker_threads')
@@ -167,29 +168,47 @@ class NativeWallProfiler {
         // need to do it here instead of in _updateContext in case the span finishes between here
         // and the _updateContext call and span_processor.js replaces the context's tag container
         // with an empty object.
-        // Find the first webspan starting from the innermost span. There might be
-        // several webspans, for example with next.js, http plugin creates a first span and then
-        // next.js plugin creates a child span, and this child span has the correct endpoint
-        // information.
-        let found = false
-        for (let i = startedSpans.length - 1; i >= 0; i--) {
-          const sspan = startedSpans[i]
-          if (sspan._duration !== undefined) {
-            // span is listed in trace started, but it finished in the meantime
-            continue
+
+        // Cache lookup of web context for this span context. It's either itself or one of its
+        // parent spans' contexts.
+        const webContext = spanContext[WebContextSymbol]
+        if (webContext === undefined) {
+          // Not cached yet. Find the first webspan starting from the innermost span. There might be
+          // several webspans, for example with next.js, http plugin creates a first span and then
+          // next.js plugin creates a child span, and this child span has the correct endpoint
+          // information.
+          let found = false
+          for (let i = startedSpans.length - 1; i >= 0; i--) {
+            const sspan = startedSpans[i]
+            if (sspan._duration !== undefined) {
+              // span is listed in trace started, but it finished in the meantime
+              continue
+            }
+            const scontext = startedSpans[i].context()
+            const tags = scontext._tags
+            if (isWebServerSpan(tags)) {
+              this._lastWebContext = scontext
+              this._lastWebTags = tags
+              // Cache so next time this span activates we don't need to lookup again
+              spanContext[WebContextSymbol] = scontext
+              found = true
+              break
+            }
           }
-          const scontext = startedSpans[i].context()
-          const tags = scontext._tags
-          if (isWebServerSpan(tags)) {
-            this._lastWebContext = scontext
-            this._lastWebTags = tags
-            found = true
-            break
+          if (!found) {
+            this._lastWebContext = undefined
+            this._lastWebTags = undefined
+            // Cache negative lookup so next time this span activates we don't need to lookup again
+            spanContext[WebContextSymbol] = null
           }
-        }
-        if (!found) {
-          this._lastWebContext = undefined
+        } else if (webContext === null) {
+          // Use negative cache lookup info
           this._lastWebTags = undefined
+          this._lastWebContext = undefined
+        } else {
+          // Use cached lookup info
+          this._lastWebContext = webContext
+          this._lastWebTags = webContext._tags
         }
       }
     } else {
@@ -233,6 +252,9 @@ class NativeWallProfiler {
     if (!this._started) return
 
     const spanContext = span.context()
+    if (spanContext.hasOwnProperty(WebContextSymbol)) {
+      spanContext[WebContextSymbol] = undefined
+    }
     const sampleContexts = spanContext[SampleContextsSymbol]
     if (sampleContexts) {
       const endpoint = endpointNameFromTags(spanContext._tags)
