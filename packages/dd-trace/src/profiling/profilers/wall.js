@@ -10,7 +10,9 @@ const telemetryMetrics = require('../../telemetry/metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
+const SampleContextsSymbol = Symbol('NativeWallProfiler.SampleContexts')
 
 const threadName = (function () {
   const { isMainThread, threadId } = require('node:worker_threads')
@@ -25,10 +27,6 @@ function getActiveSpan () {
   return store && store.span
 }
 
-function getStartedSpans (context) {
-  return context._trace.started
-}
-
 function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
   const labels = { 'thread name': threadName }
   if (spanId) {
@@ -37,20 +35,26 @@ function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, t
   if (rootSpanId) {
     labels['local root span id'] = rootSpanId
   }
-  if (webTags && Object.keys(webTags).length !== 0) {
-    labels['trace endpoint'] = endpointNameFromTags(webTags)
-  } else if (endpoint) {
-    // fallback to endpoint computed when sample was taken
+  if (endpoint) {
+    // Already computed by _spanFinished()
     labels['trace endpoint'] = endpoint
+  } else if (webTags && Object.keys(webTags).length !== 0) {
+    // The span has not finished yet, or finished before we could register this context with it in
+    // _updateContext, so let's try to compute the endpoint name from tags. This is last-ditch
+    // best-effort; it's entirely possible we won't be able to compute it as the tags aren't present
+    // yet, but we are serializing the profile already, so we can't defer it any longer.
+    const currEndpoint = endpointNameFromTags(webTags)
+    if (currEndpoint) {
+      labels['trace endpoint'] = currEndpoint
+    }
+    // Release the tags object. This also marks to _spanFinished() that we don't need endpoint to be
+    // set anymore.
+    context.webTags = undefined
   }
   // Incoming timestamps are in microseconds, we emit nanos.
   labels['end_timestamp_ns'] = timestamp * 1000n
 
   return labels
-}
-
-function getSpanContextTags (span) {
-  return span.context()._tags
 }
 
 function isWebServerSpan (tags) {
@@ -78,6 +82,8 @@ class NativeWallProfiler {
 
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
+    this._spanFinished = this._spanFinished.bind(this)
+
     this._logger = options.logger
     this._started = false
   }
@@ -118,12 +124,12 @@ class NativeWallProfiler {
       this._profilerState = this._pprof.time.getState()
       this._currentContext = {}
       this._pprof.time.setContext(this._currentContext)
-      this._lastSpan = undefined
-      this._lastStartedSpans = undefined
       this._lastSampleCount = 0
+      this._clearLast()
 
       beforeCh.subscribe(this._enter)
       enterCh.subscribe(this._enter)
+      spanFinishCh.subscribe(this._spanFinished)
     }
 
     this._started = true
@@ -142,42 +148,103 @@ class NativeWallProfiler {
       this._updateContext(context)
     }
 
+    // We defer as much processing as possible until _updateContext, so here we only grab references
+    // to objects we might need in _updateContext.
     const span = getActiveSpan()
     if (span) {
-      this._lastSpan = span
-      this._lastStartedSpans = getStartedSpans(span.context())
+      const spanContext = span.context()
+      const trace = spanContext._trace
+      const startedSpans = trace.started
+      if (this._codeHotspotsEnabled && trace.record) {
+        this._lastSpan = span
+        this._lastRootSpan = startedSpans[0]
+      } else {
+        this._lastSpan = undefined
+        this._lastRootSpan = undefined
+      }
+      if (this._endpointCollectionEnabled) {
+        // We need to grab the context and the tags of the started span with web information. We
+        // need to do it here instead of in _updateContext in case the span finishes between here
+        // and the _updateContext call and span_processor.js replaces the context's tag container
+        // with an empty object.
+        // Find the first webspan starting from the innermost span. There might be
+        // several webspans, for example with next.js, http plugin creates a first span and then
+        // next.js plugin creates a child span, and this child span has the correct endpoint
+        // information.
+        let found = false
+        for (let i = startedSpans.length - 1; i >= 0; i--) {
+          const sspan = startedSpans[i]
+          if (sspan._duration !== undefined) {
+            // span is listed in trace started, but it finished in the meantime
+            continue
+          }
+          const scontext = startedSpans[i].context()
+          const tags = scontext._tags
+          if (isWebServerSpan(tags)) {
+            this._lastWebContext = scontext
+            this._lastWebTags = tags
+            found = true
+            break
+          }
+        }
+        if (!found) {
+          this._lastWebContext = undefined
+          this._lastWebTags = undefined
+        }
+      }
     } else {
-      this._lastStartedSpans = undefined
-      this._lastSpan = undefined
+      this._clearLast()
     }
   }
 
+  _clearLast () {
+    this._lastSpan = undefined
+    this._lastRootSpan = undefined
+    this._lastWebTags = undefined
+    this._lastWebContext = undefined
+  }
+
   _updateContext (context) {
-    if (!this._lastSpan) {
-      return
-    }
-    if (this._codeHotspotsEnabled) {
+    if (this._lastSpan) {
       context.spanId = this._lastSpan.context().toSpanId()
-      const rootSpan = this._lastStartedSpans[0]
-      if (rootSpan) {
-        context.rootSpanId = rootSpan.context().toSpanId()
+    }
+    if (this._lastRootSpan) {
+      context.rootSpanId = this._lastRootSpan.context().toSpanId()
+    }
+    if (this._lastWebTags) {
+      // Store a reference to the tags object; we'll use it to try to compute the endpoint name if
+      // we serialize the profile before the span ended in generateLabels.
+      context.webTags = this._lastWebTags
+    }
+    if (this._lastWebContext && !this._lastWebContext._isFinished) {
+      // Store a reference to this sample context in the webspan's context. We'll use those to
+      // compute the endpoint name if the span ended before we serialized the profile in
+      // _spanFinished()
+      const sampleContexts = this._lastWebContext[SampleContextsSymbol]
+      if (!sampleContexts) {
+        this._lastWebContext[SampleContextsSymbol] = [context]
+      } else {
+        sampleContexts.push(context)
       }
     }
-    if (this._endpointCollectionEnabled) {
-      const startedSpans = this._lastStartedSpans
-      // Find the first webspan starting from the end:
-      // There might be several webspans, for example with next.js, http plugin creates a first span
-      // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
-      for (let i = startedSpans.length - 1; i >= 0; i--) {
-        const tags = getSpanContextTags(startedSpans[i])
-        if (isWebServerSpan(tags)) {
-          context.webTags = tags
-          // endpoint may not be determined yet, but keep it as fallback
-          // if tags are not available anymore during serialization
-          context.endpoint = endpointNameFromTags(tags)
-          break
+  }
+
+  _spanFinished (span) {
+    if (!this._started) return
+
+    const spanContext = span.context()
+    const sampleContexts = spanContext[SampleContextsSymbol]
+    if (sampleContexts) {
+      const endpoint = endpointNameFromTags(spanContext._tags)
+      for (const sampleContext of sampleContexts) {
+        // if sampleContext.webTags is undefined, we already serialized the profile.
+        if (sampleContext.webTags) {
+          sampleContext.endpoint = endpoint
+          // generateLables() shouldn't compute the endpoint
+          sampleContext.webTags = undefined
         }
       }
+      spanContext[SampleContextsSymbol] = undefined
     }
   }
 
@@ -223,6 +290,7 @@ class NativeWallProfiler {
     if (this._withContexts) {
       beforeCh.unsubscribe(this._enter)
       enterCh.unsubscribe(this._enter)
+      spanFinishCh.unsubscribe(this._spanFinished)
       this._profilerState = undefined
     }
 
