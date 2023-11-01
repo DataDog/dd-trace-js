@@ -223,7 +223,7 @@ class NativeWallProfiler {
     const profile = this._stop(false)
     if (this._codeHotspotsEnabled) {
       beforeCh.unsubscribe(this._enter)
-      enterCh.subscribe(this._enter)
+      enterCh.unsubscribe(this._enter)
       this._profilerState = undefined
     }
 
