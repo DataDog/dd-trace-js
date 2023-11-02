@@ -2,6 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let id
@@ -10,6 +11,9 @@ describe('Plugin', () => {
 
   describe('mongoose', () => {
     withVersions('mongoose', ['mongoose'], (version) => {
+      const specificVersion = require(`../../../versions/mongoose@${version}`).version()
+      if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
+
       let mongoose
 
       // This needs to be called synchronously right before each test to make
