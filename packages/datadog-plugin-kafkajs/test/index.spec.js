@@ -169,7 +169,6 @@ describe('Plugin', () => {
               eachMessage: () => {}
             })
             await sendMessages(kafka, testTopic, messages)
-
             return expectedSpanPromise
           })
 
@@ -360,14 +359,14 @@ describe('Plugin', () => {
           })
 
           describe('backlogs', () => {
-            let commitOffsetSpy
+            let setOffsetSpy
 
             beforeEach(() => {
-              commitOffsetSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'commitOffset')
+              setOffsetSpy = sinon.spy(tracer._tracer._dataStreamsProcessor, 'setOffset')
             })
 
             afterEach(() => {
-              commitOffsetSpy.restore()
+              setOffsetSpy.restore()
             })
 
             if (semver.intersects(version, '>=1.10')) {
@@ -388,7 +387,7 @@ describe('Plugin', () => {
                 })
                 await new Promise(resolve => setTimeout(resolve, 50)) // Let eachMessage be called
                 await consumer.disconnect() // Flush ongoing `eachMessage` calls
-                for (const call of commitOffsetSpy.getCalls()) {
+                for (const call of setOffsetSpy.getCalls()) {
                   expect(call.args[0]).to.not.have.property('type', 'kafka_commit')
                 }
 
@@ -399,13 +398,13 @@ describe('Plugin', () => {
                 consumer.connect()
                 await sendMessages(kafka, testTopic, messages)
                 await consumer.run({ eachMessage: async () => {}, autoCommit: false })
-                commitOffsetSpy.resetHistory()
+                setOffsetSpy.resetHistory()
                 await consumer.commitOffsets([commitMeta])
                 await consumer.disconnect()
 
                 // Check our work
-                const runArg = commitOffsetSpy.lastCall.args[0]
-                expect(commitOffsetSpy).to.be.calledOnce
+                const runArg = setOffsetSpy.lastCall.args[0]
+                expect(setOffsetSpy).to.be.calledOnce
                 expect(runArg).to.have.property('offset', commitMeta.offset)
                 expect(runArg).to.have.property('partition', commitMeta.partition)
                 expect(runArg).to.have.property('topic', commitMeta.topic)
@@ -416,8 +415,8 @@ describe('Plugin', () => {
 
             it('Should add backlog on producer response', async () => {
               await sendMessages(kafka, testTopic, messages)
-              expect(commitOffsetSpy).to.be.calledOnce
-              const { topic } = commitOffsetSpy.lastCall.args[0]
+              expect(setOffsetSpy).to.be.calledOnce
+              const { topic } = setOffsetSpy.lastCall.args[0]
               expect(topic).to.equal(testTopic)
             })
           })

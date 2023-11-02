@@ -46,8 +46,8 @@ class DatadogTracer extends Tracer {
     return ctx
   }
 
-  commitOffset (offsetData) {
-    return this._dataStreamsProcessor.commitOffset(offsetData)
+  setOffset (offsetData) {
+    return this._dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {

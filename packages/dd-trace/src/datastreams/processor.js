@@ -47,19 +47,19 @@ class StatsPoint {
 
 class Backlog {
   constructor ({ offset, ...tags }) {
-    this._sortedTags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`).join(',')
     this._offset = offset
-    this._timestamp = Date.now() * 1e6
   }
 
   get offset () { return this._offset }
 
   get tags () { return this._tags }
 
-  get timestamp () { return this._timestamp }
-
-  get sortedTags () {
-    return this._sortedTags
+  encode () {
+    return {
+      Tags: this._tags,
+      Value: this._offset
+    }
   }
 }
 
@@ -67,6 +67,14 @@ class StatsBucket {
   constructor () {
     this._checkpoints = new Map()
     this._backlogs = new Map()
+  }
+
+  get checkpoints () {
+    return this._checkpoints
+  }
+
+  get backlogs () {
+    return this._backlogs
   }
 
   forCheckpoint (checkpoint) {
@@ -80,22 +88,27 @@ class StatsBucket {
     return this._checkpoints.get(key)
   }
 
-  addBacklog (backlog) {
-    /**
-     * Conditionally add a backlog to the bucket. If there is currently an offset
-     * matching the backlog's tags, overwrite the offset IFF the backlog's offset
-     * is greater than the recorded offset.
-     *
-     * @param backlog: Backlog
-     */
-    const key = backlog.sortedTags
-    const existingOffset = this._backlogs.get(key)
-    if (existingOffset !== undefined) {
-      if (backlog.offset < existingOffset) {
-        return existingOffset
+  /**
+   * Conditionally add a backlog to the bucket. If there is currently an offset
+   * matching the backlog's tags, overwrite the offset IFF the backlog's offset
+   * is greater than the recorded offset.
+   *
+   * @typedef {{[key: string]: string}} BacklogData
+   * @property {number} offset
+   *
+   * @param {BacklogData} backlogData
+   * @returns {Backlog}
+   */
+  addBacklog (backlogData) {
+    const backlog = new Backlog(backlogData)
+    const key = backlog.tags
+    const existingBacklog = this._backlogs.get(key)
+    if (existingBacklog !== undefined) {
+      if (existingBacklog.offset > backlog.offset) {
+        return existingBacklog
       }
     }
-    this._backlogs.set(key, backlog.offset)
+    this._backlogs.set(key, backlog)
     return backlog
   }
 }
@@ -180,10 +193,19 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
+  /**
+   * Given a timestamp in nanoseconds, compute and return the closest TimeBucket
+   * @param {number} timestamp
+   * @returns {StatsBucket}
+   */
+  bucketFromTimestamp (timestamp) {
+    const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
+    return this.buckets.forTime(bucketTime)
+  }
+
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
-    const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
-    this.buckets.forTime(bucketTime)
+    this.bucketFromTimestamp(checkpoint.currentTimestamp)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
@@ -252,12 +274,20 @@ class DataStreamsProcessor {
     return dataStreamsContext
   }
 
-  commitOffset (offsetObj) {
-    const backlog = new Backlog(offsetObj)
+  recordOffset ({ timestamp, ...backlogData }) {
     if (!this.enabled) return
-    return this.buckets
-      .forTime(backlog.timestamp)
-      .addBacklog(backlog)
+    return this.bucketFromTimestamp(timestamp)
+      .addBacklog(backlogData)
+  }
+
+  setOffset (offsetObj) {
+    if (!this.enabled) return
+    const nowNs = Date.now() * 1e6
+    const backlogData = {
+      ...offsetObj,
+      timestamp: nowNs
+    }
+    this.recordOffset(backlogData)
   }
 
   _serializeBuckets () {
@@ -300,6 +330,7 @@ module.exports = {
   DataStreamsProcessor: DataStreamsProcessor,
   StatsPoint: StatsPoint,
   StatsBucket: StatsBucket,
+  Backlog,
   TimeBuckets,
   getMessageSize,
   getHeadersSize,

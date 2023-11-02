@@ -23,6 +23,7 @@ const writer = {
 const DataStreamsWriter = sinon.stub().returns(writer)
 const {
   StatsPoint,
+  Backlog,
   StatsBucket,
   TimeBuckets,
   DataStreamsProcessor,
@@ -77,27 +78,102 @@ describe('StatsPoint', () => {
 describe('StatsBucket', () => {
   const buckets = new StatsBucket()
 
-  it('should start empty', () => {
-    expect(buckets.size).to.equal(0)
+  describe('Checkpoints', () => {
+    it('should start empty', () => {
+      expect(buckets.checkpoints.size).to.equal(0)
+    })
+
+    it('should add a new entry when no matching key is found', () => {
+      const bucket = buckets.forCheckpoint(mockCheckpoint)
+      const checkpoints = buckets.checkpoints
+      expect(bucket).to.be.an.instanceOf(StatsPoint)
+      expect(checkpoints.size).to.equal(1)
+      const [key, value] = Array.from(checkpoints.entries())[0]
+      expect(key.toString()).to.equal(mockCheckpoint.hash.toString())
+      expect(value).to.be.instanceOf(StatsPoint)
+    })
+
+    it('should not add a new entry if matching key is found', () => {
+      buckets.forCheckpoint(mockCheckpoint)
+      expect(buckets.checkpoints.size).to.equal(1)
+    })
+
+    it('should add a new entry when new checkpoint does not match existing agg keys', () => {
+      buckets.forCheckpoint(anotherMockCheckpoint)
+      expect(buckets.checkpoints.size).to.equal(2)
+    })
   })
 
-  it('should add a new entry when no matching key is found', () => {
-    const bucket = buckets.forCheckpoint(mockCheckpoint)
-    expect(bucket).to.be.an.instanceOf(StatsPoint)
-    expect(buckets.size).to.equal(1)
-    const [key, value] = Array.from(buckets.entries())[0]
-    expect(key.toString()).to.equal(mockCheckpoint.hash.toString())
-    expect(value).to.be.instanceOf(StatsPoint)
-  })
+  describe('Backlogs', () => {
+    let backlogBuckets
+    const mockBacklog = {
+      offset: 12,
+      type: 'kafka_consume',
+      consumer_group: 'test-consumer',
+      partition: 0,
+      topic: 'test-topic'
+    }
 
-  it('should not add a new entry if matching key is found', () => {
-    buckets.forCheckpoint(mockCheckpoint)
-    expect(buckets.size).to.equal(1)
-  })
+    beforeEach(() => {
+      backlogBuckets = new StatsBucket()
+    })
 
-  it('should add a new entry when new checkpoint does not match existing agg keys', () => {
-    buckets.forCheckpoint(anotherMockCheckpoint)
-    expect(buckets.size).to.equal(2)
+    it('should start empty', () => {
+      expect(backlogBuckets.backlogs.size).to.equal(0)
+    })
+
+    it('should add a new entry when empty', () => {
+      const bucket = backlogBuckets.addBacklog(mockBacklog)
+      const backlogs = backlogBuckets.backlogs
+      expect(bucket).to.be.an.instanceOf(Backlog)
+      expect(backlogs.size).to.equal(1)
+      const [, value] = Array.from(backlogs.entries())[0]
+      expect(value).to.be.instanceOf(Backlog)
+    })
+
+    it('should add a new entry when given different tags', () => {
+      const otherMockBacklog = {
+        offset: 1,
+        type: 'kafka_consume',
+        consumer_group: 'test-consumer',
+        partition: 1,
+        topic: 'test-topic'
+      }
+
+      backlogBuckets.addBacklog(mockBacklog)
+      backlogBuckets.addBacklog(otherMockBacklog)
+      expect(backlogBuckets.backlogs.size).to.equal(2)
+    })
+
+    it('should update the existing entry if offset is higher', () => {
+      const higherMockBacklog = {
+        offset: 16,
+        type: 'kafka_consume',
+        consumer_group: 'test-consumer',
+        partition: 0,
+        topic: 'test-topic'
+      }
+
+      backlogBuckets.addBacklog(mockBacklog)
+      const backlog = backlogBuckets.addBacklog(higherMockBacklog)
+      expect(backlog.offset).to.equal(higherMockBacklog.offset)
+      expect(backlogBuckets.backlogs.size).to.equal(1)
+    })
+
+    it('should discard the passed backlog if offset is lower', () => {
+      const lowerMockBacklog = {
+        offset: 2,
+        type: 'kafka_consume',
+        consumer_group: 'test-consumer',
+        partition: 0,
+        topic: 'test-topic'
+      }
+
+      backlogBuckets.addBacklog(mockBacklog)
+      const backlog = backlogBuckets.addBacklog(lowerMockBacklog)
+      expect(backlog.offset).to.equal(mockBacklog.offset)
+      expect(backlogBuckets.backlogs.size).to.equal(1)
+    })
   })
 })
 
@@ -151,10 +227,10 @@ describe('DataStreamsProcessor', () => {
 
     const timeBucket = processor.buckets.values().next().value
     expect(timeBucket).to.be.instanceOf(StatsBucket)
-    expect(timeBucket.size).to.equal(1)
+    expect(timeBucket.checkpoints.size).to.equal(1)
 
     const checkpointBucket = timeBucket.forCheckpoint(mockCheckpoint)
-    expect(timeBucket.size).to.equal(1)
+    expect(timeBucket.checkpoints.size).to.equal(1)
     expect(checkpointBucket).to.be.instanceOf(StatsPoint)
 
     edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
@@ -191,6 +267,7 @@ describe('DataStreamsProcessor', () => {
           PayloadSize: payloadSize.toProto()
         }]
       }],
+      Backlogs: [],
       TracerVersion: pkg.version,
       Lang: 'javascript'
     })
