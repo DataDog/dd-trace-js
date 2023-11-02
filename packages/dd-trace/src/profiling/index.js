@@ -3,6 +3,7 @@
 const { Profiler, ServerlessProfiler } = require('./profiler')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const TimelineProfiler = require('./profilers/timeline')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -15,5 +16,6 @@ module.exports = {
   FileExporter,
   WallProfiler,
   SpaceProfiler,
+  TimelineProfiler,
   ConsoleLogger
 }

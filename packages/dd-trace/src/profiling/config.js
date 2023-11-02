@@ -9,6 +9,8 @@ const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const TimelineProfiler = require('./profilers/timeline')
+const GCProfiler = require('./profilers/gc')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
@@ -223,7 +225,11 @@ function getProfiler (name, options) {
       return new WallProfiler(options)
     case 'space':
       return new SpaceProfiler(options)
-    default:
+    case 'timeline':
+      return new TimelineProfiler(options)
+    case 'gc':
+        return new GCProfiler(options)
+      default:
       options.logger.error(`Unknown profiler "${name}"`)
   }
 }
