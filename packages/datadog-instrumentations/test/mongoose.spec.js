@@ -3,6 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { channel } = require('../src/helpers/instrument')
 const semver = require('semver')
+const { NODE_MAJOR } = require('../../../version')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
@@ -14,6 +15,9 @@ describe('mongoose instrumentations', () => {
   iterationRanges.forEach(range => {
     describe(range, () => {
       withVersions('mongoose', ['mongoose'], range, (version) => {
+        const specificVersion = require(`../../../versions/mongoose@${version}`).version()
+        if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
+
         let Test, dbName, id, mongoose
 
         function connect () {
@@ -129,15 +133,17 @@ describe('mongoose instrumentations', () => {
               })
             }
 
-            it('continue working as expected with promise', (done) => {
-              Test.count({ type: 'test' }).then((res) => {
-                expect(res).to.be.equal(3)
+            if (!semver.satisfies(specificVersion, '>=8')) {
+              // Model.count method removed from mongoose 8.0.0
+              it('continue working as expected with promise', (done) => {
+                Test.count({ type: 'test' }).then((res) => {
+                  expect(res).to.be.equal(3)
 
-                done()
+                  done()
+                })
               })
-            })
-
-            testCallbacksCalled('count', [{ type: 'test' }])
+              testCallbacksCalled('count', [{ type: 'test' }])
+            }
           })
 
           if (semver.intersects(version, '>=6')) {
@@ -164,8 +170,8 @@ describe('mongoose instrumentations', () => {
               testCallbacksCalled('countDocuments', [{ type: 'test' }])
             })
           }
-
-          if (semver.intersects(version, '>=5')) {
+          if (semver.intersects(version, '>=5') && semver.satisfies(specificVersion, '<8')) {
+            // Model.count method removed from mongoose 8.0.0
             describe('deleteOne', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
@@ -243,7 +249,7 @@ describe('mongoose instrumentations', () => {
             testCallbacksCalled('findOne', [{ type: 'test' }])
           })
 
-          if (semver.intersects(version, '>=6')) {
+          if (semver.intersects(version, '>=6') && semver.satisfies(specificVersion, '<8')) {
             describe('findOneAndDelete', () => {
               if (range !== '>=7') {
                 it('continue working as expected with cb', (done) => {
