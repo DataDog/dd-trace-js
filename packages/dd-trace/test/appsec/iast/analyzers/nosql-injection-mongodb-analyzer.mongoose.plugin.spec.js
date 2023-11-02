@@ -110,7 +110,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }
           })
 
-          if (semver.satisfies(mongooseVersion, '>=6')) {
+          if (semver.satisfies(specificMongooseVersion, '>=6')) {
             testThatRequestHasNoVulnerability({
               testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with mongoose.sanitizeFilter',
               fn: async (req, res) => {
