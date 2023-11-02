@@ -47,9 +47,12 @@ class StatsPoint {
 
 class Backlog {
   constructor ({ offset, ...tags }) {
-    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`).join(',')
+    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this._hash = this._tags.join(',')
     this._offset = offset
   }
+
+  get hash () { return this._hash }
 
   get offset () { return this._offset }
 
@@ -57,8 +60,8 @@ class Backlog {
 
   encode () {
     return {
-      Tags: this._tags,
-      Value: this._offset
+      Tags: this.tags,
+      Value: this.offset
     }
   }
 }
@@ -101,14 +104,13 @@ class StatsBucket {
    */
   addBacklog (backlogData) {
     const backlog = new Backlog(backlogData)
-    const key = backlog.tags
-    const existingBacklog = this._backlogs.get(key)
+    const existingBacklog = this._backlogs.get(backlog.hash)
     if (existingBacklog !== undefined) {
       if (existingBacklog.offset > backlog.offset) {
         return existingBacklog
       }
     }
-    this._backlogs.set(key, backlog)
+    this._backlogs.set(backlog.hash, backlog)
     return backlog
   }
 }
