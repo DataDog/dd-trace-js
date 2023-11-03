@@ -20,7 +20,7 @@ function copyProperties (original, wrapped) {
 
 function wrapFn (original, delegate) {
   assertFunction(delegate)
-  assertNotClass(original) // TODO: support constructors of native classes
+  // assertNotClass(original) // TODO: support constructors of native classes
 
   const shim = function shim () {
     return delegate.apply(this, arguments)
