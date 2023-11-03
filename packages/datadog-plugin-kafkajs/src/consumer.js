@@ -1,5 +1,6 @@
 'use strict'
 
+const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
@@ -8,9 +9,10 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   start ({ topic, partition, message, groupId }) {
     if (this.config.dsmEnabled) {
-      this.tracer.decodeDataStreamsContext(message.headers['dd-pathway-ctx'])
+      const payloadSize = getMessageSize(message)
+      this.tracer.decodeDataStreamsContext(message.headers[CONTEXT_PROPAGATION_KEY])
       this.tracer
-        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'])
+        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], payloadSize)
     }
     const childOf = extract(this.tracer, message.headers)
     this.startSpan({
