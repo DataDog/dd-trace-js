@@ -8,6 +8,7 @@ const { encodePathwayContext } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
+const { PATHWAY_HASH } = require('../../../../ext/tags')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -142,7 +143,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
   }
 
-  setCheckpoint (edgeTags, ctx = null, payloadSize = 0) {
+  setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
     if (!this.enabled) return null
     const nowNs = Date.now() * 1e6
     const direction = edgeTags.find(t => t.startsWith('direction:'))
@@ -174,6 +175,8 @@ class DataStreamsProcessor {
       }
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+    // set DSM pathway hash on span to enable related traces feature on DSM tab
+    span.setTag(PATHWAY_HASH, hash)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
