@@ -1,5 +1,10 @@
-import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
-import { LookupFunction } from 'net';
+import {
+  ClientRequest,
+  IncomingMessage,
+  OutgoingMessage,
+  ServerResponse,
+} from "http";
+import { LookupFunction } from "net";
 import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 import * as otel from "@opentelemetry/api";
@@ -16,7 +21,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param {SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan (name: string, options?: SpanOptions): Span;
+  startSpan(name: string, options?: SpanOptions): Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -28,7 +33,7 @@ export declare interface Tracer extends opentracing.Tracer {
    * @param  {string} format The format of the carrier.
    * @param  {any} carrier The carrier object.
    */
-  inject (spanContext: SpanContext | Span, format: string, carrier: any): void;
+  inject(spanContext: SpanContext | Span, format: string, carrier: any): void;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given
@@ -39,31 +44,31 @@ export declare interface Tracer extends opentracing.Tracer {
    *         The extracted SpanContext, or null if no such SpanContext could
    *         be found in `carrier`
    */
-  extract (format: string, carrier: any): SpanContext | null;
+  extract(format: string, carrier: any): SpanContext | null;
 
   /**
    * Initializes the tracer. This should be called before importing other libraries.
    */
-  init (options?: TracerOptions): this;
+  init(options?: TracerOptions): this;
 
   /**
    * Sets the URL for the trace agent. This should only be called _after_
    * init() is called, only in cases where the URL needs to be set after
    * initialization.
    */
-  setUrl (url: string): this;
+  setUrl(url: string): this;
 
   /**
    * Enable and optionally configure a plugin.
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
+  use<P extends keyof Plugins>(plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
    */
-  scope (): Scope;
+  scope(): Scope;
 
   /**
    * Instruments a function by automatically creating a span activated on its
@@ -83,8 +88,15 @@ export declare interface Tracer extends opentracing.Tracer {
    * unless there is already an active span or `childOf` option. Note that this
    * option is deprecated and has been removed in version 4.0.
    */
-  trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
-  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T>(
+    name: string,
+    fn: (span?: Span, fn?: (error?: Error) => any) => T
+  ): T;
+  trace<T>(
+    name: string,
+    options: TraceOptions & SpanOptions,
+    fn: (span?: Span, done?: (error?: Error) => string) => T
+  ): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -100,23 +112,31 @@ export declare interface Tracer extends opentracing.Tracer {
    * * The function doesn't accept a callback and doesn't return a promise, in
    * which case the span will finish at the end of the function execution.
    */
-  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any>(name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any>(
+    name: string,
+    options: TraceOptions & SpanOptions,
+    fn: T
+  ): T;
+  wrap<T = (...args: any[]) => any>(
+    name: string,
+    options: (...args: any[]) => TraceOptions & SpanOptions,
+    fn: T
+  ): T;
 
   /**
    * Create and return a string that can be included in the <head> of a
    * document to enable RUM tracing to include it. The resulting string
    * should not be cached.
    */
-  getRumData (): string;
+  getRumData(): string;
 
   /**
    * Links an authenticated user to the current trace.
    * @param {User} user Properties of the authenticated user. Accepts custom fields.
    * @returns {Tracer} The Tracer instance for chaining.
    */
-  setUser (user: User): Tracer;
+  setUser(user: User): Tracer;
 
   appsec: Appsec;
 
@@ -130,18 +150,18 @@ export declare interface TraceOptions extends Analyzable {
    * The resource you are tracing. The resource name must not be longer than
    * 5000 characters.
    */
-  resource?: string,
+  resource?: string;
 
   /**
    * The service you are tracing. The service name must not be longer than
    * 100 characters.
    */
-  service?: string,
+  service?: string;
 
   /**
    * The type of request.
    */
-  type?: string
+  type?: string;
 }
 
 /**
@@ -152,7 +172,7 @@ export declare interface TraceOptions extends Analyzable {
  * have children.
  */
 export declare interface Span extends opentracing.Span {
-  context (): SpanContext;
+  context(): SpanContext;
 }
 
 /**
@@ -169,17 +189,17 @@ export declare interface SpanContext extends opentracing.SpanContext {
   /**
    * Returns the string representation of the internal trace ID.
    */
-  toTraceId (): string;
+  toTraceId(): string;
 
   /**
    * Returns the string representation of the internal span ID.
    */
-  toSpanId (): string;
+  toSpanId(): string;
 
   /**
    * Returns the string representation used for DBM integration.
    */
-  toTraceparent (): string;
+  toTraceparent(): string;
 }
 
 /**
@@ -189,17 +209,17 @@ export declare interface SamplingRule {
   /**
    * Sampling rate for this rule.
    */
-  sampleRate: number
+  sampleRate: number;
 
   /**
    * Service on which to apply this rule. The rule will apply to all services if not provided.
    */
-  service?: string | RegExp
+  service?: string | RegExp;
 
   /**
    * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
    */
-  name?: string | RegExp
+  name?: string | RegExp;
 }
 
 /**
@@ -209,22 +229,22 @@ export declare interface SpanSamplingRule {
   /**
    * Sampling rate for this rule. Will default to 1.0 (always) if not provided.
    */
-  sampleRate?: number
+  sampleRate?: number;
 
   /**
    * Maximum number of spans matching a span sampling rule to be allowed per second.
    */
-  maxPerSecond?: number
+  maxPerSecond?: number;
 
   /**
    * Service name or pattern on which to apply this rule. The rule will apply to all services if not provided.
    */
-  service?: string
+  service?: string;
 
   /**
    * Operation name or pattern on which to apply this rule. The rule will apply to all operation names if not provided.
    */
-  name?: string
+  name?: string;
 }
 
 /**
@@ -234,12 +254,12 @@ export declare interface PropagationStyle {
   /**
    * Selection of context propagation injection mechanisms.
    */
-  inject: string[],
+  inject: string[];
 
   /**
    * Selection and priority order of context propagation extraction mechanisms.
    */
-  extract: string[]
+  extract: string[];
 }
 
 /**
@@ -251,13 +271,13 @@ export declare interface TracerOptions {
    * traces with logs.
    * @default false
    */
-  logInjection?: boolean,
+  logInjection?: boolean;
 
   /**
    * Whether to enable startup logs.
    * @default true
    */
-  startupLogs?: boolean,
+  startupLogs?: boolean;
 
   /**
    * The service name to be used for this program. If not set, the service name
@@ -291,7 +311,7 @@ export declare interface TracerOptions {
   /**
    * Whether to enable profiling.
    */
-  profiling?: boolean
+  profiling?: boolean;
 
   /**
    * Options specific for the Dogstatsd agent.
@@ -300,13 +320,13 @@ export declare interface TracerOptions {
     /**
      * The hostname of the Dogstatsd agent that the metrics will submitted to.
      */
-    hostname?: string
+    hostname?: string;
 
     /**
      * The port of the Dogstatsd agent that the metrics will submitted to.
      * @default 8125
      */
-    port?: number
+    port?: number;
   };
 
   /**
@@ -330,7 +350,7 @@ export declare interface TracerOptions {
    * and controls the ingestion rate limit between the agent and the backend.
    * Defaults to deferring the decision to the agent.
    */
-  rateLimit?: number,
+  rateLimit?: number;
 
   /**
    * Sampling rules to apply to priority samplin. Each rule is a JSON,
@@ -339,13 +359,13 @@ export declare interface TracerOptions {
    * specified, will defer to global sampling rate for all spans.
    * @default []
    */
-  samplingRules?: SamplingRule[]
+  samplingRules?: SamplingRule[];
 
   /**
    * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
    * @default []
    */
-  spanSamplingRules?: SpanSamplingRule[]
+  spanSamplingRules?: SpanSamplingRule[];
 
   /**
    * Interval in milliseconds at which the tracer will submit traces to the agent.
@@ -363,19 +383,19 @@ export declare interface TracerOptions {
    * Whether to enable runtime metrics.
    * @default false
    */
-  runtimeMetrics?: boolean
+  runtimeMetrics?: boolean;
 
   /**
    * Custom function for DNS lookups when sending requests to the agent.
    * @default dns.lookup()
    */
-  lookup?: LookupFunction
+  lookup?: LookupFunction;
 
   /**
    * Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.
    * @default 0.4
    */
-  protocolVersion?: string
+  protocolVersion?: string;
 
   /**
    * Deprecated in favor of the global versions of the variables provided under this option
@@ -387,12 +407,12 @@ export declare interface TracerOptions {
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
      */
-    sampleRate?: number
+    sampleRate?: number;
 
     /**
      * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
      */
-    rateLimit?: number
+    rateLimit?: number;
   };
 
   /**
@@ -400,69 +420,71 @@ export declare interface TracerOptions {
    * @default {}
    */
   experimental?: {
-    b3?: boolean
-    traceparent?: boolean
+    b3?: boolean;
+    traceparent?: boolean;
 
     /**
      * Whether to add an auto-generated `runtime-id` tag to metrics.
      * @default false
      */
-    runtimeId?: boolean
+    runtimeId?: boolean;
 
     /**
      * Whether to write traces to log output or agentless, rather than send to an agent
      * @default false
      */
-    exporter?: 'log' | 'agent' | 'datadog'
+    exporter?: "log" | "agent" | "datadog";
 
     /**
      * Whether to enable the experimental `getRumData` method.
      * @default false
      */
-    enableGetRumData?: boolean
+    enableGetRumData?: boolean;
 
     /**
      * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
      */
-    iast?: boolean | {
-      /**
-       * Whether to enable IAST.
-       * @default false
-       */
-      enabled?: boolean,
-      /**
-       * Controls the percentage of requests that iast will analyze
-       * @default 30
-       */
-      requestSampling?: number,
-      /**
-       * Controls how many request can be analyzing code vulnerabilities at the same time
-       * @default 2
-       */
-      maxConcurrentRequests?: number,
-      /**
-       * Controls how many code vulnerabilities can be detected in the same request
-       * @default 2
-       */
-      maxContextOperations?: number,
-      /**
-       * Whether to enable vulnerability deduplication
-       */
-      deduplicationEnabled?: boolean
-      /**
-       * Whether to enable vulnerability redaction
-       * @default true
-       */
-      redactionEnabled?: boolean,
-      /**
-       * Specifies a regex that will redact sensitive source names in vulnerability reports.
-       */
-      redactionNamePattern?: string,
-      /**
-       * Specifies a regex that will redact sensitive source values in vulnerability reports.
-       */
-      redactionValuePattern?: string
-    }
+    iast?:
+      | boolean
+      | {
+          /**
+           * Whether to enable IAST.
+           * @default false
+           */
+          enabled?: boolean;
+          /**
+           * Controls the percentage of requests that iast will analyze
+           * @default 30
+           */
+          requestSampling?: number;
+          /**
+           * Controls how many request can be analyzing code vulnerabilities at the same time
+           * @default 2
+           */
+          maxConcurrentRequests?: number;
+          /**
+           * Controls how many code vulnerabilities can be detected in the same request
+           * @default 2
+           */
+          maxContextOperations?: number;
+          /**
+           * Whether to enable vulnerability deduplication
+           */
+          deduplicationEnabled?: boolean;
+          /**
+           * Whether to enable vulnerability redaction
+           * @default true
+           */
+          redactionEnabled?: boolean;
+          /**
+           * Specifies a regex that will redact sensitive source names in vulnerability reports.
+           */
+          redactionNamePattern?: string;
+          /**
+           * Specifies a regex that will redact sensitive source values in vulnerability reports.
+           */
+          redactionValuePattern?: string;
+        };
   };
 
   /**
@@ -493,79 +515,86 @@ export declare interface TracerOptions {
    * implementation for the runtime. Only change this if you know what you are
    * doing.
    */
-  scope?: 'async_hooks' | 'async_local_storage' | 'async_resource' | 'sync' | 'noop'
+  scope?:
+    | "async_hooks"
+    | "async_local_storage"
+    | "async_resource"
+    | "sync"
+    | "noop";
 
   /**
    * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
    * @default false
    */
-  reportHostname?: boolean
+  reportHostname?: boolean;
 
   /**
    * A string representing the minimum tracer log level to use when debug logging is enabled
    * @default 'debug'
    */
-  logLevel?: 'error' | 'debug'
+  logLevel?: "error" | "debug";
 
   /**
    * If false, require a parent in order to trace.
    * @default true
    * @deprecated since version 4.0
    */
-  orphanable?: boolean
+  orphanable?: boolean;
 
   /**
    * Enables DBM to APM link using tag injection.
    * @default 'disabled'
    */
-  dbmPropagationMode?: 'disabled' | 'service' | 'full'
+  dbmPropagationMode?: "disabled" | "service" | "full";
 
   /**
    * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
    */
-  appsec?: boolean | {
-    /**
-     * Whether to enable AppSec.
-     * @default false
-     */
-    enabled?: boolean,
+  appsec?:
+    | boolean
+    | {
+        /**
+         * Whether to enable AppSec.
+         * @default false
+         */
+        enabled?: boolean;
 
-    /**
-     * Specifies a path to a custom rules file.
-     */
-    rules?: string,
+        /**
+         * Specifies a path to a custom rules file.
+         */
+        rules?: string;
 
-    /**
-     * Controls the maximum amount of traces sampled by AppSec attacks, per second.
-     * @default 100
-     */
-    rateLimit?: number,
+        /**
+         * Controls the maximum amount of traces sampled by AppSec attacks, per second.
+         * @default 100
+         */
+        rateLimit?: number;
 
-    /**
-     * Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.
-     * @default 5000
-     */
-    wafTimeout?: number,
+        /**
+         * Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.
+         * @default 5000
+         */
+        wafTimeout?: number;
 
-    /**
-     * Specifies a regex that will redact sensitive data by its key in attack reports.
-     */
-    obfuscatorKeyRegex?: string,
+        /**
+         * Specifies a regex that will redact sensitive data by its key in attack reports.
+         */
+        obfuscatorKeyRegex?: string;
 
-    /**
-     * Specifies a regex that will redact sensitive data by its value in attack reports.
-     */
-    obfuscatorValueRegex?: string,
+        /**
+         * Specifies a regex that will redact sensitive data by its value in attack reports.
+         */
+        obfuscatorValueRegex?: string;
 
-    /**
-     * Specifies a path to a custom blocking template html file.
-     */
-    blockedTemplateHtml?: string,
+        /**
+         * Specifies a path to a custom blocking template html file.
+         */
+        blockedTemplateHtml?: string;
 
-    /**
-     * Specifies a path to a custom blocking template json file.
-     */
-    blockedTemplateJson?: string,
+        /**
+         * Specifies a path to a custom blocking template json file.
+         */
+        blockedTemplateJson?: string;
 
     /**
      * Controls the automated user event tracking configuration
@@ -605,24 +634,24 @@ export declare interface TracerOptions {
      * Specifies the remote configuration polling interval in seconds
      * @default 5
      */
-    pollInterval?: number,
-  }
+    pollInterval?: number;
+  };
 
   /**
    * Whether to enable client IP collection from relevant IP headers
    * @default false
    */
-  clientIpEnabled?: boolean
+  clientIpEnabled?: boolean;
 
   /**
    * Custom header name to source the http.client_ip tag from.
    */
-  clientIpHeader?: string,
+  clientIpHeader?: string;
 
   /**
    * The selection and priority order of context propagation injection and extraction mechanisms.
    */
-  propagationStyle?: string[] | PropagationStyle
+  propagationStyle?: string[] | PropagationStyle;
 }
 
 /**
@@ -633,39 +662,39 @@ export declare interface User {
    * Unique identifier of the user.
    * Mandatory.
    */
-  id: string,
+  id: string;
 
   /**
    * Email of the user.
    */
-  email?: string,
+  email?: string;
 
   /**
    * User-friendly name of the user.
    */
-  name?: string,
+  name?: string;
 
   /**
    * Session ID of the user.
    */
-  session_id?: string,
+  session_id?: string;
 
   /**
    * Role the user is making the request under.
    */
-  role?: string,
+  role?: string;
 
   /**
    * Scopes or granted authorizations the user currently possesses.
    * The value could come from the scope associated with an OAuth2
    * Access Token or an attribute value in a SAML 2 Assertion.
    */
-  scope?: string,
+  scope?: string;
 
   /**
    * Custom fields to attach to the user (RBAC, Oauth, etc…).
    */
-  [key: string]: string | undefined
+  [key: string]: string | undefined;
 }
 
 export declare interface DogStatsD {
@@ -675,7 +704,11 @@ export declare interface DogStatsD {
    * @param {number} value The amount to increment the stat by.
    * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
-  increment(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+  increment(
+    stat: string,
+    value?: number,
+    tags?: { [tag: string]: string | number }
+  ): void;
 
   /**
    * Decrements a metric by the specified value, optionally specifying tags.
@@ -683,7 +716,11 @@ export declare interface DogStatsD {
    * @param {number} value The amount to decrement the stat by.
    * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
-  decrement(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+  decrement(
+    stat: string,
+    value?: number,
+    tags?: { [tag: string]: string | number }
+  ): void;
 
   /**
    * Sets a distribution value, optionally specifying tags.
@@ -691,7 +728,11 @@ export declare interface DogStatsD {
    * @param {number} value The amount to increment the stat by.
    * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
-  distribution(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+  distribution(
+    stat: string,
+    value?: number,
+    tags?: { [tag: string]: string | number }
+  ): void;
 
   /**
    * Sets a gauge value, optionally specifying tags.
@@ -699,14 +740,18 @@ export declare interface DogStatsD {
    * @param {number} value The amount to increment the stat by.
    * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
    */
-  gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+  gauge(
+    stat: string,
+    value?: number,
+    tags?: { [tag: string]: string | number }
+  ): void;
 
   /**
    * Forces any unsent metrics to be sent
    *
    * @beta This method is experimental and could be removed in future versions.
    */
-  flush(): void
+  flush(): void;
 }
 
 export declare interface Appsec {
@@ -717,7 +762,10 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackUserLoginSuccessEvent(user: User, metadata?: { [key: string]: string }): void
+  trackUserLoginSuccessEvent(
+    user: User,
+    metadata?: { [key: string]: string }
+  ): void;
 
   /**
    * Links a failed login event to the current trace.
@@ -727,7 +775,11 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackUserLoginFailureEvent(userId: string, exists: boolean, metadata?: { [key: string]: string }): void
+  trackUserLoginFailureEvent(
+    userId: string,
+    exists: boolean,
+    metadata?: { [key: string]: string }
+  ): void;
 
   /**
    * Links a custom event to the current trace.
@@ -736,7 +788,10 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in future versions.
    */
-  trackCustomEvent(eventName: string, metadata?: { [key: string]: string }): void
+  trackCustomEvent(
+    eventName: string,
+    metadata?: { [key: string]: string }
+  ): void;
 
   /**
    * Checks if the passed user should be blocked according to AppSec rules.
@@ -746,7 +801,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  isUserBlocked(user: User): boolean
+  isUserBlocked(user: User): boolean;
 
   /**
    * Sends a "blocked" template response based on the request accept header and ends the response.
@@ -757,7 +812,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean
+  blockRequest(req?: IncomingMessage, res?: OutgoingMessage): boolean;
 
   /**
    * Links an authenticated user to the current trace.
@@ -765,7 +820,7 @@ export declare interface Appsec {
    *
    * @beta This method is in beta and could change in the future
    */
-  setUser(user: User): void
+  setUser(user: User): void;
 }
 
 /** @hidden */
@@ -791,7 +846,7 @@ export declare interface Scope {
    *
    * @returns {Span} The active span.
    */
-  active (): Span | null;
+  active(): Span | null;
 
   /**
    * Activate a span in the scope of a function.
@@ -800,7 +855,7 @@ export declare interface Scope {
    * @param {Function} fn Function that will have the span activated on its scope.
    * @returns The return value of the provided function.
    */
-  activate<T> (span: Span, fn: ((...args: any[]) => T)): T;
+  activate<T>(span: Span, fn: (...args: any[]) => T): T;
 
   /**
    * Binds a target to the provided span, or the active span if omitted.
@@ -809,64 +864,64 @@ export declare interface Scope {
    * @param {Span} [span=scope.active()] The span to activate.
    * @returns The bound target.
    */
-  bind<T extends (...args: any[]) => void> (fn: T, span?: Span | null): T;
-  bind<V, T extends (...args: any[]) => V> (fn: T, span?: Span | null): T;
-  bind<T> (fn: Promise<T>, span?: Span | null): Promise<T>;
+  bind<T extends (...args: any[]) => void>(fn: T, span?: Span | null): T;
+  bind<V, T extends (...args: any[]) => V>(fn: T, span?: Span | null): T;
+  bind<T>(fn: Promise<T>, span?: Span | null): Promise<T>;
 }
 
 /** @hidden */
 interface Plugins {
-  "amqp10": plugins.amqp10;
-  "amqplib": plugins.amqplib;
+  amqp10: plugins.amqp10;
+  amqplib: plugins.amqplib;
   "aws-sdk": plugins.aws_sdk;
-  "bunyan": plugins.bunyan;
+  bunyan: plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
-  "connect": plugins.connect;
-  "couchbase": plugins.couchbase;
-  "cucumber": plugins.cucumber;
-  "cypress": plugins.cypress;
-  "dns": plugins.dns;
-  "elasticsearch": plugins.elasticsearch;
-  "express": plugins.express;
-  "fastify": plugins.fastify;
-  "fetch": plugins.fetch;
+  connect: plugins.connect;
+  couchbase: plugins.couchbase;
+  cucumber: plugins.cucumber;
+  cypress: plugins.cypress;
+  dns: plugins.dns;
+  elasticsearch: plugins.elasticsearch;
+  express: plugins.express;
+  fastify: plugins.fastify;
+  fetch: plugins.fetch;
   "generic-pool": plugins.generic_pool;
   "google-cloud-pubsub": plugins.google_cloud_pubsub;
-  "graphql": plugins.graphql;
-  "grpc": plugins.grpc;
-  "hapi": plugins.hapi;
-  "http": plugins.http;
-  "http2": plugins.http2;
-  "ioredis": plugins.ioredis;
-  "jest": plugins.jest;
-  "kafkajs": plugins.kafkajs
-  "knex": plugins.knex;
-  "koa": plugins.koa;
-  "mariadb": plugins.mariadb;
-  "memcached": plugins.memcached;
+  graphql: plugins.graphql;
+  grpc: plugins.grpc;
+  hapi: plugins.hapi;
+  http: plugins.http;
+  http2: plugins.http2;
+  ioredis: plugins.ioredis;
+  jest: plugins.jest;
+  kafkajs: plugins.kafkajs;
+  knex: plugins.knex;
+  koa: plugins.koa;
+  mariadb: plugins.mariadb;
+  memcached: plugins.memcached;
   "microgateway-core": plugins.microgateway_core;
-  "mocha": plugins.mocha;
-  "moleculer": plugins.moleculer;
+  mocha: plugins.mocha;
+  moleculer: plugins.moleculer;
   "mongodb-core": plugins.mongodb_core;
-  "mongoose": plugins.mongoose;
-  "mysql": plugins.mysql;
-  "mysql2": plugins.mysql2;
-  "net": plugins.net;
-  "next": plugins.next;
-  "openai": plugins.openai;
-  "opensearch": plugins.opensearch;
-  "oracledb": plugins.oracledb;
-  "paperplane": plugins.paperplane;
-  "playwright": plugins.playwright;
-  "pg": plugins.pg;
-  "pino": plugins.pino;
-  "redis": plugins.redis;
-  "restify": plugins.restify;
-  "rhea": plugins.rhea;
-  "router": plugins.router;
-  "sharedb": plugins.sharedb;
-  "tedious": plugins.tedious;
-  "winston": plugins.winston;
+  mongoose: plugins.mongoose;
+  mysql: plugins.mysql;
+  mysql2: plugins.mysql2;
+  net: plugins.net;
+  next: plugins.next;
+  openai: plugins.openai;
+  opensearch: plugins.opensearch;
+  oracledb: plugins.oracledb;
+  paperplane: plugins.paperplane;
+  playwright: plugins.playwright;
+  pg: plugins.pg;
+  pino: plugins.pino;
+  redis: plugins.redis;
+  restify: plugins.restify;
+  rhea: plugins.rhea;
+  router: plugins.router;
+  sharedb: plugins.sharedb;
+  tedious: plugins.tedious;
+  winston: plugins.winston;
 }
 
 /** @hidden */
@@ -902,7 +957,11 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+    allowlist?:
+      | string
+      | RegExp
+      | ((url: string) => boolean)
+      | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -910,7 +969,11 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    whitelist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+    whitelist?:
+      | string
+      | RegExp
+      | ((url: string) => boolean)
+      | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * List of URLs that should not be instrumented. Takes precedence over
@@ -918,7 +981,11 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+    blocklist?:
+      | string
+      | RegExp
+      | ((url: string) => boolean)
+      | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -926,7 +993,11 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+    blacklist?:
+      | string
+      | RegExp
+      | ((url: string) => boolean)
+      | (string | RegExp | ((url: string) => boolean))[];
 
     /**
      * An array of headers to include in the span metadata.
@@ -971,7 +1042,11 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (
+        span?: Span,
+        req?: IncomingMessage,
+        res?: ServerResponse
+      ) => any;
     };
 
     /**
@@ -1007,13 +1082,21 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: Span, req?: ClientRequest, res?: IncomingMessage) => any;
+      request?: (
+        span?: Span,
+        req?: ClientRequest,
+        res?: IncomingMessage
+      ) => any;
     };
 
     /**
      * List of urls to which propagation headers should not be injected
      */
-    propagationBlocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+    propagationBlocklist?:
+      | string
+      | RegExp
+      | ((url: string) => boolean)
+      | (string | RegExp | ((url: string) => boolean))[];
   }
 
   /** @hidden */
@@ -1054,7 +1137,18 @@ declare namespace plugins {
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
      */
-    metadata?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+    metadata?:
+      | string[]
+      | ((variables: { [key: string]: any }) => { [key: string]: any });
+
+    /**
+     * Callback function to determine if there was an error. It should take a
+     * status code as its only parameter and return `true` for success or `false`
+     * for errors.
+     *
+     * @default code => code === 0
+     */
+    validateStatus?: (code: number) => boolean;
   }
 
   /** @hidden */
@@ -1202,14 +1296,14 @@ declare namespace plugins {
 
   /** @hidden */
   interface ExecutionArgs {
-    schema: any,
-    document: any,
-    rootValue?: any,
-    contextValue?: any,
-    variableValues?: any,
-    operationName?: string,
-    fieldResolver?: any,
-    typeResolver?: any,
+    schema: any;
+    document: any;
+    rootValue?: any;
+    contextValue?: any;
+    variableValues?: any;
+    operationName?: string;
+    fieldResolver?: any;
+    typeResolver?: any;
   }
 
   /**
@@ -1260,7 +1354,9 @@ declare namespace plugins {
      * the key/value pairs to record. For example, using
      * `variables => variables` would record all variables.
      */
-    variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+    variables?:
+      | string[]
+      | ((variables: { [key: string]: any }) => { [key: string]: any });
 
     /**
      * Whether to collapse list items into a single element. (i.e. single
@@ -1290,7 +1386,7 @@ declare namespace plugins {
       execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
       validate?: (span?: Span, document?: any, errors?: any) => void;
       parse?: (span?: Span, source?: any, document?: any) => void;
-    }
+    };
   }
 
   /**
@@ -1301,12 +1397,12 @@ declare namespace plugins {
     /**
      * Configuration for gRPC clients.
      */
-    client?: Grpc,
+    client?: Grpc;
 
     /**
      * Configuration for gRPC servers.
      */
-    server?: Grpc
+    server?: Grpc;
   }
 
   /**
@@ -1327,12 +1423,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: HttpClient | boolean,
+    client?: HttpClient | boolean;
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: HttpServer | boolean
+    server?: HttpServer | boolean;
 
     /**
      * Hooks to run before spans are finished.
@@ -1361,12 +1457,12 @@ declare namespace plugins {
     /**
      * Configuration for HTTP clients.
      */
-    client?: Http2Client | boolean,
+    client?: Http2Client | boolean;
 
     /**
      * Configuration for HTTP servers.
      */
-    server?: Http2Server | boolean
+    server?: Http2Server | boolean;
   }
 
   /**
@@ -1379,7 +1475,11 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    allowlist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -1387,7 +1487,11 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    whitelist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
@@ -1395,7 +1499,11 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    blocklist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -1403,7 +1511,11 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    blacklist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Whether to use a different service name for each Redis instance based
@@ -1535,7 +1647,11 @@ declare namespace plugins {
       /**
        * Hook to execute just before the request span finishes.
        */
-      request?: (span?: Span, req?: IncomingMessage, res?: ServerResponse) => any;
+      request?: (
+        span?: Span,
+        req?: IncomingMessage,
+        res?: ServerResponse
+      ) => any;
     };
   }
 
@@ -1577,9 +1693,9 @@ declare namespace plugins {
   interface paperplane extends HttpServer {}
 
   /**
-  * This plugin automatically instruments the
-  * [playwright](https://github.com/microsoft/playwright) module.
-  */
+   * This plugin automatically instruments the
+   * [playwright](https://github.com/microsoft/playwright) module.
+   */
   interface playwright extends Integration {}
 
   /**
@@ -1611,7 +1727,11 @@ declare namespace plugins {
      *
      * @default /^.*$/
      */
-    allowlist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    allowlist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `allowlist`.
@@ -1619,7 +1739,11 @@ declare namespace plugins {
      * deprecated
      * @hidden
      */
-    whitelist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    whitelist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
@@ -1627,7 +1751,11 @@ declare namespace plugins {
      *
      * @default []
      */
-    blocklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    blocklist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
 
     /**
      * Deprecated in favor of `blocklist`.
@@ -1635,7 +1763,11 @@ declare namespace plugins {
      * @deprecated
      * @hidden
      */
-    blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+    blacklist?:
+      | string
+      | RegExp
+      | ((command: string) => boolean)
+      | (string | RegExp | ((command: string) => boolean))[];
   }
 
   /**
@@ -1702,7 +1834,7 @@ export namespace opentelemetry {
      *
      * @returns TracerProvider A TracerProvider instance
      */
-    new(): TracerProvider;
+    new (): TracerProvider;
 
     /**
      * Returns a Tracer, creating one if one with the given name and version is
@@ -1788,9 +1920,21 @@ export namespace opentelemetry {
      *     do some more work
      *     span.end();
      */
-    startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
-    startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
-    startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, context: otel.Context, fn: F): ReturnType<F>;
+    startActiveSpan<F extends (span: Span) => unknown>(
+      name: string,
+      fn: F
+    ): ReturnType<F>;
+    startActiveSpan<F extends (span: Span) => unknown>(
+      name: string,
+      options: SpanOptions,
+      fn: F
+    ): ReturnType<F>;
+    startActiveSpan<F extends (span: Span) => unknown>(
+      name: string,
+      options: SpanOptions,
+      context: otel.Context,
+      fn: F
+    ): ReturnType<F>;
   }
 
   /**
@@ -1843,7 +1987,11 @@ export namespace opentelemetry {
      *     if type is {@type TimeInput} and 3rd param is undefined
      * @param [startTime] start time of the event.
      */
-    addEvent(name: string, attributesOrStartTime?: SpanAttributes | TimeInput, startTime?: TimeInput): this;
+    addEvent(
+      name: string,
+      attributesOrStartTime?: SpanAttributes | TimeInput,
+      startTime?: TimeInput
+    ): this;
 
     /**
      * Sets a status to the span. If used, this will override the default Span

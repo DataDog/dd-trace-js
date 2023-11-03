@@ -470,6 +470,94 @@ describe('Plugin', () => {
           }, done)
         })
       })
+
+      describe('with validateStatus configuration', () => {
+        before(() => {
+          const config = {
+            server: {
+              validateStatus: code => code < 5
+            },
+            client: false
+          }
+
+          return agent.load('grpc', config)
+            .then(() => {
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
+            })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should use supplied function for determining if response is not an error', async () => {
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              const error = new Error('foobar')
+
+              error.code = grpc.status.UNKNOWN
+
+              const childOf = tracer.scope().active()
+              const child = tracer.startSpan('child', { childOf })
+
+              // Delay trace to ensure auto-cancellation doesn't override the status code.
+              setTimeout(() => child.finish())
+
+              callback(error, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.not.have.property('error')
+              expect(traces[0][0].meta).to.not.have.property(ERROR_MESSAGE)
+              expect(traces[0][0].meta).to.not.have.property(ERROR_TYPE)
+              expect(traces[0][0].meta).to.not.have.property(ERROR_STACK)
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+            })
+        })
+
+        it('should use supplied function for determining if response is not an error', async () => {
+          const client = await buildClient({
+            getUnary: (_, callback) => {
+              const metadata = new grpc.Metadata()
+
+              metadata.set('extra', 'information')
+
+              const error = new Error('foobar')
+
+              error.code = grpc.status.NOT_FOUND
+
+              const childOf = tracer.scope().active()
+              const child = tracer.startSpan('child', { childOf })
+
+              // Delay trace to ensure auto-cancellation doesn't override the status code.
+              setTimeout(() => child.finish())
+
+              callback(error, {}, metadata)
+            }
+          })
+
+          client.getUnary({ first: 'foobar' }, () => {})
+
+          return agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, 'foobar')
+              expect(traces[0][0].meta[ERROR_STACK]).to.match(/^Error: foobar\n {4}at Object.getUnary.*/)
+              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, 'Error')
+              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 5)
+              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+            })
+        })
+      })
     })
   })
 })

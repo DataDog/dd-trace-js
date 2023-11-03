@@ -283,6 +283,7 @@ tracer.use('grpc', { metadata: ['foo', 'bar'] });
 tracer.use('grpc', { metadata: meta => meta });
 tracer.use('grpc', { client: { metadata: [] } });
 tracer.use('grpc', { server: { metadata: [] } });
+tracer.use('grpc', { validateStatus: code => code === 0})
 tracer.use('hapi');
 tracer.use('hapi', httpServerOptions);
 tracer.use('http');
