@@ -21,7 +21,15 @@ const writer = {
   flush: sinon.stub()
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
-const { StatsPoint, StatsBucket, TimeBuckets, DataStreamsProcessor } = proxyquire('../src/datastreams/processor', {
+const {
+  StatsPoint,
+  StatsBucket,
+  TimeBuckets,
+  DataStreamsProcessor,
+  getHeadersSize,
+  getMessageSize,
+  getSizeOrZero
+} = proxyquire('../src/datastreams/processor', {
   './writer': { DataStreamsWriter }
 })
 
@@ -31,7 +39,8 @@ const mockCheckpoint = {
   parentHash: DEFAULT_PARENT_HASH,
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
-  pathwayLatencyNs: DEFAULT_LATENCY
+  pathwayLatencyNs: DEFAULT_LATENCY,
+  payloadSize: 100
 }
 
 const anotherMockCheckpoint = {
@@ -40,7 +49,8 @@ const anotherMockCheckpoint = {
   parentHash: ANOTHER_PARENT_HASH,
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
-  pathwayLatencyNs: DEFAULT_LATENCY
+  pathwayLatencyNs: DEFAULT_LATENCY,
+  payloadSize: 100
 }
 
 describe('StatsPoint', () => {
@@ -49,8 +59,10 @@ describe('StatsPoint', () => {
     aggStats.addLatencies(mockCheckpoint)
     const edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     const pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    const payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     edgeLatency.accept(DEFAULT_LATENCY / 1e9)
     pathwayLatency.accept(DEFAULT_LATENCY / 1e9)
+    payloadSize.accept(100)
 
     const encoded = aggStats.encode()
     expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
@@ -58,6 +70,7 @@ describe('StatsPoint', () => {
     expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
+    expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
   })
 })
 
@@ -102,6 +115,7 @@ describe('DataStreamsProcessor', () => {
   let edgeLatency
   let pathwayLatency
   let processor
+  let payloadSize
 
   const config = {
     dsmEnabled: true,
@@ -145,8 +159,10 @@ describe('DataStreamsProcessor', () => {
 
     edgeLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
     pathwayLatency = new LogCollapsingLowestDenseDDSketch(0.00775)
+    payloadSize = new LogCollapsingLowestDenseDDSketch(0.00775)
     edgeLatency.accept(mockCheckpoint.edgeLatencyNs / 1e9)
     pathwayLatency.accept(mockCheckpoint.pathwayLatencyNs / 1e9)
+    payloadSize.accept(mockCheckpoint.payloadSize)
 
     const encoded = checkpointBucket.encode()
     expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
@@ -154,6 +170,7 @@ describe('DataStreamsProcessor', () => {
     expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
+    expect(encoded.PayloadSize).to.deep.equal(payloadSize.toProto())
   })
 
   it('should export on interval', () => {
@@ -170,11 +187,62 @@ describe('DataStreamsProcessor', () => {
           ParentHash: new Uint64(DEFAULT_PARENT_HASH),
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
-          PathwayLatency: pathwayLatency.toProto()
+          PathwayLatency: pathwayLatency.toProto(),
+          PayloadSize: payloadSize.toProto()
         }]
       }],
       TracerVersion: pkg.version,
       Lang: 'javascript'
     })
+  })
+})
+
+describe('getSizeOrZero', () => {
+  it('should return the size of a string', () => {
+    expect(getSizeOrZero('hello')).to.equal(5)
+  })
+
+  it('should handle unicode characters', () => {
+    // emoji is 4 bytes
+    expect(getSizeOrZero('hello 😀')).to.equal(10)
+  })
+
+  it('should return the size of an ArrayBuffer', () => {
+    const buffer = new ArrayBuffer(10)
+    expect(getSizeOrZero(buffer)).to.equal(10)
+  })
+
+  it('should return the size of a Buffer', () => {
+    const buffer = Buffer.from('hello', 'utf-8')
+    expect(getSizeOrZero(buffer)).to.equal(5)
+  })
+})
+
+describe('getHeadersSize', () => {
+  it('should return 0 for undefined/empty headers', () => {
+    expect(getHeadersSize(undefined)).to.equal(0)
+    expect(getHeadersSize({})).to.equal(0)
+  })
+
+  it('should return the total size of all headers', () => {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': '100'
+    }
+    expect(getHeadersSize(headers)).to.equal(45)
+  })
+})
+
+describe('getMessageSize', () => {
+  it('should return the size of a message', () => {
+    const message = {
+      key: 'key',
+      value: 'value',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': '100'
+      }
+    }
+    expect(getMessageSize(message)).to.equal(53)
   })
 })
