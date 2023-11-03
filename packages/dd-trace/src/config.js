@@ -13,6 +13,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { filterFromString } = require('./payload-tagging/filter')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -322,6 +323,17 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       false
     )
+    const DD_TRACE_PAYLOAD_TAGS = coalesce(
+      options.HTTPpayloadTagging,
+      process.env.DD_TRACE_PAYLOAD_TAGS,
+      undefined
+    )
+
+    const DD_TRACE_PAYLOAD_MAX_DEPTH = coalesce(
+      options.HTTPpayloadMaxDepth,
+      process.env.DD_TRACE_PAYLOAD_MAX_DEPTH,
+      10
+    )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
@@ -590,6 +602,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
+    this.httpPayloadTagging = filterFromString(DD_TRACE_PAYLOAD_TAGS)
+    this.httpPayloadMaxDepth = DD_TRACE_PAYLOAD_MAX_DEPTH
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
