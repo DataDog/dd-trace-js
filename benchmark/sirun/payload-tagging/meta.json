@@ -1,0 +1,23 @@
+{
+    "name": "payload-tagging",
+    "cachegrind": false,
+    "iterations": 40,
+    "instructions": true,
+    "variants": {
+      "control": {
+        "setup": "bash -c \"nohup node server.js &\"",
+        "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+        "run": "node client.js",
+        "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
+        "env": { }
+      },
+      "with-payload-tagging": {
+        "setup": "bash -c \"nohup node server.js &\"",
+        "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY node server.js >/dev/null 2>&1 &\"",
+        "run": "node client.js",
+        "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
+        "baseline": "control",
+        "env": { "DD_TRACE_PAYLOAD_TAGS": "*,-secrets,-sensconfig" }
+      }
+    }
+  }
