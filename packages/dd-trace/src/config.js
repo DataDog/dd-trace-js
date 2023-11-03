@@ -81,7 +81,7 @@ function propagationStyle (key, option, defaultValue) {
   }
 
   // Should be an array at this point
-  if (Array.isArray(option)) return ('code', option.map(v => v.toLowerCase()))
+  if (Array.isArray(option)) return ['code', option.map(v => v.toLowerCase())]
 
   // If it's not an array but not undefined there's something wrong with the input
   if (typeof option !== 'undefined') {
@@ -92,12 +92,12 @@ function propagationStyle (key, option, defaultValue) {
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
   const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE)
   if (typeof envVar !== 'undefined') {
-    return ('env_var', envVar.split(',')
+    return ['env_var', envVar.split(',')
       .filter(v => v !== '')
-      .map(v => v.trim().toLowerCase()))
+      .map(v => v.trim().toLowerCase())]
   }
 
-  return ('default', defaultValue)
+  return ['default', defaultValue]
 }
 
 class Config {
@@ -314,6 +314,7 @@ class Config {
     }
     this.propagationStyleInject = propagationStyle('inject', options.tracePropagationStyle,
       this.defaultPropagationStyle)
+    console.log('PRO', this.propagationStyleInject)
     const DD_TRACE_PROPAGATION_STYLE_INJECT = this.propagationStyleInject[1]
     this.propagationStyleExtract = propagationStyle('extract', options.tracePropagationStyle,
       this.defaultPropagationStyle)
@@ -747,8 +748,8 @@ class Config {
     this._setBoolean(defaults, 'profiling.enabled', false)
     this._setValue(defaults, 'profiling.sourceMap', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
-    this._setValue(defaults, 'spanAttributeSchema', undefined)
-    this._setValue(defaults, 'spanRemoveIntegrationFromService', undefined)
+    this._setValue(defaults, 'spanAttributeSchema', 'v0')
+    this._setValue(defaults, 'spanRemoveIntegrationFromService', false)
     this._setValue(defaults, 'peerServiceMapping', formatPeerServiceMapping({}))
     this._setValue(defaults, 'lookup', undefined)
     this._setBoolean(defaults, 'startupLogs', false)
@@ -1091,7 +1092,8 @@ class Config {
         const container = containers[i]
         const origin = origins[i]
 
-        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
+        if ((container[name] !== null && container[name] !== undefined && !isNaN(container[name])) ||
+        container === this._defaults) {
           if (this[name] === container[name] && this.hasOwnProperty(name)) break
 
           const value = this[name] = container[name]
