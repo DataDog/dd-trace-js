@@ -7,7 +7,7 @@ const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
-const dc = require('../../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
