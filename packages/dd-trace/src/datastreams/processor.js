@@ -135,12 +135,16 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
-  recordCheckpoint (checkpoint) {
+  recordCheckpoint (checkpoint, span=null) {
     if (!this.enabled) return
     const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
     this.buckets.forTime(bucketTime)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
+    // set DSM pathway hash on span to enable related traces feature on DSM tab
+    if (span) {
+      span.setTag(PATHWAY_HASH, hash.toString('hex'))
+    }
   }
 
   setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
@@ -175,8 +179,6 @@ class DataStreamsProcessor {
       }
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
-    // set DSM pathway hash on span to enable related traces feature on DSM tab
-    span.setTag(PATHWAY_HASH, hash.toString('hex'))
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
@@ -201,7 +203,7 @@ class DataStreamsProcessor {
       pathwayLatencyNs: pathwayLatencyNs,
       payloadSize: payloadSize
     }
-    this.recordCheckpoint(checkpoint)
+    this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
   }
 
