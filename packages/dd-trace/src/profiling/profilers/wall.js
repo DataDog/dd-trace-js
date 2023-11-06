@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../../datadog-core')
 
-const dc = require('../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
