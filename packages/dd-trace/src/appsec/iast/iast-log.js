@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const log = require('../../log')
 const { calculateDDBasePath } = require('../../util')
 
