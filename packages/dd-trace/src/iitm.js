@@ -3,7 +3,7 @@
 const semver = require('semver')
 const logger = require('./log')
 const { addHook } = require('import-in-the-middle')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
