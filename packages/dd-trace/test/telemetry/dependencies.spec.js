@@ -349,11 +349,18 @@ describe('dependencies', () => {
       global.setImmediate = originalSetImmediate
     })
 
-    it('should not call sendData for modules not captured in the initial load', () => {
-      const request = 'custom-module2'
-      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
-      moduleLoadStartChannel.publish({ request, filename }) // should not be called here
-      expect(sendData).to.have.been.calledTwice
+    it('should not call sendData for modules not captured in the initial load', done => {
+      setTimeout(() => {
+        // using sendData.callCount wasn't working properly
+        const timesCalledBeforeLazyLoad = sendData.getCalls().length
+
+        const request = 'custom-module2'
+        const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+        moduleLoadStartChannel.publish({ request, filename }) // should not be called here
+
+        expect(sendData.getCalls().length).to.equal(timesCalledBeforeLazyLoad)
+        done()
+      }, 5) // simulate lazy-loaded dependency, small ms delay to be safe
     })
   })
 
