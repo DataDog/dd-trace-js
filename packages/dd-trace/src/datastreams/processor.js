@@ -151,13 +151,12 @@ class DataStreamsProcessor {
   }
 
   onInterval () {
-    const { Stats, Backlogs } = this._serializeBuckets()
-    if ([ Stats, Backlogs ].every(arr => arr.length === 0)) return
+    const { Stats } = this._serializeBuckets()
+    if ([ Stats ].every(arr => arr.length === 0)) return
     const payload = {
       Env: this.env,
       Service: this.service,
       Stats,
-      Backlogs,
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript'
@@ -254,7 +253,6 @@ class DataStreamsProcessor {
   _serializeBuckets () {
     // TimeBuckets
     const serializedBuckets = []
-    const serializedBacklogs = []
 
     for (const [ timeNs, bucket ] of this.buckets.entries()) {
       const points = []
@@ -265,24 +263,24 @@ class DataStreamsProcessor {
         points.push(stats.encode())
       }
 
+      const backlogs = []
+      if (bucket._backlogs.size > 0) {
+        for (const backlog of bucket._backlogs.values()) {
+          backlogs.push(backlog.encode())
+        }
+      }
       serializedBuckets.push({
         Start: new Uint64(timeNs),
         Duration: new Uint64(this.bucketSizeNs),
-        Stats: points
+        Stats: points,
+        Backlogs: backlogs
       })
-
-      if (bucket._backlogs.size > 0) {
-        for (const backlog of Object.values(bucket._backlogs)) {
-          serializedBacklogs.push(backlog.encode())
-        }
-      }
     }
 
     this.buckets.clear()
 
     return {
       Stats: serializedBuckets,
-      Backlogs: serializedBacklogs
     }
   }
 }
