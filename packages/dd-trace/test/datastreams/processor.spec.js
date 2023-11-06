@@ -265,9 +265,9 @@ describe('DataStreamsProcessor', () => {
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),
           PayloadSize: payloadSize.toProto()
-        }]
+        }],
+        Backlogs: []
       }],
-      Backlogs: [],
       TracerVersion: pkg.version,
       Lang: 'javascript'
     })
