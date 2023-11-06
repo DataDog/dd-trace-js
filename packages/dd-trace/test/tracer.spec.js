@@ -105,7 +105,7 @@ describe('Tracer', () => {
         expect(trace.meta).to.not.have.property(BASE_SERVICE)
       })
 
-      it('should be set when tracer.trace service matched configured service', () => {
+      it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
         expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'service')
