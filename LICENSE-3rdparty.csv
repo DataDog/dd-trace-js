@@ -8,7 +8,7 @@ require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
-require,diagnostics_channel,MIT,Copyright 2021 Simon D.
+require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki

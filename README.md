@@ -202,11 +202,11 @@ To get around this, one can treat all third party modules, or at least third par
 
 For these reasons it's necessary to have custom-built bundler plugins. Such plugins are able to instruct the bundler on how to behave, injecting intermediary code and otherwise intercepting the "translated" `require()` calls. The result is that many more packages are then included in the bundled JavaScript file. Some applications can have 100% of modules bundled, however native modules still need to remain external to the bundle.
 
-### Esbuild Support
+### ESBuild Support
 
-This library provides experimental esbuild support in the form of an esbuild plugin, and currently requires at least Node.js v16.17 or v18.7. To use the plugin, make sure you have `dd-trace@3+` installed, and then require the `dd-trace/esbuild` module when building your bundle.
+This library provides experimental ESBuild support in the form of an ESBuild plugin. Require the `dd-trace/esbuild` module when building your bundle to enable the plugin.
 
-Here's an example of how one might use `dd-trace` with esbuild:
+Here's an example of how one might use `dd-trace` with ESBuild:
 
 ```javascript
 const ddPlugin = require('dd-trace/esbuild')

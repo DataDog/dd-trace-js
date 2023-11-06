@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const path = require('path')
 const semver = require('semver')
 const Hook = require('./hook')
