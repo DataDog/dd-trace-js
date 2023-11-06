@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const semver = require('semver')
 const instrumentations = require('./instrumentations')
 const { AsyncResource } = require('async_hooks')

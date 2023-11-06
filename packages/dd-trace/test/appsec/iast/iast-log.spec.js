@@ -24,7 +24,7 @@ describe('IAST log', () => {
     }
 
     iastLog = proxyquire('../../../src/appsec/iast/iast-log', {
-      '../../../../diagnostics_channel': {
+      'dc-polyfill': {
         channel: () => telemetryLog
       },
       '../../log': log
