@@ -143,7 +143,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab
     if (span) {
-      span.setTag(PATHWAY_HASH, hash.toString('hex'))
+      span.setTag(PATHWAY_HASH, checkpoint.hash.toString('hex'))
     }
   }
 
