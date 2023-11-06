@@ -236,8 +236,8 @@ class Config {
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     const DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
-      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !inServerlessEnvironment
     )
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
