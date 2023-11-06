@@ -1,7 +1,7 @@
 'use strict'
 
 const { expect } = require('chai')
-const { channel } = require('../../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const { getExecutedMetric, getInstrumentedMetric, TagKey } = require('../../../src/appsec/iast/telemetry/iast-metric')
 

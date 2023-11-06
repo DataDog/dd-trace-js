@@ -971,7 +971,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http', { server: false })
             .then(() => {
-              ch = require('../../diagnostics_channel').channel('apm:http:client:request:start')
+              ch = require('dc-polyfill').channel('apm:http:client:request:start')
               sub = () => {}
               tracer = require('../../dd-trace')
               http = require(protocol)

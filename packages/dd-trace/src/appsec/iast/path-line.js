@@ -13,7 +13,7 @@ const pathLine = {
 }
 
 const EXCLUDED_PATHS = [
-  path.join(path.sep, 'node_modules', 'diagnostics_channel')
+  path.join(path.sep, 'node_modules', 'dc-polyfill')
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
