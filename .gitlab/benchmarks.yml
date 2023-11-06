@@ -1,3 +1,4 @@
+# owner: @DataDog/dd-trace-js
 variables:
   BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
 
