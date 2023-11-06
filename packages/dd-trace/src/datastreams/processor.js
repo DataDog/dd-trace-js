@@ -176,7 +176,7 @@ class DataStreamsProcessor {
     }
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     // set DSM pathway hash on span to enable related traces feature on DSM tab
-    span.setTag(PATHWAY_HASH, parseInt(Buffer.toString(hash)))
+    span.setTag(PATHWAY_HASH, hash.toString('hex'))
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {

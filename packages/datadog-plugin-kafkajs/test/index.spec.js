@@ -10,6 +10,20 @@ const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
+const testTopic = 'test-topic'
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:' + testTopic, 'type:kafka'],
+  ENTRY_PARENT_HASH
+)
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+  expectedProducerHash
+)
+
 describe('Plugin', () => {
   describe('kafkajs', function () {
     this.timeout(10000) // TODO: remove when new internal trace has landed
@@ -17,7 +31,6 @@ describe('Plugin', () => {
       return agent.close({ ritmReset: false })
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
-      const testTopic = 'test-topic'
       let kafka
       let tracer
       let Kafka
@@ -41,7 +54,8 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
-                'component': 'kafkajs'
+                'component': 'kafkajs',
+                'pathway.hash': expectedProducerHash.toString('hex')
               },
               metrics: {
                 'kafka.batch_size': messages.length
@@ -140,7 +154,8 @@ describe('Plugin', () => {
               service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
-                'component': 'kafkajs'
+                'component': 'kafkajs',
+                'pathway.hash': expectedConsumerHash.toString('hex')
               },
               resource: testTopic,
               error: 0,
@@ -268,18 +283,6 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
-          const expectedProducerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:out', 'topic:' + testTopic, 'type:kafka'],
-            ENTRY_PARENT_HASH
-          )
-          const expectedConsumerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
-            expectedProducerHash
-          )
 
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
