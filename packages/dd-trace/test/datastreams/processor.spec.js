@@ -123,7 +123,7 @@ describe('StatsBucket', () => {
     })
 
     it('should add a new entry when empty', () => {
-      const bucket = backlogBuckets.addBacklog(mockBacklog)
+      const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
       expect(bucket).to.be.an.instanceOf(Backlog)
       expect(backlogs.size).to.equal(1)
@@ -140,8 +140,8 @@ describe('StatsBucket', () => {
         topic: 'test-topic'
       }
 
-      backlogBuckets.addBacklog(mockBacklog)
-      backlogBuckets.addBacklog(otherMockBacklog)
+      backlogBuckets.forBacklog(mockBacklog)
+      backlogBuckets.forBacklog(otherMockBacklog)
       expect(backlogBuckets.backlogs.size).to.equal(2)
     })
 
@@ -154,8 +154,8 @@ describe('StatsBucket', () => {
         topic: 'test-topic'
       }
 
-      backlogBuckets.addBacklog(mockBacklog)
-      const backlog = backlogBuckets.addBacklog(higherMockBacklog)
+      backlogBuckets.forBacklog(mockBacklog)
+      const backlog = backlogBuckets.forBacklog(higherMockBacklog)
       expect(backlog.offset).to.equal(higherMockBacklog.offset)
       expect(backlogBuckets.backlogs.size).to.equal(1)
     })
@@ -169,8 +169,8 @@ describe('StatsBucket', () => {
         topic: 'test-topic'
       }
 
-      backlogBuckets.addBacklog(mockBacklog)
-      const backlog = backlogBuckets.addBacklog(lowerMockBacklog)
+      backlogBuckets.forBacklog(mockBacklog)
+      const backlog = backlogBuckets.forBacklog(lowerMockBacklog)
       expect(backlog.offset).to.equal(mockBacklog.offset)
       expect(backlogBuckets.backlogs.size).to.equal(1)
     })
