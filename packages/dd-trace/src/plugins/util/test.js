@@ -21,6 +21,7 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL
 } = require('./tags')
+const { filterSensitiveInfoFromRepository } = require('./url')
 const id = require('../../id')
 
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
@@ -147,6 +148,8 @@ function removeInvalidMetadata (metadata) {
         log.error(`Repository URL is not a valid repository URL: ${metadata[GIT_REPOSITORY_URL]}.`)
         return filteredTags
       }
+      filteredTags[tag] = filterSensitiveInfoFromRepository(metadata[tag])
+      return filteredTags
     }
     if (tag === GIT_COMMIT_SHA) {
       if (!validateGitCommitSha(metadata[GIT_COMMIT_SHA])) {
