@@ -76,9 +76,10 @@ describe('StatsPoint', () => {
 })
 
 describe('StatsBucket', () => {
-  const buckets = new StatsBucket()
-
   describe('Checkpoints', () => {
+    let buckets
+    beforeEach(() => { buckets = new StatsBucket() })
+
     it('should start empty', () => {
       expect(buckets.checkpoints.size).to.equal(0)
     })
@@ -95,10 +96,12 @@ describe('StatsBucket', () => {
 
     it('should not add a new entry if matching key is found', () => {
       buckets.forCheckpoint(mockCheckpoint)
+      buckets.forCheckpoint(mockCheckpoint)
       expect(buckets.checkpoints.size).to.equal(1)
     })
 
     it('should add a new entry when new checkpoint does not match existing agg keys', () => {
+      buckets.forCheckpoint(mockCheckpoint)
       buckets.forCheckpoint(anotherMockCheckpoint)
       expect(buckets.checkpoints.size).to.equal(2)
     })
@@ -126,7 +129,6 @@ describe('StatsBucket', () => {
       const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
       expect(bucket).to.be.an.instanceOf(Backlog)
-      expect(backlogs.size).to.equal(1)
       const [, value] = Array.from(backlogs.entries())[0]
       expect(value).to.be.instanceOf(Backlog)
     })
@@ -204,6 +206,11 @@ describe('DataStreamsProcessor', () => {
     tags: { tag: 'some tag' }
   }
 
+  beforeEach(() => {
+    processor = new DataStreamsProcessor(config)
+    clearTimeout(processor.timer)
+  })
+
   it('should construct', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
@@ -218,6 +225,35 @@ describe('DataStreamsProcessor', () => {
     expect(processor.enabled).to.equal(config.dsmEnabled)
     expect(processor.env).to.equal(config.env)
     expect(processor.tags).to.deep.equal(config.tags)
+  })
+
+  it('should track backlogs', () => {
+    const mockBacklog = {
+      offset: 12,
+      type: 'kafka_consume',
+      consumer_group: 'test-consumer',
+      partition: 0,
+      topic: 'test-topic'
+    }
+    expect(processor.buckets.size).to.equal(0)
+    processor.recordOffset({ timestamp: DEFAULT_TIMESTAMP, ...mockBacklog })
+    expect(processor.buckets.size).to.equal(1)
+
+    const timeBucket = processor.buckets.values().next().value
+    expect(timeBucket).to.be.instanceOf(StatsBucket)
+    expect(timeBucket.backlogs.size).to.equal(1)
+
+    const backlog = timeBucket.forBacklog(mockBacklog)
+    expect(timeBucket.backlogs.size).to.equal(1)
+    expect(backlog).to.be.instanceOf(Backlog)
+
+    const encoded = backlog.encode()
+    expect(encoded).to.deep.equal({
+      Tags: [
+        'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume'
+      ],
+      Value: 12
+    })
   })
 
   it('should track latency stats', () => {
@@ -250,6 +286,7 @@ describe('DataStreamsProcessor', () => {
   })
 
   it('should export on interval', () => {
+    processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
     expect(writer.flush).to.be.calledWith({
       Env: 'test',
