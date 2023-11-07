@@ -1,3 +1,5 @@
+# owner: @DataDog/serverless-apm
+# owner: @DataDog/serverless
 name: Serverless performance test
 
 on:
