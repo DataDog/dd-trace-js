@@ -135,15 +135,15 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
-  recordCheckpoint (checkpoint, span=null) {
+  recordCheckpoint (checkpoint,span = null) {
     if (!this.enabled) return
     const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
     this.buckets.forTime(bucketTime)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
-    // set DSM pathway hash on span to enable related traces feature on DSM tab
+    // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.toString('hex'))
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
     }
   }
 

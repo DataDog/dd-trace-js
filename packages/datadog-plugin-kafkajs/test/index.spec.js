@@ -55,7 +55,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'producer',
                 'component': 'kafkajs',
-                'pathway.hash': expectedProducerHash.toString('hex')
+                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
               },
               metrics: {
                 'kafka.batch_size': messages.length
@@ -155,7 +155,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 'component': 'kafkajs',
-                'pathway.hash': expectedConsumerHash.toString('hex')
+                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
               },
               resource: testTopic,
               error: 0,
