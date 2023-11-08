@@ -150,6 +150,9 @@ class NativeWallProfiler {
       this._lastStartedSpans = startedSpans
       if (this._endpointCollectionEnabled) {
         let found = false
+        // Find the first webspan starting from the end:
+        // There might be several webspans, for example with next.js, http plugin creates a first span
+        // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
         for (let i = startedSpans.length - 1; i >= 0; i--) {
           const tags = getSpanContextTags(startedSpans[i])
           if (isWebServerSpan(tags)) {
