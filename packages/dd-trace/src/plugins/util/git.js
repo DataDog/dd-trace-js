@@ -19,6 +19,7 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   CI_WORKSPACE_PATH
 } = require('./tags')
+const { filterSensitiveInfoFromRepository } = require('./url')
 
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
 
@@ -214,7 +215,7 @@ function getGitMetadata (ciMetadata) {
 
   return {
     [GIT_REPOSITORY_URL]:
-      repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url']),
+      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
     [GIT_COMMIT_MESSAGE]:
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
     [GIT_COMMIT_AUTHOR_DATE]: authorDate,
