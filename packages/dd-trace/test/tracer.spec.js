@@ -13,6 +13,7 @@ const { DD_MAJOR } = require('../../../version')
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
+const EXPORT_SERVICE_NAME = 'service'
 const BASE_SERVICE = tags.BASE_SERVICE
 
 const describeOrphanable = DD_MAJOR < 4 ? describe : describe.skip
@@ -39,6 +40,7 @@ describe('Tracer', () => {
 
     tracer = new Tracer(config)
     tracer._exporter.setUrl = sinon.stub()
+    tracer._exporter.export = sinon.stub()
     tracer._prioritySampler.configure = sinon.stub()
   })
 
@@ -89,38 +91,25 @@ describe('Tracer', () => {
     })
 
     describe('_dd.base_service', () => {
-      let genSpan
-
       it('should be set when tracer.trace service mismatches configured service', () => {
-        tracer.trace('name', { service: 'custom' }, span => {
-          genSpan = span
-        })
-        const tags = genSpan.context()._tags
-        expect(genSpan).to.be.instanceof(Span)
-        expect(tags).to.include({
-          [BASE_SERVICE]: 'service',
-          [SERVICE_NAME]: 'custom'
-        })
+        tracer.trace('name', { service: 'custom' }, () => {})
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'custom')
+        expect(trace.meta).to.have.property(BASE_SERVICE, 'service')
       })
 
       it('should not be set when tracer.trace service is not supplied', () => {
-        tracer.trace('name', {}, span => {
-          genSpan = span
-        })
-        const tags = genSpan.context()._tags
-        expect(genSpan).to.be.instanceof(Span)
-        expect(tags).to.have.property(SERVICE_NAME, 'service')
-        expect(tags).to.not.have.property(BASE_SERVICE)
+        tracer.trace('name', {}, () => {})
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'service')
+        expect(trace.meta).to.not.have.property(BASE_SERVICE)
       })
 
-      it('should be set when tracer.trace service matched configured service', () => {
-        tracer.trace('name', { service: 'service' }, span => {
-          genSpan = span
-        })
-        const tags = genSpan.context()._tags
-        expect(genSpan).to.be.instanceof(Span)
-        expect(tags).to.have.property(SERVICE_NAME, 'service')
-        expect(tags).to.not.have.property(BASE_SERVICE)
+      it('should not be set when tracer.trace service matched configured service', () => {
+        tracer.trace('name', { service: 'service' }, () => {})
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        expect(trace).to.have.property(EXPORT_SERVICE_NAME, 'service')
+        expect(trace.meta).to.not.have.property(BASE_SERVICE)
       })
     })
 
