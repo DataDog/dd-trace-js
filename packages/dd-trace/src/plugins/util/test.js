@@ -21,7 +21,6 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL
 } = require('./tags')
-const { filterSensitiveInfoFromRepository } = require('./url')
 const id = require('../../id')
 
 const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
