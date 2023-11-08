@@ -15,9 +15,9 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
   }
 
   try {
-    const { protocol, hostname, pathname } = new URL(repositoryUrl)
+    const { protocol, host, pathname } = new URL(repositoryUrl)
 
-    return `${protocol}//${hostname}${pathname === '/' ? '' : pathname}`
+    return `${protocol}//${host}${pathname === '/' ? '' : pathname}`
   } catch (e) {
     return ''
   }
