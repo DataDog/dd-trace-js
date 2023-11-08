@@ -1,7 +1,14 @@
 'use strict'
-
+const path = require('path')
+const os = require('os')
+const fs = require('fs')
+const { pathToFileURL } = require('node:url')
 const { expect } = require('chai')
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
+const semver = require('semver')
+const iast = require('../../../../src/appsec/iast')
+const Config = require('../../../../src/config')
 
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
@@ -13,12 +20,7 @@ describe('IAST Rewriter', () => {
   })
 
   describe('Enabling rewriter', () => {
-    let rewriter, iastTelemetry
-
-    const shimmer = {
-      wrap: sinon.spy(),
-      unwrap: sinon.spy()
-    }
+    let rewriter, iastTelemetry, shimmer
 
     class Rewriter {
       rewrite (content, filename) {
@@ -33,7 +35,11 @@ describe('IAST Rewriter', () => {
 
     beforeEach(() => {
       iastTelemetry = {
-        add: sinon.spy()
+        add: sinon.stub()
+      }
+      shimmer = {
+        wrap: sinon.stub(),
+        unwrap: sinon.stub()
       }
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': { Rewriter, getPrepareStackTrace: function () {} },
@@ -43,7 +49,7 @@ describe('IAST Rewriter', () => {
     })
 
     afterEach(() => {
-      sinon.restore()
+      rewriter.disableRewriter()
     })
 
     it('Should wrap module compile method on taint tracking enable', () => {
@@ -115,6 +121,57 @@ describe('IAST Rewriter', () => {
       expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
 
       process.env.NODE_OPTIONS = origNodeOptions
+    })
+  })
+
+  describe('ESM rewriter hooks', () => {
+    const sourcePreloadChannel = dc.channel('iitm:source:preload')
+
+    beforeEach(() => {
+      iast.enable(new Config({
+        experimental: {
+          iast: {
+            enabled: true
+          }
+        }
+      }))
+    })
+
+    it('should rewrite in channel object data', () => {
+      const source = Buffer.from(`export function test(b,c) { return  b + c }`)
+      const preloadData = {
+        source,
+        url: pathToFileURL(path.join(os.tmpdir(), 'test1.mjs')).toString()
+      }
+
+      sourcePreloadChannel.publish(preloadData)
+
+      expect(preloadData.source.toString()).to.contain('_ddiast.plusOperator(')
+    })
+
+    if (semver.satisfies(process.versions.node, '>=20.6.0')) {
+      it('should publish events when module is imported', (done) => {
+        const esmOneJsFilePath = path.join(os.tmpdir(), 'esm-one.mjs')
+        const esmTwoJsFilePath = path.join(os.tmpdir(), 'esm-two.mjs')
+        fs.copyFileSync(path.join(__dirname, 'resources', 'esm-one.mjs'), esmOneJsFilePath)
+        fs.copyFileSync(path.join(__dirname, 'resources', 'esm-two.mjs'), esmTwoJsFilePath)
+
+        const channelCallback = sinon.stub()
+        sourcePreloadChannel.subscribe(channelCallback)
+
+        import(esmOneJsFilePath).then(() => {
+          expect(channelCallback).to.have.been.calledTwice
+          expect(channelCallback.firstCall.args[0].url).to.contain('esm-one.mjs')
+          expect(channelCallback.secondCall.args[0].url).to.contain('esm-two.mjs')
+
+          sourcePreloadChannel.unsubscribe(channelCallback)
+          done()
+        }).catch(done)
+      })
+    }
+
+    afterEach(() => {
+      iast.disable()
     })
   })
 })

@@ -19,10 +19,18 @@ const iastTelemetry = require('./telemetry')
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
+const sourcePreloadChannel = dc.channel('iitm:source:preload')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
+const { MessageChannel } = require('node:worker_threads')
+const { register } = require('node:module')
+const { pathToFileURL } = require('node:url')
+const iastLog = require('./iast-log')
+
+let registered = false
 
 function enable (config, _tracer) {
   iastTelemetry.configure(config, config.iast && config.iast.telemetryVerbosity)
+  enableEsmRewriter()
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -30,6 +38,35 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
+}
+
+function enableEsmRewriter () {
+  if (!registered && register && process.argv.length > 1) { // TODO check if it is a valid fix
+    try {
+      // register-hooks.js
+      const { port1, port2 } = new MessageChannel()
+
+      port1.on('message', (originalData) => {
+        if (sourcePreloadChannel.hasSubscribers) {
+          const data = { ...originalData }
+          sourcePreloadChannel.publish(data)
+          port1.postMessage(data)
+        } else {
+          port1.postMessage(originalData)
+        }
+      })
+      port1.unref()
+
+      register('./hooks.mjs', {
+        parentURL: pathToFileURL(__filename),
+        data: { port: port2 },
+        transferList: [port2]
+      })
+    } catch (e) {
+      iastLog.errorAndPublish(e)
+    }
+    registered = true
+  }
 }
 
 function disable () {

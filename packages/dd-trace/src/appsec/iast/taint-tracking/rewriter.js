@@ -10,6 +10,8 @@ const { getRewriteFunction } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
+const sourcePreloadChannel = dc.channel('iitm:source:preload')
+
 let rewriter
 let getPrepareStackTrace
 
@@ -81,25 +83,42 @@ function getPrepareStackTraceAccessor () {
 }
 
 function getCompileMethodFn (compileMethod) {
-  const rewriteFn = getRewriteFunction(rewriter)
   return function (content, filename) {
     try {
-      if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
-        const rewritten = rewriteFn(content, filename)
+      const rewritten = rewriteContent(content, filename)
 
-        if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
-          hardcodedSecretCh.publish(rewritten.literalsResult)
-        }
-
-        if (rewritten?.content) {
-          return compileMethod.apply(this, [rewritten.content, filename])
-        }
+      if (rewritten?.content) {
+        return compileMethod.apply(this, [rewritten.content, filename])
       }
     } catch (e) {
       iastLog.error(`Error rewriting ${filename}`)
         .errorAndPublish(e)
     }
     return compileMethod.apply(this, [content, filename])
+  }
+}
+
+function rewriteContent (content, filename) {
+  const rewriteFn = getRewriteFunction(rewriter)
+
+  if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
+    if (typeof content !== 'string') {
+      content = content.toString()
+    }
+    const rewritten = rewriteFn(content, filename)
+
+    if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+      hardcodedSecretCh.publish(rewritten.literalsResult)
+    }
+    return rewritten
+  }
+  return undefined
+}
+
+function rewriteESMModule (data) {
+  const rewritten = rewriteContent(Buffer.from(data.source), data.url)
+  if (rewritten) {
+    data.source = Buffer.from(rewritten.content)
   }
 }
 
@@ -112,6 +131,7 @@ function enableRewriter (telemetryVerbosity) {
         Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
       }
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
+      sourcePreloadChannel.subscribe(rewriteESMModule)
     }
   } catch (e) {
     iastLog.error('Error enabling TaintTracking Rewriter')
@@ -121,6 +141,7 @@ function enableRewriter (telemetryVerbosity) {
 
 function disableRewriter () {
   shimmer.unwrap(Module.prototype, '_compile')
+  sourcePreloadChannel.unsubscribe(rewriteESMModule)
   Error.prepareStackTrace = originalPrepareStackTrace
 }
 
