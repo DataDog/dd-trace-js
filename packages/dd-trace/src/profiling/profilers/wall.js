@@ -120,7 +120,7 @@ class NativeWallProfiler {
       this._pprof.time.setContext(this._currentContext)
       this._lastSpan = undefined
       this._lastStartedSpans = undefined
-      this._webTags = undefined
+      this._lastWebTags = undefined
       this._lastSampleCount = 0
 
       beforeCh.subscribe(this._enter)
@@ -156,19 +156,19 @@ class NativeWallProfiler {
         for (let i = startedSpans.length - 1; i >= 0; i--) {
           const tags = getSpanContextTags(startedSpans[i])
           if (isWebServerSpan(tags)) {
-            this._webTags = tags
+            this._lastWebTags = tags
             found = true
             break
           }
         }
         if (!found) {
-          this._webTags = undefined
+          this._lastWebTags = undefined
         }
       }
     } else {
       this._lastStartedSpans = undefined
       this._lastSpan = undefined
-      this._webTags = undefined
+      this._lastWebTags = undefined
     }
   }
 
@@ -183,11 +183,11 @@ class NativeWallProfiler {
         context.rootSpanId = rootSpan.context().toSpanId()
       }
     }
-    if (this._webTags) {
-      context.webTags = this._webTags
+    if (this._lastWebTags) {
+      context.webTags = this._lastWebTags
       // endpoint may not be determined yet, but keep it as fallback
       // if tags are not available anymore during serialization
-      context.endpoint = endpointNameFromTags(this._webTags)
+      context.endpoint = endpointNameFromTags(this._lastWebTags)
     }
   }
 
@@ -236,7 +236,7 @@ class NativeWallProfiler {
       this._profilerState = undefined
       this._lastSpan = undefined
       this._lastStartedSpans = undefined
-      this._webTags = undefined
+      this._lastWebTags = undefined
     }
 
     this._started = false
