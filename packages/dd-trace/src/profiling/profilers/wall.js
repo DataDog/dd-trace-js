@@ -234,6 +234,9 @@ class NativeWallProfiler {
       beforeCh.unsubscribe(this._enter)
       enterCh.unsubscribe(this._enter)
       this._profilerState = undefined
+      this._lastSpan = undefined
+      this._lastStartedSpans = undefined
+      this._webTags = undefined
     }
 
     this._started = false
