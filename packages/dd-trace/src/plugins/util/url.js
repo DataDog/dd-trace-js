@@ -2,7 +2,7 @@ const { URL } = require('url')
 
 function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (!repositoryUrl) {
-    return repositoryUrl
+    return ''
   }
   if (repositoryUrl.startsWith('git@')) {
     return repositoryUrl
