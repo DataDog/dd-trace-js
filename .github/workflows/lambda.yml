@@ -1,4 +1,3 @@
-# owner: @DataDog/serverless-apm
 name: Lambda
 
 on:
