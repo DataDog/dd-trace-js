@@ -31,7 +31,6 @@
 /packages/dd-trace/src/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
 
-
 # CI
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
