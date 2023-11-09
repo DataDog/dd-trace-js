@@ -1,7 +1,6 @@
 'use strict'
 const path = require('path')
 const os = require('os')
-const fs = require('fs')
 const { pathToFileURL } = require('node:url')
 const { expect } = require('chai')
 const dc = require('dc-polyfill')
@@ -125,7 +124,7 @@ describe('IAST Rewriter', () => {
   })
 
   describe('ESM rewriter hooks', () => {
-    const sourcePreloadChannel = dc.channel('iitm:source:preload')
+    const sourcePreloadChannel = dc.channel('datadog:esm:source:preload')
 
     beforeEach(() => {
       iast.enable(new Config({
@@ -147,6 +146,18 @@ describe('IAST Rewriter', () => {
       sourcePreloadChannel.publish(preloadData)
 
       expect(preloadData.source.toString()).to.contain('_ddiast.plusOperator(')
+    })
+
+    it('should not rewrite in node_modules file', () => {
+      const source = Buffer.from(`export function test(b,c) { return  b + c }`)
+      const preloadData = {
+        source,
+        url: pathToFileURL(path.join(os.tmpdir(), 'node_modules', 'test1.mjs')).toString()
+      }
+
+      sourcePreloadChannel.publish(preloadData)
+
+      expect(preloadData.source).to.be.equal(source)
     })
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {

@@ -10,7 +10,7 @@ const { getRewriteFunction } = require('./rewriter-telemetry')
 const dc = require('dc-polyfill')
 
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
-const sourcePreloadChannel = dc.channel('iitm:source:preload')
+const sourcePreloadChannel = dc.channel('datadog:esm:source:preload')
 
 let rewriter
 let getPrepareStackTrace

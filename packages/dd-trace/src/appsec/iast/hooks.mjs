@@ -1,6 +1,8 @@
 let i = 0
 const loadMap = new Map()
+const MAX_REWRITE_TIME_MS = 100
 let communicationPort
+
 export async function initialize({ port }) {
   communicationPort = port
   communicationPort.on('message', (msg) => {
@@ -25,7 +27,7 @@ export async function load(url, context, nextLoad) {
           loadMap.delete(id)
           resolve(nextLoadResult)
         }
-      }, 100)
+      }, MAX_REWRITE_TIME_MS)
       timeout.unref && timeout.unref()
 
       loadMap.set(id, ({ source }) => {
