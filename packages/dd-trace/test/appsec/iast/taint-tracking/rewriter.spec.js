@@ -151,15 +151,10 @@ describe('IAST Rewriter', () => {
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       it('should publish events when module is imported', (done) => {
-        const esmOneJsFilePath = path.join(os.tmpdir(), 'esm-one.mjs')
-        const esmTwoJsFilePath = path.join(os.tmpdir(), 'esm-two.mjs')
-        fs.copyFileSync(path.join(__dirname, 'resources', 'esm-one.mjs'), esmOneJsFilePath)
-        fs.copyFileSync(path.join(__dirname, 'resources', 'esm-two.mjs'), esmTwoJsFilePath)
-
         const channelCallback = sinon.stub()
         sourcePreloadChannel.subscribe(channelCallback)
 
-        import(esmOneJsFilePath).then(() => {
+        import('./resources/esm-one.mjs').then(() => {
           expect(channelCallback).to.have.been.calledTwice
           expect(channelCallback.firstCall.args[0].url).to.contain('esm-one.mjs')
           expect(channelCallback.secondCall.args[0].url).to.contain('esm-two.mjs')
