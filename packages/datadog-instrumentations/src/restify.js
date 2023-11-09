@@ -50,7 +50,12 @@ function wrapFn (fn) {
     enterChannel.publish({ req, route })
 
     try {
-      return fn.apply(this, arguments)
+      const result = fn.apply(this, arguments)
+      if (result && typeof result === 'object' && typeof result.then === 'function') {
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+      }
+      return result
     } catch (error) {
       errorChannel.publish({ req, error })
       nextChannel.publish({ req })
