@@ -1,5 +1,4 @@
 let i = 0
-const loadedContexts = new WeakSet()
 const loadMap = new Map()
 let communicationPort
 export async function initialize({ port }) {
@@ -16,7 +15,7 @@ export async function initialize({ port }) {
 
 export async function load(url, context, nextLoad) {
   const nextLoadResult = await nextLoad(url, context)
-  if (nextLoadResult.source && !loadedContexts.has(loadedContexts)) {
+  if (nextLoadResult.source) {
     const id = i++
     return new Promise((resolve) => {
       let resolved = false

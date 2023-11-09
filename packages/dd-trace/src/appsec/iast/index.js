@@ -1,9 +1,14 @@
+'use strict'
+
+const { isMainThread, MessageChannel } = require('node:worker_threads')
+const { pathToFileURL } = require('node:url')
+const dc = require('dc-polyfill')
+
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
-const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
 const {
   enableTaintTracking,
@@ -14,17 +19,15 @@ const {
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
+const iastLog = require('./iast-log')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
+const { register } = require('node:module')
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const sourcePreloadChannel = dc.channel('iitm:source:preload')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
-const { MessageChannel } = require('node:worker_threads')
-const { register } = require('node:module')
-const { pathToFileURL } = require('node:url')
-const iastLog = require('./iast-log')
 
 let registered = false
 
@@ -41,9 +44,10 @@ function enable (config, _tracer) {
 }
 
 function enableEsmRewriter () {
-  if (!registered && register && process.argv.length > 1) { // TODO check if it is a valid fix
+  if (register && !registered && isMainThread) {
+    // When we are not in the main app thread it could be an ESM loaders thread,
+    // we don't want to register the rewriter twice
     try {
-      // register-hooks.js
       const { port1, port2 } = new MessageChannel()
 
       port1.on('message', (originalData) => {
