@@ -4,16 +4,16 @@ const {
   channel,
   addHook
 } = require('./helpers/instrument')
-const tracingChannel = require('dc')
+// const tracingChannel = require('dc-polyfill').tracingChannel
+// const ch = tracingChannel('apm:aerospike:command')
 const shimmer = require('../../datadog-shimmer')
-const ch = channel('apm:aerospike:command:start')
 
-const startCh = channel('apm:aerospike:command:start')
-const endCh = channel('apm:aerospike:command:end')
-const errorCh = channel('apm:aerospike:command:error')
+const startCh = channel('apm:aerospike:query:start')
+const endCh = channel('apm:aerospike:query:end') // you need return value of function your instrumenting
+const errorCh = channel('apm:aerospike:query:error')
 
-const asyncStartChannel = channel('apm:aerospike:command:asyncStart')
-const asyncEndChannel = channel('apm:aerospike:command:asyncEnd')
+const asyncStartChannel = channel('apm:aerospike:query:asyncStart') // write before async call back gets called, thus in our case finishing the span
+const asyncEndChannel = channel('apm:aerospike:query:asyncEnd') // you need async return value of function your instrumenting
 
 function wrapCreateCommand (createCommand) {
   if (typeof createCommand !== 'function') return createCommand
@@ -24,13 +24,14 @@ function wrapCreateCommand (createCommand) {
     if (!CommandClass) return CommandClass
 
     shimmer.wrap(CommandClass.prototype, 'process', wrapProcess)
+
     return CommandClass
   }
 }
 
 function wrapProcess (process) {
-  return function (cb) {
-    if (typeof cb !== 'function') return process.apply(this, arguments)
+  return function (...args) {
+    if (typeof args[0] !== 'function') return process.apply(this, args)
 
     const ctx = {
       commandName: this.constructor.name,
@@ -38,49 +39,40 @@ function wrapProcess (process) {
       clientConfig: this.client.config
     }
 
-    // return startCh.runStores(ctx, () => {
-    //   arguments[0] = function () {
-    //     asyncStartChannel.runStores(ctx, () => {
-    //       try {
-    //         return cb.apply(this, arguments)
-    //       } catch (e) {
-    //         ctx.error = e
-    //         errorCh.publish(ctx)
-    //       } finally {
-    //         asyncEndChannel.publish(ctx)
-    //       }
-    //     })
-    //   }
-    //   try {
-    //     return process.apply(this, arguments)
-    //   } catch (e) {
-    //     ctx.error = e
-    //     errorCh.publish(ctx)
-    //   } finally {
-    //     endCh.publish(ctx)
-    //   }
-    // })
-
-    return traceSync(fn, context = {}, thisArg, ...args) {
-      const { start, end, error } = this;
-  
-      return start.runStores(context, () => {
-        try {
-          const result = ReflectApply(fn, thisArg, args);
-          context.result = result;
-          return result;
-        } catch (err) {
-          context.error = err;
-          error.publish(context);
-          throw err;
-        } finally {
-          end.publish(context);
+    // return ch.traceCallback(process, -1, ctx, this, ...args)
+    return startCh.runStores(ctx, () => {
+      arguments[0] = function () {
+        if (arguments[0] !== null) {
+          ctx.error = arguments['0']
+          errorCh.publish(ctx)
         }
-      });
-    }
+        asyncStartChannel.runStores(ctx, () => {
+          try {
+            // console.log(55, args)
+            const res = args[0].apply(this, arguments)
+            // console.log(55, res, arguments)
+            return res
+          } catch (e) {
+            ctx.error = e
+            errorCh.publish(ctx)
+          } finally {
+            asyncEndChannel.publish(ctx)
+          }
+        })
+      }
+      try {
+        const res = process.apply(this, arguments)
+        return res
+      } catch (e) {
+        ctx.error = e
+        errorCh.publish(ctx)
+      } finally {
+        endCh.publish(ctx)
+      }
+    })
   }
 }
 
-addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5'] }, commandFactory => {
+addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=3'] }, commandFactory => {
   return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
 })
