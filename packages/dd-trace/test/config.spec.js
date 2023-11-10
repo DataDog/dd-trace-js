@@ -904,7 +904,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
     const config = new Config()
@@ -912,7 +912,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
     // FUNCTION_NAME and GCP_PROJECT env vars indicate a gcp function with a deprecated runtime
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'
@@ -922,7 +922,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
     // K_SERVICE and FUNCTION_TARGET env vars indicate a gcp function with a newer runtime
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
@@ -932,7 +932,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
     // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
@@ -965,15 +965,15 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED', () => {
-    const origTraceTelemetryValue = process.env.DD_TRACE_TELEMETRY_ENABLED
-    process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED', () => {
+    const origTraceTelemetryValue = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
 
-    process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = origTraceTelemetryValue
   })
 
   it('should not set DD_TELEMETRY_METRICS_ENABLED', () => {

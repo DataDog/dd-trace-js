@@ -1,7 +1,7 @@
 'use strict'
 
 const tracerVersion = require('../../../../package.json').version
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
