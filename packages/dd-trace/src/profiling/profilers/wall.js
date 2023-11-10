@@ -18,6 +18,8 @@ const threadName = (function () {
   return `${name} Event Loop`
 })()
 
+const CachedWebTags = Symbol('NativeWallProfiler.CachedWebTags')
+
 let kSampleCount
 
 function getActiveSpan () {
@@ -149,20 +151,27 @@ class NativeWallProfiler {
       const startedSpans = getStartedSpans(span.context())
       this._lastStartedSpans = startedSpans
       if (this._endpointCollectionEnabled) {
-        let found = false
-        // Find the first webspan starting from the end:
-        // There might be several webspans, for example with next.js, http plugin creates a first span
-        // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
-        for (let i = startedSpans.length - 1; i >= 0; i--) {
-          const tags = getSpanContextTags(startedSpans[i])
-          if (isWebServerSpan(tags)) {
-            this._lastWebTags = tags
-            found = true
-            break
+        const cachedWebTags = span[CachedWebTags]
+        if (cachedWebTags === undefined) {
+          let found = false
+          // Find the first webspan starting from the end:
+          // There might be several webspans, for example with next.js, http plugin creates a first span
+          // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
+          for (let i = startedSpans.length - 1; i >= 0; i--) {
+            const tags = getSpanContextTags(startedSpans[i])
+            if (isWebServerSpan(tags)) {
+              this._lastWebTags = tags
+              span[CachedWebTags] = tags
+              found = true
+              break
+            }
           }
-        }
-        if (!found) {
-          this._lastWebTags = undefined
+          if (!found) {
+            this._lastWebTags = undefined
+            span[CachedWebTags] = null // cache negative lookup result
+          }
+        } else {
+          this._lastWebTags = cachedWebTags
         }
       }
     } else {
