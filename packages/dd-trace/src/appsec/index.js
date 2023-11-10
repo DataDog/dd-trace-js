@@ -1,5 +1,6 @@
 'use strict'
 
+const { isMainThread } = require('worker_threads')
 const log = require('../log')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
@@ -29,7 +30,7 @@ let isEnabled = false
 let config
 
 function enable (_config) {
-  if (isEnabled) return
+  if (isEnabled || !isMainThread) return
 
   try {
     appsecTelemetry.enable(_config.telemetry)
