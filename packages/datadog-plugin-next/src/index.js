@@ -73,6 +73,10 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const req = this._requests.get(span)
 
+
+    // if the request has been cancelled or otherwise removed, don't process the span
+    if (!req) return
+
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
     if (current && ['/404', '/500', '/_error', '/_not-found'].includes(page)) {
