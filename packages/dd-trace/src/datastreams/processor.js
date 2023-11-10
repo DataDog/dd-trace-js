@@ -135,7 +135,7 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
-  recordCheckpoint (checkpoint,span = null) {
+  recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
     const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
     this.buckets.forTime(bucketTime)
