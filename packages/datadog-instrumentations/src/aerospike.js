@@ -78,6 +78,8 @@ function wrapProcess (process) {
 //   return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
 // })
 
-addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5'] }, commandFactory => {
-  return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-})
+if (DD_MAJOR >= 20) {
+  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5'] }, commandFactory => {
+    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+  })
+}
