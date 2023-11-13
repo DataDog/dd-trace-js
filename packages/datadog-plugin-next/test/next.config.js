@@ -11,6 +11,13 @@ const config = {
   experimental: {}
 }
 
+// Ensure webpack 5 is used by default for older versions
+if (satisfies(VERSION, '<11')) {
+  config.future = {
+    webpack5: true
+  }
+}
+
 // In older versions of Next.js (11.0.1 and before), the webpack config doesn't support 'node' prefixes by default
 // So, any "node" prefixes are replaced for these older versions by this webpack plugin
 // Additionally, webpack was having problems with our use of 'worker_threads', so we don't resolve it
