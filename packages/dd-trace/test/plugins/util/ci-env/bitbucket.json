@@ -418,5 +418,138 @@
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://bitbucket.org/DataDog/dogweb.git"
     }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user@bitbucket.org/DataDog/dogweb.git",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://bitbucket.org/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user:password@bitbucket.org:1234/DataDog/dogweb.git",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://bitbucket.org:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user:password@1.1.1.1/DataDog/dogweb.git",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user:password@1.1.1.1:1234/DataDog/dogweb.git",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "https://user:password@1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "ssh://user@host.xz:port/path/to/repo.git/",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BITBUCKET_BUILD_NUMBER": "bitbucket-build-num",
+      "BITBUCKET_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BITBUCKET_GIT_HTTP_ORIGIN": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "BITBUCKET_PIPELINE_UUID": "{bitbucket-uuid}",
+      "BITBUCKET_REPO_FULL_NAME": "bitbucket-repo"
+    },
+    {
+      "ci.job.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.pipeline.id": "bitbucket-uuid",
+      "ci.pipeline.name": "bitbucket-repo",
+      "ci.pipeline.number": "bitbucket-build-num",
+      "ci.pipeline.url": "https://bitbucket.org/bitbucket-repo/addon/pipelines/home#!/results/bitbucket-build-num",
+      "ci.provider.name": "bitbucket",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
   ]
 ]
