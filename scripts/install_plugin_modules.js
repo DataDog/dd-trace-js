@@ -203,7 +203,14 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines --check-files', { cwd: folder() })
+  const folderPath = folder()
+  console.log(22, folderPath)
+  // if (folderPath.includes('aerospike')) {
+  //   exec('npm install --ignore-engines', { cwd: folderPath })
+  // } else {
+  //   exec('yarn --ignore-engines', { cwd: folderPath })
+  // }
+  exec('npm install --ignore-engines', { cwd: folderPath })
 }
 
 function addFolder (name, version) {

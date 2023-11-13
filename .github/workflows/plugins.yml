@@ -35,7 +35,7 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y g++ libssl-dev zlib1g-dev
-          yarn add @mapbox/node-pre-gyp
+          npm --build-from-source install node-pre-gyp
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
