@@ -278,7 +278,6 @@ jobs:
     env:
       PLUGINS: dns
     steps:
-      - uses: sudo apt install g++ libssl libssl-dev zlib1g-dev
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
