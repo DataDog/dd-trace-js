@@ -6,7 +6,7 @@ const {
 } = require('./helpers/instrument')
 // const tracingChannel = require('dc-polyfill').tracingChannel
 // const ch = tracingChannel('apm:aerospike:command')
-const version = require('../../../version.js')
+const { DD_MAJOR, DD_MINOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:aerospike:query:start')
