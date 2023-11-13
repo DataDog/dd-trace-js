@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../../datadog-core')
 
-const dc = require('../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../../../ext/tags')
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
@@ -10,7 +10,16 @@ const telemetryMetrics = require('../../telemetry/metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
+
+const threadName = (function () {
+  const { isMainThread, threadId } = require('node:worker_threads')
+  const name = isMainThread ? 'Main' : `Worker #${threadId}`
+  return `${name} Event Loop`
+})()
+
+const CachedWebTags = Symbol('NativeWallProfiler.CachedWebTags')
 
 let kSampleCount
 
@@ -24,7 +33,7 @@ function getStartedSpans (context) {
 }
 
 function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
-  const labels = {}
+  const labels = { 'thread name': threadName }
   if (spanId) {
     labels['span id'] = spanId
   }
@@ -58,29 +67,6 @@ function endpointNameFromTags (tags) {
   ].filter(v => v).join(' ')
 }
 
-function updateContext (context, span, startedSpans, endpointCollectionEnabled) {
-  context.spanId = span.context().toSpanId()
-  const rootSpan = startedSpans[0]
-  if (rootSpan) {
-    context.rootSpanId = rootSpan.context().toSpanId()
-    if (endpointCollectionEnabled) {
-      // Find the first webspan starting from the end:
-      // There might be several webspans, for example with next.js, http plugin creates a first span
-      // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
-      for (let i = startedSpans.length - 1; i >= 0; i--) {
-        const tags = getSpanContextTags(startedSpans[i])
-        if (isWebServerSpan(tags)) {
-          context.webTags = tags
-          // endpoint may not be determined yet, but keep it as fallback
-          // if tags are not available anymore during serialization
-          context.endpoint = endpointNameFromTags(tags)
-          break
-        }
-      }
-    }
-  }
-}
-
 class NativeWallProfiler {
   constructor (options = {}) {
     this.type = 'wall'
@@ -88,12 +74,14 @@ class NativeWallProfiler {
     this._flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
     this._codeHotspotsEnabled = !!options.codeHotspotsEnabled
     this._endpointCollectionEnabled = !!options.endpointCollectionEnabled
+    this._withContexts = this._codeHotspotsEnabled || this._endpointCollectionEnabled
     this._v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
     this._mapper = undefined
     this._pprof = undefined
 
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
+    this._spanFinished = this._spanFinished.bind(this)
     this._logger = options.logger
     this._started = false
   }
@@ -108,12 +96,6 @@ class NativeWallProfiler {
 
   start ({ mapper } = {}) {
     if (this._started) return
-
-    if (this._codeHotspotsEnabled && !this._emittedFFMessage && this._logger) {
-      this._logger.debug(
-        `Wall profiler: Enable trace_show_breakdown_profiling_for_node feature flag to see code hotspots.`)
-      this._emittedFFMessage = true
-    }
 
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
@@ -131,21 +113,23 @@ class NativeWallProfiler {
       intervalMicros: this._samplingIntervalMicros,
       durationMillis: this._flushIntervalMillis,
       sourceMapper: this._mapper,
-      withContexts: this._codeHotspotsEnabled,
+      withContexts: this._withContexts,
       lineNumbers: false,
       workaroundV8Bug: this._v8ProfilerBugWorkaroundEnabled
     })
 
-    if (this._codeHotspotsEnabled) {
+    if (this._withContexts) {
       this._profilerState = this._pprof.time.getState()
       this._currentContext = {}
       this._pprof.time.setContext(this._currentContext)
       this._lastSpan = undefined
       this._lastStartedSpans = undefined
+      this._lastWebTags = undefined
       this._lastSampleCount = 0
 
       beforeCh.subscribe(this._enter)
       enterCh.subscribe(this._enter)
+      spanFinishCh.subscribe(this._spanFinished)
     }
 
     this._started = true
@@ -161,18 +145,67 @@ class NativeWallProfiler {
       this._currentContext = {}
       this._pprof.time.setContext(this._currentContext)
 
-      if (this._lastSpan) {
-        updateContext(context, this._lastSpan, this._lastStartedSpans, this._endpointCollectionEnabled)
-      }
+      this._updateContext(context)
     }
 
     const span = getActiveSpan()
     if (span) {
       this._lastSpan = span
-      this._lastStartedSpans = getStartedSpans(span.context())
+      const startedSpans = getStartedSpans(span.context())
+      this._lastStartedSpans = startedSpans
+      if (this._endpointCollectionEnabled) {
+        const cachedWebTags = span[CachedWebTags]
+        if (cachedWebTags === undefined) {
+          let found = false
+          // Find the first webspan starting from the end:
+          // There might be several webspans, for example with next.js, http plugin creates a first span
+          // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
+          for (let i = startedSpans.length - 1; i >= 0; i--) {
+            const tags = getSpanContextTags(startedSpans[i])
+            if (isWebServerSpan(tags)) {
+              this._lastWebTags = tags
+              span[CachedWebTags] = tags
+              found = true
+              break
+            }
+          }
+          if (!found) {
+            this._lastWebTags = undefined
+            span[CachedWebTags] = null // cache negative lookup result
+          }
+        } else {
+          this._lastWebTags = cachedWebTags
+        }
+      }
     } else {
       this._lastStartedSpans = undefined
       this._lastSpan = undefined
+      this._lastWebTags = undefined
+    }
+  }
+
+  _updateContext (context) {
+    if (!this._lastSpan) {
+      return
+    }
+    if (this._codeHotspotsEnabled) {
+      context.spanId = this._lastSpan.context().toSpanId()
+      const rootSpan = this._lastStartedSpans[0]
+      if (rootSpan) {
+        context.rootSpanId = rootSpan.context().toSpanId()
+      }
+    }
+    if (this._lastWebTags) {
+      context.webTags = this._lastWebTags
+      // endpoint may not be determined yet, but keep it as fallback
+      // if tags are not available anymore during serialization
+      context.endpoint = endpointNameFromTags(this._lastWebTags)
+    }
+  }
+
+  _spanFinished (span) {
+    if (span[CachedWebTags]) {
+      span[CachedWebTags] = undefined
     }
   }
 
@@ -188,12 +221,12 @@ class NativeWallProfiler {
 
   _stop (restart) {
     if (!this._started) return
-    if (this._codeHotspotsEnabled) {
+    if (this._withContexts) {
       // update last sample context if needed
       this._enter()
       this._lastSampleCount = 0
     }
-    const profile = this._pprof.time.stop(restart, this._codeHotspotsEnabled ? generateLabels : undefined)
+    const profile = this._pprof.time.stop(restart, this._withContexts ? generateLabels : undefined)
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
@@ -215,10 +248,14 @@ class NativeWallProfiler {
     if (!this._started) return
 
     const profile = this._stop(false)
-    if (this._codeHotspotsEnabled) {
+    if (this._withContexts) {
       beforeCh.unsubscribe(this._enter)
-      enterCh.subscribe(this._enter)
+      enterCh.unsubscribe(this._enter)
+      spanFinishCh.unsubscribe(this._spanFinished)
       this._profilerState = undefined
+      this._lastSpan = undefined
+      this._lastStartedSpans = undefined
+      this._lastWebTags = undefined
     }
 
     this._started = false

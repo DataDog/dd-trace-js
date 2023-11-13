@@ -23,12 +23,14 @@ const {
   TEST_ITR_TESTS_SKIPPED,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
-  TEST_CODE_COVERAGE_LINES_PCT
+  TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_ITR_FORCED_RUN,
+  TEST_ITR_UNSKIPPABLE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-const isOldNode = semver.satisfies(process.version, '<=12')
-const versions = ['7.0.0', isOldNode ? '8' : 'latest']
+const isOldNode = semver.satisfies(process.version, '<=16')
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
@@ -546,6 +548,134 @@ versions.forEach(version => {
                   stdio: 'inherit'
                 }
               )
+            })
+            it('does not skip suites if suite is marked as unskippable', (done) => {
+              receiver.setSettings({
+                code_coverage: true,
+                tests_skipping: true
+              })
+
+              receiver.setSuitesToSkip([
+                {
+                  type: 'suite',
+                  attributes: {
+                    suite: `${featuresPath}farewell.feature`
+                  }
+                },
+                {
+                  type: 'suite',
+                  attributes: {
+                    suite: `${featuresPath}greetings.feature`
+                  }
+                }
+              ])
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const suites = events.filter(event => event.type === 'test_suite_end')
+
+                  assert.equal(suites.length, 2)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  const testModule = events.find(event => event.type === 'test_session_end').content
+
+                  assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+                  assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+
+                  const skippedSuite = suites.find(
+                    event => event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
+                  ).content
+                  const forcedToRunSuite = suites.find(
+                    event => event.content.resource === 'test_suite.ci-visibility/features/greetings.feature'
+                  ).content
+
+                  assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+                  assert.notProperty(skippedSuite.meta, TEST_ITR_UNSKIPPABLE)
+                  assert.notProperty(skippedSuite.meta, TEST_ITR_FORCED_RUN)
+
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_STATUS, 'fail')
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.propertyVal(forcedToRunSuite.meta, TEST_ITR_FORCED_RUN, 'true')
+                }, 25000)
+
+              childProcess = exec(
+                runTestsWithCoverageCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'inherit'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+            it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+              receiver.setSettings({
+                code_coverage: true,
+                tests_skipping: true
+              })
+
+              receiver.setSuitesToSkip([
+                {
+                  type: 'suite',
+                  attributes: {
+                    suite: `${featuresPath}farewell.feature`
+                  }
+                }
+              ])
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const suites = events.filter(event => event.type === 'test_suite_end')
+
+                  assert.equal(suites.length, 2)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  const testModule = events.find(event => event.type === 'test_session_end').content
+
+                  assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+                  assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
+
+                  const skippedSuite = suites.find(
+                    event => event.content.resource === 'test_suite.ci-visibility/features/farewell.feature'
+                  )
+                  const failedSuite = suites.find(
+                    event => event.content.resource === 'test_suite.ci-visibility/features/greetings.feature'
+                  )
+
+                  assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
+                  assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+                  assert.notProperty(skippedSuite.content.meta, TEST_ITR_FORCED_RUN)
+
+                  assert.propertyVal(failedSuite.content.meta, TEST_STATUS, 'fail')
+                  assert.propertyVal(failedSuite.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+                  assert.notProperty(failedSuite.content.meta, TEST_ITR_FORCED_RUN)
+                }, 25000)
+
+              childProcess = exec(
+                runTestsWithCoverageCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'inherit'
+                }
+              )
+
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
             })
             it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
               receiver.setSuitesToSkip([{

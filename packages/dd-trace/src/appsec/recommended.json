@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.8.0"
+    "rules_version": "1.9.0"
   },
   "rules": [
     {
@@ -3004,6 +3004,7 @@
             ],
             "regex": "<script[^>]*>[\\s\\S]*?",
             "options": {
+              "case_sensitive": false,
               "min_length": 8
             }
           },
@@ -4207,7 +4208,6 @@
       "name": "Remote Command Execution: Java process spawn (CVE-2017-9805)",
       "tags": {
         "type": "java_code_injection",
-        "crs_id": "944110",
         "category": "attack_attempt",
         "cwe": "94",
         "capec": "1000/152/242"
@@ -4235,48 +4235,16 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "(?:runtime|processbuilder)",
+            "regex": "(?:unmarshaller|base64data|java\\.).*(?:runtime|processbuilder)",
             "options": {
-              "case_sensitive": true,
-              "min_length": 7
-            }
-          },
-          "operator": "match_regex"
-        },
-        {
-          "parameters": {
-            "inputs": [
-              {
-                "address": "server.request.query"
-              },
-              {
-                "address": "server.request.body"
-              },
-              {
-                "address": "server.request.path_params"
-              },
-              {
-                "address": "server.request.headers.no_cookies"
-              },
-              {
-                "address": "grpc.server.request.message"
-              },
-              {
-                "address": "graphql.server.all_resolvers"
-              }
-            ],
-            "regex": "(?:unmarshaller|base64data|java\\.)",
-            "options": {
-              "case_sensitive": true,
-              "min_length": 5
+              "case_sensitive": false,
+              "min_length": 13
             }
           },
           "operator": "match_regex"
         }
       ],
-      "transformers": [
-        "lowercase"
-      ]
+      "transformers": []
     },
     {
       "id": "crs-944-130",
@@ -4479,6 +4447,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
               }
             ],
             "regex": "[#%$]{(?:[^}]+[^\\w\\s}\\-_][^}]+|\\d+-\\d+)}",
@@ -4752,7 +4723,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "\\bqualysperiscope\\.com\\b"
+            "regex": "\\bqualysperiscope\\.com\\b|\\.oscomm\\."
           },
           "operator": "match_regex"
         }
@@ -4833,7 +4804,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "\\b(?:webhook\\.site|\\.canarytokens\\.com|vii\\.one|act1on3\\.ru|gdsburp\\.com)\\b"
+            "regex": "\\b(?:webhook\\.site|\\.canarytokens\\.com|vii\\.one|act1on3\\.ru|gdsburp\\.com|arcticwolf\\.net|oob\\.li|htbiw\\.com|h4\\.vc|mochan\\.cloud|imshopping\\.com|bootstrapnodejs\\.com|mooo-ng\\.com|securitytrails\\.com|canyouhackit\\.io|7bae\\.xyz)\\b"
           },
           "operator": "match_regex"
         }
@@ -4955,7 +4926,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "\\b(?:interact\\.sh|oast\\.(?:pro|live|site|online|fun|me))\\b"
+            "regex": "\\b(?:interact\\.sh|oast\\.(?:pro|live|site|online|fun|me)|indusfacefinder\\.in|where\\.land|syhunt\\.net|tssrt\\.de|boardofcyber\\.io|assetnote-callback\\.com|praetorianlabs\\.dev|netspi\\.sh)\\b"
           },
           "operator": "match_regex"
         }
@@ -4996,7 +4967,187 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "\\b(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)r87(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)(?:me|com)\\b",
+            "regex": "\\b(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)?r87(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)(?:me|com)\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 7
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-009",
+      "name": "WhiteHat Security OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "WhiteHatSecurity",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "regex": "\\bwhsec(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)us\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 8
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-010",
+      "name": "Nessus OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Nessus",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "regex": "\\b\\.nessus\\.org\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 8
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-011",
+      "name": "Watchtowr OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "Watchtowr",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "regex": "\\bwatchtowr\\.com\\b",
+            "options": {
+              "case_sensitive": false,
+              "min_length": 8
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
+      "id": "dog-913-012",
+      "name": "AppCheck NG OOB domain",
+      "tags": {
+        "type": "commercial_scanner",
+        "category": "attack_attempt",
+        "tool_name": "AppCheckNG",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "regex": "\\bptst\\.io\\b",
             "options": {
               "case_sensitive": false,
               "min_length": 7
@@ -5049,6 +5200,50 @@
       "transformers": []
     },
     {
+      "id": "dog-932-100",
+      "name": "Shell spawn executing network command",
+      "tags": {
+        "type": "command_injection",
+        "category": "attack_attempt",
+        "cwe": "77",
+        "capec": "1000/152/248/88",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "regex": "(?:(?:['\"\\x60({|;&]|(?:^|['\"\\x60({|;&])(?:cmd(?:\\.exe)?\\s+(?:/\\w(?::\\w+)?\\s+)*))(?:ping|curl|wget|telnet)|\\bnslookup)[\\s,]",
+            "options": {
+              "case_sensitive": true,
+              "min_length": 5
+            }
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "dog-934-001",
       "name": "XXE - XML file loads external entity",
       "tags": {
@@ -5056,7 +5251,7 @@
         "category": "attack_attempt",
         "cwe": "91",
         "capec": "1000/152/248/250",
-        "confidence": "0"
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5091,7 +5286,7 @@
         "category": "attack_attempt",
         "cwe": "83",
         "capec": "1000/152/242/63/591/243",
-        "confidence": "0"
+        "confidence": "1"
       },
       "conditions": [
         {
@@ -5125,7 +5320,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "<(?:iframe|esi:include)(?:(?:\\s|/)*\\w+=[\"'\\w]+)*(?:\\s|/)*src(?:doc)?=[\"']?(?:data:|javascript:|http:|//)[^\\s'\"]+['\"]?",
+            "regex": "<(?:iframe|esi:include)(?:(?:\\s|/)*\\w+=[\"'\\w]+)*(?:\\s|/)*src(?:doc)?=[\"']?(?:data:|javascript:|http:|dns:|//)[^\\s'\"]+['\"]?",
             "options": {
               "min_length": 14
             }
@@ -5171,7 +5366,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "https?:\\/\\/(?:.*\\.)?(?:bxss\\.in|xss\\.ht|js\\.rip)",
+            "regex": "https?:\\/\\/(?:.*\\.)?(?:bxss\\.(?:in|me)|xss\\.ht|js\\.rip)",
             "options": {
               "case_sensitive": false
             }
@@ -6110,7 +6305,7 @@
                 "address": "graphql.server.all_resolvers"
               }
             ],
-            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii.one|act1on3.ru)"
+            "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru)"
           },
           "operator": "match_regex"
         }
@@ -7611,6 +7806,35 @@
       "transformers": []
     },
     {
+      "id": "ua0-600-63x",
+      "name": "FeroxBuster",
+      "tags": {
+        "type": "attack_tool",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "tool_name": "feroxbuster",
+        "confidence": "1"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies",
+                "key_path": [
+                  "user-agent"
+                ]
+              }
+            ],
+            "regex": "^feroxbuster/"
+          },
+          "operator": "match_regex"
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "ua0-600-6xx",
       "name": "Stealthy scanner",
       "tags": {
@@ -7631,7 +7855,7 @@
                 ]
               }
             ],
-            "regex": "mozilla/4\\.0 \\(compatible(; msie (?:6\\.0; win32|4\\.0; Windows NT))?\\)",
+            "regex": "mozilla/4\\.0 \\(compatible(; msie (?:6\\.0; (?:win32|Windows NT 5\\.0)|4\\.0; Windows NT))?\\)",
             "options": {
               "case_sensitive": false
             }

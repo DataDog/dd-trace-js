@@ -117,6 +117,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', null)
+    expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
   })
 
@@ -217,6 +219,8 @@ describe('Config', () => {
     process.env.DD_IAST_MAX_CONTEXT_OPERATIONS = '4'
     process.env.DD_IAST_DEDUPLICATION_ENABLED = false
     process.env.DD_IAST_REDACTION_ENABLED = false
+    process.env.DD_IAST_REDACTION_NAME_PATTERN = 'REDACTION_NAME_PATTERN'
+    process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'REDACTION_VALUE_PATTERN'
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
@@ -298,6 +302,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 4)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
   })
 
@@ -418,6 +424,8 @@ describe('Config', () => {
           maxContextOperations: 5,
           deduplicationEnabled: false,
           redactionEnabled: false,
+          redactionNamePattern: 'REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'REDACTION_VALUE_PATTERN',
           telemetryVerbosity: 'DEBUG'
         }
       },
@@ -474,6 +482,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 5)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', false)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
@@ -655,6 +665,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
+    process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
+    process.env.DD_IAST_REDACTION_VALUE_PATTERN = 'value_pattern_to_be_overriden_by_options'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
 
@@ -698,7 +710,9 @@ describe('Config', () => {
         exporter: 'agent',
         enableGetRumData: false,
         iast: {
-          enabled: true
+          enabled: true,
+          redactionNamePattern: 'REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'REDACTION_VALUE_PATTERN'
         }
       },
       appsec: {
@@ -768,6 +782,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.maxContextOperations', 2)
     expect(config).to.have.nested.property('iast.deduplicationEnabled', true)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
+    expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
+    expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
   })
 
   it('should give priority to non-experimental options', () => {
@@ -899,7 +915,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if AWS_LAMBDA_FUNCTION_NAME is present', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
 
     const config = new Config()
@@ -907,7 +923,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
     // FUNCTION_NAME and GCP_PROJECT env vars indicate a gcp function with a deprecated runtime
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'
@@ -917,7 +933,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
     // K_SERVICE and FUNCTION_TARGET env vars indicate a gcp function with a newer runtime
     process.env.K_SERVICE = 'function_name'
     process.env.FUNCTION_TARGET = 'function_target'
@@ -927,7 +943,7 @@ describe('Config', () => {
     expect(config.telemetry.enabled).to.be.false
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
     // AzureWebJobsScriptRoot and FUNCTIONS_EXTENSION_VERSION env vars indicate an azure function
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
@@ -946,7 +962,7 @@ describe('Config', () => {
     expect(config.telemetry.heartbeatInterval).to.eq(60000)
     expect(config.telemetry.logCollection).to.be.false
     expect(config.telemetry.debug).to.be.false
-    expect(config.telemetry.metrics).to.be.false
+    expect(config.telemetry.metrics).to.be.true
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -960,40 +976,40 @@ describe('Config', () => {
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
   })
 
-  it('should not set DD_TRACE_TELEMETRY_ENABLED', () => {
-    const origTraceTelemetryValue = process.env.DD_TRACE_TELEMETRY_ENABLED
-    process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+  it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED', () => {
+    const origTraceTelemetryValue = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
     const config = new Config()
 
     expect(config.telemetry.enabled).to.be.false
 
-    process.env.DD_TRACE_TELEMETRY_ENABLED = origTraceTelemetryValue
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = origTraceTelemetryValue
   })
 
-  it('should set DD_TELEMETRY_METRICS_ENABLED', () => {
+  it('should not set DD_TELEMETRY_METRICS_ENABLED', () => {
     const origTelemetryMetricsEnabledValue = process.env.DD_TELEMETRY_METRICS_ENABLED
-    process.env.DD_TELEMETRY_METRICS_ENABLED = 'true'
+    process.env.DD_TELEMETRY_METRICS_ENABLED = 'false'
 
     const config = new Config()
 
-    expect(config.telemetry.metrics).to.be.true
+    expect(config.telemetry.metrics).to.be.false
 
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
 
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = false', () => {
-    const origLogCollectionValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
+  it('should not set DD_TELEMETRY_LOG_COLLECTION_ENABLED', () => {
+    const origLogsValue = process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = 'false'
 
     const config = new Config()
 
     expect(config.telemetry.logCollection).to.be.false
 
-    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogCollectionValue
+    process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
   })
 
-  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED = true if DD_IAST_ENABLED', () => {
+  it('should set DD_TELEMETRY_LOG_COLLECTION_ENABLED if DD_IAST_ENABLED', () => {
     const origIastEnabledValue = process.env.DD_IAST_ENABLED
     process.env.DD_IAST_ENABLED = 'true'
 
@@ -1276,6 +1292,11 @@ describe('Config', () => {
       const config = new Config({})
       expect(config).to.have.property('commitSHA', DUMMY_COMMIT_SHA)
       expect(config).to.have.property('repositoryUrl', DUMMY_REPOSITORY_URL)
+    })
+    it('reads DD_GIT_* env vars and filters out user data', () => {
+      process.env.DD_GIT_REPOSITORY_URL = 'https://user:password@github.com/DataDog/dd-trace-js.git'
+      const config = new Config({})
+      expect(config).to.have.property('repositoryUrl', 'https://github.com/DataDog/dd-trace-js.git')
     })
     it('reads DD_TAGS env var', () => {
       process.env.DD_TAGS = `git.commit.sha:${DUMMY_COMMIT_SHA},git.repository_url:${DUMMY_REPOSITORY_URL}`

@@ -707,6 +707,223 @@
   [
     {
       "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "https://user@github.com/DataDog/dogweb.git",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "https://user:password@github.com:1234/DataDog/dogweb.git",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "https://user:password@1.1.1.1/DataDog/dogweb.git",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "https://user:password@1.1.1.1:1234/DataDog/dogweb.git",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "https://user:password@1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "ssh://user@host.xz:port/path/to/repo.git/",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
+      "BUILDKITE_BRANCH": "",
+      "BUILDKITE_BUILD_AUTHOR": "buildkite-git-commit-author-name",
+      "BUILDKITE_BUILD_AUTHOR_EMAIL": "buildkite-git-commit-author-email@datadoghq.com",
+      "BUILDKITE_BUILD_ID": "buildkite-pipeline-id",
+      "BUILDKITE_BUILD_NUMBER": "buildkite-pipeline-number",
+      "BUILDKITE_BUILD_URL": "https://buildkite-build-url.com",
+      "BUILDKITE_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "BUILDKITE_JOB_ID": "buildkite-job-id",
+      "BUILDKITE_MESSAGE": "buildkite-git-commit-message",
+      "BUILDKITE_PIPELINE_SLUG": "buildkite-pipeline-name",
+      "BUILDKITE_REPO": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "BUILDKITE_TAG": ""
+    },
+    {
+      "_dd.ci.env_vars": "{\"BUILDKITE_BUILD_ID\":\"buildkite-pipeline-id\",\"BUILDKITE_JOB_ID\":\"buildkite-job-id\"}",
+      "ci.job.url": "https://buildkite-build-url.com#buildkite-job-id",
+      "ci.pipeline.id": "buildkite-pipeline-id",
+      "ci.pipeline.name": "buildkite-pipeline-name",
+      "ci.pipeline.number": "buildkite-pipeline-number",
+      "ci.pipeline.url": "https://buildkite-build-url.com",
+      "ci.provider.name": "buildkite",
+      "git.commit.author.email": "buildkite-git-commit-author-email@datadoghq.com",
+      "git.commit.author.name": "buildkite-git-commit-author-name",
+      "git.commit.message": "buildkite-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BUILDKITE": "true",
       "BUILDKITE_AGENT_ID": "1a222222-e999-3636-8ddd-802222222222",
       "BUILDKITE_AGENT_META_DATA_MYOTHERTAG": "my-other-value",
       "BUILDKITE_AGENT_META_DATA_MYTAG": "my-value",

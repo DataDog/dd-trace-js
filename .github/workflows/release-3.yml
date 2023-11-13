@@ -15,6 +15,7 @@ jobs:
     environment: npm
     permissions:
       id-token: write
+      contents: write
     env:
       NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:

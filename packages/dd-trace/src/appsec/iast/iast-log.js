@@ -1,8 +1,10 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const log = require('../../log')
-const telemetryLogs = require('./telemetry/log')
 const { calculateDDBasePath } = require('../../util')
+
+const telemetryLog = dc.channel('datadog:telemetry:log')
 
 const ddBasePath = calculateDDBasePath(__dirname)
 const EOL = '\n'
@@ -80,9 +82,8 @@ const iastLog = {
   },
 
   publish (data, level) {
-    if (telemetryLogs.isLevelEnabled(level)) {
-      const telemetryLog = getTelemetryLog(data, level)
-      telemetryLogs.publish(telemetryLog)
+    if (telemetryLog.hasSubscribers) {
+      telemetryLog.publish(getTelemetryLog(data, level))
     }
     return this
   },
@@ -92,6 +93,10 @@ const iastLog = {
     return this.publish(data, 'DEBUG')
   },
 
+  /**
+   * forward 'INFO' log level to 'DEBUG' telemetry log level
+   * see also {@link ../../telemetry/logs#isLevelEnabled } method
+   */
   infoAndPublish (data) {
     this.info(data)
     return this.publish(data, 'DEBUG')
