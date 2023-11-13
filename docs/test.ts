@@ -110,6 +110,10 @@ tracer.init({
     blockedTemplateJson: './blocked.json',
     eventTracking: {
       mode: 'safe'
+    },
+    apiSecurity: {
+      enabled: true,
+      requestSampling: 1.0
     }
   }
 });
