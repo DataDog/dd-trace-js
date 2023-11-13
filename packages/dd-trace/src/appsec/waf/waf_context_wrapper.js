@@ -26,7 +26,9 @@ class WAFContextWrapper {
 
     // TODO: possible optimizaion: only send params that haven't already been sent with same value to this wafContext
     for (const key of Object.keys(params)) {
-      if (this.requiredAddresses.has(key) && !this.addressesToSkip.has(key)) {
+      // TODO: requiredAddresses is no longer used due to processor addresses are not included in the list. Check on
+      // future versions when the actual addresses are included in the 'loaded' section inside diagnostics.
+      if (!this.addressesToSkip.has(key)) {
         inputs[key] = params[key]
         if (preventDuplicateAddresses.has(key)) {
           newAddressesToSkip.add(key)

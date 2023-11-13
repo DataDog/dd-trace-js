@@ -297,22 +297,22 @@ describe('reporter', () => {
     })
 
     it('should call addTags with matched tags', () => {
-      const derivatives = [
-        { '_dd.appsec.s.req.headers': [8] },
-        { '_dd.appsec.s.req.query': [8] },
-        { '_dd.appsec.s.req.params': [8] },
-        { '_dd.appsec.s.req.cookies': [8] },
-        { '_dd.appsec.s.req.body': [8] },
-        { 'custom.processor.output': 'value' }
-      ]
+      const derivatives = {
+        '_dd.appsec.s.req.headers': [{ 'key': [8] }],
+        '_dd.appsec.s.req.query': [{ 'key': [8] }],
+        '_dd.appsec.s.req.params': [{ 'key': [8] }],
+        '_dd.appsec.s.req.cookies': [{ 'key': [8] }],
+        '_dd.appsec.s.req.body': [{ 'key': [8] }],
+        'custom.processor.output': [{ 'key': [8] }]
+      }
 
       Reporter.reportSchemas(derivatives)
       expect(span.addTags).to.be.calledOnceWithExactly({
-        '_dd.appsec.s.req.headers': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
-        '_dd.appsec.s.req.query': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
-        '_dd.appsec.s.req.params': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
-        '_dd.appsec.s.req.cookies': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=',
-        '_dd.appsec.s.req.body': 'H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA='
+        '_dd.appsec.s.req.headers': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
+        '_dd.appsec.s.req.query': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
+        '_dd.appsec.s.req.params': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
+        '_dd.appsec.s.req.cookies': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
+        '_dd.appsec.s.req.body': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA'
       })
     })
   })

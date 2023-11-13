@@ -157,12 +157,10 @@ function reportSchemas (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  derivatives.forEach((address) => {
-    for (const [key, value] of Object.entries(address)) {
-      if (key.includes('_dd.appsec.s.req')) {
-        const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-        tags[key] = Buffer.from(gzippedValue).toString('base64')
-      }
+  Object.entries(derivatives).forEach(([address, value]) => {
+    if (address.includes('_dd.appsec.s.req')) {
+      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+      tags[address] = Buffer.from(gzippedValue).toString('base64')
     }
   })
 
