@@ -17,9 +17,29 @@ env:
   SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 # TODO: upstream jobs
-
-
 jobs:
+  aerospike:
+    runs-on: ubuntu-latest
+    services:
+      aerospike:
+        image: aerospike:ce-6.4.0.3
+        ports: 
+          - "127.0.0.1:3000-3002:3000-3002"
+    env:
+      PLUGINS: aerospike
+      SERVICES: aerospike
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
