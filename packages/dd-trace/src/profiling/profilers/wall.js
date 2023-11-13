@@ -10,6 +10,7 @@ const telemetryMetrics = require('../../telemetry/metrics')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const threadName = (function () {
@@ -80,6 +81,7 @@ class NativeWallProfiler {
 
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
+    this._spanFinished = this._spanFinished.bind(this)
     this._logger = options.logger
     this._started = false
   }
@@ -127,6 +129,7 @@ class NativeWallProfiler {
 
       beforeCh.subscribe(this._enter)
       enterCh.subscribe(this._enter)
+      spanFinishCh.subscribe(this._spanFinished)
     }
 
     this._started = true
@@ -200,6 +203,12 @@ class NativeWallProfiler {
     }
   }
 
+  _spanFinished (span) {
+    if (span[CachedWebTags]) {
+      span[CachedWebTags] = undefined
+    }
+  }
+
   _reportV8bug (maybeBug) {
     const tag = `v8_profiler_bug_workaround_enabled:${this._v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
@@ -242,6 +251,7 @@ class NativeWallProfiler {
     if (this._withContexts) {
       beforeCh.unsubscribe(this._enter)
       enterCh.unsubscribe(this._enter)
+      spanFinishCh.unsubscribe(this._spanFinished)
       this._profilerState = undefined
       this._lastSpan = undefined
       this._lastStartedSpans = undefined
