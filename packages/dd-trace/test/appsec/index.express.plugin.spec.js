@@ -18,8 +18,11 @@ withVersions('express', 'express', version => {
 
     before((done) => {
       const express = require('../../../../versions/express').get()
+      const bodyParser = require('../../../../versions/body-parser').get()
 
       const app = express()
+      app.use(bodyParser.json())
+
       app.get('/', (req, res) => {
         requestBody()
         res.end('DONE')
@@ -82,7 +85,7 @@ withVersions('express', 'express', version => {
             rules: path.join(__dirname, 'api_security_rules.json'),
             apiSecurity: {
               enabled: true,
-              requestSampling: 0
+              requestSampling: 1.0
             }
           }
         })
@@ -92,30 +95,30 @@ withVersions('express', 'express', version => {
         appsec.disable()
       })
 
-      it('should not get the schema', async () => {
+      it('should get the schema', async () => {
         appsec.enable(config)
 
-        const res = await axios.post(`http://localhost:${port}/`, { key: 'testattack' })
+        const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
+          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
+          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal('H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA')
         })
 
         expect(res.status).to.be.equal(200)
         expect(res.data).to.be.equal('DONE')
       })
 
-      it('should get the schema', async () => {
-        config.appsec.apiSecurity.requestSampling = 1
+      it('should not get the schema', async () => {
+        config.appsec.apiSecurity.requestSampling = 0
         appsec.enable(config)
 
-        const res = await axios.post(`http://localhost:${port}/`, { key: 'testattack' })
+        const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
-          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal('H4sIAAAAAAAAA4u2iAUA8YntnQMAAAA=')
+          expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
         })
 
         expect(res.status).to.be.equal(200)

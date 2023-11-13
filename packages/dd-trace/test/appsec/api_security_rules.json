@@ -17,7 +17,7 @@
                 "address": "server.request.body"
               }
             ],
-            "regex": "*attack*"
+            "regex": "^.*attack*"
           },
           "operator": "match_regex"
         }
