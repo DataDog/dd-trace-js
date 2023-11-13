@@ -129,11 +129,14 @@ async function assertPackage (name, version, dependency, external) {
     dependencies
   }
 
+  console.log(876, name, version, dependencies, external)
   if (!external) {
     pkg.workspaces = {
       nohoist: ['**/**']
     }
   }
+
+  console.log(22, pkg)
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
 }
 
@@ -187,6 +190,7 @@ module.exports = {
 }
 
 function assertWorkspace () {
+  console.log(55, workspaces, Array.from(workspaces))
   fs.writeFileSync(filename(null, null, 'package.json'), JSON.stringify({
     name: 'versions',
     version: '1.0.0',
@@ -199,12 +203,15 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines', { cwd: folder() })
+  exec('yarn --ignore-engines --check-files', { cwd: folder() })
 }
 
 function addFolder (name, version) {
   const basename = [name, version].filter(val => val).join('@')
-  if (!excludeList.includes(name)) workspaces.add(basename)
+  if (!excludeList.includes(name)) {
+    console.log(33, workspaces, basename)
+    workspaces.add(basename)
+  }
 }
 
 function folder (name, version) {

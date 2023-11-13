@@ -1,4 +1,4 @@
-{
+{ 
   "aws-sdk": [
     {
       "name": "@aws-sdk/client-lambda",

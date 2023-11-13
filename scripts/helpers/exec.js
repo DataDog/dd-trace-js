@@ -8,10 +8,22 @@ function exec (command, options) {
 
   execSync(`echo "${color.GRAY}$ ${command}${color.NONE}"`, { stdio: [0, 1, 2] })
 
-  return execSync(command, options)
+  console.log(199, command, options)
+
+  // return execSync(command, options)
+  let res = null
+
+  try {
+    res = execSync(command, options)
+  } catch (e) {
+    console.log(e)
+  }
+
+  return res
 }
 
 function pipe (command, options) {
+  console.log(10000, command)
   return exec(command, Object.assign({ stdio: 'pipe' }, options))
     .toString()
     .replace(/\n$/, '')
