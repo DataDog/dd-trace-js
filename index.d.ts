@@ -578,7 +578,7 @@ export declare interface TracerOptions {
        * @default 'safe'
        */
       mode?: 'safe' | 'extended' | 'disabled'
-    }
+    },
 
     /**
      * Configuration for Api Security sampling
@@ -592,6 +592,7 @@ export declare interface TracerOptions {
        * @default 0.1
        */
       requestSampling?: number
+    }
   };
 
   /**
