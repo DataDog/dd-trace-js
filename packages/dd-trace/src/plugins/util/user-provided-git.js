@@ -13,7 +13,7 @@ const {
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
-const { URL } = require('url')
+const { filterSensitiveInfoFromRepository } = require('./url')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -25,19 +25,6 @@ function removeEmptyValues (tags) {
       [tag]: tags[tag]
     }
   }, {})
-}
-
-function filterSensitiveInfoFromRepository (repositoryUrl) {
-  try {
-    if (repositoryUrl.startsWith('git@')) {
-      return repositoryUrl
-    }
-    const { protocol, hostname, pathname } = new URL(repositoryUrl)
-
-    return `${protocol}//${hostname}${pathname}`
-  } catch (e) {
-    return repositoryUrl
-  }
 }
 
 // The regex is extracted from
