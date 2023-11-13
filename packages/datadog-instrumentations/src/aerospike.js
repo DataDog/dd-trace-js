@@ -6,6 +6,7 @@ const {
 } = require('./helpers/instrument')
 // const tracingChannel = require('dc-polyfill').tracingChannel
 // const ch = tracingChannel('apm:aerospike:command')
+const version = require('../../../version.js')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:aerospike:query:start')
@@ -73,6 +74,10 @@ function wrapProcess (process) {
   }
 }
 
-addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['3', '4', '>=5'] }, commandFactory => {
+// addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['3', '4', '>=5'] }, commandFactory => {
+//   return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+// })
+
+addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5'] }, commandFactory => {
   return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
 })
