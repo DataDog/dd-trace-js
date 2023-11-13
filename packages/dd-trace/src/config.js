@@ -509,6 +509,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     )
 
     const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+      options.appsec?.apiSecurity?.enabled,
       process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       false
     )
