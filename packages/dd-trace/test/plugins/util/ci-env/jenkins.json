@@ -694,6 +694,153 @@
       "BUILD_URL": "https://jenkins.com/pipeline",
       "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
       "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://user@github.com/DataDog/dogweb.git",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://user:password@github.com:1234/DataDog/dogweb.git",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://user:password@1.1.1.1/DataDog/dogweb.git",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://user:password@1.1.1.1:1234/DataDog/dogweb.git",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "https://user:password@1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "ssh://user@host.xz:port/path/to/repo.git/",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_URL_1": "ssh://user:password@host.xz:port/path/to/repo.git/",
+      "JENKINS_URL": "jenkins",
+      "JOB_URL": "https://jenkins.com/job"
+    },
+    {
+      "_dd.ci.env_vars": "{\"DD_CUSTOM_TRACE_ID\":\"jenkins-custom-trace-id\"}",
+      "ci.pipeline.id": "jenkins-pipeline-id",
+      "ci.pipeline.number": "jenkins-pipeline-number",
+      "ci.pipeline.url": "https://jenkins.com/pipeline",
+      "ci.provider.name": "jenkins",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BUILD_NUMBER": "jenkins-pipeline-number",
+      "BUILD_TAG": "jenkins-pipeline-id",
+      "BUILD_URL": "https://jenkins.com/pipeline",
+      "DD_CUSTOM_TRACE_ID": "jenkins-custom-trace-id",
+      "GIT_COMMIT": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "JENKINS_URL": "jenkins",
       "JOB_URL": "https://jenkins.com/job",
       "NODE_LABELS": "built-in linux",
