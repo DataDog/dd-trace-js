@@ -43,13 +43,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engines
-      # - uses: ./.github/actions/node/14
-      - run: yarn test:plugins:ci
-      # - uses: ./.github/actions/node/oldest
-      # - run: yarn test:plugins:ci
-      # - uses: ./.github/actions/node/latest
-      # - run: yarn test:plugins:ci
-      - if: always()
+      - run: yarn services
+      - run: yarn test:plugins
       - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
