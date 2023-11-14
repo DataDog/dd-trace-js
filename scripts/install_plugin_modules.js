@@ -131,12 +131,12 @@ async function assertPackage (name, version, dependency, external) {
 
   console.log(876, name, version, dependencies, external)
   if (!external) {
-    // pkg.workspaces = {
-    //   nohoist: ['**/**']
-    // }
-    pkg.installConfig = {
-      'hoistingLimits': 'workspaces'
+    pkg.workspaces = {
+      nohoist: ['**/**']
     }
+    // pkg.installConfig = {
+    //   'hoistingLimits': 'workspaces'
+    // }
   }
 
   console.log(22, pkg)
