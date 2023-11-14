@@ -41,14 +41,13 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-python@v4
-          with:
-            python-version: '3.10' 
       - name: Setup Nodejs and npm
         uses: actions/setup-node@v2
         with:
           node-version: "14"
       - name: Setup yarn
+        run: sudo apt update
+        run: sudo apt install python3
         run: npm install -g yarn
       - name: Setup Nodejs with yarn caching
         uses: actions/setup-node@v2
