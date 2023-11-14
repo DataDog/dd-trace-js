@@ -32,7 +32,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)
           const dataStreamsContext = this.tracer
-            .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], payloadSize)
+            .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], span, payloadSize)
           pathwayCtx = encodePathwayContext(dataStreamsContext)
           message.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
         }
