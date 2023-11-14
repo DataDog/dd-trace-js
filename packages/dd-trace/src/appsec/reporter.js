@@ -21,7 +21,7 @@ const contentHeaderList = [
   'content-type'
 ]
 
-const REQUEST_HEADERS_PASSMAP = mapHeaderAndTags([
+const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'accept',
   'accept-encoding',
   'accept-language',
@@ -33,17 +33,15 @@ const REQUEST_HEADERS_PASSMAP = mapHeaderAndTags([
 
   ...ipHeaderList,
   ...contentHeaderList
-])
+], 'http.request.headers.')
 
-const RESPONSE_HEADERS_PASSMAP = mapHeaderAndTags([
-  ...contentHeaderList
-], 'http.response.headers.')
-
-function mapHeaderAndTags (headerList, tagPrefix = 'http.request.headers.') {
-  return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
-}
+const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
 
 const metricsQueue = new Map()
+
+function mapHeaderAndTags (headerList, tagPrefix) {
+  return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
+}
 
 function filterHeaders (headers, passMap) {
   const result = {}
@@ -111,7 +109,7 @@ function reportAttack (attackData) {
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_PASSMAP)
+  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
   newTags['appsec.event'] = 'true'
 
@@ -157,7 +155,7 @@ function finishRequest (req, res) {
 
   if (!rootSpan.context()._tags['appsec.event']) return
 
-  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSMAP)
+  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
   if (req.route && typeof req.route.path === 'string') {
     newTags['http.endpoint'] = req.route.path
