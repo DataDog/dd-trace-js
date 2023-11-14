@@ -1,4 +1,5 @@
 * @DataDog/dd-trace-js
+
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
@@ -29,3 +30,26 @@
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
 /packages/dd-trace/test/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
+
+# CI
+/.github/workflows/appsec.yml @DataDog/asm-js
+/.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
+/.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
+/.github/workflows/core.yml @DataDog/dd-trace-js
+/.github/workflows/lambda.yml @DataDog/serverless-apm
+/.github/workflows/package-size.yml @DataDog/dd-trace-js
+/.github/workflows/plugins.yml @DataDog/dd-trace-js
+/.github/workflows/pr-labels.yml @DataDog/dd-trace-js
+/.github/workflows/profiling.yml @DataDog/profiling-js
+/.github/workflows/project.yml @DataDog/dd-trace-js
+/.github/workflows/release-3.yml @DataDog/dd-trace-js
+/.github/workflows/release-dev.yml @DataDog/dd-trace-js
+/.github/workflows/release-latest.yml @DataDog/dd-trace-js
+/.github/workflows/release-proposal.yml @DataDog/dd-trace-js
+/.github/workflows/serverless-integration-test.yml @DataDog/serverless
+/.github/workflows/serverless-performance.yml @DataDog/serverless-apm @DataDog/serverless
+/.github/workflows/system-tests.yml @DataDog/asm-js
+/.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
+/.github/workflows/tracing.yml @DataDog/dd-trace-js
+/.gitlab/benchmarks.yml @DataDog/dd-trace-js
+/.gitlab-ci.yml @DataDog/dd-trace-js
