@@ -3,6 +3,7 @@
 const Limiter = require('../rate_limiter')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
+const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
@@ -13,54 +14,49 @@ const {
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
-// TODO: use precomputed maps instead
-const REQUEST_HEADERS_PASSLIST = [
-  'accept',
-  'accept-encoding',
-  'accept-language',
-  'content-encoding',
-  'content-language',
-  'content-length',
-  'content-type',
-  'forwarded',
-  'forwarded-for',
-  'host',
-  'true-client-ip',
-  'user-agent',
-  'via',
-  'x-client-ip',
-  'x-cluster-client-ip',
-  'x-forwarded',
-  'x-forwarded-for',
-  'x-real-ip'
-]
+const metricsQueue = new Map()
 
-const RESPONSE_HEADERS_PASSLIST = [
+const contentHeaderList = [
   'content-encoding',
   'content-language',
   'content-length',
   'content-type'
 ]
 
-const metricsQueue = new Map()
+const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  'accept',
+  'accept-encoding',
+  'accept-language',
+  'host',
+  'user-agent',
+  'forwarded',
+  'via',
 
-function filterHeaders (headers, passlist, prefix) {
+  ...ipHeaderList,
+  ...contentHeaderList
+], 'http.request.headers.')
+
+const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
+
+function mapHeaderAndTags (headerList, tagPrefix) {
+  return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
+}
+
+function filterHeaders (headers, map) {
   const result = {}
 
   if (!headers) return result
 
-  for (let i = 0; i < passlist.length; ++i) {
-    const headerName = passlist[i]
-
-    if (headers[headerName]) {
-      result[`${prefix}${formatHeaderName(headerName)}`] = '' + headers[headerName]
+  for (const [headerName, tagName] of map) {
+    const headerValue = headers[headerName]
+    if (headerValue) {
+      result[tagName] = '' + headerValue
     }
   }
 
   return result
 }
 
-// TODO: this can be precomputed at start time
 function formatHeaderName (name) {
   return name
     .trim()
@@ -86,7 +82,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 function reportMetrics (metrics) {
   // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
-  const rootSpan = store && store.req && web.root(store.req)
+  const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
 
   if (metrics.duration) {
@@ -106,13 +102,13 @@ function reportMetrics (metrics) {
 
 function reportAttack (attackData) {
   const store = storage.getStore()
-  const req = store && store.req
+  const req = store?.req
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_PASSLIST, 'http.request.headers.')
+  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
   newTags['appsec.event'] = 'true'
 
@@ -158,7 +154,7 @@ function finishRequest (req, res) {
 
   if (!rootSpan.context()._tags['appsec.event']) return
 
-  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_PASSLIST, 'http.response.headers.')
+  const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
 
   if (req.route && typeof req.route.path === 'string') {
     newTags['http.endpoint'] = req.route.path
@@ -180,5 +176,6 @@ module.exports = {
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
   finishRequest,
-  setRateLimit
+  setRateLimit,
+  mapHeaderAndTags
 }
