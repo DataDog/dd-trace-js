@@ -22,7 +22,12 @@ const tags = {
   HTTP_REQUEST_HEADERS: 'http.request.headers',
   HTTP_RESPONSE_HEADERS: 'http.response.headers',
   HTTP_USERAGENT: 'http.useragent',
-  HTTP_CLIENT_IP: 'http.client_ip'
+  HTTP_CLIENT_IP: 'http.client_ip',
+
+  // Messaging
+
+  // DSM Specific
+  PATHWAY_HASH: 'pathway.hash'
 }
 
 // Deprecated
