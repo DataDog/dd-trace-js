@@ -7,6 +7,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const net = require('net')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const EventEmitter = require('events')
+const { DD_MAJOR } = require('../../../version')
 
 const clients = {
   pg: pg => pg.Client
@@ -483,7 +484,9 @@ describe('Plugin', () => {
 
         it('query text should contain traceparent', done => {
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = DD_MAJOR >= 5
+              ? Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+              : '0000000000000000'
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
             expect(seenTraceId).to.equal(traceId)
@@ -565,7 +568,9 @@ describe('Plugin', () => {
           }
 
           agent.use(traces => {
-            const expectedTimePrefix = Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+            const expectedTimePrefix = DD_MAJOR >= 5
+              ? Math.floor(clock.now / 1000).toString(16).padStart(8, '0').padEnd(16, '0')
+              : '0000000000000000'
             const traceId = expectedTimePrefix + traces[0][0].trace_id.toString(16).padStart(16, '0')
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
