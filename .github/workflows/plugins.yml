@@ -40,18 +40,15 @@ jobs:
       SERVICES: aerospike
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
-      - uses: actions/checkout@v2
-      - run: npm install -g yarn
+      # - uses: actions/checkout@v2
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
           node-version: 16.14
-
       - name: Get node version
         id: node
         run: |
           echo "::set-output name=version::$(node -v)"
-
       - name: Get node_modules cache
         uses: actions/cache@v3.0.2
         id: node_modules
@@ -64,7 +61,7 @@ jobs:
       - uses: ./.github/actions/node/oldest
       - run: yarn services
       - run: yarn test:plugins
-      - uses: codecov/codecov-action@v2
+      # - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
