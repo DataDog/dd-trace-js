@@ -7,17 +7,13 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
-
-const threadName = (function () {
-  const { isMainThread, threadId } = require('node:worker_threads')
-  const name = isMainThread ? 'Main' : `Worker #${threadId}`
-  return `${name} Event Loop`
-})()
+const threadName = `${threadNamePrefix} Event Loop`
 
 const CachedWebTags = Symbol('NativeWallProfiler.CachedWebTags')
 
@@ -33,7 +29,11 @@ function getStartedSpans (context) {
 }
 
 function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
-  const labels = { 'thread name': threadName }
+  const labels = {
+    [THREAD_NAME]: threadName,
+    // Incoming timestamps are in microseconds, we emit nanos.
+    [END_TIMESTAMP]: timestamp * 1000n
+  }
   if (spanId) {
     labels['span id'] = spanId
   }
@@ -46,8 +46,6 @@ function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, t
     // fallback to endpoint computed when sample was taken
     labels['trace endpoint'] = endpoint
   }
-  // Incoming timestamps are in microseconds, we emit nanos.
-  labels['end_timestamp_ns'] = timestamp * 1000n
 
   return labels
 }
