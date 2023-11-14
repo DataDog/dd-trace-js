@@ -18,6 +18,7 @@ jobs:
         include:
           - weblog-variant: express4
           - weblog-variant: express4-typescript
+          - weblog-variant: nextjs
     env:
       TEST_LIBRARY: nodejs
       WEBLOG_VARIANT: ${{ matrix.weblog-variant }}

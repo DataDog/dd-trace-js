@@ -68,7 +68,7 @@
     "node": ">=16"
   },
   "dependencies": {
-    "@datadog/native-appsec": "^4.0.0",
+    "@datadog/native-appsec": "4.0.0",
     "@datadog/native-iast-rewriter": "2.2.1",
     "@datadog/native-iast-taint-tracking": "1.6.3",
     "@datadog/native-metrics": "^2.0.0",
@@ -97,6 +97,7 @@
     "node-abort-controller": "^3.1.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
+    "pprof-format": "^2.0.7", 
     "protobufjs": "^7.2.4",
     "retry": "^0.13.1",
     "semver": "^7.5.4"
@@ -133,7 +134,6 @@
     "multer": "^1.4.5-lts.1",
     "nock": "^11.3.3",
     "nyc": "^15.1.0",
-    "pprof-format": "^2.0.7",
     "proxyquire": "^1.8.0",
     "rimraf": "^3.0.0",
     "sinon": "^15.2.0",
