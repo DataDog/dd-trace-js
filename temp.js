@@ -9,7 +9,7 @@ const config = {
 
 const namespace = 'test'
 const set = 'demo'
-
+// test
 const client = Aerospike.client(config)
 
 client.connect(() => {
