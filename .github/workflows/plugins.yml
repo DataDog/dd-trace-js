@@ -39,6 +39,7 @@ jobs:
       PLUGINS: aerospike
       SERVICES: aerospike
       DD_TEST_AGENT_URL: http://testagent:9126
+      DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@v2
       - name: Setup Nodejs and npm
