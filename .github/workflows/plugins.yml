@@ -47,8 +47,6 @@ jobs:
         with:
           node-version: "14"
       - name: Setup yarn
-        run: sudo apt update
-        run: sudo apt install python3
         run: npm install -g yarn
       - name: Setup Nodejs with yarn caching
         uses: actions/setup-node@v2
