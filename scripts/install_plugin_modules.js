@@ -131,8 +131,11 @@ async function assertPackage (name, version, dependency, external) {
 
   console.log(876, name, version, dependencies, external)
   if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**']
+    // pkg.workspaces = {
+    //   nohoist: ['**/**']
+    // }
+    pkg.installConfig = {
+      'hoistingLimits': 'workspaces'
     }
   }
 
@@ -210,7 +213,8 @@ function install () {
   // } else {
   //   exec('yarn --ignore-engines', { cwd: folderPath })
   // }
-  exec('npm install --ignore-engines', { cwd: folderPath })
+  // exec('npm install --ignore-engines', { cwd: folderPath })
+  exec('yarn --ignore-engines', { cwd: folderPath })
 }
 
 function addFolder (name, version) {

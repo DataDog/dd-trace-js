@@ -21,6 +21,8 @@ const hasIgnoreEngines = npmArgv &&
   npmArgv.original &&
   npmArgv.original.includes('--ignore-engines')
 
+console.log(10000000, npmArgv)
+
 if (nodeMajor < min && !hasIgnoreEngines) {
   process.exitCode = 1
   console.error('\n' + `
