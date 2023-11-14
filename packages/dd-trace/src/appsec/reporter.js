@@ -29,7 +29,6 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'accept-language',
   'host',
   'user-agent',
-
   'forwarded',
   'via',
 
@@ -48,10 +47,10 @@ function filterHeaders (headers, passMap) {
 
   if (!headers) return result
 
-  for (const nameAndTagPair of passMap) {
-    const headerValue = headers[nameAndTagPair[0]]
+  for (const [headerName, tagName] of passMap) {
+    const headerValue = headers[headerName]
     if (headerValue) {
-      result[nameAndTagPair[1]] = '' + headerValue
+      result[tagName] = '' + headerValue
     }
   }
 
