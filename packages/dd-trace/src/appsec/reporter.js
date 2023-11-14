@@ -14,6 +14,8 @@ const {
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
 
+const metricsQueue = new Map()
+
 const contentHeaderList = [
   'content-encoding',
   'content-language',
@@ -36,8 +38,6 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
-
-const metricsQueue = new Map()
 
 function mapHeaderAndTags (headerList, tagPrefix) {
   return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
