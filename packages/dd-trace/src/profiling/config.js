@@ -9,6 +9,7 @@ const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
@@ -37,6 +38,7 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
@@ -126,7 +128,12 @@ class Config {
 
     const profilers = options.profilers
       ? options.profilers
-      : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+      : getProfilers({
+        DD_PROFILING_HEAP_ENABLED,
+        DD_PROFILING_WALLTIME_ENABLED,
+        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
+        DD_PROFILING_PROFILERS
+      })
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
@@ -139,7 +146,10 @@ class Config {
 
 module.exports = { Config }
 
-function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS }) {
+function getProfilers ({
+  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED,
+  DD_PROFILING_PROFILERS, DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED
+}) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
   // Use a Set to avoid duplicates
   const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
@@ -162,6 +172,11 @@ function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLE
     }
   }
 
+  // Events profiler is a profiler for timeline events that goes with the wall
+  // profiler
+  if (profilers.has('wall') && DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED) {
+    profilers.add('events')
+  }
   return [...profilers]
 }
 
@@ -223,6 +238,8 @@ function getProfiler (name, options) {
       return new WallProfiler(options)
     case 'space':
       return new SpaceProfiler(options)
+    case 'events':
+      return new EventsProfiler(options)
     default:
       options.logger.error(`Unknown profiler "${name}"`)
   }
