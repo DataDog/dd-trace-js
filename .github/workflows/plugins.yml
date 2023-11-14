@@ -42,7 +42,24 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: npm install -g yarn
-      - uses: ./.github/actions/node/setup
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16.14
+
+      - name: Get node version
+        id: node
+        run: |
+          echo "::set-output name=version::$(node -v)"
+
+      - name: Get node_modules cache
+        uses: actions/cache@v3.0.2
+        id: node_modules
+        with:
+          path: |
+            **/node_modules
+          # Add node version as a cache key to avoid yarn recompilation for particular node as it doesn't change often
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('**/yarn.lock') }}-${{ steps.node.outputs.version }}
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn services
