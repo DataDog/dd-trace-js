@@ -42,12 +42,12 @@ function mapHeaderAndTags (headerList, tagPrefix) {
   return new Map(headerList.map(headerName => [headerName, `${tagPrefix}${formatHeaderName(headerName)}`]))
 }
 
-function filterHeaders (headers, passMap) {
+function filterHeaders (headers, map) {
   const result = {}
 
   if (!headers) return result
 
-  for (const [headerName, tagName] of passMap) {
+  for (const [headerName, tagName] of map) {
     const headerValue = headers[headerName]
     if (headerValue) {
       result[tagName] = '' + headerValue
