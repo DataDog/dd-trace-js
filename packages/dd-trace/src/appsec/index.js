@@ -29,11 +29,7 @@ let isEnabled = false
 let config
 
 function sampleRequest ({ enabled, requestSampling }) {
-  if (!enabled) {
-    return false
-  }
-
-  if (!requestSampling) {
+  if (!enabled || !requestSampling) {
     return false
   }
 
@@ -112,6 +108,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
+  // TODO: this doesn't support headers sent with res.writeHead()
   const responseHeaders = Object.assign({}, res.getHeaders())
   delete responseHeaders['set-cookie']
 
