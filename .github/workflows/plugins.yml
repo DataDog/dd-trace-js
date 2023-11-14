@@ -41,10 +41,17 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
-      - uses: actions/setup-node@v3
-      - with:
+      - name: Setup Nodejs and npm
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+      - name: Setup yarn
+        run: npm install -g yarn
+      - name: Setup Nodejs with yarn caching
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
           cache: yarn
-          node-version: '16'
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn services
