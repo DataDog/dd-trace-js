@@ -41,7 +41,7 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
-      - run: curl -o- -L https://yarnpkg.com/install.sh | bash -s -- && export PATH="$HOME/.yarn/bin:$PATH"
+      - run: npm install -g yarn
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
