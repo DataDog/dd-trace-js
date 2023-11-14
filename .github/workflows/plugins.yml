@@ -53,9 +53,8 @@ jobs:
           node-version: "14"
           cache: yarn
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
       - run: yarn services
-      - run: yarn test:plugins
+      - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
