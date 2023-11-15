@@ -400,10 +400,10 @@
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@1.6.3":
-  version "1.6.3"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.6.3.tgz#cb2125f7bf18806da6f326c3a6b7210da3e05d8b"
-  integrity sha512-u/bBPNx0w8Bq+I+30enI99Ua2WPbVLkANGNyQNjW4tz2PHyeGI++HyzZV+fGm0YSy41FuHZq9EWP3SSDz/eSVw==
+"@datadog/native-iast-taint-tracking@1.6.4":
+  version "1.6.4"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-1.6.4.tgz#16c21ad7c36a53420c0d3c5a3720731809cc7e98"
+  integrity sha512-Owxk7hQ4Dxwv4zJAoMjRga0IvE6lhvxnNc8pJCHsemCWBXchjr/9bqg05Zy5JnMbKUWn4XuZeJD6RFZpRa8bfw==
   dependencies:
     node-gyp-build "^3.9.0"
 
