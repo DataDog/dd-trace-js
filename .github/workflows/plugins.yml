@@ -51,13 +51,13 @@ jobs:
         with:
           node-version: "14.15.1"
       - name: Setup yarn
-        run: npm install -g yarn
+        run: npm install -g yarn --ignore-engines
       - name: Setup Nodejs with yarn caching
         uses: actions/setup-node@v2
         with:
           node-version: "14.15.1"
           cache: yarn
-      - run: yarn install
+      - run: yarn install --ignore-engines
       - run: yarn services
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
