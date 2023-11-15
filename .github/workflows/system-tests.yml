@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: 'DataDog/system-tests'
+          ref: 'ugaitz/modify-nextjs-initialization'
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v3
