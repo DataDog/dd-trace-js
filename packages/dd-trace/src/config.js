@@ -13,7 +13,6 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
-const { DD_MAJOR } = require('../../../version')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -373,7 +372,7 @@ class Config {
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
       options.traceId128BitGenerationEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
-      DD_MAJOR >= 5
+      true
     )
 
     const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
