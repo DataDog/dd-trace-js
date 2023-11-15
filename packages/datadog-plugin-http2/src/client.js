@@ -62,9 +62,7 @@ class Http2ClientPlugin extends ClientPlugin {
 
     addHeaderTags(span, headers, HTTP_REQUEST_HEADERS, this.config)
 
-    if (!hasAmazonSignature(headers, path)) {
-      this.tracer.inject(span, HTTP_HEADERS, headers)
-    }
+    this.tracer.inject(span, HTTP_HEADERS, headers)
 
     message.parentStore = store
     message.currentStore = { ...store, span }
@@ -131,29 +129,6 @@ function extractSessionDetails (authority, options) {
   }
 
   return { protocol, port, host }
-}
-
-function hasAmazonSignature (headers, path) {
-  if (headers) {
-    headers = Object.keys(headers)
-      .reduce((prev, next) => Object.assign(prev, {
-        [next.toLowerCase()]: headers[next]
-      }), {})
-
-    if (headers['x-amz-signature']) {
-      return true
-    }
-
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
-      return true
-    }
-  }
-
-  return path && path.toLowerCase().indexOf('x-amz-signature=') !== -1
-}
-
-function startsWith (searchString) {
-  return value => String(value).startsWith(searchString)
 }
 
 function getStatusValidator (config) {
