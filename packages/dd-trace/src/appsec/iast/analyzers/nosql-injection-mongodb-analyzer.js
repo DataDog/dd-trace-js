@@ -9,7 +9,7 @@ const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
 
-const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
+const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 
 function iterateObjectStrings (target, fn, levelKeys = [], depth = 50, visited = new Set()) {

@@ -163,7 +163,7 @@ jobs:
         ports:
           - 27017:27017
     env:
-      PLUGINS: mongoose
+      PLUGINS: mongoose|mquery
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v2
