@@ -217,7 +217,7 @@ function install () {
   //   exec('yarn --ignore-engines', { cwd: folderPath })
   // }
   // exec('npm install --ignore-engines', { cwd: folderPath })
-  exec('yarn --ignore-engines', { cwd: folderPath })
+  exec('yarn --ignore-engines --force', { cwd: folderPath })
 }
 
 function addFolder (name, version) {
