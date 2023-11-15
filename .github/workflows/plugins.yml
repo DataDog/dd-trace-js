@@ -58,7 +58,7 @@ jobs:
           node-version: "14.15.1"
           cache: yarn
       - run: yarn install --ignore-engines
-      - run: yarn services
+      - run: DOWNLOAD=1 yarn services
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
