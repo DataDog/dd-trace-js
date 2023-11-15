@@ -78,23 +78,22 @@ class Tracer {
     //   return api.trace.wrapSpanContext(spanContext)
     // }
 
-    const span = new Span(
+    return new Span(
       this,
       context,
       name,
       spanContext,
       spanKind,
       links,
-      options.startTime
+      options.startTime,
+
+      // Set initial span attributes. The attributes object may have been mutated
+      // by the sampler, so we sanitize the merged attributes before setting them.
+      sanitizeAttributes(
+        // Object.assign(attributes, samplingResult.attributes)
+        attributes
+      )
     )
-    // Set initial span attributes. The attributes object may have been mutated
-    // by the sampler, so we sanitize the merged attributes before setting them.
-    const initAttributes = sanitizeAttributes(
-      // Object.assign(attributes, samplingResult.attributes)
-      attributes
-    )
-    span.setAttributes(initAttributes)
-    return span
   }
 
   startActiveSpan (name, options, context, fn) {
