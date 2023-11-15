@@ -60,7 +60,7 @@ function wrapFn (fn) {
           errorChannel.publish({ req, error })
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          throw err
+          throw error
         })
       }
       return result
