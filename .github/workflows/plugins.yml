@@ -46,17 +46,20 @@ jobs:
         run: apt-get update && apt-get install -y wget
       - name: Install python
         run: apt-get update && apt-get install -y python3 python3-pip
-      - name: Setup Nodejs and npm
-        uses: actions/setup-node@v2
-        with:
-          node-version: "14"
+        #install node 14.15.1
+      - name: Install node
+        run: wget https://nodejs.org/dist/v14.15.1/node-v14.15.1-linux-x64.tar.xz && tar -xf node-v14.15.1-linux-x64.tar.xz && mv node-v14.15.1-linux-x64 /usr/local/lib/nodejs && echo 'export PATH=/usr/local/lib/nodejs/node-v14.15.1-linux-x64/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
+      # - name: Setup Nodejs and npm
+      #   uses: actions/setup-node@v2
+      #   with:
+      #     node-version: "14"
       - name: Setup yarn
         run: npm install -g yarn
-      - name: Setup Nodejs with yarn caching
-        uses: actions/setup-node@v2
-        with:
-          node-version: "14"
-          cache: yarn
+      # - name: Setup Nodejs with yarn caching
+      #   uses: actions/setup-node@v2
+      #   with:
+      #     node-version: "14"
+      #     cache: yarn
       - run: yarn install
       - run: yarn services
       - run: yarn test:plugins:ci
