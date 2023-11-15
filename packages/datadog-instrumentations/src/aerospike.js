@@ -78,20 +78,18 @@ function wrapProcess (process) {
 //   return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
 // })
 
-if (NODE_MAJOR >= 20) {
-  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
-}
+// if (NODE_MAJOR >= 20) {
+//   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
+//     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+//   })
+// }
 
-if (NODE_MAJOR >= 16 && NODE_MAJOR < 20) {
-  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['5.5.0'] }, commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
-}
+// if (NODE_MAJOR >= 16 && NODE_MAJOR < 20) {
+//   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['5.5.0'] }, commandFactory => {
+//     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+//   })
+// }
 
-if (NODE_MAJOR <= 14) {
-  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['^3.5.0', '4', '5.2.0'] }, commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
-}
+addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['^3.5.0', '4', '5.2.0'] }, commandFactory => {
+  return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+})
