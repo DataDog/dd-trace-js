@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v2
       # install apt install g++ libssl libssl-dev zlib1g-dev
       - name: Install prereqs
-        run: apt-get install g++ libssl1.0.0 libssl-dev libz-dev -y
+        run: apt-get update && apt-get install g++ libssl1.0.0 libssl-dev libz-dev -y
       - name: Install wget
         run: apt-get update && apt-get install -y wget
       - name: Install python
