@@ -52,13 +52,13 @@ jobs:
       - name: Setup Nodejs and npm
         uses: actions/setup-node@v2
         with:
-          node-version: "14.15.1"
+          node-version: "12"
       - name: Setup yarn
         run: npm install -g yarn --ignore-engines
       - name: Setup Nodejs with yarn caching
         uses: actions/setup-node@v2
         with:
-          node-version: "14.15.1"
+          node-version: "12"
           cache: yarn
       - run: yarn install --ignore-engines
       - run: yarn services
