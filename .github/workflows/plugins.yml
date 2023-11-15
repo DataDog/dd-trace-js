@@ -42,6 +42,8 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@v2
+      - name: Install wget
+        run: apt-get update && apt-get install -y wget
       - name: Install python
         run: apt-get update && apt-get install -y python3 python3-pip
       - name: Setup Nodejs and npm
