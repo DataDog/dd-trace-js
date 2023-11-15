@@ -42,6 +42,9 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@v2
+      # install apt install g++ libssl libssl-dev zlib1g-dev
+      - name: Install prereqs
+        run: apt-get install g++ libssl1.0.0 libssl-dev libz-dev -y
       - name: Install wget
         run: apt-get update && apt-get install -y wget
       - name: Install python
@@ -49,13 +52,13 @@ jobs:
       - name: Setup Nodejs and npm
         uses: actions/setup-node@v2
         with:
-          node-version: "16"
+          node-version: "14.15.1"
       - name: Setup yarn
         run: npm install -g yarn --ignore-engines
       - name: Setup Nodejs with yarn caching
         uses: actions/setup-node@v2
         with:
-          node-version: "16"
+          node-version: "14.15.1"
           cache: yarn
       - run: yarn install --ignore-engines
       - run: yarn services
