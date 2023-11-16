@@ -1,19 +1,15 @@
 'use strict'
 
-const mquery = require('mquery')
-
-function vulnerableFind (collection, filter, cb) {
+function vulnerableFind (mquery, collection, filter) {
   return mquery()
-    .find(filter)
     .collection(collection)
-    .then(cb).catch(cb)
+    .find(filter)
 }
 
-function vulnerableFindOne (collection, filter, cb) {
+function vulnerableFindOne (mquery, collection, filter) {
   return mquery()
-    .findOne(filter)
     .collection(collection)
-    .then(cb).catch(cb)
+    .findOne(filter)
 }
 
 module.exports = {
