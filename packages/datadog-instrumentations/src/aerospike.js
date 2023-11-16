@@ -67,20 +67,20 @@ function wrapProcess (process) {
   }
 }
 
-// from testing currently only works with node 20
+// from testing currently only works uptil node 20
 if (NODE_MAJOR === 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
 }
 
-if (NODE_MAJOR > 14) {
+if (NODE_MAJOR > 14 && NODE_MAJOR <= 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['5.5.0 - 5.7.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
 }
 
-if (NODE_MAJOR >= 14) {
+if (NODE_MAJOR >= 14 && NODE_MAJOR <= 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['4', '5.0.0 - 5.4.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
