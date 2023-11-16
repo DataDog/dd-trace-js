@@ -2,6 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
+const zlib = require('zlib')
 
 describe('reporter', () => {
   let Reporter
@@ -297,22 +298,25 @@ describe('reporter', () => {
     })
 
     it('should call addTags with matched tags', () => {
+      const schemaValue = [{ 'key': [8] }]
       const derivatives = {
-        '_dd.appsec.s.req.headers': [{ 'key': [8] }],
-        '_dd.appsec.s.req.query': [{ 'key': [8] }],
-        '_dd.appsec.s.req.params': [{ 'key': [8] }],
-        '_dd.appsec.s.req.cookies': [{ 'key': [8] }],
-        '_dd.appsec.s.req.body': [{ 'key': [8] }],
-        'custom.processor.output': [{ 'key': [8] }]
+        '_dd.appsec.s.req.headers': schemaValue,
+        '_dd.appsec.s.req.query': schemaValue,
+        '_dd.appsec.s.req.params': schemaValue,
+        '_dd.appsec.s.req.cookies': schemaValue,
+        '_dd.appsec.s.req.body': schemaValue,
+        'custom.processor.output': schemaValue
       }
 
       Reporter.reportSchemas(derivatives)
+
+      const schemaEncoded = Buffer.from(zlib.gzipSync(JSON.stringify(schemaValue))).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
-        '_dd.appsec.s.req.headers': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
-        '_dd.appsec.s.req.query': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
-        '_dd.appsec.s.req.params': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
-        '_dd.appsec.s.req.cookies': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA',
-        '_dd.appsec.s.req.body': 'H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA'
+        '_dd.appsec.s.req.headers': schemaEncoded,
+        '_dd.appsec.s.req.query': schemaEncoded,
+        '_dd.appsec.s.req.params': schemaEncoded,
+        '_dd.appsec.s.req.cookies': schemaEncoded,
+        '_dd.appsec.s.req.body': schemaEncoded
       })
     })
   })
