@@ -81,7 +81,7 @@ if (NODE_MAJOR > 14 && NODE_MAJOR <= 20) {
 }
 
 if (NODE_MAJOR >= 14 && NODE_MAJOR < 20) {
-  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['3.5.0', '4', '5.0.0 - 5.3.0'] },
+  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['4', '5.0.0 - 5.3.0'] },
     commandFactory => {
       return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
     })
