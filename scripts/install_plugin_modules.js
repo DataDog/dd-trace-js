@@ -130,8 +130,14 @@ async function assertPackage (name, version, dependency, external) {
   }
 
   if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**']
+    if (name === 'aerospike') {
+      pkg.installConfig = {
+        'hoistingLimits': 'workspaces'
+      }
+    } else {
+      pkg.workspaces = {
+        nohoist: ['**/**']
+      }
     }
   }
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')
