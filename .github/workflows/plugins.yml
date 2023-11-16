@@ -37,10 +37,21 @@ jobs:
         image: aerospike:ce-6.4.0.3
         ports: 
           - "127.0.0.1:3000-3002:3000-3002"
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
+        ports:
+          - 9126:9126
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
       RANGE: ${{ matrix.range }}
+      DD_TEST_AGENT_URL: http://testagent:9126
+      DEBIAN_FRONTEND: noninteractive
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
