@@ -260,41 +260,41 @@ describe('Plugin', () => {
         })
       })
 
-      // describe('with configuration', () => {
-      //   before(() => {
-      //     return agent.load('aerospike', { service: 'custom' })
-      //   })
+      describe('with configuration', () => {
+        before(() => {
+          return agent.load('aerospike', { service: 'custom' })
+        })
 
-      //   it('should be configured with the correct values', done => {
-      //     agent
-      //       .use(traces => {
-      //         expect(traces[0][0]).to.have.property('name', 'aerospike.command')
-      //         expect(traces[0][0]).to.have.property('service', 'custom')
-      //       })
-      //       .then(done)
-      //       .catch(done)
+        it('should be configured with the correct values', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'aerospike.command')
+              expect(traces[0][0]).to.have.property('service', 'custom')
+            })
+            .then(done)
+            .catch(done)
 
-      //     client.connect(() => {
-      //       client.put(key, { i: 123 }, () => { client.close() })
-      //     })
-      //   })
+          client.connect(() => {
+            client.put(key, { i: 123 }, () => {})
+          })
+        })
 
-      //   withNamingSchema(
-      //     () => client.connect(() => {
-      //       client.put(key, { i: 123 }, () => { client.close() })
-      //     }),
-      //     {
-      //       v0: {
-      //         opName: 'aerospike.command',
-      //         serviceName: 'custom'
-      //       },
-      //       v1: {
-      //         opName: 'aerospike.command',
-      //         serviceName: 'custom'
-      //       }
-      //     }
-      //   )
-      // })
+        withNamingSchema(
+          () => client.connect(() => {
+            client.put(key, { i: 123 }, () => {})
+          }),
+          {
+            v0: {
+              opName: 'aerospike.command',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'aerospike.command',
+              serviceName: 'custom'
+            }
+          }
+        )
+      })
     })
   })
 })
