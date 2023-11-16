@@ -20,40 +20,6 @@ env:
 
 
 jobs:
-  # aerospike-node-14:
-  #   runs-on: ubuntu-latest
-  #   container: ubuntu:18.04
-  #   services:
-  #     aerospike:
-  #       image: aerospike:ce-6.4.0.3
-  #       ports: 
-  #         - "127.0.0.1:3000-3002:3000-3002"
-  #     testagent:
-  #       image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
-  #       env:
-  #         LOG_LEVEL: DEBUG
-  #         TRACE_LANGUAGE: javascript
-  #         DISABLED_CHECKS: trace_content_length
-  #         PORT: 9126
-  #       ports:
-  #         - 9126:9126
-  #   env:
-  #     PLUGINS: aerospike
-  #     SERVICES: aerospike
-  #     DD_TEST_AGENT_URL: http://testagent:9126
-  #     DEBIAN_FRONTEND: noninteractive
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Setup Nodejs and npm
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: "14"
-  #     - name: Setup yarn
-  #       run: npm install -g yarn --ignore-engines
-  #     - run: yarn install --ignore-engines
-  #     - run: yarn services
-  #     - run: yarn test:plugins
-  #     - uses: codecov/codecov-action@v2
   aerospike:
     runs-on: ubuntu-latest
     services:
