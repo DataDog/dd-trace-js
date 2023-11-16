@@ -67,7 +67,8 @@ function wrapProcess (process) {
   }
 }
 
-if (NODE_MAJOR >= 20) {
+// from testing currently only works with node 20
+if (NODE_MAJOR === 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
