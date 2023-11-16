@@ -108,9 +108,8 @@ function normalizeConfig (config) {
   const validateStatus = typeof config.validateStatus === 'function'
     ? config.validateStatus
     : code => code < 500
-  const enableFullStaticResourcePath = config.enableFullStaticResourcePath || false
 
-  return Object.assign({}, config, { hooks, validateStatus, enableFullStaticResourcePath })
+  return Object.assign({}, config, { hooks, validateStatus })
 }
 
 function getHooks (config) {
