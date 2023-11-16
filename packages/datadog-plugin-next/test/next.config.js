@@ -31,9 +31,11 @@ if (satisfies(VERSION, '<11.1.0')) {
 
     config.resolve.preferRelative = true
 
+    // for future errors, any node:* module that produces a webpack build error should be added here
     config.resolve.fallback = {
       ...config.resolve.fallback,
-      worker_threads: false
+      worker_threads: false,
+      perf_hooks: false
     }
 
     return config

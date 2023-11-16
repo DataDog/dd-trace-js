@@ -7,16 +7,13 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
+const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
-
-const threadName = (function () {
-  const { isMainThread, threadId } = require('node:worker_threads')
-  const name = isMainThread ? 'Main' : `Worker #${threadId}`
-  return `${name} Event Loop`
-})()
+const threadName = `${threadNamePrefix} Event Loop`
 
 const CachedWebTags = Symbol('NativeWallProfiler.CachedWebTags')
 
@@ -32,7 +29,11 @@ function getStartedSpans (context) {
 }
 
 function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
-  const labels = { 'thread name': threadName }
+  const labels = {
+    [THREAD_NAME]: threadName,
+    // Incoming timestamps are in microseconds, we emit nanos.
+    [END_TIMESTAMP]: timestamp * 1000n
+  }
   if (spanId) {
     labels['span id'] = spanId
   }
@@ -45,14 +46,8 @@ function generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, t
     // fallback to endpoint computed when sample was taken
     labels['trace endpoint'] = endpoint
   }
-  // Incoming timestamps are in microseconds, we emit nanos.
-  labels['end_timestamp_ns'] = timestamp * 1000n
 
   return labels
-}
-
-function getSpanContextTags (span) {
-  return span.context()._tags
 }
 
 function isWebServerSpan (tags) {
@@ -80,6 +75,7 @@ class NativeWallProfiler {
 
     // Bind to this so the same value can be used to unsubscribe later
     this._enter = this._enter.bind(this)
+    this._spanFinished = this._spanFinished.bind(this)
     this._logger = options.logger
     this._started = false
   }
@@ -127,6 +123,7 @@ class NativeWallProfiler {
 
       beforeCh.subscribe(this._enter)
       enterCh.subscribe(this._enter)
+      spanFinishCh.subscribe(this._spanFinished)
     }
 
     this._started = true
@@ -147,8 +144,9 @@ class NativeWallProfiler {
 
     const span = getActiveSpan()
     if (span) {
+      const context = span.context()
       this._lastSpan = span
-      const startedSpans = getStartedSpans(span.context())
+      const startedSpans = getStartedSpans(context)
       this._lastStartedSpans = startedSpans
       if (this._endpointCollectionEnabled) {
         const cachedWebTags = span[CachedWebTags]
@@ -156,14 +154,19 @@ class NativeWallProfiler {
           let found = false
           // Find the first webspan starting from the end:
           // There might be several webspans, for example with next.js, http plugin creates a first span
-          // and then next.js plugin creates a child span, and this child span haves the correct endpoint information.
+          // and then next.js plugin creates a child span, and this child span has the correct endpoint information.
+          let nextSpanId = context._spanId
           for (let i = startedSpans.length - 1; i >= 0; i--) {
-            const tags = getSpanContextTags(startedSpans[i])
-            if (isWebServerSpan(tags)) {
-              this._lastWebTags = tags
-              span[CachedWebTags] = tags
-              found = true
-              break
+            const nextContext = startedSpans[i].context()
+            if (nextContext._spanId === nextSpanId) {
+              const tags = nextContext._tags
+              if (isWebServerSpan(tags)) {
+                this._lastWebTags = tags
+                span[CachedWebTags] = tags
+                found = true
+                break
+              }
+              nextSpanId = nextContext._parentId
             }
           }
           if (!found) {
@@ -197,6 +200,12 @@ class NativeWallProfiler {
       // endpoint may not be determined yet, but keep it as fallback
       // if tags are not available anymore during serialization
       context.endpoint = endpointNameFromTags(this._lastWebTags)
+    }
+  }
+
+  _spanFinished (span) {
+    if (span[CachedWebTags]) {
+      span[CachedWebTags] = undefined
     }
   }
 
@@ -242,6 +251,7 @@ class NativeWallProfiler {
     if (this._withContexts) {
       beforeCh.unsubscribe(this._enter)
       enterCh.unsubscribe(this._enter)
+      spanFinishCh.unsubscribe(this._spanFinished)
       this._profilerState = undefined
       this._lastSpan = undefined
       this._lastStartedSpans = undefined

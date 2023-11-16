@@ -368,10 +368,11 @@ class Config {
       isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
+    // the tracer generates 128 bit IDs by default as of v5
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
       options.traceId128BitGenerationEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
-      false
+      true
     )
 
     const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(

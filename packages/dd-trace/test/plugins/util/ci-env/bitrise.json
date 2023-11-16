@@ -499,5 +499,152 @@
       "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
       "git.repository_url": "https://github.com/DataDog/dogweb.git"
     }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "https://user@github.com/DataDog/dogweb.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "https://user:password@github.com:1234/DataDog/dogweb.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://github.com:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "https://user:password@1.1.1.1/DataDog/dogweb.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "https://user:password@1.1.1.1:1234/DataDog/dogweb.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "https://user:password@1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "https://1.1.1.1:1234/DataDog/dogweb_with_@_yeah.git"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "ssh://user@host.xz:port/path/to/repo.git/"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
+  ],
+  [
+    {
+      "BITRISE_BUILD_NUMBER": "bitrise-pipeline-number",
+      "BITRISE_BUILD_SLUG": "bitrise-pipeline-id",
+      "BITRISE_BUILD_URL": "https://bitrise-build-url.com//",
+      "BITRISE_GIT_MESSAGE": "bitrise-git-commit-message",
+      "BITRISE_TRIGGERED_WORKFLOW_ID": "bitrise-pipeline-name",
+      "GIT_CLONE_COMMIT_HASH": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "GIT_REPOSITORY_URL": "ssh://user:password@host.xz:port/path/to/repo.git/"
+    },
+    {
+      "ci.pipeline.id": "bitrise-pipeline-id",
+      "ci.pipeline.name": "bitrise-pipeline-name",
+      "ci.pipeline.number": "bitrise-pipeline-number",
+      "ci.pipeline.url": "https://bitrise-build-url.com//",
+      "ci.provider.name": "bitrise",
+      "git.commit.message": "bitrise-git-commit-message",
+      "git.commit.sha": "b9f0fb3fdbb94c9d24b2c75b49663122a529e123",
+      "git.repository_url": "ssh://host.xz:port/path/to/repo.git/"
+    }
   ]
 ]
