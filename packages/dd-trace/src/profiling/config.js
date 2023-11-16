@@ -131,9 +131,11 @@ class Config {
       : getProfilers({
         DD_PROFILING_HEAP_ENABLED,
         DD_PROFILING_WALLTIME_ENABLED,
-        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
         DD_PROFILING_PROFILERS
       })
+
+    this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
@@ -147,8 +149,7 @@ class Config {
 module.exports = { Config }
 
 function getProfilers ({
-  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED,
-  DD_PROFILING_PROFILERS, DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED
+  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS
 }) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
   // Use a Set to avoid duplicates
@@ -172,11 +173,6 @@ function getProfilers ({
     }
   }
 
-  // Events profiler is a profiler for timeline events that goes with the wall
-  // profiler
-  if (profilers.has('wall') && DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED) {
-    profilers.add('events')
-  }
   return [...profilers]
 }
 
@@ -238,8 +234,6 @@ function getProfiler (name, options) {
       return new WallProfiler(options)
     case 'space':
       return new SpaceProfiler(options)
-    case 'events':
-      return new EventsProfiler(options)
     default:
       options.logger.error(`Unknown profiler "${name}"`)
   }
@@ -255,6 +249,11 @@ function ensureProfilers (profilers, options) {
     if (typeof profiler === 'string') {
       profilers[i] = getProfiler(profiler, options)
     }
+  }
+
+  // Events profiler is a profiler for timeline events
+  if (options.timelineEnabled) {
+    profilers.push(new EventsProfiler(options))
   }
 
   // Filter out any invalid profilers
