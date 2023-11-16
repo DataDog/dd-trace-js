@@ -24,7 +24,6 @@ jobs:
     runs-on: ubuntu-latest
     services:
       aerospike:
-        aerospike:
         image: aerospike:ce-6.4.0.3
         ports: 
           - "127.0.0.1:3000-3002:3000-3002"
