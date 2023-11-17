@@ -57,8 +57,7 @@ describe('AppSec Index', () => {
     }
 
     web = {
-      root: sinon.stub(),
-      getContext: sinon.stub()
+      root: sinon.stub()
     }
 
     blocking = {
@@ -220,7 +219,6 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       sinon.stub(waf, 'run')
-      web.getContext.returns({})
     })
 
     it('should propagate incoming http start data', () => {
@@ -272,11 +270,6 @@ describe('AppSec Index', () => {
       }
 
       web.root.returns(rootSpan)
-      web.getContext.returns({})
-    })
-
-    afterEach(() => {
-      AppSec.disable()
     })
 
     it('should propagate incoming http end data', () => {
@@ -420,11 +413,6 @@ describe('AppSec Index', () => {
       }
 
       web.root.returns(rootSpan)
-      web.getContext.returns({})
-    })
-
-    afterEach(() => {
-      AppSec.disable()
     })
 
     it('should not trigger schema extraction with sampling disabled', () => {
@@ -536,7 +524,6 @@ describe('AppSec Index', () => {
         addTags: sinon.stub()
       }
       web.root.returns(rootSpan)
-      web.getContext.returns({})
 
       abortController = { abort: sinon.stub() }
 

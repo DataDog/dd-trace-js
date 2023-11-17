@@ -7,6 +7,7 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
+const zlib = require('zlib')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {
@@ -98,12 +99,13 @@ withVersions('express', 'express', version => {
       it('should get the schema', async () => {
         appsec.enable(config)
 
+        const expectedSchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
         const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
           expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal('H4sIAAAAAAAAA4uuVspOrVSyiraIrY0FAJDZQ4oNAAAA')
+          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedSchema)
         })
 
         expect(res.status).to.be.equal(200)

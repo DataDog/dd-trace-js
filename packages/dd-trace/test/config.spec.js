@@ -1354,5 +1354,23 @@ describe('Config', () => {
         }
       }
     })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: -5
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 0.1
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
 })

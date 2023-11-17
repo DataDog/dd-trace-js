@@ -395,7 +395,6 @@ class Config {
       appsec.enabled,
       process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
-
     const DD_APPSEC_RULES = coalesce(
       appsec.rules,
       process.env.DD_APPSEC_RULES
@@ -437,6 +436,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
+    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+      appsec?.apiSecurity?.enabled,
+      isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
+      false
+    )
+    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
+      appsec?.apiSecurity?.requestSampling,
+      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
+      0.1
+    )
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -520,18 +529,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
       process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
-    )
-
-    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
-      options.appsec?.apiSecurity?.enabled,
-      process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
-      false
-    )
-
-    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
-      options.appsec?.apiSecurity?.requestSampling,
-      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
-      0.1
     )
 
     const ingestion = options.ingestion || {}

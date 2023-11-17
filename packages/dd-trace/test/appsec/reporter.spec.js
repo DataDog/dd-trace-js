@@ -282,11 +282,6 @@ describe('reporter', () => {
   })
 
   describe('reportSchemas', () => {
-    it('should not call addTags if no parameter is passed', () => {
-      Reporter.reportSchemas()
-      expect(span.addTags).not.to.be.called
-    })
-
     it('should not call addTags if parameter is undefined', () => {
       Reporter.reportSchemas(undefined)
       expect(span.addTags).not.to.be.called
@@ -310,7 +305,7 @@ describe('reporter', () => {
 
       Reporter.reportSchemas(derivatives)
 
-      const schemaEncoded = Buffer.from(zlib.gzipSync(JSON.stringify(schemaValue))).toString('base64')
+      const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
       expect(span.addTags).to.be.calledOnceWithExactly({
         '_dd.appsec.s.req.headers': schemaEncoded,
         '_dd.appsec.s.req.query': schemaEncoded,
