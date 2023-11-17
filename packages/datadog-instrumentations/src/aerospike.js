@@ -1,18 +1,13 @@
 'use strict'
 
 const {
-  channel,
   addHook
 } = require('./helpers/instrument')
 const { NODE_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel('apm:aerospike:command:start')
-const endCh = channel('apm:aerospike:command:end')
-const errorCh = channel('apm:aerospike:command:error')
-
-const asyncStartChannel = channel('apm:aerospike:command:asyncStart')
-const asyncEndChannel = channel('apm:aerospike:command:asyncEnd')
+const tracingChannel = require('dc-polyfill').tracingChannel
+const ch = tracingChannel('apm:aerospike:command')
 
 function wrapCreateCommand (createCommand) {
   if (typeof createCommand !== 'function') return createCommand
@@ -30,7 +25,8 @@ function wrapCreateCommand (createCommand) {
 
 function wrapProcess (process) {
   return function (...args) {
-    if (typeof args[0] !== 'function') return process.apply(this, args)
+    const cb = args[0]
+    if (typeof cb !== 'function') return process.apply(this, args)
 
     const ctx = {
       commandName: this.constructor.name,
@@ -38,49 +34,24 @@ function wrapProcess (process) {
       clientConfig: this.client.config
     }
 
-    return startCh.runStores(ctx, () => {
-      arguments[0] = function () {
-        if (arguments[0] !== null) {
-          ctx.error = arguments['0']
-          errorCh.publish(ctx)
-        }
-        asyncStartChannel.runStores(ctx, () => {
-          try {
-            return args[0].apply(this, arguments)
-          } catch (e) {
-            ctx.error = e
-            errorCh.publish(ctx)
-          } finally {
-            asyncEndChannel.publish(ctx)
-          }
-        })
-      }
-      try {
-        return process.apply(this, arguments)
-      } catch (e) {
-        ctx.error = e
-        errorCh.publish(ctx)
-      } finally {
-        endCh.publish(ctx)
-      }
-    })
+    return ch.traceCallback(process, -1, ctx, this, ...args)
   }
 }
 
-// from testing currently only works uptil node 20
+// from testing, aerospike versions currently can't be installed on node 21
 if (NODE_MAJOR === 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
 }
 
-if (NODE_MAJOR > 14 && NODE_MAJOR <= 20) {
+if (NODE_MAJOR >= 15 && NODE_MAJOR <= 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['5.5.0 - 5.7.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
   })
 }
 
-if (NODE_MAJOR >= 14 && NODE_MAJOR < 20) {
+if (NODE_MAJOR >= 14 && NODE_MAJOR <= 19) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['4', '5.0.0 - 5.3.0'] },
     commandFactory => {
       return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
