@@ -197,15 +197,13 @@ describe('Plugin', () => {
                 set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
-                type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
-                job.waitUntilDone((waitError) => {
-                  const exp = aerospike.exp
+                job.wait((waitError) => {
                   const query = client.query(ns, 'demo')
                   const queryPolicy = {
-                    filterExpression: exp.keyExist('uniqueExpKey')
+                    totalTimeout: 10000
                   }
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
