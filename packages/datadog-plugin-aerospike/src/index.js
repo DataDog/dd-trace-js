@@ -7,23 +7,25 @@ class AerospikePlugin extends DatabasePlugin {
   static get id () { return 'aerospike' }
   static get operation () { return 'command' }
   static get system () { return 'aerospike' }
+  static get prefix () {
+    return 'tracing:apm:aerospike:command'
+  }
 
   bindStart (ctx) {
     const { commandName, commandArgs } = ctx
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
     const store = storage.getStore()
     const childOf = store ? store.span : null
-    let ns, set, key, bin, index
     let meta = {}
 
     if (resourceName.includes('Index')) {
-      [ns, set, bin, index] = commandArgs
+      const [ns, set, bin, index] = commandArgs
       meta = getMetaForIndex(ns, set, bin, index)
     } else if (resourceName === 'Query') {
-      const { ns: queryNs, set: querySet } = commandArgs[2]
-      meta = getMetaForQuery({ ns: queryNs, set: querySet })
+      const { ns, set } = commandArgs[2]
+      meta = getMetaForQuery({ ns, set })
     } else if (isKeyObject(commandArgs[0])) {
-      ({ ns, set, key } = commandArgs[0])
+      const { ns, set, key } = commandArgs[0]
       meta = getMetaForKey(ns, set, key)
     }
 
@@ -42,9 +44,11 @@ class AerospikePlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
-  bindAsyncStart (obj) {
-    obj.currentStore.span.finish()
-    return obj.parentStore
+  bindAsyncStart (ctx) {
+    if (ctx.currentStore) {
+      ctx.currentStore.span.finish()
+    }
+    return ctx.parentStore
   }
 
   end (ctx) {
@@ -54,9 +58,11 @@ class AerospikePlugin extends DatabasePlugin {
   }
 
   error (ctx) {
-    const error = ctx.error
-    const span = ctx.currentStore.span
-    span.setTag('error', error)
+    if (ctx.error) {
+      const error = ctx.error
+      const span = ctx.currentStore.span
+      span.setTag('error', error)
+    }
   }
 }
 

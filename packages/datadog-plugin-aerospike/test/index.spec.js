@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let client
@@ -54,10 +55,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `Put`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Put`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -78,10 +78,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `Connect`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Connect`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('component', 'aerospike')
@@ -96,10 +95,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `Get`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Get`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -120,10 +118,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `Operate`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Operate`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -150,10 +147,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `IndexCreate`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `IndexCreate`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.namespace', ns)
@@ -183,10 +179,9 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
-                const resource = `Query`
-                expect(span).to.have.property('name', 'aerospike.command')
-                expect(span).to.have.property('service', 'test-aerospike')
-                expect(span).to.have.property('resource', resource)
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Query`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.namespace', ns)
@@ -209,7 +204,9 @@ describe('Plugin', () => {
                 job.waitUntilDone((waitError) => {
                   const exp = aerospike.exp
                   const query = client.query(ns, 'demo')
-                  const queryPolicy = { filterExpression: exp.keyExist('uniqueExpKey') }
+                  const queryPolicy = {
+                    filterExpression: exp.keyExist('uniqueExpKey')
+                  }
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                   const stream = query.foreach(queryPolicy)
@@ -268,7 +265,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'aerospike.command')
+              expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
               expect(traces[0][0]).to.have.property('service', 'custom')
             })
             .then(done)
