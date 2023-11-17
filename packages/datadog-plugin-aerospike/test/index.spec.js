@@ -200,7 +200,6 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
-                console.log(10000000000)
                 job.wait((waitError) => {
                   const query = client.query(ns, 'demo')
                   const queryPolicy = {
@@ -209,6 +208,7 @@ describe('Plugin', () => {
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                   const stream = query.foreach(queryPolicy)
+                  console.log(10000000000)
                   stream.on('end', () => {})
                 })
               })
