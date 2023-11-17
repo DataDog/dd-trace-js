@@ -146,12 +146,9 @@ function reportAttack (attackData) {
 }
 
 function reportSchemas (derivatives) {
-  if (!derivatives) {
-    return
-  }
+  if (!derivatives) return
 
-  const store = storage.getStore()
-  const req = store?.req
+  const req = storage.getStore()?.req
   const rootSpan = web.root(req)
 
   if (!rootSpan) return
