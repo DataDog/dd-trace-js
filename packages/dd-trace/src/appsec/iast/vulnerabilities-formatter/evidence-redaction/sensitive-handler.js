@@ -6,6 +6,7 @@ const vulnerabilities = require('../../vulnerabilities')
 const { contains, intersects, remove } = require('./range-utils')
 
 const CommandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const HeaderSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const JsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
 const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
@@ -28,6 +29,7 @@ class SensitiveHandler {
     const urlSensitiveAnalyzer = new UrlSensitiveAnalyzer()
     this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, new HeaderSensitiveAnalyzer())
   }
 
   isSensibleName (name) {
