@@ -17,9 +17,7 @@ describe('Config', () => {
   let osType
 
   const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
-  const RECOMMENDED_JSON = require(RECOMMENDED_JSON_PATH)
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
-  const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
@@ -101,7 +99,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
+    expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
@@ -277,7 +275,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -758,7 +756,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -813,7 +811,7 @@ describe('Config', () => {
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: RECOMMENDED_JSON,
+      rules: undefined,
       customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
@@ -1095,19 +1093,18 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: 'DOES_NOT_EXIST.json',
+        rules: 'path/to/rules.json',
         blockedTemplateHtml: 'DOES_NOT_EXIST.html',
         blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
 
-    expect(log.error).to.be.callCount(3)
+    expect(log.error).to.be.callCount(2)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
-    expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
 
     expect(config.appsec.enabled).to.be.true
-    expect(config.appsec.rules).to.be.undefined
+    expect(config.appsec.rules).to.eq('path/to/rules.json')
     expect(config.appsec.customRulesProvided).to.be.true
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
