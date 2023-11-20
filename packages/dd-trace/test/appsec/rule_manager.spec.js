@@ -1,6 +1,8 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
+const fs = require('fs')
+const path = require('path')
+const { loadRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
 
@@ -27,30 +29,21 @@ describe('AppSec Rule Manager', () => {
     clearAllRules()
   })
 
-  describe('applyRules', () => {
+  describe('loadRules', () => {
     it('should call waf init with proper params', () => {
-      applyRules(rules, config.appsec)
+      loadRules(config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
       expect(blocking.updateBlockingConfiguration).not.to.have.been.called
     })
 
     it('should call updateBlockingConfiguration with proper params', () => {
-      const testRules = {
-        ...rules,
-        actions: [
-          {
-            id: 'block',
-            otherParam: 'other'
-          },
-          {
-            id: 'otherId',
-            moreParams: 'more'
-          }
-        ]
-      }
+      const rulesPath = path.join(__dirname, './blocking-actions-rules.json')
+      const testRules = JSON.parse(fs.readFileSync(rulesPath))
 
-      applyRules(testRules, config.appsec)
+      config.appsec.rules = rulesPath
+
+      loadRules(config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
       expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly({
@@ -61,14 +54,17 @@ describe('AppSec Rule Manager', () => {
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
-      expect(() => { applyRules(undefined, config.appsec) }).to.throw()
-      expect(() => { applyRules(null, config.appsec) }).to.throw()
+      config.appsec.rules = './not/existing/file.json'
+      expect(() => { loadRules(config.appsec) }).to.throw()
+
+      config.appsec.rules = './bad-formatted-rules.json'
+      expect(() => { loadRules(config.appsec) }).to.throw()
     })
   })
 
   describe('clearAllRules', () => {
     it('should call clear method on all applied rules', () => {
-      applyRules(rules, config.appsec)
+      loadRules(config.appsec)
       expect(waf.init).to.have.been.calledOnce
 
       clearAllRules()
@@ -288,7 +284,7 @@ describe('AppSec Rule Manager', () => {
 
     describe('ASM_DD', () => {
       beforeEach(() => {
-        applyRules(rules, config.appsec)
+        loadRules(config.appsec)
       })
 
       it('should apply new rules', () => {
