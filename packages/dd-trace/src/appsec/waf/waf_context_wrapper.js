@@ -65,9 +65,7 @@ class WAFContextWrapper {
         Reporter.reportAttack(JSON.stringify(result.events))
       }
 
-      if (result.derivatives) {
-        Reporter.reportSchemas(result.derivatives)
-      }
+      Reporter.reportSchemas(result.derivatives)
 
       return result.actions
     } catch (err) {

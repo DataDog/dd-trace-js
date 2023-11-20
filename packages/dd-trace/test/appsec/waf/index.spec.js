@@ -26,11 +26,6 @@ describe('WAF Manager', () => {
         loaded: ['rule_1'], failed: []
       }
     }
-    DDWAF.prototype.requiredAddresses = new Map([
-      ['server.request.headers.no_cookies', { 'header': 'value' }],
-      ['server.request.uri.raw', 'https://testurl'],
-      ['server.request.body', 'value']
-    ])
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }

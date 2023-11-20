@@ -150,12 +150,12 @@ function reportSchemas (derivatives) {
   if (!rootSpan) return
 
   const tags = {}
-  Object.entries(derivatives).forEach(([address, value]) => {
-    if (address.includes('_dd.appsec.s.req')) {
+  for (const [address, value] of Object.entries(derivatives)) {
+    if (address.startsWith('_dd.appsec.s.req')) {
       const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-      tags[address] = Buffer.from(gzippedValue).toString('base64')
+      tags[address] = gzippedValue.toString('base64')
     }
-  })
+  }
 
   rootSpan.addTags(tags)
 }

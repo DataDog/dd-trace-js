@@ -799,6 +799,10 @@ describe('Config', () => {
         blockedTemplateJson: undefined,
         eventTracking: {
           mode: 'disabled'
+        },
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 1.0
         }
       },
       experimental: {
@@ -833,8 +837,8 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
-        enabled: false,
-        requestSampling: 0.1
+        enabled: true,
+        requestSampling: 1.0
       }
     })
   })
