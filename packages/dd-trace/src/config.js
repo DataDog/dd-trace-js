@@ -309,6 +309,10 @@ class Config {
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
+    const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
+      process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      false
+    )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -579,6 +583,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
+    this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this.experimental = {
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
