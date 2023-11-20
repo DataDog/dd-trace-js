@@ -46,6 +46,11 @@ class EventsProfiler {
   }
 
   profile () {
+    if (this.entries.length === 0) {
+      // No events in the period; don't produce a profile
+      return null
+    }
+
     const stringTable = new StringTable()
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
     const kindLabelKey = stringTable.dedup('gc type')
