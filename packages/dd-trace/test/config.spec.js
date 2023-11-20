@@ -275,7 +275,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON_PATH)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
