@@ -15,7 +15,7 @@ const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 const threadName = `${threadNamePrefix} Event Loop`
 
-const CachedWebTags = Symbol('NativeWallProfiler.CachedWebTags')
+const MemoizedWebTags = Symbol('NativeWallProfiler.MemoizedWebTags')
 
 let kSampleCount
 
@@ -59,6 +59,38 @@ function endpointNameFromTags (tags) {
     tags[HTTP_METHOD],
     tags[HTTP_ROUTE]
   ].filter(v => v).join(' ')
+}
+
+function getWebTags (startedSpans, i, span) {
+  // Are web tags for this span already memoized?
+  const memoizedWebTags = span[MemoizedWebTags]
+  if (memoizedWebTags !== undefined) {
+    return memoizedWebTags
+  }
+  // No, we'll have to memoize a new value
+  function memoize (tags) {
+    span[MemoizedWebTags] = tags
+    return tags
+  }
+  // Is this span itself a web span?
+  const context = span.context()
+  const tags = context._tags
+  if (isWebServerSpan(tags)) {
+    return memoize(tags)
+  }
+  // It isn't. Get parent's web tags (memoize them too recursively.)
+  // There might be several webspans, for example with next.js, http plugin creates the first span
+  // and then next.js plugin creates a child span, and this child span has the correct endpoint
+  // information. That's why we always use the tags of the closest ancestor web span.
+  const parentId = context._parentId
+  while (--i >= 0) {
+    const ispan = startedSpans[i]
+    if (ispan.context()._spanId === parentId) {
+      return memoize(getWebTags(startedSpans, i, ispan))
+    }
+  }
+  // Local root span with no web span
+  return memoize(null)
 }
 
 class NativeWallProfiler {
@@ -149,33 +181,7 @@ class NativeWallProfiler {
       const startedSpans = getStartedSpans(context)
       this._lastStartedSpans = startedSpans
       if (this._endpointCollectionEnabled) {
-        const cachedWebTags = span[CachedWebTags]
-        if (cachedWebTags === undefined) {
-          let found = false
-          // Find the first webspan starting from the end:
-          // There might be several webspans, for example with next.js, http plugin creates a first span
-          // and then next.js plugin creates a child span, and this child span has the correct endpoint information.
-          let nextSpanId = context._spanId
-          for (let i = startedSpans.length - 1; i >= 0; i--) {
-            const nextContext = startedSpans[i].context()
-            if (nextContext._spanId === nextSpanId) {
-              const tags = nextContext._tags
-              if (isWebServerSpan(tags)) {
-                this._lastWebTags = tags
-                span[CachedWebTags] = tags
-                found = true
-                break
-              }
-              nextSpanId = nextContext._parentId
-            }
-          }
-          if (!found) {
-            this._lastWebTags = undefined
-            span[CachedWebTags] = null // cache negative lookup result
-          }
-        } else {
-          this._lastWebTags = cachedWebTags
-        }
+        this._lastWebTags = getWebTags(startedSpans, startedSpans.length, span)
       }
     } else {
       this._lastStartedSpans = undefined
@@ -204,8 +210,8 @@ class NativeWallProfiler {
   }
 
   _spanFinished (span) {
-    if (span[CachedWebTags]) {
-      span[CachedWebTags] = undefined
+    if (span[MemoizedWebTags]) {
+      span[MemoizedWebTags] = undefined
     }
   }
 
