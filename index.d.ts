@@ -590,6 +590,7 @@ export declare interface TracerOptions {
       enabled?: boolean,
 
       /** Controls the request sampling rate (between 0 and 1) in which Api Security is triggered.
+       * The value will be coerced back if it's outside of the 0-1 range.
        * @default 0.1
        */
       requestSampling?: number
