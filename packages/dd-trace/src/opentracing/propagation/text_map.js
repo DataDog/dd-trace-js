@@ -241,6 +241,13 @@ class TextMapPropagator {
       this._extractBaggageItems(carrier, spanContext)
       this._extractSamplingPriority(carrier, spanContext)
       this._extractTags(carrier, spanContext)
+
+      const tc = this._extractTraceparentContext(carrier)
+
+      if (tc && spanContext._traceId.equals(tc._traceId)) {
+        spanContext._traceparent = tc._traceparent
+        spanContext._tracestate = tc._tracestate
+      }
     }
 
     return spanContext
