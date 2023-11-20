@@ -464,6 +464,40 @@ describe('TextMapPropagator', () => {
       expect(first._spanId.toString(16)).to.equal(spanId)
     })
 
+    it('should always extract tracestate from tracecontext when trace IDs match', () => {
+      textMap['traceparent'] = '00-0000000000000000000000000000007B-0000000000000456-01'
+      textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._tracestate.get('other')).to.equal('bleh')
+    })
+
+    it(`should not extract tracestate from tracecontext when trace IDs don't match`, () => {
+      textMap['traceparent'] = '00-00000000000000000000000000000789-0000000000000456-01'
+      textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._tracestate).to.be.undefined
+    })
+
+    it(`should not extract tracestate from tracecontext when configured to extract first`, () => {
+      textMap['traceparent'] = '00-0000000000000000000000000000007B-0000000000000456-01'
+      textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.tracePropagationExtractFirst = true
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._tracestate).to.be.undefined
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
@@ -744,6 +778,19 @@ describe('TextMapPropagator', () => {
         expect(carrier.traceparent).to.match(/^01/)
         expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-4')
         expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-4')
+      })
+
+      it('should propagate other vendors', () => {
+        textMap['traceparent'] = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+
+        propagator.inject(spanContext, carrier)
+
+        expect(carrier['tracestate']).to.include('other=bleh')
       })
 
       it('should fix _dd.p.dm if invalid (non-hyphenated) input is received', () => {
