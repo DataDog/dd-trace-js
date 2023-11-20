@@ -486,6 +486,18 @@ describe('TextMapPropagator', () => {
       expect(spanContext._tracestate).to.be.undefined
     })
 
+    it(`should not extract tracestate from tracecontext when configured to extract first`, () => {
+      textMap['traceparent'] = '00-0000000000000000000000000000007B-0000000000000456-01'
+      textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.tracePropagationExtractFirst = true
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._tracestate).to.be.undefined
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
