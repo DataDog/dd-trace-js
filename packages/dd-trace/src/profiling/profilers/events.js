@@ -36,7 +36,7 @@ class EventsProfiler {
       this._observer = new PerformanceObserver(add.bind(this))
     }
     // Currently only support GC
-    this._observer.observe({ type: 'gc' })
+    this._observer.observe({ entryTypes: ['gc'] })
   }
 
   stop () {
