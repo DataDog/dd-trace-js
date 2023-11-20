@@ -52,10 +52,10 @@ function wrapFn (fn) {
     try {
       const result = fn.apply(this, arguments)
       if (result && typeof result === 'object' && typeof result.then === 'function') {
-        return result.then(function () {
+        return result.then(function (res) {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          return arguments
+          return res
         }).catch(function (error) {
           errorChannel.publish({ req, error })
           nextChannel.publish({ req })
