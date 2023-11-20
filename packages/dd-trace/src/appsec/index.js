@@ -36,7 +36,7 @@ function enable (_config) {
 
     setTemplates(_config)
 
-    RuleManager.applyRules(_config.appsec.rules, _config.appsec)
+    RuleManager.loadRules(_config.appsec)
 
     remoteConfig.enableWafUpdate(_config.appsec)
 
