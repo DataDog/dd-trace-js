@@ -179,6 +179,7 @@ describe('Plugin', () => {
             agent
               .use(traces => {
                 const span = traces[0][0]
+                console.log(20000, span)
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
                 expect(span).to.have.property('resource', `Query`)
