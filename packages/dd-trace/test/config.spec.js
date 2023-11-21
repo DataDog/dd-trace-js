@@ -817,6 +817,10 @@ describe('Config', () => {
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
           eventTracking: {
             mode: 'safe'
+          },
+          apiSecurity: {
+            enabled: false,
+            requestSampling: 0.5
           }
         }
       }
