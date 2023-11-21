@@ -192,10 +192,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            client.connect(() => {
+            aerospike.connect((error, client) => {
+              if (error) throw error
               const index = {
                 ns: ns,
-                set: 'demo',
+                set: set,
                 bin: 'tags',
                 index: 'tags_idx',
                 type: aerospike.indexType.LIST,
