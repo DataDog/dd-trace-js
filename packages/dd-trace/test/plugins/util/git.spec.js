@@ -89,14 +89,14 @@ describe('git', () => {
   })
   it('does not crash if git is not available', () => {
     sanitizedExecStub.returns('')
-    const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
+    const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
     expect(metadata).to.eql({
       [GIT_BRANCH]: '',
       [GIT_TAG]: undefined,
       [GIT_COMMIT_MESSAGE]: '',
       [GIT_COMMIT_SHA]: '',
-      [GIT_REPOSITORY_URL]: 'ciRepositoryUrl',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_COMMITTER_EMAIL]: undefined,
       [GIT_COMMIT_COMMITTER_DATE]: undefined,
       [GIT_COMMIT_COMMITTER_NAME]: undefined,
@@ -112,7 +112,7 @@ describe('git', () => {
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('gitRepositoryUrl')
+      .onCall(1).returns('https://github.com/datadog/safe-repository.git')
       .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
@@ -124,7 +124,7 @@ describe('git', () => {
       [GIT_TAG]: 'ciTag',
       [GIT_COMMIT_MESSAGE]: 'this is a commit message',
       [GIT_COMMIT_SHA]: 'gitCommitSHA',
-      [GIT_REPOSITORY_URL]: 'gitRepositoryUrl',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
       [GIT_COMMIT_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
       [GIT_COMMIT_AUTHOR_NAME]: 'git author',
@@ -319,5 +319,36 @@ describe('unshallowRepository', () => {
 
     unshallowRepository()
     expect(sanitizedExecStub).to.have.been.calledWith('git', options)
+  })
+})
+
+describe('user credentials', () => {
+  afterEach(() => {
+    sanitizedExecStub.reset()
+    execFileSyncStub.reset()
+  })
+  it('scrubs https user credentials', () => {
+    sanitizedExecStub
+      .onCall(0).returns(
+        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
+        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+      )
+      .onCall(1).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
+
+    const metadata = getGitMetadata({})
+    expect(metadata[GIT_REPOSITORY_URL])
+      .to.equal('https://github.com/datadog/safe-repository.git')
+  })
+  it('scrubs ssh user credentials', () => {
+    sanitizedExecStub
+      .onCall(0).returns(
+        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
+        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+      )
+      .onCall(1).returns('ssh://username@host.xz:port/path/to/repo.git/')
+
+    const metadata = getGitMetadata({})
+    expect(metadata[GIT_REPOSITORY_URL])
+      .to.equal('ssh://host.xz:port/path/to/repo.git/')
   })
 })

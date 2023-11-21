@@ -8,7 +8,7 @@ require,@datadog/sketches-js,Apache license 2.0,Copyright 2020 Datadog Inc.
 require,@opentelemetry/api,Apache license 2.0,Copyright OpenTelemetry Authors
 require,@opentelemetry/core,Apache license 2.0,Copyright OpenTelemetry Authors
 require,crypto-randomuuid,MIT,Copyright 2021 Node.js Foundation and contributors
-require,diagnostics_channel,MIT,Copyright 2021 Simon D.
+require,dc-polyfill,MIT,Copyright 2023 Datadog Inc.
 require,ignore,MIT,Copyright 2013 Kael Zhang and contributors
 require,import-in-the-middle,Apache license 2.0,Copyright 2021 Datadog Inc.
 require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
@@ -28,6 +28,7 @@ require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,node-abort-controller,MIT,Copyright (c) 2019 Steve Faulkner
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
+require,pprof-format,MIT,Copyright 2022 Stephen Belanger
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
@@ -62,7 +63,6 @@ dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foun
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
-dev,pprof-format,MIT,Copyright 2022 Stephen Belanger
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen

@@ -10,7 +10,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
@@ -248,8 +248,9 @@ class Config {
 
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
-    const DD_TRACE_TELEMETRY_ENABLED = coalesce(
-      process.env.DD_TRACE_TELEMETRY_ENABLED,
+    const DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !inServerlessEnvironment
     )
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
@@ -268,7 +269,7 @@ class Config {
     )
     const DD_TELEMETRY_METRICS_ENABLED = coalesce(
       process.env.DD_TELEMETRY_METRICS_ENABLED,
-      false
+      true
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
@@ -315,12 +316,20 @@ class Config {
         'environment variables'
       )
     }
-    this.propagationStyleInject = propagationStyle('inject', options.tracePropagationStyle,
-      this.defaultPropagationStyle)
-    const DD_TRACE_PROPAGATION_STYLE_INJECT = this.propagationStyleInject[1]
-    this.propagationStyleExtract = propagationStyle('extract', options.tracePropagationStyle,
-      this.defaultPropagationStyle)
-    const DD_TRACE_PROPAGATION_STYLE_EXTRACT = this.propagationStyleExtract[1]
+    const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
+      'inject',
+      options.tracePropagationStyle,
+      defaultPropagationStyle
+    )[1]
+    const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
+      'extract',
+      options.tracePropagationStyle,
+      defaultPropagationStyle
+    )[1]
+    const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
+      process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      false
+    )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
       process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -380,10 +389,11 @@ class Config {
       isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
+    // the tracer generates 128 bit IDs by default as of v5
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
       options.traceId128BitGenerationEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
-      false
+      true
     )
 
     const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
@@ -456,7 +466,7 @@ class Config {
       5 // seconds
     )
 
-    this.iastOptions = options.experimental && options.experimental.iast
+    const iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       this.iastOptions &&
       (this.iastOptions === true || this.iastOptions.enabled === true),
@@ -469,7 +479,7 @@ class Config {
     )
 
     const iastRequestSampling = coalesce(
-      parseInt(this.iastOptions && this.iastOptions.requestSampling),
+      parseInt(this.iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
@@ -477,31 +487,43 @@ class Config {
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(this.iastOptions && this.iastOptions.maxConcurrentRequests),
+      parseInt(this.iastOptions?.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
     const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(this.iastOptions && this.iastOptions.maxContextOperations),
+      parseInt(this.iastOptions?.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      this.iastOptions && this.iastOptions.deduplicationEnabled,
+      this.iastOptions?.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
-      this.iastOptions && this.iastOptions.redactionEnabled,
-      process.env.DD_IAST_REDACTION_ENABLED && !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
+      this.iastOptions?.redactionEnabled,
+      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
+    const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
+      iastOptions?.redactionNamePattern,
+      process.env.DD_IAST_REDACTION_NAME_PATTERN,
+      null
+    )
+
+    const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
+      iastOptions?.redactionValuePattern,
+      process.env.DD_IAST_REDACTION_VALUE_PATTERN,
+      null
+    )
+
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      this.iastOptions && this.iastOptions.telemetryVerbosity,
+      this.iastOptions?.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
       'INFORMATION'
     )
@@ -562,7 +584,7 @@ class Config {
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
-      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     }
     this.appsec = {
@@ -589,10 +611,12 @@ class Config {
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
-    if (gitMetadataEnabled) {
-      this.repositoryUrl = coalesce(
-        process.env.DD_GIT_REPOSITORY_URL,
-        this.tags[GIT_REPOSITORY_URL]
+    if (this.gitMetadataEnabled) {
+      this.repositoryUrl = removeUserSensitiveInfo(
+        coalesce(
+          process.env.DD_GIT_REPOSITORY_URL,
+          this.tags[GIT_REPOSITORY_URL]
+        )
       )
       this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,

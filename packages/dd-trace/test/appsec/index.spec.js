@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('fs')
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
@@ -21,6 +22,7 @@ const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
   let config
@@ -37,7 +39,7 @@ describe('AppSec Index', () => {
     config = {
       appsec: {
         enabled: true,
-        rules: RULES,
+        rules: './path/rules.json',
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
@@ -82,8 +84,9 @@ describe('AppSec Index', () => {
       './telemetry': appsecTelemetry
     })
 
+    sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
-    sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(RuleManager, 'loadRules')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
@@ -100,7 +103,7 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
+      expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
@@ -108,10 +111,10 @@ describe('AppSec Index', () => {
     })
 
     it('should log when enable fails', () => {
-      RuleManager.applyRules.restore()
+      RuleManager.loadRules.restore()
 
       const err = new Error('Invalid Rules')
-      sinon.stub(RuleManager, 'applyRules').throws(err)
+      sinon.stub(RuleManager, 'loadRules').throws(err)
 
       AppSec.enable(config)
 
@@ -643,6 +646,65 @@ describe('AppSec Index', () => {
           {}
         )
       })
+    })
+  })
+
+  describe('Metrics', () => {
+    const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+    let config
+
+    beforeEach(() => {
+      sinon.restore()
+
+      appsecNamespace.reset()
+
+      config = new Config({
+        appsec: {
+          enabled: true
+        }
+      })
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    after(() => {
+      appsecNamespace.reset()
+    })
+
+    it('should increment waf.init metric', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics.series.length).to.equal(1)
+      expect(metrics.series[0].metric).to.equal('waf.init')
+    })
+
+    it('should not increment waf.init metric if metrics are not enabled', () => {
+      config.telemetry.enabled = true
+      config.telemetry.metrics = false
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
+    })
+
+    it('should not increment waf.init metric if telemetry is not enabled', () => {
+      config.telemetry.enabled = false
+      config.telemetry.metrics = true
+
+      appsec.enable(config)
+
+      const metrics = appsecNamespace.metrics.toJSON()
+
+      expect(metrics).to.be.undefined
     })
   })
 })

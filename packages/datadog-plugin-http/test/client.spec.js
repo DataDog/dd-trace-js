@@ -964,6 +964,50 @@ describe('Plugin', () => {
         }
       })
 
+      describe('with late plugin initialization and an external subscriber', () => {
+        let ch
+        let sub
+
+        beforeEach(() => {
+          return agent.load('http', { server: false })
+            .then(() => {
+              ch = require('dc-polyfill').channel('apm:http:client:request:start')
+              sub = () => {}
+              tracer = require('../../dd-trace')
+              http = require(protocol)
+            })
+        })
+
+        afterEach(() => {
+          ch.unsubscribe(sub)
+        })
+
+        it('should not crash', done => {
+          const app = (req, res) => {
+            res.end()
+          }
+
+          getPort().then(port => {
+            appListener = server(app, port, () => {
+              ch.subscribe(sub)
+
+              tracer.use('http', false)
+
+              const req = http.request(`${protocol}://localhost:${port}`, res => {
+                res.on('error', done)
+                res.on('data', () => {})
+                res.on('end', () => done())
+              })
+              req.on('error', done)
+
+              tracer.use('http', true)
+
+              req.end()
+            })
+          })
+        })
+      })
+
       describe('with service configuration', () => {
         let config
 

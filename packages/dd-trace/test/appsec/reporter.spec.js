@@ -54,12 +54,12 @@ describe('reporter', () => {
         'user-agent': 42,
         secret: 'password',
         'x-forwarded-for': '10'
-      }, [
+      }, Reporter.mapHeaderAndTags([
         'host',
         'user-agent',
         'x-forwarded-for',
         'x-client-ip'
-      ], 'prefix.')
+      ], 'prefix.'))
 
       expect(result).to.deep.equal({
         'prefix.host': 'localhost',

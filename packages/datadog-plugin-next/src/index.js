@@ -43,7 +43,7 @@ class NextPlugin extends ServerPlugin {
     this.addError(error, span)
   }
 
-  finish ({ req, res }) {
+  finish ({ req, res, nextRequest = {} }) {
     const store = storage.getStore()
 
     if (!store) return
@@ -52,7 +52,8 @@ class NextPlugin extends ServerPlugin {
     const error = span.context()._tags['error']
 
     if (!this.config.validateStatus(res.statusCode) && !error) {
-      span.setTag('error', true)
+      span.setTag('error', req.error || nextRequest.error || true)
+      web.addError(req, req.error || nextRequest.error || true)
     }
 
     span.addTags({
@@ -64,7 +65,7 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath }) {
+  pageLoad ({ page, isAppPath = false }) {
     const store = storage.getStore()
 
     if (!store) return

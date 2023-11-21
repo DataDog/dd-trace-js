@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 // TODO: use TBD naming convention
 module.exports = {

@@ -12,6 +12,7 @@ const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
+const { channel } = require('dc-polyfill')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -29,6 +30,8 @@ const integrationCounters = {
   span_created: {},
   span_finished: {}
 }
+
+const finishCh = channel('dd-trace:span:finish')
 
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
@@ -176,6 +179,7 @@ class DatadogSpan {
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
     this._spanContext._isFinished = true
+    finishCh.publish(this)
     this._processor.process(this)
   }
 

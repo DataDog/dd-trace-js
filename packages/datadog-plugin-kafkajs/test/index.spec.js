@@ -8,7 +8,21 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+
+const testTopic = 'test-topic'
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:' + testTopic, 'type:kafka'],
+  ENTRY_PARENT_HASH
+)
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+  expectedProducerHash
+)
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
@@ -17,7 +31,6 @@ describe('Plugin', () => {
       return agent.close({ ritmReset: false })
     })
     withVersions('kafkajs', 'kafkajs', (version) => {
-      const testTopic = 'test-topic'
       let kafka
       let tracer
       let Kafka
@@ -41,7 +54,8 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
-                'component': 'kafkajs'
+                'component': 'kafkajs',
+                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
               },
               metrics: {
                 'kafka.batch_size': messages.length
@@ -140,7 +154,8 @@ describe('Plugin', () => {
               service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
-                'component': 'kafkajs'
+                'component': 'kafkajs',
+                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
               },
               resource: testTopic,
               error: 0,
@@ -268,18 +283,6 @@ describe('Plugin', () => {
           afterEach(async () => {
             await consumer.disconnect()
           })
-          const expectedProducerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:out', 'topic:' + testTopic, 'type:kafka'],
-            ENTRY_PARENT_HASH
-          )
-          const expectedConsumerHash = computePathwayHash(
-            'test',
-            'tester',
-            ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
-            expectedProducerHash
-          )
 
           it('Should set a checkpoint on produce', async () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
@@ -298,6 +301,32 @@ describe('Plugin', () => {
               }
             })
             setDataStreamsContextSpy.restore()
+          })
+
+          it('Should set a message payload size when producing a message', async () => {
+            const messages = [{ key: 'key1', value: 'test2' }]
+            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+              DataStreamsProcessor.prototype.recordCheckpoint.restore()
+            }
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+            await sendMessages(kafka, testTopic, messages)
+            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            recordCheckpointSpy.restore()
+          })
+
+          it('Should set a message payload size when consuming a message', async () => {
+            const messages = [{ key: 'key1', value: 'test2' }]
+            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+              DataStreamsProcessor.prototype.recordCheckpoint.restore()
+            }
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+            await sendMessages(kafka, testTopic, messages)
+            await consumer.run({
+              eachMessage: async () => {
+                expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+                recordCheckpointSpy.restore()
+              }
+            })
           })
         })
       })

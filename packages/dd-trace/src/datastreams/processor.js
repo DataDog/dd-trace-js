@@ -4,12 +4,16 @@ const pkg = require('../../../../package.json')
 const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-
+const { encodePathwayContext } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
+const { types } = require('util')
+const { PATHWAY_HASH } = require('../../../../ext/tags')
+
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
+const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -18,6 +22,7 @@ class StatsPoint {
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+    this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
   }
 
   addLatencies (checkpoint) {
@@ -25,6 +30,7 @@ class StatsPoint {
     const pathwayLatencySec = checkpoint.pathwayLatencyNs / 1e9
     this.edgeLatency.accept(edgeLatencySec)
     this.pathwayLatency.accept(pathwayLatencySec)
+    this.payloadSize.accept(checkpoint.payloadSize)
   }
 
   encode () {
@@ -33,7 +39,8 @@ class StatsPoint {
       ParentHash: this.parentHash,
       EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(),
-      PathwayLatency: this.pathwayLatency.toProto()
+      PathwayLatency: this.pathwayLatency.toProto(),
+      PayloadSize: this.payloadSize.toProto()
     }
   }
 }
@@ -47,6 +54,29 @@ class StatsBucket extends Map {
 
     return this.get(key)
   }
+}
+
+function getSizeOrZero (obj) {
+  if (typeof obj === 'string') {
+    return Buffer.from(obj, 'utf-8').length
+  }
+  if (types.isArrayBuffer(obj)) {
+    return obj.byteLength
+  }
+  if (Buffer.isBuffer(obj)) {
+    return obj.length
+  }
+  return 0
+}
+
+function getHeadersSize (headers) {
+  if (headers === undefined) return 0
+  return Object.entries(headers).reduce((prev, [key, val]) => getSizeOrZero(key) + getSizeOrZero(val) + prev, 0)
+}
+
+function getMessageSize (message) {
+  const { key, value, headers } = message
+  return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
 }
 
 class TimeBuckets extends Map {
@@ -105,15 +135,19 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
-  recordCheckpoint (checkpoint) {
+  recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
     const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
     this.buckets.forTime(bucketTime)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
+    // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
+    if (span) {
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+    }
   }
 
-  setCheckpoint (edgeTags, ctx = null) {
+  setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
     if (!this.enabled) return null
     const nowNs = Date.now() * 1e6
     const direction = edgeTags.find(t => t.startsWith('direction:'))
@@ -147,16 +181,7 @@ class DataStreamsProcessor {
     const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
-    const checkpoint = {
-      currentTimestamp: nowNs,
-      parentHash: parentHash,
-      hash: hash,
-      edgeTags: edgeTags,
-      edgeLatencyNs: edgeLatencyNs,
-      pathwayLatencyNs: pathwayLatencyNs
-    }
-    this.recordCheckpoint(checkpoint)
-    return {
+    const dataStreamsContext = {
       hash: hash,
       edgeStartNs: edgeStartNs,
       pathwayStartNs: pathwayStartNs,
@@ -164,6 +189,22 @@ class DataStreamsProcessor {
       closestOppositeDirectionHash: closestOppositeDirectionHash,
       closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart
     }
+    if (direction === 'direction:out') {
+      // Add the header for this now, as the callee doesn't have access to context when producing
+      payloadSize += getSizeOrZero(encodePathwayContext(dataStreamsContext))
+      payloadSize += CONTEXT_PROPAGATION_KEY.length
+    }
+    const checkpoint = {
+      currentTimestamp: nowNs,
+      parentHash: parentHash,
+      hash: hash,
+      edgeTags: edgeTags,
+      edgeLatencyNs: edgeLatencyNs,
+      pathwayLatencyNs: pathwayLatencyNs,
+      payloadSize: payloadSize
+    }
+    this.recordCheckpoint(checkpoint, span)
+    return dataStreamsContext
   }
 
   _serializeBuckets () {
@@ -194,5 +235,9 @@ module.exports = {
   StatsPoint: StatsPoint,
   StatsBucket: StatsBucket,
   TimeBuckets,
-  ENTRY_PARENT_HASH
+  getMessageSize,
+  getHeadersSize,
+  getSizeOrZero,
+  ENTRY_PARENT_HASH,
+  CONTEXT_PROPAGATION_KEY
 }

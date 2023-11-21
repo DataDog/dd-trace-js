@@ -1,14 +1,27 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
-const agent = require('../../../plugins/agent')
-const path = require('path')
-const os = require('os')
 const fs = require('fs')
+const os = require('os')
+const path = require('path')
+const semver = require('semver')
+const { prepareTestServerForIastInExpress } = require('../utils')
+const agent = require('../../../plugins/agent')
+
 describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('express', 'express', '>4.18.0', expressVersion => {
     withVersions('mongodb', 'mongodb', mongodbVersion => {
+      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
+
+      const satisfiesNodeVersionForMongo3and4 =
+        (semver.satisfies(process.version, '<14.20.1') && semver.satisfies(mongodb.version(), '>=3.3 <5'))
+      const satisfiesNodeVersionForMongo5 =
+        (semver.satisfies(process.version, '>=14.20.1 <16.20.1') && semver.satisfies(mongodb.version(), '5'))
+      const satisfiesNodeVersionForMongo6 =
+        (semver.satisfies(process.version, '>=16.20.1') && semver.satisfies(mongodb.version(), '>=6'))
+
+      if (!satisfiesNodeVersionForMongo3and4 && !satisfiesNodeVersionForMongo5 && !satisfiesNodeVersionForMongo6) return
+
       const vulnerableMethodFilename = 'mongodb-vulnerable-method.js'
       let collection, tmpFilePath
 
@@ -17,7 +30,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       })
 
       before(async () => {
-        const { MongoClient } = require(`../../../../../../versions/mongodb@${mongodbVersion}`).get()
+        const { MongoClient } = mongodb.get()
         const client = new MongoClient('mongodb://127.0.0.1:27017')
         await client.connect()
 
@@ -35,6 +48,14 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       })
 
       prepareTestServerForIastInExpress('Test without sanitization middlewares', expressVersion,
+        (expressApp) => {
+          expressApp.get('/path/:parameter', async function (req, res) {
+            await collection.find({
+              key: req.params.parameter
+            })
+            res.end()
+          })
+        },
         (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
           testThatRequestHasVulnerability({
             fn: async (req, res) => {
@@ -57,6 +78,15 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               expect(someRedacted).to.be.true
+            }
+          })
+
+          testThatRequestHasNoVulnerability({
+            testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with path params',
+            fn: function noop () {},
+            vulnerability: 'NOSQL_MONGODB_INJECTION',
+            makeRequest: (done, config) => {
+              axios.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
             }
           })
 

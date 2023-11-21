@@ -20,4 +20,13 @@ test.describe('playwright', () => {
       'Hello Warld'
     ])
   })
+  test('should work with annotated tests', async ({ page }) => {
+    test.info().annotations.push({ type: 'DD_TAGS[test.memory.usage]', description: 'low' })
+    test.info().annotations.push({ type: 'DD_TAGS[test.memory.allocations]', description: 16 })
+    // this is malformed and should be ignored
+    test.info().annotations.push({ type: 'DD_TAGS[test.invalid', description: 'high' })
+    await expect(page.locator('.hello-world')).toHaveText([
+      'Hello World'
+    ])
+  })
 })

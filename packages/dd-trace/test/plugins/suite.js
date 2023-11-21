@@ -12,7 +12,7 @@ const url = require('url')
 const { once } = require('events')
 const { expect } = require('chai')
 
-process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 const mkdtemp = util.promisify(fs.mkdtemp)
 

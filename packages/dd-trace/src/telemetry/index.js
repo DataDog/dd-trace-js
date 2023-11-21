@@ -1,11 +1,12 @@
 'use strict'
 const tracerVersion = require('../../../../package.json').version
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
+const logs = require('./logs')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -238,7 +239,7 @@ function start (aConfig, thePluginManager) {
 
   sendData(config, application, host, 'app-integrations-change',
     { 'integrations': integrations }, updateRetryData)
-
+  
   heartbeat(config, application, host)
 
   extendedHeartbeat(config)

@@ -9,6 +9,7 @@ const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
@@ -37,6 +38,7 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
@@ -126,26 +128,19 @@ class Config {
 
     const profilers = options.profilers
       ? options.profilers
-      : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+      : getProfilers({
+        DD_PROFILING_HEAP_ENABLED,
+        DD_PROFILING_WALLTIME_ENABLED,
+        DD_PROFILING_PROFILERS
+      })
 
-    function getCodeHotspotsOptionsOr (defvalue) {
-      return coalesce(options.codeHotspotsEnabled,
-        DD_PROFILING_CODEHOTSPOTS_ENABLED,
-        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, defvalue)
-    }
-    this.codeHotspotsEnabled = isTrue(getCodeHotspotsOptionsOr(false))
+    this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+
+    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
+      DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
-    if (this.endpointCollectionEnabled && !this.codeHotspotsEnabled) {
-      if (getCodeHotspotsOptionsOr(undefined) !== undefined) {
-        this.logger.warn(
-          'Endpoint collection is enabled, but Code Hotspots are disabled. ' +
-          'Enable Code Hotspots too for endpoint collection to work.')
-        this.endpointCollectionEnabled = false
-      } else {
-        this.logger.info('Code Hotspots are implicitly enabled by endpoint collection.')
-        this.codeHotspotsEnabled = true
-      }
-    }
 
     this.profilers = ensureProfilers(profilers, this)
   }
@@ -153,7 +148,9 @@ class Config {
 
 module.exports = { Config }
 
-function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS }) {
+function getProfilers ({
+  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS
+}) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
   // Use a Set to avoid duplicates
   const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
@@ -252,6 +249,11 @@ function ensureProfilers (profilers, options) {
     if (typeof profiler === 'string') {
       profilers[i] = getProfiler(profiler, options)
     }
+  }
+
+  // Events profiler is a profiler for timeline events
+  if (options.timelineEnabled) {
+    profilers.push(new EventsProfiler(options))
   }
 
   // Filter out any invalid profilers
