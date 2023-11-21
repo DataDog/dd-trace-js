@@ -65,7 +65,7 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath = false }) {
+  pageLoad ({ page, isAppPath = false, isStatic = false }) {
     const store = storage.getStore()
 
     if (!store) return
@@ -82,12 +82,12 @@ class NextPlugin extends ServerPlugin {
     // remove ending /route or /page for appDir projects
     if (isAppPath) page = page.substring(0, page.lastIndexOf('/'))
 
-    // This is for static files whose 'page' includes the whole file path
-    // For normal page matches, like /api/hello/[name] and a req.url like /api/hello/world,
-    // nothing should happen
-    // For page matches like /User/something/public/text.txt and req.url like /text.txt,
-    // it should disregard the extra absolute path Next.js sometimes sets
-    if (page.includes(req.url)) page = req.url
+    // handle static resource
+    if (isStatic) {
+      page = req.url.includes('_next/static')
+        ? '/_next/static/*'
+        : '/public/*'
+    }
 
     span.addTags({
       [COMPONENT]: this.constructor.id,
