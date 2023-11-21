@@ -106,7 +106,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
     if (typeof value === 'object' && value !== null) {
       flatten(value, result, [...prefix, key], traversedObjects)
     } else {
-      result.push({ name: [...prefix, key].join('.'), value })
+      result.push({ name: [...prefix, key].join('.'), value, origin: 'code' })
     }
   }
   return result
@@ -115,7 +115,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: flatten(config),
+    configuration: config.configWithOrigin ? config.configWithOrigin : flatten(config),
     additional_payload: []
   }
   if (errors.agentError) {
@@ -124,15 +124,6 @@ function appStarted (config) {
   }
   return app
 }
-
-// function formatConfig (config) {
-// // format peerServiceMapping from an object to a string map in order for
-// // telemetry intake to accept the configuration
-//   config.peerServiceMapping = config.peerServiceMapping
-//     ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
-//     : ''
-//   return config
-// }
 
 function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
@@ -292,12 +283,6 @@ function updateConfig (changes, config) {
 
   const application = createAppObject(config)
   const host = createHostObject()
-
-  // const names = {
-  //   sampleRate: 'DD_TRACE_SAMPLE_RATE',
-  //   logInjection: 'DD_LOG_INJECTION',
-  //   headerTags: 'DD_TRACE_HEADER_TAGS'
-  // }
 
   const configuration = changes.map(change => ({
     name: change.name,

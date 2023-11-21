@@ -20,9 +20,7 @@ describe('Config', () => {
   let osType
 
   const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
-  const RECOMMENDED_JSON = require(RECOMMENDED_JSON_PATH)
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
-  const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
@@ -107,7 +105,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
+    expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
@@ -125,8 +123,8 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
-      { name: 'service', value: 'node', origin: 'code' },
+    expect(config.configWithOrigin).to.deep.include(
+      { name: 'service', value: 'node', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
@@ -139,7 +137,6 @@ describe('Config', () => {
       { name: 'port', value: '8126', origin: 'default' },
       { name: 'debug', value: false, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
-      { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'default' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
@@ -147,7 +144,6 @@ describe('Config', () => {
       { name: 'clientIpHeader', value: null, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'runtimeMetrics', value: false, origin: 'default' },
-      { name: 'service', value: 'node', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
@@ -156,7 +152,6 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
-      { name: 'spanComputePeerService', value: false, origin: 'default' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
       { name: 'peerServiceMapping', value: '', origin: 'default' },
       { name: 'tracePropagationStyle.extract', value: ['datadog', 'tracecontext'], origin: 'default' },
@@ -168,15 +163,13 @@ describe('Config', () => {
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
       { name: 'startupLogs', value: false, origin: 'default' },
-      { name: 'telemetry.enabled', value: true, origin: 'default' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.logCollection', value: false, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.metrics', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
-      { name: 'appsec.rules', value: RECOMMENDED_JSON, origin: 'default' },
+      { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.customRulesProvided', value: false, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
@@ -196,8 +189,6 @@ describe('Config', () => {
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
-      { name: 'repositoryUrl', value: undefined, origin: 'default' },
-      { name: 'commitSHA', value: undefined, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' }
     )
@@ -358,7 +349,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -380,7 +371,7 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
+    expect(config.configWithOrigin).to.deep.include(
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'debug', value: true, origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
@@ -407,7 +398,7 @@ describe('Config', () => {
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
-      { name: 'appsec.rules', value: RULES_JSON, origin: 'env_var' },
+      { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.customRulesProvided', value: true, origin: 'env_var' },
       { name: 'appsec.rateLimit', value: 42, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: 42, origin: 'env_var' },
@@ -415,7 +406,7 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
       { name: 'appsec.eventTracking.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
-      { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
+      { name: 'remoteConfig.enabled', value: false, origin: 'calculated' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
       { name: 'iast.requestSampling', value: 40, origin: 'env_var' },
@@ -624,12 +615,12 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
+    expect(config.configWithOrigin).to.deep.include(
       { name: 'protocolVersion', value: '0.5', origin: 'code' },
       { name: 'site', value: 'datadoghq.eu', origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
       { name: 'port', value: '6218', origin: 'code' },
-      { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
+      { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'service', value: 'service', origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' },
@@ -648,7 +639,7 @@ describe('Config', () => {
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
       { name: 'spanComputePeerService', value: true, origin: 'code' },
       { name: 'peerServiceMapping', value: 'd:dd', origin: 'code' },
-      { name: 'tracePropagationStyle.extract', value: ['datadog'], origin: 'code' },
+      { name: 'tracePropagationStyle.extract', value: ['datadog'], origin: 'calculated' },
       { name: 'experimental.runtimeId', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
@@ -919,7 +910,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -972,7 +963,7 @@ describe('Config', () => {
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: RECOMMENDED_JSON,
+      rules: undefined,
       customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
@@ -1215,6 +1206,15 @@ describe('Config', () => {
     expect(config.remoteConfig.enabled).to.be.false
   })
 
+  it('should send empty array when remote config is called on empty options', () => {
+    const config = new Config()
+
+    config.configure({}, true)
+
+    expect(Config.prototype._merge.calledTwice).to.be.true
+    expect(Config.prototype._merge.returnValues[1]).to.deep.equal([])
+  })
+
   it('should ignore invalid iast.requestSampling', () => {
     const config = new Config({
       experimental: {
@@ -1254,19 +1254,19 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: 'DOES_NOT_EXIST.json',
+        rules: 'path/to/rules.json',
         blockedTemplateHtml: 'DOES_NOT_EXIST.html',
         blockedTemplateJson: 'DOES_NOT_EXIST.json'
       }
     })
 
-    expect(log.error).to.be.callCount(6)
+    expect(log.error).to.be.callCount(4)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
 
     expect(config.appsec.enabled).to.be.true
-    expect(config.appsec.rules).to.be.undefined
+    expect(config.appsec.rules).to.eq('path/to/rules.json')
     expect(config.appsec.customRulesProvided).to.be.true
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
