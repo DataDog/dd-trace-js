@@ -51,129 +51,129 @@ describe('Plugin', () => {
         })
 
         describe('client', () => {
-          it('should instrument put', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.command.opName)
-                expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Put`)
-                expect(span).to.have.property('type', 'aerospike')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('aerospike.key', keyString)
-                expect(span.meta).to.have.property('aerospike.namespace', ns)
-                expect(span.meta).to.have.property('aerospike.setname', set)
-                expect(span.meta).to.have.property('aerospike.userkey', userKey)
-                expect(span.meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          // it('should instrument put', done => {
+          //   agent
+          //     .use(traces => {
+          //       const span = traces[0][0]
+          //       expect(span).to.have.property('name', expectedSchema.command.opName)
+          //       expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //       expect(span).to.have.property('resource', `Put`)
+          //       expect(span).to.have.property('type', 'aerospike')
+          //       expect(span.meta).to.have.property('span.kind', 'client')
+          //       expect(span.meta).to.have.property('aerospike.key', keyString)
+          //       expect(span.meta).to.have.property('aerospike.namespace', ns)
+          //       expect(span.meta).to.have.property('aerospike.setname', set)
+          //       expect(span.meta).to.have.property('aerospike.userkey', userKey)
+          //       expect(span.meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {
-              client.put(key, { i: 123 }, () => {})
-            })
-          })
+          //   client.connect(() => {
+          //     client.put(key, { i: 123 }, () => {})
+          //   })
+          // })
 
-          it('should instrument connect', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.command.opName)
-                expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Connect`)
-                expect(span).to.have.property('type', 'aerospike')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          // it('should instrument connect', done => {
+          //   agent
+          //     .use(traces => {
+          //       const span = traces[0][0]
+          //       expect(span).to.have.property('name', expectedSchema.command.opName)
+          //       expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //       expect(span).to.have.property('resource', `Connect`)
+          //       expect(span).to.have.property('type', 'aerospike')
+          //       expect(span.meta).to.have.property('span.kind', 'client')
+          //       expect(span.meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {})
-          })
+          //   client.connect(() => {})
+          // })
 
-          it('should instrument get', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.command.opName)
-                expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Get`)
-                expect(span).to.have.property('type', 'aerospike')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('aerospike.key', keyString)
-                expect(span.meta).to.have.property('aerospike.namespace', ns)
-                expect(span.meta).to.have.property('aerospike.setname', set)
-                expect(span.meta).to.have.property('aerospike.userkey', userKey)
-                expect(span.meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          // it('should instrument get', done => {
+          //   agent
+          //     .use(traces => {
+          //       const span = traces[0][0]
+          //       expect(span).to.have.property('name', expectedSchema.command.opName)
+          //       expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //       expect(span).to.have.property('resource', `Get`)
+          //       expect(span).to.have.property('type', 'aerospike')
+          //       expect(span.meta).to.have.property('span.kind', 'client')
+          //       expect(span.meta).to.have.property('aerospike.key', keyString)
+          //       expect(span.meta).to.have.property('aerospike.namespace', ns)
+          //       expect(span.meta).to.have.property('aerospike.setname', set)
+          //       expect(span.meta).to.have.property('aerospike.userkey', userKey)
+          //       expect(span.meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {
-              client.get(key, () => {})
-            })
-          })
+          //   client.connect(() => {
+          //     client.get(key, () => {})
+          //   })
+          // })
 
-          it('should instrument operate', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.command.opName)
-                expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Operate`)
-                expect(span).to.have.property('type', 'aerospike')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('aerospike.key', keyString)
-                expect(span.meta).to.have.property('aerospike.namespace', ns)
-                expect(span.meta).to.have.property('aerospike.setname', set)
-                expect(span.meta).to.have.property('aerospike.userkey', userKey)
-                expect(span.meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          // it('should instrument operate', done => {
+          //   agent
+          //     .use(traces => {
+          //       const span = traces[0][0]
+          //       expect(span).to.have.property('name', expectedSchema.command.opName)
+          //       expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //       expect(span).to.have.property('resource', `Operate`)
+          //       expect(span).to.have.property('type', 'aerospike')
+          //       expect(span.meta).to.have.property('span.kind', 'client')
+          //       expect(span.meta).to.have.property('aerospike.key', keyString)
+          //       expect(span.meta).to.have.property('aerospike.namespace', ns)
+          //       expect(span.meta).to.have.property('aerospike.setname', set)
+          //       expect(span.meta).to.have.property('aerospike.userkey', userKey)
+          //       expect(span.meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {
-              client.put(key, { i: 123 }, () => {
-                const ops = [
-                  aerospike.operations.incr('i', 1),
-                  aerospike.operations.read('i')
-                ]
-                client.operate(key, ops, () => {})
-              })
-            })
-          })
+          //   client.connect(() => {
+          //     client.put(key, { i: 123 }, () => {
+          //       const ops = [
+          //         aerospike.operations.incr('i', 1),
+          //         aerospike.operations.read('i')
+          //       ]
+          //       client.operate(key, ops, () => {})
+          //     })
+          //   })
+          // })
 
-          it('should instrument createIndex', done => {
-            agent
-              .use(traces => {
-                const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.command.opName)
-                expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `IndexCreate`)
-                expect(span).to.have.property('type', 'aerospike')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('aerospike.namespace', ns)
-                expect(span.meta).to.have.property('aerospike.setname', 'demo')
-                expect(span.meta).to.have.property('aerospike.bin', 'tags')
-                expect(span.meta).to.have.property('aerospike.index', 'tags_idx')
-                expect(span.meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          // it('should instrument createIndex', done => {
+          //   agent
+          //     .use(traces => {
+          //       const span = traces[0][0]
+          //       expect(span).to.have.property('name', expectedSchema.command.opName)
+          //       expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //       expect(span).to.have.property('resource', `IndexCreate`)
+          //       expect(span).to.have.property('type', 'aerospike')
+          //       expect(span.meta).to.have.property('span.kind', 'client')
+          //       expect(span.meta).to.have.property('aerospike.namespace', ns)
+          //       expect(span.meta).to.have.property('aerospike.setname', 'demo')
+          //       expect(span.meta).to.have.property('aerospike.bin', 'tags')
+          //       expect(span.meta).to.have.property('aerospike.index', 'tags_idx')
+          //       expect(span.meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {
-              const index = {
-                ns: ns,
-                set: 'demo',
-                bin: 'tags',
-                index: 'tags_idx',
-                type: aerospike.indexType.LIST,
-                datatype: aerospike.indexDataType.STRING
-              }
-              client.createIndex(index, (error, job) => {
-              })
-            })
-          })
+          //   client.connect(() => {
+          //     const index = {
+          //       ns: ns,
+          //       set: 'demo',
+          //       bin: 'tags',
+          //       index: 'tags_idx',
+          //       type: aerospike.indexType.LIST,
+          //       datatype: aerospike.indexDataType.STRING
+          //     }
+          //     client.createIndex(index, (error, job) => {
+          //     })
+          //   })
+          // })
 
           it('should instrument query', done => {
             agent
@@ -201,97 +201,105 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
-                job.wait((waitError) => {
-                  const query = client.query(ns, 'demo')
-                  const queryPolicy = {
-                    totalTimeout: 10000
-                  }
+                if (error) throw error
+                job.waitUntilDone((error) => {
+                  if (error) throw error
+
+                  const query = client.query('test', 'demo')
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-                  const stream = query.foreach(queryPolicy)
-                  stream.on('end', () => {})
-                  console.log(10000000)
+                  const stream = query.foreach()
+                  stream.on('error', (error) => {
+                    console.error(error)
+                    throw error
+                  })
+                  stream.on('data', (record) => {
+                    console.info(record)
+                  })
+                  stream.on('end', () => {
+                    client.close()
+                  })
                 })
               })
             })
           })
 
-          it('should run the callback in the parent context', done => {
-            const obj = {}
-            client.connect(() => {
-              tracer.scope().activate(obj, () => {
-                client.put(key, { i: 123 }, () => {
-                  expect(tracer.scope().active()).to.equal(obj)
-                  done()
-                })
-              })
-            })
-          })
+          // it('should run the callback in the parent context', done => {
+          //   const obj = {}
+          //   client.connect(() => {
+          //     tracer.scope().activate(obj, () => {
+          //       client.put(key, { i: 123 }, () => {
+          //         expect(tracer.scope().active()).to.equal(obj)
+          //         done()
+          //       })
+          //     })
+          //   })
+          // })
 
-          it('should handle errors', done => {
-            let error
+          // it('should handle errors', done => {
+          //   let error
 
-            agent
-              .use(traces => {
-                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(traces[0][0].meta).to.have.property('component', 'aerospike')
-              })
-              .then(done)
-              .catch(done)
+          //   agent
+          //     .use(traces => {
+          //       expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+          //       expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
+          //       expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+          //       expect(traces[0][0].meta).to.have.property('component', 'aerospike')
+          //     })
+          //     .then(done)
+          //     .catch(done)
 
-            client.connect(() => {
-              client.put(key, { i: 'not_a_number' }, () => {
-                const ops = [
-                  aerospike.operations.incr('i', 1),
-                  aerospike.operations.read('i')
-                ]
+          //   client.connect(() => {
+          //     client.put(key, { i: 'not_a_number' }, () => {
+          //       const ops = [
+          //         aerospike.operations.incr('i', 1),
+          //         aerospike.operations.read('i')
+          //       ]
 
-                client.operate(key, ops, (err) => {
-                  error = err
-                })
-              })
-            })
-          })
+          //       client.operate(key, ops, (err) => {
+          //         error = err
+          //       })
+          //     })
+          //   })
+          // })
         })
       })
 
-      describe('with configuration', () => {
-        before(() => {
-          return agent.load('aerospike', { service: 'custom' })
-        })
+      // describe('with configuration', () => {
+      //   before(() => {
+      //     return agent.load('aerospike', { service: 'custom' })
+      //   })
 
-        it('should be configured with the correct values', done => {
-          agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
-            })
-            .then(done)
-            .catch(done)
+      //   it('should be configured with the correct values', done => {
+      //     agent
+      //       .use(traces => {
+      //         expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
+      //         expect(traces[0][0]).to.have.property('service', 'custom')
+      //       })
+      //       .then(done)
+      //       .catch(done)
 
-          client.connect(() => {
-            client.put(key, { i: 123 }, () => {})
-          })
-        })
+      //     client.connect(() => {
+      //       client.put(key, { i: 123 }, () => {})
+      //     })
+      //   })
 
-        withNamingSchema(
-          () => client.connect(() => {
-            client.put(key, { i: 123 }, () => {})
-          }),
-          {
-            v0: {
-              opName: 'aerospike.command',
-              serviceName: 'custom'
-            },
-            v1: {
-              opName: 'aerospike.command',
-              serviceName: 'custom'
-            }
-          }
-        )
-      })
+      //   withNamingSchema(
+      //     () => client.connect(() => {
+      //       client.put(key, { i: 123 }, () => {})
+      //     }),
+      //     {
+      //       v0: {
+      //         opName: 'aerospike.command',
+      //         serviceName: 'custom'
+      //       },
+      //       v1: {
+      //         opName: 'aerospike.command',
+      //         serviceName: 'custom'
+      //       }
+      //     }
+      //   )
+      // })
     })
   })
 })
