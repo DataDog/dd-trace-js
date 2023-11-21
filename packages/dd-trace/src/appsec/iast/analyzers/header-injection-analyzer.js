@@ -5,6 +5,7 @@ const { HEADER_INJECTION } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
+const HEADER_NAME_VALUE_SEPARATOR = ': '
 
 class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -17,6 +18,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
   analyze (headerInfo) {
     const { name, value } = headerInfo
+    // TODO ignore also cookie headers?
     if (this.isLocationHeader(name) || typeof value !== 'string') return
 
     super.analyze(headerInfo)
@@ -27,11 +29,17 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   _getEvidence (headerInfo, iastContext) {
-    const evidence = super._getEvidence(headerInfo.value, iastContext)
+    const prefix = headerInfo.name + HEADER_NAME_VALUE_SEPARATOR
 
-    evidence.context = {
-      headerName: headerInfo.name
-    }
+    const evidence = super._getEvidence(headerInfo.value, iastContext)
+    evidence.value = prefix + evidence.value
+    evidence.ranges = evidence.ranges.map(range => {
+      return {
+        ...range,
+        start: range.start + prefix.length,
+        end: range.end + prefix.length
+      }
+    })
 
     return evidence
   }
@@ -46,3 +54,4 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 }
 
 module.exports = new HeaderInjectionAnalyzer()
+module.exports.HEADER_NAME_VALUE_SEPARATOR = HEADER_NAME_VALUE_SEPARATOR

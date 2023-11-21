@@ -5,13 +5,19 @@ const {
   DEFAULT_IAST_REDACTION_NAME_PATTERN,
   DEFAULT_IAST_REDACTION_VALUE_PATTERN
 } = require('../sensitive-regex')
+const { HEADER_NAME_VALUE_SEPARATOR } = require('../../../analyzers/header-injection-analyzer')
+
 class HeaderSensitiveAnalyzer {
   extractSensitiveRanges (evidence) {
-    if (evidence.context?.headerName.match(DEFAULT_IAST_REDACTION_NAME_PATTERN) ||
-      evidence.value.match(DEFAULT_IAST_REDACTION_VALUE_PATTERN)) {
+    const evidenceValue = evidence.value
+    const sections = evidenceValue.split(HEADER_NAME_VALUE_SEPARATOR)
+    const headerName = sections[0]
+    const headerValue = sections.slice(1).join(HEADER_NAME_VALUE_SEPARATOR)
+    if (headerName.match(DEFAULT_IAST_REDACTION_NAME_PATTERN) ||
+      headerValue.match(DEFAULT_IAST_REDACTION_VALUE_PATTERN)) {
       return [{
-        start: 0,
-        end: evidence.value.length
+        start: headerName.length + HEADER_NAME_VALUE_SEPARATOR.length,
+        end: evidenceValue.length
       }]
     }
 
