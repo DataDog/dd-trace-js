@@ -1,61 +1,10 @@
 const { getBodyTags } = require('../../src/payload-tagging/tagger')
-const { filterFromString } = require('../../src/payload-tagging/filter')
+const { Mask } = require('../../src/payload-tagging/mask')
 
-const globFilter = filterFromString('*')
-const defaultOpts = { filter: globFilter, maxDepth: 10, prefix: 'http.payload' }
-
-function optsWithFilter (filter) {
-  return { ...defaultOpts, filter }
-}
+const globMask = new Mask('*')
+const defaultOpts = { filter: globMask, maxDepth: 10, prefix: 'http.payload' }
 
 describe('JSON payload tagger', () => {
-  describe('filtering', () => {
-    const input = JSON.stringify({ foo: { bar: 1, quux: 2 }, bar: 3 })
-    const ctype = 'application/json'
-    it('should take everything with glob filter', () => {
-      const tags = getBodyTags(input, ctype, defaultOpts)
-      expect(tags).to.deep.equal({
-        'http.payload.foo.bar': '1',
-        'http.payload.foo.quux': '2',
-        'http.payload.bar': '3'
-      })
-    })
-
-    it('should exclude paths when excluding', () => {
-      const filter = filterFromString('*,-foo.bar,-foo.quux')
-      const tags = getBodyTags(input, ctype, optsWithFilter(filter))
-      expect(tags).to.deep.equal({
-        'http.payload.bar': '3'
-      })
-    })
-
-    it('should only provide included paths when including', () => {
-      const filter = filterFromString('foo.bar,foo.quux')
-      const tags = getBodyTags(input, ctype, optsWithFilter(filter))
-      expect(tags).to.deep.equal({
-        'http.payload.foo.bar': '1',
-        'http.payload.foo.quux': '2'
-      })
-    })
-
-    it('should remove an entire section if given a partial path', () => {
-      const filter = filterFromString('*,-foo')
-      const tags = getBodyTags(input, ctype, optsWithFilter(filter))
-      expect(tags).to.deep.equal({
-        'http.payload.bar': '3'
-      })
-    })
-
-    it('should include an entire section if given a partial path', () => {
-      const filter = filterFromString('foo')
-      const tags = getBodyTags(input, ctype, optsWithFilter(filter))
-      expect(tags).to.deep.equal({
-        'http.payload.foo.bar': '1',
-        'http.payload.foo.quux': '2'
-      })
-    })
-  })
-
   describe('tag count cutoff', () => {
     it('generate many tags when not reaching the cap', () => {
       const belowCap = 200
@@ -127,13 +76,37 @@ describe('JSON payload tagger', () => {
       })
     })
 
-    describe('escaping', () => {
-      it('should escape `.` characters', () => {
-        const input = JSON.stringify({ 'foo.bar': { 'baz': 'quux' } })
-        const tags = getBodyTags(input, 'application/json', defaultOpts)
-        expect(tags).to.deep.equal({
-          'http.payload.foo\\.bar.baz': 'quux'
-        })
+    it('should redact banned keys even if they are objects', () => {
+      const input = JSON.stringify({
+        foo: {
+          authorization: {
+            token: 'tokenpleaseredact',
+            authorization: 'pleaseredact',
+            valid: 'valid'
+          },
+          baz: {
+            password: 'shouldgo',
+            'x-authorization': 'shouldbegone',
+            data: 'shouldstay'
+          }
+        }
+      })
+      const tags = getBodyTags(input, 'application/json', defaultOpts)
+      expect(tags).to.deep.equal({
+        'http.payload.foo.authorization': 'redacted',
+        'http.payload.foo.baz.password': 'redacted',
+        'http.payload.foo.baz.x-authorization': 'redacted',
+        'http.payload.foo.baz.data': 'shouldstay'
+      })
+    })
+  })
+
+  describe('escaping', () => {
+    it('should escape `.` characters in individual keys', () => {
+      const input = JSON.stringify({ 'foo.bar': { 'baz': 'quux' } })
+      const tags = getBodyTags(input, 'application/json', defaultOpts)
+      expect(tags).to.deep.equal({
+        'http.payload.foo\\.bar.baz': 'quux'
       })
     })
   })
@@ -145,6 +118,15 @@ describe('JSON payload tagger', () => {
       expect(tags).to.deep.equal({
         'http.payload.foo': 'bar',
         'http.payload.baz': 'null'
+      })
+    })
+
+    it('should transform boolean values to strings', () => {
+      const input = JSON.stringify({ 'foo': true, 'bar': false })
+      const tags = getBodyTags(input, 'application/json', defaultOpts)
+      expect(tags).to.deep.equal({
+        'http.payload.foo': 'true',
+        'http.payload.bar': 'false'
       })
     })
 

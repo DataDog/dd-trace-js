@@ -13,7 +13,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
-const { filterFromString } = require('./payload-tagging/filter')
+const { Mask } = require('./payload-tagging/mask')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -324,16 +324,19 @@ class Config {
       false
     )
     const DD_TRACE_PAYLOAD_TAGS = coalesce(
-      options.HTTPpayloadTagging,
-      process.env.DD_TRACE_PAYLOAD_TAGS,
+      options.httpPayloadTagging !== '' ? options.httpPayloadTagging : undefined,
+      process.env.DD_TRACE_PAYLOAD_TAGS !== '' ? process.env.DD_TRACE_PAYLOAD_TAGS : undefined,
       undefined
     )
 
-    const DD_TRACE_PAYLOAD_MAX_DEPTH = coalesce(
-      options.HTTPpayloadMaxDepth,
+    const DD_TRACE_PAYLOAD_MAX_DEPTH_STR = coalesce(
+      options.httpPayloadMaxDepth,
       process.env.DD_TRACE_PAYLOAD_MAX_DEPTH,
-      10
+      undefined
     )
+    const DD_TRACE_PAYLOAD_MAX_DEPTH = DD_TRACE_PAYLOAD_MAX_DEPTH_STR
+      ? parseInt(DD_TRACE_PAYLOAD_MAX_DEPTH_STR) : 10
+
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
@@ -602,7 +605,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
       exporters: DD_PROFILING_EXPORTERS
     }
-    this.httpPayloadTagging = filterFromString(DD_TRACE_PAYLOAD_TAGS)
+    this.httpPayloadTagging = new Mask(DD_TRACE_PAYLOAD_TAGS)
     this.httpPayloadMaxDepth = DD_TRACE_PAYLOAD_MAX_DEPTH
     this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED

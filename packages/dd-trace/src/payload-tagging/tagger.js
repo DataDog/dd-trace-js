@@ -15,60 +15,64 @@ function escapeKey (key) {
 }
 
 function isJSONContentType (contentType) {
-  return contentType && typeof contentType === 'string' && contentType.slice(-4) === 'json'
+  return typeof contentType === 'string' && contentType.substring(contentType.length - 4) === 'json'
 }
 
-function tagsFromObject (object, filter, maxDepth, prefix) {
+/**
+ * Compute normalized payload tags from any given object.
+ *
+ * @param {object} object
+ * @param {import('./mask').Mask} mask
+ * @param {number} maxDepth
+ * @param {string} prefix
+ * @returns
+ */
+function tagsFromObject (object, mask, maxDepth, prefix) {
   let tagCount = 0
-  const result = {}
 
-  function tagRec (prefix, object, filterObj = filter.filterObj, depth = 0, indent) {
+  function tagRec (prefix, object, maskHead = mask._root, depth = 0) {
     // Off by one: _dd.payload_tags_trimmed counts as 1 tag
     if (tagCount >= PAYLOAD_TAGGING_MAX_TAGS - 1) {
-      result['_dd.payload_tags_trimmed'] = true
-      return
+      tagCount += 1
+      return [['_dd.payload_tags_trimmed', true]]
     }
 
     if (depth >= maxDepth && typeof object === 'object') {
-      result[prefix] = truncated
       tagCount += 1
-      return
-    } else {
-      depth += 1
+      return [[prefix, truncated]]
     }
 
     if (object === null) {
-      // TODO check which tracers strip null/None/... values
-      // Probably all of them
-      // Limitation to document for users
-      result[prefix] = 'null'
       tagCount += 1
-      return
+      return [[prefix, 'null']]
     }
 
-    if (typeof object === 'number' || typeof object === 'boolean') {
-      result[prefix] = object.toString()
+    if (['number', 'boolean'].includes(typeof object)) {
       tagCount += 1
-      return
+      return [[prefix, object.toString()]]
     }
 
     if (typeof object === 'string') {
-      const lastKey = prefix.split('.').pop()
-      result[prefix] = redactedKeys.includes(lastKey) ? redacted : object.substring(0, 5000)
       tagCount += 1
-      return
+      return [[prefix, object.substring(0, 5000)]]
     }
 
     if (typeof object === 'object') {
+      const subTags = []
       for (const [key, value] of Object.entries(object)) {
-        if (!filter.canTag(key, filterObj)) continue
-        const nextFilter = filterObj === undefined ? filterObj : filterObj[key]
-        tagRec(`${prefix}.${escapeKey(key)}`, value, nextFilter, depth)
+        const isLastKey = !(typeof value === 'object')
+        if (redactedKeys.includes(key)) {
+          subTags.push(tagRec(`${prefix}.${key}`, redacted, undefined, depth + 1))
+          continue
+        }
+        if (maskHead.canTag(key, isLastKey)) {
+          subTags.push(tagRec(`${prefix}.${escapeKey(key)}`, value, maskHead.next(key), depth + 1))
+        }
       }
+      return subTags.flat()
     }
   }
-  tagRec(prefix, object)
-  return result
+  return Object.fromEntries(tagRec(prefix, object))
 }
 
 function getBodyTags (jsonString, contentType, opts) {
@@ -99,6 +103,7 @@ function getBodyResponseTags (jsonString, contentType, opts) {
 }
 
 module.exports = {
+  tagsFromObject,
   getBodyTags,
   getBodyRequestTags,
   getBodyResponseTags,
