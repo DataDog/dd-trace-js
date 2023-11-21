@@ -183,8 +183,7 @@ describe('Plugin', () => {
           // this test works on node 14, so it is not a problem with the test but most likely a problem with the package
           // version and aerospike server version mismatch which is really hard to pin down, since aerospike doesn't
           // provide info on package version's compatibility with each server version
-          console.log('what is going on', version, semver.satisfies(version, '^4'))
-          if (!(NODE_MAJOR === 16 && semver.satisfies(version, '^4'))) {
+          if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4'))) {
             it('should instrument query', done => {
               agent
                 .use(traces => {
