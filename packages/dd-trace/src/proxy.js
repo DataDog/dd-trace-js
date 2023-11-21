@@ -63,6 +63,7 @@ class Tracer extends NoopProxy {
         try {
           const profiler = require('./profiler')
           profiler.start(config)
+          this._profilerStarted = profiler.started()
         } catch (e) {
           log.error(e)
         }
@@ -102,6 +103,10 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  profilerStarted () {
+    return this._profilerStarted
   }
 
   use () {

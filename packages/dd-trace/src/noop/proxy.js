@@ -20,6 +20,10 @@ class Tracer {
     return this
   }
 
+  profilerStarted () {
+    return Promise.resolve()
+  }
+
   trace (name, options, fn) {
     if (!fn) {
       fn = options

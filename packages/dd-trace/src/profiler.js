@@ -34,5 +34,9 @@ module.exports = {
 
   stop: () => {
     profiler.stop()
+  },
+
+  started: () => {
+    return profiler.started()
   }
 }
