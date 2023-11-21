@@ -198,6 +198,7 @@ describe('Plugin', () => {
                 set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
+                type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
