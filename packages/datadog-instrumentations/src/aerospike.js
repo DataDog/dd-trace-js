@@ -38,7 +38,7 @@ function wrapProcess (process) {
   }
 }
 
-// from testing, aerospike versions currently can't be installed on node 21
+// from testing, aerospike modules currently can't be installed on node 21
 if (NODE_MAJOR === 20) {
   addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['>=5.8.0'] }, commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
@@ -52,7 +52,7 @@ if (NODE_MAJOR >= 15 && NODE_MAJOR <= 20) {
 }
 
 if (NODE_MAJOR >= 14 && NODE_MAJOR <= 19) {
-  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['4', '5.0.0 - 5.3.0'] },
+  addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['4', '5.0.0 - 5.4.0'] },
     commandFactory => {
       return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
     })
