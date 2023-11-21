@@ -319,12 +319,12 @@ class Config {
     const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
       options.tracePropagationStyle,
-      defaultPropagationStyle
+      this.defaultPropagationStyle
     )[1]
     const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
       'extract',
       options.tracePropagationStyle,
-      defaultPropagationStyle
+      this.defaultPropagationStyle
     )[1]
     const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
       process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
@@ -466,7 +466,7 @@ class Config {
       5 // seconds
     )
 
-    const iastOptions = options?.experimental?.iast
+    this.iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       this.iastOptions &&
       (this.iastOptions === true || this.iastOptions.enabled === true),
@@ -511,13 +511,13 @@ class Config {
     )
 
     const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
-      iastOptions?.redactionNamePattern,
+      this.iastOptions?.redactionNamePattern,
       process.env.DD_IAST_REDACTION_NAME_PATTERN,
       null
     )
 
     const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
-      iastOptions?.redactionValuePattern,
+      this.iastOptions?.redactionValuePattern,
       process.env.DD_IAST_REDACTION_VALUE_PATTERN,
       null
     )
@@ -597,6 +597,11 @@ class Config {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED
     }
 
+    this.iast = {
+      redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
+      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
+    }
+
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
@@ -611,7 +616,7 @@ class Config {
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
-    if (this.gitMetadataEnabled) {
+    if (gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
           process.env.DD_GIT_REPOSITORY_URL,
@@ -720,7 +725,7 @@ class Config {
     this._setBoolean(defaults, 'startupLogs', false)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
     this._setBoolean(defaults, 'telemetry.debug', false)
-    this._setBoolean(defaults, 'telemetry.metrics', false)
+    this._setBoolean(defaults, 'telemetry.metrics', true)
     this._setBoolean(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'tagsHeaderMaxLength', 512)
@@ -736,6 +741,7 @@ class Config {
     this._setValue(defaults, 'remoteConfig.pollInterval', 5)
     this._setBoolean(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
+    this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
     this._setValue(defaults, 'iast.maxContextOperations', 2)
     this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
@@ -744,7 +750,7 @@ class Config {
     this._setBoolean(defaults, 'isCiVisibility', false)
     this._setBoolean(defaults, 'gitMetadataEnabled', true)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
-    this._setBoolean(defaults, 'traceId128BitGenerationEnabled', false)
+    this._setBoolean(defaults, 'traceId128BitGenerationEnabled', true)
     this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
   }
 
