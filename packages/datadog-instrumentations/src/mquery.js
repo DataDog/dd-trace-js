@@ -10,9 +10,11 @@ const shimmer = require('../../datadog-shimmer')
 const startCh = channel('datadog:mquery:filter:start')
 const finishCh = channel('datadog:mquery:filter:finish')
 
-const methods = ['find', 'findOne', 'findOneAndUpdate', 'findOneAndRemove', 'count', 'distinct']
+const methods = ['find', 'findOne', 'findOneAndRemove', 'count', 'distinct']
 
-function wrapCallback (asyncResource, callback, filters) {
+const methodsOptionalArgs = ['findOneAndUpdate']
+
+function wrapCallback (asyncResource, callback) {
   if (typeof callback !== 'function') return callback
 
   return function () {
@@ -20,17 +22,26 @@ function wrapCallback (asyncResource, callback, filters) {
       try {
         return callback.apply(this, arguments)
       } finally {
-        finishCh.publish({ filters })
+        finishCh.publish()
       }
     })
   }
+}
+
+function getFilters (args, methodName) {
+  const filters = [args[0]]
+
+  if (methodsOptionalArgs.includes(methodName)) {
+    filters.push(args[1])
+  }
+  return filters
 }
 
 addHook({
   name: 'mquery',
   versions: ['>=4.0.0']
 }, Query => {
-  methods.forEach(methodName => {
+  [...methods, ...methodsOptionalArgs].forEach(methodName => {
     if (!(methodName in Query.prototype)) return
 
     shimmer.wrap(Query.prototype, methodName, method => {
@@ -42,10 +53,8 @@ addHook({
         const asyncResource = new AsyncResource('bound-anonymous-fn')
 
         return asyncResource.runInAsyncScope(() => {
-          const filters = arguments.length > 0 ? [arguments[0]] : []
-
           startCh.publish({
-            filters,
+            filters: getFilters(arguments, methodName),
             methodName
           })
 
@@ -53,9 +62,9 @@ addHook({
 
           if (query.then) {
             const origThen = query.then
-            query.then = asyncResource.bind(function (onFulfilled, onRejected) {
-              arguments[0] = wrapCallback(asyncResource, onFulfilled, filters)
-              arguments[1] = wrapCallback(asyncResource, onRejected, filters)
+            query.then = asyncResource.bind(function (onResolved, onRejected) {
+              arguments[0] = wrapCallback(asyncResource, onResolved)
+              arguments[1] = wrapCallback(asyncResource, onRejected)
 
               return origThen.apply(this, arguments)
             })
