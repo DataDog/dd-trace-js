@@ -83,6 +83,41 @@ class GCDecorator {
   }
 }
 
+class DNSDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationNameLabelKey = stringTable.dedup('operation name')
+    this.hostLabelKey = stringTable.dedup('host')
+    this.addressLabelKey = stringTable.dedup('address')
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    function addLabel (labelNameKey, labelValue) {
+      labels.push(labelFromStr(stringTable, labelNameKey, labelValue))
+    }
+    const op = item.name
+    addLabel(this.operationNameLabelKey, item.name)
+    const detail = item.detail
+    switch (op) {
+      case 'lookup':
+        addLabel(this.hostLabelKey, detail.hostname)
+        break
+      case 'lookupService':
+        addLabel(this.addressLabelKey, `${detail.host}:${detail.port}`)
+        break
+      case 'getHostByAddr':
+        addLabel(this.addressLabelKey, detail.host)
+        break
+      default:
+        if (op.startsWith('query')) {
+          addLabel(this.hostLabelKey, detail.host)
+        }
+    }
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
@@ -91,6 +126,12 @@ const decoratorTypes = {
 const threadNames = {
   gc: 'GC'
 }
+// Needs at least node 16 for DNS
+if (node16) {
+  decoratorTypes.dns = DNSDecorator
+  threadNames.dns = 'DNS'
+}
+
 /**
  * This class generates pprof files with timeline events sourced from Node.js
  * performance measurement APIs.
