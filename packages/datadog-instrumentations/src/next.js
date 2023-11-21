@@ -144,7 +144,9 @@ function instrument (req, res, handler) {
 function wrapServeStatic (serveStatic) {
   return function (req, res, path) {
     return instrument(req, res, () => {
-      if (pageLoadChannel.hasSubscribers && path) pageLoadChannel.publish({ page: path })
+      if (pageLoadChannel.hasSubscribers && path) {
+        pageLoadChannel.publish({ page: path, isStatic: true })
+      }
 
       return serveStatic.apply(this, arguments)
     })
