@@ -75,27 +75,53 @@ describe('nosql injection detection with mquery', () => {
 
         prepareTestServerForIastInExpress('Test with mquery', expressVersion,
           (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-            // testThatRequestHasVulnerability({
-            //   fn: async (req, res) => {
-            //     try {
-            //       await mquery()
-            //         .collection(testCollection)
-            //         .find({
-            //           name: req.query.key,
-            //           value: [1, 2,
-            //             'value',
-            //             false, req.query.key]
-            //         })
-            //     } catch (e) {
-            //       // do nothing
-            //     }
-            //     res.end()
-            //   },
-            //   vulnerability: 'NOSQL_MONGODB_INJECTION',
-            //   makeRequest: (done, config) => {
-            //     axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-            //   }
-            // })
+            testThatRequestHasVulnerability({
+              testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability [find exec]',
+              fn: (req, res) => {
+                try {
+                  mquery()
+                    .collection(testCollection)
+                    .find({
+                      name: req.query.key,
+                      value: [1, 2,
+                        'value',
+                        false, req.query.key]
+                    })
+                    .exec()
+                } catch (e) {
+                  // do nothing
+                }
+                res.end()
+              },
+              vulnerability: 'NOSQL_MONGODB_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability [await find exec]',
+              fn: async (req, res) => {
+                try {
+                  await mquery()
+                    .collection(testCollection)
+                    .find({
+                      name: req.query.key,
+                      value: [1, 2,
+                        'value',
+                        false, req.query.key]
+                    })
+                    .exec()
+                } catch (e) {
+                  // do nothing
+                }
+                res.end()
+              },
+              vulnerability: 'NOSQL_MONGODB_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              }
+            })
 
             testThatRequestHasVulnerability({
               testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in correct file and line [find]',
@@ -118,7 +144,7 @@ describe('nosql injection detection with mquery', () => {
                 occurrences: 1,
                 location: {
                   path: vulnerableMethodFilename,
-                  line: 7
+                  line: 6
                 }
               }
             })
@@ -156,6 +182,17 @@ describe('nosql injection detection with mquery', () => {
                   .find({
                     name: 'test'
                   })
+              } catch (e) {
+                // do nothing
+              }
+              res.end()
+            }, 'NOSQL_MONGODB_INJECTION')
+
+            testThatRequestHasNoVulnerability(async (req, res) => {
+              try {
+                await mquery()
+                  .collection(testCollection)
+                  .find()
               } catch (e) {
                 // do nothing
               }

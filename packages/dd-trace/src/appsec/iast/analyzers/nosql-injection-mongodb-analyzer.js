@@ -46,7 +46,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    this.addSub('datadog:mongoose:model:filter:start', ({ filters }) => {
+    const start = ({ filters }) => {
       const store = storage.getStore()
       if (!store) return
 
@@ -56,15 +56,21 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         })
       }
 
-      storage.enterWith({ ...store, nosqlAnalyzed: true, mongooseParentStore: store })
-    })
+      storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
+    }
 
-    this.addSub('datadog:mongoose:model:filter:finish', () => {
+    const finish = () => {
       const store = storage.getStore()
-      if (store?.mongooseParentStore) {
-        storage.enterWith(store.mongooseParentStore)
+      if (store?.parentStore) {
+        storage.enterWith(store.parentStore)
       }
-    })
+    }
+
+    this.addSub('datadog:mongoose:model:filter:start', start)
+    this.addSub('datadog:mquery:filter:start', start)
+
+    this.addSub('datadog:mongoose:model:filter:finish', finish)
+    this.addSub('datadog:mquery:filter:finish', finish)
   }
 
   configureSanitizers () {
