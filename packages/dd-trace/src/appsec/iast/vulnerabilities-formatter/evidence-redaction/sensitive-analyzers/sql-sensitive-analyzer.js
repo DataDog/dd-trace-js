@@ -110,4 +110,3 @@ module.exports = function extractSensitiveRanges (evidence) {
   }
   return []
 }
-

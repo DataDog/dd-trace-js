@@ -4,6 +4,7 @@ const iastLog = require('../../../iast-log')
 
 const LDAP_PATTERN = '\\(.*?(?:~=|=|<=|>=)(?<LITERAL>[^)]+)\\)'
 const pattern = new RegExp(LDAP_PATTERN, 'gmi')
+
 module.exports = function extractSensitiveRanges (evidence) {
   try {
     pattern.lastIndex = 0

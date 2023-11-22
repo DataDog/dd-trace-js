@@ -5,6 +5,7 @@ const iastLog = require('../../../iast-log')
 const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 const QUERY_FRAGMENT = '[?#&]([^=&;]+)=([^?#&]+)'
 const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
+
 module.exports = function extractSensitiveRanges (evidence) {
   try {
     const ranges = []

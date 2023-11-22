@@ -19,6 +19,7 @@ const EXCLUDED_HEADER_NAMES = [
   'upgrade',
   'connection'
 ]
+
 class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
     super(HEADER_INJECTION)
@@ -63,14 +64,18 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   isCookieExclusion (name, value, iastContext) {
     if (name?.trim().toLowerCase() === 'set-cookie') {
       const ranges = getRanges(iastContext, value)
+
       for (let i = 0; i < ranges.length; i++) {
         const range = ranges[i]
+
         if (range.iinfo.type !== HTTP_REQUEST_COOKIE_VALUE && range.iinfo.type !== HTTP_REQUEST_COOKIE_NAME) {
           return false
         }
       }
+
       return true
     }
+
     return false
   }
 
@@ -79,12 +84,15 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
       const ranges = getRanges(iastContext, value)
       for (let i = 0; i < ranges.length; i++) {
         const range = ranges[i]
+
         if (range.iinfo.type !== HTTP_REQUEST_HEADER_VALUE) {
           return false
         }
       }
+
       return true
     }
+
     return false
   }
 
