@@ -30,14 +30,15 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
   _getEvidence (headerInfo, iastContext) {
     const prefix = headerInfo.name + HEADER_NAME_VALUE_SEPARATOR
+    const prefixLength = prefix.length
 
     const evidence = super._getEvidence(headerInfo.value, iastContext)
     evidence.value = prefix + evidence.value
     evidence.ranges = evidence.ranges.map(range => {
       return {
         ...range,
-        start: range.start + prefix.length,
-        end: range.end + prefix.length
+        start: range.start + prefixLength,
+        end: range.end + prefixLength
       }
     })
 
