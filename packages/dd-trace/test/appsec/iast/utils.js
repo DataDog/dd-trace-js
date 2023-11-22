@@ -293,13 +293,18 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const bodyParser = require(`../../../../../versions/body-parser`).get()
-      const cookieParser = require(`../../../../../versions/cookie-parser`).get()
       const expressApp = express()
 
       if (loadMiddlewares) loadMiddlewares(expressApp)
 
       expressApp.use(bodyParser.json())
-      expressApp.use(cookieParser())
+      try {
+        const cookieParser = require(`../../../../../versions/cookie-parser`).get()
+        expressApp.use(cookieParser())
+      } catch (e) {
+        // do nothing, in some scenarios we don't have cookie-parse dependency available, and we don't need
+        // it in all the iast tests
+      }
 
       expressApp.all('/', listener)
       getPort().then(newPort => {
