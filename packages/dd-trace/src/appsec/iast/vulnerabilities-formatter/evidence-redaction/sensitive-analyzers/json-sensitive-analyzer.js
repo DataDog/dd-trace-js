@@ -2,7 +2,7 @@
 
 const { stringifyWithRanges } = require('../../utils')
 
-class JsonSensitiveAnalyzer {
+module.exports = {
   extractSensitiveRanges (evidence) {
     // expect object evidence
     const { value, ranges, sensitiveRanges } = stringifyWithRanges(evidence.value, evidence.rangesToApply, true)
@@ -12,5 +12,3 @@ class JsonSensitiveAnalyzer {
     return sensitiveRanges
   }
 }
-
-module.exports = JsonSensitiveAnalyzer

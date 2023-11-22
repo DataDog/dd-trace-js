@@ -5,12 +5,12 @@ const vulnerabilities = require('../../vulnerabilities')
 
 const { contains, intersects, remove } = require('./range-utils')
 
-const CommandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
-const HeaderSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
-const JsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
-const LdapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
-const SqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
-const UrlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
+const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
+const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
+const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
+const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
+const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
 const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
 
@@ -22,14 +22,13 @@ class SensitiveHandler {
     this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
     this._sensitiveAnalyzers = new Map()
-    this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, new CommandSensitiveAnalyzer())
-    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, new JsonSensitiveAnalyzer())
-    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, new LdapSensitiveAnalyzer())
-    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, new SqlSensitiveAnalyzer())
-    const urlSensitiveAnalyzer = new UrlSensitiveAnalyzer()
+    this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, new HeaderSensitiveAnalyzer())
+    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, headerSensitiveAnalyzer)
   }
 
   isSensibleName (name) {

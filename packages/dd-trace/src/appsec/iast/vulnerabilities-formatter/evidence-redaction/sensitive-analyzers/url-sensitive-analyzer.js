@@ -4,16 +4,10 @@ const iastLog = require('../../../iast-log')
 
 const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 const QUERY_FRAGMENT = '[?#&]([^=&;]+)=([^?#&]+)'
-
-class UrlSensitiveAnalyzer {
-  constructor () {
-    this._pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
-  }
-
+const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
+module.exports = {
   extractSensitiveRanges (evidence) {
     try {
-      const pattern = this._pattern
-
       const ranges = []
       let regexResult = pattern.exec(evidence.value)
 
@@ -45,5 +39,3 @@ class UrlSensitiveAnalyzer {
     return []
   }
 }
-
-module.exports = UrlSensitiveAnalyzer

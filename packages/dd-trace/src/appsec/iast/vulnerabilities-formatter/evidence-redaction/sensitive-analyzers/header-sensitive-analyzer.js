@@ -7,7 +7,7 @@ const {
 
 const { HEADER_NAME_VALUE_SEPARATOR } = require('../../constants')
 
-class HeaderSensitiveAnalyzer {
+module.exports = {
   extractSensitiveRanges (evidence) {
     const evidenceValue = evidence.value
     const sections = evidenceValue.split(HEADER_NAME_VALUE_SEPARATOR)
@@ -25,4 +25,3 @@ class HeaderSensitiveAnalyzer {
   }
 }
 
-module.exports = HeaderSensitiveAnalyzer

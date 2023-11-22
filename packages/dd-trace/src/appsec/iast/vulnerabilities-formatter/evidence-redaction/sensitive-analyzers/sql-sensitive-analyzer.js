@@ -23,55 +23,53 @@ const NUMERIC_LITERAL =
   })`
 const ORACLE_ESCAPED_LITERAL = 'q\'<.*?>\'|q\'\\(.*?\\)\'|q\'\\{.*?\\}\'|q\'\\[.*?\\]\'|q\'(?<ESCAPE>.).*?\\k<ESCAPE>\''
 
-class SqlSensitiveAnalyzer {
-  constructor () {
-    this._patterns = {
-      ANSI: new RegExp( // Default
-        [
-          NUMERIC_LITERAL,
-          STRING_LITERAL,
-          LINE_COMMENT,
-          BLOCK_COMMENT
-        ].join('|'),
-        'gmi'
-      ),
-      MYSQL: new RegExp(
-        [
-          NUMERIC_LITERAL,
-          MYSQL_STRING_LITERAL,
-          LINE_COMMENT,
-          BLOCK_COMMENT
-        ].join('|'),
-        'gmi'
-      ),
-      POSTGRES: new RegExp(
-        [
-          NUMERIC_LITERAL,
-          POSTGRESQL_ESCAPED_LITERAL,
-          STRING_LITERAL,
-          LINE_COMMENT,
-          BLOCK_COMMENT
-        ].join('|'),
-        'gmi'
-      ),
-      ORACLE: new RegExp([
-        NUMERIC_LITERAL,
-        ORACLE_ESCAPED_LITERAL,
-        STRING_LITERAL,
-        LINE_COMMENT,
-        BLOCK_COMMENT
-      ].join('|'),
-      'gmi')
-    }
-    this._patterns.SQLITE = this._patterns.MYSQL
-    this._patterns.MARIADB = this._patterns.MYSQL
-  }
+const patterns = {
+  ANSI: new RegExp( // Default
+    [
+      NUMERIC_LITERAL,
+      STRING_LITERAL,
+      LINE_COMMENT,
+      BLOCK_COMMENT
+    ].join('|'),
+    'gmi'
+  ),
+  MYSQL: new RegExp(
+    [
+      NUMERIC_LITERAL,
+      MYSQL_STRING_LITERAL,
+      LINE_COMMENT,
+      BLOCK_COMMENT
+    ].join('|'),
+    'gmi'
+  ),
+  POSTGRES: new RegExp(
+    [
+      NUMERIC_LITERAL,
+      POSTGRESQL_ESCAPED_LITERAL,
+      STRING_LITERAL,
+      LINE_COMMENT,
+      BLOCK_COMMENT
+    ].join('|'),
+    'gmi'
+  ),
+  ORACLE: new RegExp([
+    NUMERIC_LITERAL,
+    ORACLE_ESCAPED_LITERAL,
+    STRING_LITERAL,
+    LINE_COMMENT,
+    BLOCK_COMMENT
+  ].join('|'),
+  'gmi')
+}
+patterns.SQLITE = patterns.MYSQL
+patterns.MARIADB = patterns.MYSQL
 
+module.exports = {
   extractSensitiveRanges (evidence) {
     try {
-      let pattern = this._patterns[evidence.dialect]
+      let pattern = patterns[evidence.dialect]
       if (!pattern) {
-        pattern = this._patterns['ANSI']
+        pattern = patterns['ANSI']
       }
       pattern.lastIndex = 0
       const tokens = []
@@ -114,5 +112,3 @@ class SqlSensitiveAnalyzer {
     return []
   }
 }
-
-module.exports = SqlSensitiveAnalyzer
