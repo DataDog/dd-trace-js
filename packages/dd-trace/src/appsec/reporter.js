@@ -10,6 +10,7 @@ const {
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric
 } = require('./telemetry')
+const zlib = require('zlib')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -140,6 +141,25 @@ function reportAttack (attackData) {
   rootSpan.addTags(newTags)
 }
 
+function reportSchemas (derivatives) {
+  if (!derivatives) return
+
+  const req = storage.getStore()?.req
+  const rootSpan = web.root(req)
+
+  if (!rootSpan) return
+
+  const tags = {}
+  for (const [address, value] of Object.entries(derivatives)) {
+    if (address.startsWith('_dd.appsec.s.req')) {
+      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+      tags[address] = gzippedValue.toString('base64')
+    }
+  }
+
+  rootSpan.addTags(tags)
+}
+
 function finishRequest (req, res) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
@@ -175,6 +195,7 @@ module.exports = {
   reportMetrics,
   reportAttack,
   reportWafUpdate: incrementWafUpdatesMetric,
+  reportSchemas,
   finishRequest,
   setRateLimit,
   mapHeaderAndTags

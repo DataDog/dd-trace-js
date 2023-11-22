@@ -28,6 +28,14 @@ const { storage } = require('../../../datadog-core')
 let isEnabled = false
 let config
 
+function sampleRequest ({ enabled, requestSampling }) {
+  if (!enabled || !requestSampling) {
+    return false
+  }
+
+  return Math.random() <= requestSampling
+}
+
 function enable (_config) {
   if (isEnabled) return
 
@@ -90,6 +98,10 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     payload[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
+  if (sampleRequest(config.appsec.apiSecurity)) {
+    payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+  }
+
   const actions = waf.run(payload, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
@@ -101,7 +113,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   delete responseHeaders['set-cookie']
 
   const payload = {
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: res.statusCode,
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
 
