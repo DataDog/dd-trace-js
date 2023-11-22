@@ -20,25 +20,10 @@ class Profiler extends EventEmitter {
     this._timer = undefined
     this._lastStart = undefined
     this._timeoutInterval = undefined
-    this._resetStarted()
-  }
-
-  started () {
-    return this._started
   }
 
   start (options) {
-    const started = this._start(options)
-    started.catch((err) => { if (options.logger) options.logger.error(err) })
-    started.then(this._startedResolve, this._startedReject)
-    return this
-  }
-
-  _resetStarted () {
-    this._started = new Promise((resolve, reject) => {
-      this._startedResolve = resolve
-      this._startedReject = reject
-    })
+    return this._start(options).catch((err) => { if (options.logger) options.logger.error(err) })
   }
 
   async _start (options) {
@@ -120,7 +105,6 @@ class Profiler extends EventEmitter {
 
     clearTimeout(this._timer)
     this._timer = undefined
-    this._resetStarted()
 
     return this
   }
