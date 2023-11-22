@@ -64,51 +64,50 @@ const patterns = {
 patterns.SQLITE = patterns.MYSQL
 patterns.MARIADB = patterns.MYSQL
 
-module.exports = {
-  extractSensitiveRanges (evidence) {
-    try {
-      let pattern = patterns[evidence.dialect]
-      if (!pattern) {
-        pattern = patterns['ANSI']
-      }
-      pattern.lastIndex = 0
-      const tokens = []
+module.exports = function extractSensitiveRanges (evidence) {
+  try {
+    let pattern = patterns[evidence.dialect]
+    if (!pattern) {
+      pattern = patterns['ANSI']
+    }
+    pattern.lastIndex = 0
+    const tokens = []
 
-      let regexResult = pattern.exec(evidence.value)
-      while (regexResult != null) {
-        let start = regexResult.index
-        let end = regexResult.index + regexResult[0].length
-        const startChar = evidence.value.charAt(start)
-        if (startChar === '\'' || startChar === '"') {
-          start++
-          end--
-        } else if (end > start + 1) {
-          const nextChar = evidence.value.charAt(start + 1)
-          if (startChar === '/' && nextChar === '*') {
-            start += 2
-            end -= 2
-          } else if (startChar === '-' && startChar === nextChar) {
-            start += 2
-          } else if (startChar.toLowerCase() === 'q' && nextChar === '\'') {
-            start += 3
-            end -= 2
-          } else if (startChar === '$') {
-            const match = regexResult[0]
-            const size = match.indexOf('$', 1) + 1
-            if (size > 1) {
-              start += size
-              end -= size
-            }
+    let regexResult = pattern.exec(evidence.value)
+    while (regexResult != null) {
+      let start = regexResult.index
+      let end = regexResult.index + regexResult[0].length
+      const startChar = evidence.value.charAt(start)
+      if (startChar === '\'' || startChar === '"') {
+        start++
+        end--
+      } else if (end > start + 1) {
+        const nextChar = evidence.value.charAt(start + 1)
+        if (startChar === '/' && nextChar === '*') {
+          start += 2
+          end -= 2
+        } else if (startChar === '-' && startChar === nextChar) {
+          start += 2
+        } else if (startChar.toLowerCase() === 'q' && nextChar === '\'') {
+          start += 3
+          end -= 2
+        } else if (startChar === '$') {
+          const match = regexResult[0]
+          const size = match.indexOf('$', 1) + 1
+          if (size > 1) {
+            start += size
+            end -= size
           }
         }
-
-        tokens.push({ start, end })
-        regexResult = pattern.exec(evidence.value)
       }
-      return tokens
-    } catch (e) {
-      iastLog.debug(e)
+
+      tokens.push({ start, end })
+      regexResult = pattern.exec(evidence.value)
     }
-    return []
+    return tokens
+  } catch (e) {
+    iastLog.debug(e)
   }
+  return []
 }
+

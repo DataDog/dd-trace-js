@@ -48,7 +48,7 @@ class SensitiveHandler {
   scrubEvidence (vulnerabilityType, evidence, sourcesIndexes, sources) {
     const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
     if (sensitiveAnalyzer) {
-      const sensitiveRanges = sensitiveAnalyzer.extractSensitiveRanges(evidence)
+      const sensitiveRanges = sensitiveAnalyzer(evidence)
       return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
     }
     return null

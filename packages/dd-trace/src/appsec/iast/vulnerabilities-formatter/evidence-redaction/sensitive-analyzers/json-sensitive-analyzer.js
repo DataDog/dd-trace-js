@@ -2,13 +2,11 @@
 
 const { stringifyWithRanges } = require('../../utils')
 
-module.exports = {
-  extractSensitiveRanges (evidence) {
-    // expect object evidence
-    const { value, ranges, sensitiveRanges } = stringifyWithRanges(evidence.value, evidence.rangesToApply, true)
-    evidence.value = value
-    evidence.ranges = ranges
+module.exports = function extractSensitiveRanges (evidence) {
+  // expect object evidence
+  const { value, ranges, sensitiveRanges } = stringifyWithRanges(evidence.value, evidence.rangesToApply, true)
+  evidence.value = value
+  evidence.ranges = ranges
 
-    return sensitiveRanges
-  }
+  return sensitiveRanges
 }
