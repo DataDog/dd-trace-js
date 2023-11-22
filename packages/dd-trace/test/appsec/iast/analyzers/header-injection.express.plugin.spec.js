@@ -56,14 +56,134 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability({
-          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is location',
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "location"',
           fn: (req, res) => {
-            setHeaderFunction('location', 'not tainted string', res)
+            setHeaderFunction('location', req.body.test, res)
           },
           vulnerability: 'HEADER_INJECTION',
           makeRequest: (done, config) => {
             return axios.post(`http://localhost:${config.port}/`, {
               test: 'https://www.datadoghq.com'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "Sec-WebSocket-Location"',
+          fn: (req, res) => {
+            setHeaderFunction('Sec-WebSocket-Location', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'https://www.datadoghq.com'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "Sec-WebSocket-Accept"',
+          fn: (req, res) => {
+            setHeaderFunction('Sec-WebSocket-Accept', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'https://www.datadoghq.com'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "Upgrade"',
+          fn: (req, res) => {
+            setHeaderFunction('Upgrade', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'https://www.datadoghq.com'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header is "Connection"',
+          fn: (req, res) => {
+            setHeaderFunction('Upgrade', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'https://www.datadoghq.com'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header ' +
+            'is "access-control-allow-origin" and the origin is a header',
+          fn: (req, res) => {
+            setHeaderFunction('access-control-allow-origin', req.headers.testheader, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.get(`http://localhost:${config.port}/`, {
+              headers: {
+                testheader: 'headerValue'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasVulnerability({
+          testDescription: 'should have HEADER_INJECTION vulnerability when the header ' +
+            'is "access-control-allow-origin" and the origin is not a header',
+          fn: (req, res) => {
+            setHeaderFunction('access-control-allow-origin', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'https://www.datadoghq.com'
+            }, {
+              headers: {
+                testheader: 'headerValue'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability when the header ' +
+            'is "set-cookie" and the origin is a cookie',
+          fn: (req, res) => {
+            setHeaderFunction('set-cookie', req.cookies.cookie1, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.get(`http://localhost:${config.port}/`, {
+              headers: {
+                Cookie: 'cookie1=value'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasVulnerability({
+          testDescription: 'should have HEADER_INJECTION vulnerability when the header ' +
+            'is "access-control-allow-origin" and the origin is not a header',
+          fn: (req, res) => {
+            setHeaderFunction('set-cookie', req.body.test, res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'key=value'
+            }, {
+              headers: {
+                testheader: 'headerValue'
+              }
             }).catch(done)
           }
         })
