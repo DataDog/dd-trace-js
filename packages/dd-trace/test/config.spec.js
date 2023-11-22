@@ -109,6 +109,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -220,6 +222,9 @@ describe('Config', () => {
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
+    process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
 
     const config = new Config()
 
@@ -285,6 +290,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -654,6 +661,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
@@ -717,6 +726,10 @@ describe('Config', () => {
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
         eventTracking: {
           mode: 'safe'
+        },
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 1.0
         }
       },
       remoteConfig: {
@@ -766,6 +779,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -790,6 +805,10 @@ describe('Config', () => {
         blockedTemplateJson: undefined,
         eventTracking: {
           mode: 'disabled'
+        },
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 1.0
         }
       },
       experimental: {
@@ -804,6 +823,10 @@ describe('Config', () => {
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
           eventTracking: {
             mode: 'safe'
+          },
+          apiSecurity: {
+            enabled: false,
+            requestSampling: 0.5
           }
         }
       }
@@ -822,6 +845,10 @@ describe('Config', () => {
       eventTracking: {
         enabled: false,
         mode: 'disabled'
+      },
+      apiSecurity: {
+        enabled: true,
+        requestSampling: 1.0
       }
     })
   })
@@ -1330,5 +1357,33 @@ describe('Config', () => {
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
     })
+  })
+  it('should sanitize values for API Security sampling between 0 and 1', () => {
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 5
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: -5
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 0.1
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
 })
