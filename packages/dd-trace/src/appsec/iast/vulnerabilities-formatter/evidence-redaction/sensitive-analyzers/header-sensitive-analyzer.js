@@ -1,11 +1,11 @@
 'use strict'
 
-// const iastLog = require('../../../iast-log')
 const {
   DEFAULT_IAST_REDACTION_NAME_PATTERN,
   DEFAULT_IAST_REDACTION_VALUE_PATTERN
 } = require('../sensitive-regex')
-const { HEADER_NAME_VALUE_SEPARATOR } = require('../../../analyzers/header-injection-analyzer')
+
+const { HEADER_NAME_VALUE_SEPARATOR } = require('../../constants')
 
 class HeaderSensitiveAnalyzer {
   extractSensitiveRanges (evidence) {

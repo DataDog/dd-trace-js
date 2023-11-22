@@ -320,23 +320,23 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
       return agent.close({ ritmReset: false })
     })
 
-    function testThatRequestHasVulnerability (fn, vulnerability, occurrences, cb, makeRequest) {
-      let testDescription = `should have ${vulnerability} vulnerability`
+    function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
+      let testDescription
       if (typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability
-        occurrences = obj.occurrences
+        occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
         cb = obj.cb
         makeRequest = obj.makeRequest
         testDescription = obj.testDescription || testDescription
       }
-
+      testDescription = testDescription || `should have ${vulnerability} vulnerability`
       it(testDescription, function (done) {
         this.timeout(5000)
         app = fn
 
-        checkVulnerabilityInRequest(vulnerability, occurrences, cb, makeRequest, config, done)
+        checkVulnerabilityInRequest(vulnerability, occurrencesAndLocation, cb, makeRequest, config, done)
       })
     }
 

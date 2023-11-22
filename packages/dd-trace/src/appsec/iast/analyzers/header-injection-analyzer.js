@@ -3,9 +3,9 @@
 const InjectionAnalyzer = require('./injection-analyzer')
 const { HEADER_INJECTION } = require('../vulnerabilities')
 const { getNodeModulesPaths } = require('../path-line')
+const { HEADER_NAME_VALUE_SEPARATOR } = require('../vulnerabilities-formatter/constants')
 
-const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
-const HEADER_NAME_VALUE_SEPARATOR = ': '
+const EXCLUDED_PATHS = getNodeModulesPaths('express')
 
 class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   constructor () {
@@ -18,7 +18,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
   analyze (headerInfo) {
     const { name, value } = headerInfo
-    // TODO ignore also cookie headers?
+
     if (this.isLocationHeader(name) || typeof value !== 'string') return
 
     super.analyze(headerInfo)
