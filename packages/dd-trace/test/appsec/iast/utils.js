@@ -302,7 +302,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
         const cookieParser = require(`../../../../../versions/cookie-parser`).get()
         expressApp.use(cookieParser())
       } catch (e) {
-        // do nothing, in some scenarios we don't have cookie-parse dependency available, and we don't need
+        // do nothing, in some scenarios we don't have cookie-parser dependency available, and we don't need
         // it in all the iast tests
       }
 
