@@ -49,6 +49,10 @@ describe('AppSec Index', () => {
         eventTracking: {
           enabled: true,
           mode: 'safe'
+        },
+        apiSecurity: {
+          enabled: false,
+          requestSampling: 0
         }
       }
     }
@@ -266,6 +270,7 @@ describe('AppSec Index', () => {
       const rootSpan = {
         addTags: sinon.stub()
       }
+
       web.root.returns(rootSpan)
     })
 
@@ -298,7 +303,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
@@ -339,7 +344,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
       }, req)
 
@@ -390,7 +395,7 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
+        'server.response.status': '201',
         'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
         'server.request.body': { a: '1' },
         'server.request.path_params': { c: '3' },
@@ -398,6 +403,118 @@ describe('AppSec Index', () => {
         'server.request.query': { b: '2' }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+    })
+  })
+
+  describe('Api Security', () => {
+    beforeEach(() => {
+      sinon.stub(waf, 'run')
+
+      const rootSpan = {
+        addTags: sinon.stub()
+      }
+
+      web.root.returns(rootSpan)
+    })
+
+    it('should not trigger schema extraction with sampling disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 0
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1'
+      }, req)
+    })
+
+    it('should not trigger schema extraction with feature disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: false,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1'
+      }, req)
+    })
+
+    it('should trigger schema extraction with sampling enabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        'server.request.uri.raw': '/path',
+        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+        'server.request.method': 'POST',
+        'http.client_ip': '127.0.0.1',
+        'waf.context.processor': { 'extract-schema': true }
+      }, req)
     })
   })
 
