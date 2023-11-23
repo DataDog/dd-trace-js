@@ -24,6 +24,7 @@ const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 const { block, setTemplates } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
+const graphql = require('./graphql')
 
 let isEnabled = false
 let config
@@ -41,6 +42,7 @@ function enable (_config) {
 
   try {
     appsecTelemetry.enable(_config.telemetry)
+    graphql.enable()
 
     setTemplates(_config)
 
@@ -234,6 +236,7 @@ function disable () {
   RuleManager.clearAllRules()
 
   appsecTelemetry.disable()
+  graphql.disable()
 
   remoteConfig.disableWafUpdate()
 
