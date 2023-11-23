@@ -70,6 +70,7 @@ function enable (_config) {
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
+    console.error(err)
 
     disable()
   }

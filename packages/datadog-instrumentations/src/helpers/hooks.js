@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  '@apollo/server': () => require('../apollo-server'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),
   '@playwright/test': () => require('../playwright'),
