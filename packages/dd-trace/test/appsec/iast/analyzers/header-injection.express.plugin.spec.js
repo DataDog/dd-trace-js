@@ -47,6 +47,42 @@ describe('Header injection vulnerability', () => {
           }
         })
 
+        testThatRequestHasVulnerability({
+          testDescription: 'should have HEADER_INJECTION vulnerability ' +
+            'when the header value is an array with tainted string',
+          fn: (req, res) => {
+            setHeaderFunction('custom', ['not_tainted', req.body.test], res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          occurrencesAndLocation: {
+            occurrences: 1,
+            location: {
+              path: setHeaderFunctionFilename,
+              line: 4
+            }
+          },
+          cb: (headerInjectionVulnerabilities) => {
+            const evidenceString = headerInjectionVulnerabilities[0].evidence.valueParts
+              .map(part => part.value).join('')
+
+            expect(evidenceString).to.be.equal('custom: value')
+          },
+          makeRequest: (done, config) => {
+            return axios.post(`http://localhost:${config.port}/`, {
+              test: 'value'
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+            'when the header value an array without tainteds',
+          fn: (req, res) => {
+            setHeaderFunction('custom', ['not tainted string 1', 'not tainted string 2'], res)
+          },
+          vulnerability: 'HEADER_INJECTION'
+        })
+
         testThatRequestHasNoVulnerability({
           testDescription: 'should not have HEADER_INJECTION vulnerability when the header value is not tainted',
           fn: (req, res) => {
@@ -121,8 +157,8 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability({
-          testDescription: 'should not have HEADER_INJECTION vulnerability when the header ' +
-            'is "access-control-allow-origin" and the origin is a header',
+          testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+            'when the header is "access-control-allow-origin" and the origin is a header',
           fn: (req, res) => {
             setHeaderFunction('access-control-allow-origin', req.headers.testheader, res)
           },
@@ -137,8 +173,8 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasVulnerability({
-          testDescription: 'should have HEADER_INJECTION vulnerability when the header ' +
-            'is "access-control-allow-origin" and the origin is not a header',
+          testDescription: 'should have HEADER_INJECTION vulnerability ' +
+            'when the header is "access-control-allow-origin" and the origin is not a header',
           fn: (req, res) => {
             setHeaderFunction('access-control-allow-origin', req.body.test, res)
           },
@@ -155,8 +191,8 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability({
-          testDescription: 'should not have HEADER_INJECTION vulnerability when the header ' +
-            'is "set-cookie" and the origin is a cookie',
+          testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+            'when the header is "set-cookie" and the origin is a cookie',
           fn: (req, res) => {
             setHeaderFunction('set-cookie', req.cookies.cookie1, res)
           },
@@ -171,8 +207,8 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasVulnerability({
-          testDescription: 'should have HEADER_INJECTION vulnerability when the header ' +
-            'is "access-control-allow-origin" and the origin is not a header',
+          testDescription: 'should have HEADER_INJECTION vulnerability when ' +
+            'the header is "access-control-allow-origin" and the origin is not a header',
           fn: (req, res) => {
             setHeaderFunction('set-cookie', req.body.test, res)
           },

@@ -26,18 +26,25 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => this.analyze({ name, value }))
+    this.addSub('datadog:http:server:response:set-header:finish', ({ name, value }) => {
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+          const headerValue = value[i]
+
+          this.analyze({ name, value: headerValue })
+        }
+      } else {
+        this.analyze({ name, value })
+      }
+    })
   }
 
   _isVulnerable ({ name, value }, iastContext) {
     if (this.isExcludedHeaderName(name) || typeof value !== 'string') return
 
-    const isVulnerable = super._isVulnerable(value, iastContext)
-
-    if (this.isCookieExclusion(name, value, iastContext)) return false
-    if (this.isAccessControlAllowOriginExclusion(name, value, iastContext)) return false
-
-    return isVulnerable
+    return super._isVulnerable(value, iastContext) &&
+      !(this.isCookieExclusion(name, value, iastContext) ||
+        this.isAccessControlAllowOriginExclusion(name, value, iastContext))
   }
 
   _getEvidence (headerInfo, iastContext) {
@@ -63,17 +70,8 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
   isCookieExclusion (name, value, iastContext) {
     if (name?.trim().toLowerCase() === 'set-cookie') {
-      const ranges = getRanges(iastContext, value)
-
-      for (let i = 0; i < ranges.length; i++) {
-        const range = ranges[i]
-
-        if (range.iinfo.type !== HTTP_REQUEST_COOKIE_VALUE && range.iinfo.type !== HTTP_REQUEST_COOKIE_NAME) {
-          return false
-        }
-      }
-
-      return true
+      return getRanges(iastContext, value)
+        .every(range => range.iinfo.type === HTTP_REQUEST_COOKIE_VALUE || range.iinfo.type === HTTP_REQUEST_COOKIE_NAME)
     }
 
     return false
@@ -81,16 +79,8 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
 
   isAccessControlAllowOriginExclusion (name, value, iastContext) {
     if (name?.trim().toLowerCase() === 'access-control-allow-origin') {
-      const ranges = getRanges(iastContext, value)
-      for (let i = 0; i < ranges.length; i++) {
-        const range = ranges[i]
-
-        if (range.iinfo.type !== HTTP_REQUEST_HEADER_VALUE) {
-          return false
-        }
-      }
-
-      return true
+      return getRanges(iastContext, value)
+        .every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE)
     }
 
     return false
