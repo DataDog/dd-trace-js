@@ -46,7 +46,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     })
 
-    const start = ({ filters }) => {
+    const start = ({ filters, setNosqlAnalyzedFlag = true }) => {
       const store = storage.getStore()
       if (!store) return
 
@@ -56,7 +56,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         })
       }
 
-      storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
+      if (setNosqlAnalyzedFlag) {
+        storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
+      }
     }
 
     const finish = () => {

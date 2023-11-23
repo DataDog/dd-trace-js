@@ -10,7 +10,7 @@ const shimmer = require('../../datadog-shimmer')
 const startCh = channel('datadog:mquery:filter:start')
 const finishCh = channel('datadog:mquery:filter:finish')
 
-const methods = ['find', 'findOne', 'findOneAndRemove', 'count', 'distinct']
+const methods = ['find', 'findOne', 'findOneAndRemove', 'count', 'distinct', 'where']
 
 const methodsOptionalArgs = ['findOneAndUpdate']
 
@@ -29,10 +29,13 @@ function wrapCallback (asyncResource, callback) {
 }
 
 function getFilters (args, methodName) {
-  const filters = [args[0]]
+  // Should string arguments be excluded?
+  const arg0 = args[0]
+  const filters = arg0 && typeof arg0 === 'object' ? [args[0]] : []
 
-  if (methodsOptionalArgs.includes(methodName)) {
-    filters.push(args[1])
+  const arg1 = args[1]
+  if (methodsOptionalArgs.includes(methodName) && arg1 && typeof arg1 === 'object') {
+    filters.push(arg1)
   }
   return filters
 }
@@ -53,20 +56,34 @@ addHook({
         const asyncResource = new AsyncResource('bound-anonymous-fn')
 
         return asyncResource.runInAsyncScope(() => {
-          startCh.publish({
-            filters: getFilters(arguments, methodName),
-            methodName
-          })
+          startCh.publish({ filters: getFilters(arguments, methodName), setNosqlAnalyzedFlag: false })
 
           const query = method.apply(this, arguments)
 
           if (query.then) {
             const origThen = query.then
-            query.then = asyncResource.bind(function (onResolved, onRejected) {
-              arguments[0] = wrapCallback(asyncResource, onResolved)
-              arguments[1] = wrapCallback(asyncResource, onRejected)
+            query.then = asyncResource.bind(function (resolve, reject) {
+              arguments[0] = wrapCallback(asyncResource, resolve)
+              arguments[1] = wrapCallback(asyncResource, reject)
+
+              // send start with no filters to set the nosqlAnalyzed flag
+              startCh.publish({ setNosqlAnalyzedFlag: true })
 
               return origThen.apply(this, arguments)
+            })
+          }
+
+          if (query.exec) {
+            const origExec = query.exec
+            query.exec = asyncResource.bind(function () {
+              try {
+                // send start with no filters to set the nosqlAnalyzed flag
+                startCh.publish({ setNosqlAnalyzedFlag: true })
+
+                return origExec.apply(this, arguments)
+              } finally {
+                finishCh.publish()
+              }
             })
           }
 

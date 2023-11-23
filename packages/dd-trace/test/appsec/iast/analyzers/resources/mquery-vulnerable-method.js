@@ -1,18 +1,38 @@
 'use strict'
 
-function vulnerableFind (mquery, collection, filter) {
-  return mquery()
-    .collection(collection)
+function vulnerableFind (collection, filter) {
+  return collection
     .find(filter)
 }
 
-function vulnerableFindOne (mquery, collection, filter) {
-  return mquery()
-    .collection(collection)
+async function vulnerableFindOne (collection, filter) {
+  return collection
     .findOne(filter)
+}
+
+function vulnerableFindWhere (collection, filter, where) {
+  return collection
+    .find(filter)
+    .where(where)
+}
+
+function vulnerableFindExec (collection, filter) {
+  return collection
+    .find(filter)
+    .exec()
+}
+
+function vulnerableFindWhereExec (collection, filter, where) {
+  return collection
+    .find(filter)
+    .where(where)
+    .exec()
 }
 
 module.exports = {
   vulnerableFind,
-  vulnerableFindOne
+  vulnerableFindOne,
+  vulnerableFindWhere,
+  vulnerableFindExec,
+  vulnerableFindWhereExec
 }
