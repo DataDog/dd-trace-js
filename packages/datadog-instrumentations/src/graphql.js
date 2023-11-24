@@ -6,6 +6,7 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { GraphQLError } = require('graphql')
 
 /** cached objects */
 
@@ -36,6 +37,8 @@ const parseErrorCh = channel('apm:graphql:parser:error')
 const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
+
+const graphqlWafCh = channel('datadog:graphql:resolver:start')
 
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
@@ -202,6 +205,16 @@ function wrapResolve (resolve) {
     if (!startResolveCh.hasSubscribers) return resolve.apply(this, arguments)
 
     const context = contexts.get(contextValue)
+
+    const abortController = new AbortController()
+    graphqlWafCh.publish({ info, context, args, abortController })
+
+    if (abortController.signal.aborted) {
+      // throw new GraphQLError('Invalid argument value', {
+      //   extensions: { code: 'BAD_USER_INPUT' }
+      // })
+      return null
+    }
 
     if (!context) return resolve.apply(this, arguments)
 

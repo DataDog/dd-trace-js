@@ -1,9 +1,19 @@
 'use strict'
 
-const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { storage } = require('../../../datadog-core')
 const { block } = require('./blocking')
 const web = require('../plugins/util/web')
+const waf = require('./waf')
+const addresses = require('./addresses')
+const {
+  graphqlFinishExecute,
+  graphqlStartResolve,
+  startGraphqlMiddleware,
+  endGraphqlMiddleware,
+  startExecuteHTTPGraphQLRequest,
+  startGraphqlWrite
+} = require('./channels')
+
 /** TODO
  *    - Instrumentate @apollo/server to:
  *      - Mark a request as graphql endpoint
@@ -13,19 +23,46 @@ const web = require('../plugins/util/web')
  *      - monitor threats (done)
  *      - mark the request as blocked somehow
  */
-const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
-const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
-const startExecuteHTTPGraphQLRequest = channel('datadog:apollo:request:start')
-const startGraphqlWrite = channel('datadog:apollo:response-write:start')
 
 const graphqlRequestData = new WeakMap()
 
 function enable () {
   enableApollo()
+  graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
+  graphqlStartResolve.subscribe(onGraphqlStartResolve)
 }
 
 function disable () {
   disableApollo()
+  if (graphqlFinishExecute.hasSubscribers) graphqlFinishExecute.unsubscribe(onGraphqlFinishExecute)
+  if (graphqlStartResolve.hasSubscribers) graphqlStartResolve.unsubscribe(onGraphqlStartResolve)
+}
+
+function onGraphqlFinishExecute ({ context }) {
+  const store = storage.getStore()
+  const req = store?.req
+
+  if (!req) return
+
+  const resolvers = context?.resolvers
+
+  if (!resolvers || typeof resolvers !== 'object') return
+
+  // Don't collect blocking result because it only works in monitor mode.
+  waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers }, req)
+}
+
+function onGraphqlStartResolve ({ info, context, args, abortController }) {
+  const store = storage.getStore()
+  const req = store?.req
+
+  if (!req) return
+
+  for (const [key, value] of Object.entries(args)) {
+    if (value === 'attack') {
+      abortController.abort()
+    }
+  }
 }
 
 // Starts @apollo/server related logic
@@ -35,6 +72,7 @@ function enterInApolloMiddleware ({ req, res }) {
     inApolloMiddleware: true
   })
 }
+
 function exitFromApolloMiddleware ({ req }) {
   const requestData = graphqlRequestData.get(req)
   if (requestData) requestData.inApolloMiddleware = false
@@ -71,6 +109,8 @@ function disableApollo () {
   endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
   startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
 }
+
 module.exports = {
-  enable, disable
+  enable,
+  disable
 }
