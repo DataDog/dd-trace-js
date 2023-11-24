@@ -53,14 +53,17 @@ function onGraphqlFinishExecute ({ context }) {
 }
 
 function onGraphqlStartResolve ({ info, context, args, abortController }) {
-  const store = storage.getStore()
-  const req = store?.req
+  const req = storage.getStore()?.req
 
   if (!req) return
 
   for (const [key, value] of Object.entries(args)) {
     if (value === 'attack') {
-      abortController.abort()
+      const requestData = graphqlRequestData.get(req)
+      if (requestData.isInGraphqlRequest) {
+        requestData.blocked = true
+        abortController.abort()
+      }
     }
   }
 }
@@ -69,7 +72,8 @@ function onGraphqlStartResolve ({ info, context, args, abortController }) {
 function enterInApolloMiddleware ({ req, res }) {
   graphqlRequestData.set(req, {
     res,
-    inApolloMiddleware: true
+    inApolloMiddleware: true,
+    blocked: false
   })
 }
 
