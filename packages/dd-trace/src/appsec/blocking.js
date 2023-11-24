@@ -7,6 +7,17 @@ let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let blockingConfiguration
 
+function getBlockWithRedirectData () {
+  let statusCode = blockingConfiguration.parameters.status_code
+  if (!statusCode || statusCode < 300 || statusCode >= 400) {
+    statusCode = 303
+  }
+  const headers = {
+    'Location': blockingConfiguration.parameters.location
+  }
+  return { headers, statusCode }
+}
+
 function blockWithRedirect (res, rootSpan, abortController) {
   rootSpan.addTags({
     'appsec.blocked': 'true'
@@ -26,9 +37,10 @@ function blockWithRedirect (res, rootSpan, abortController) {
   }
 }
 
-function blockWithContent (req, res, rootSpan, abortController) {
+function getBlockWithContentData (req) {
   let type
   let body
+  let statusCode
 
   // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
   const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
@@ -51,18 +63,32 @@ function blockWithContent (req, res, rootSpan, abortController) {
     }
   }
 
+  if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
+    blockingConfiguration.parameters.status_code) {
+    statusCode = blockingConfiguration.parameters.status_code
+  } else {
+    statusCode = 403
+  }
+
+  const headers = {
+    'Content-Type': type,
+    'Content-Length': Buffer.byteLength(body)
+  }
+
+  return { body, statusCode, headers }
+}
+
+function blockWithContent (req, res, rootSpan, abortController) {
+  const { body, headers, statusCode } = getBlockWithContentData(req)
+
   rootSpan.addTags({
     'appsec.blocked': 'true'
   })
 
-  if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
-    blockingConfiguration.parameters.status_code) {
-    res.statusCode = blockingConfiguration.parameters.status_code
-  } else {
-    res.statusCode = 403
+  res.statusCode = statusCode
+  for (const [headerName, headerValue] of Object.entries(headers)) {
+    res.setHeader(headerName, headerValue)
   }
-  res.setHeader('Content-Type', type)
-  res.setHeader('Content-Length', Buffer.byteLength(body))
   res.end(body)
 
   if (abortController) {
@@ -84,6 +110,15 @@ function block (req, res, rootSpan, abortController) {
   }
 }
 
+function getBlockingData (req) {
+  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
+    blockingConfiguration.parameters.location) {
+    return getBlockWithRedirectData()
+  } else {
+    return getBlockWithContentData(req)
+  }
+}
+
 function setTemplates (config) {
   if (config.appsec.blockedTemplateHtml) {
     templateHtml = config.appsec.blockedTemplateHtml
@@ -99,6 +134,7 @@ function updateBlockingConfiguration (newBlockingConfiguration) {
 
 module.exports = {
   block,
+  getBlockingData,
   setTemplates,
   updateBlockingConfiguration
 }

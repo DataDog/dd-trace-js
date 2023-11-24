@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { block } = require('./blocking')
+const { block, getBlockingData } = require('./blocking')
 const web = require('../plugins/util/web')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -124,16 +124,11 @@ function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
   const requestData = graphqlRequestData.get(req)
 
   if (requestData?.blocked) {
-    // TODO
-    //  Change by real data, probably we should
-    //  implement new block method, just to get the data
-    abortData.code = 403
-    abortData.headers = {
-      'Content-Type': 'application/json'
-    }
-    abortData.message = JSON.stringify({
-      'message': 'you are blocked'
-    })
+    const blockingData = getBlockingData(req)
+    abortData.statusCode = blockingData.statusCode
+    abortData.headers = blockingData.headers
+    abortData.message = blockingData.body
+
     abortController.abort()
   }
 }
