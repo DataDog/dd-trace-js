@@ -62,10 +62,13 @@ class Tracer extends NoopProxy {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
           const profiler = require('./profiler')
-          profiler.start(config)
+          this._profilerStarted = profiler.start(config)
         } catch (e) {
           log.error(e)
         }
+      }
+      if (!this._profilerStarted) {
+        this._profilerStarted = Promise.resolve(false)
       }
 
       if (config.runtimeMetrics) {
@@ -102,6 +105,13 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  profilerStarted () {
+    if (!this._profilerStarted) {
+      throw new Error('profilerStarted() must be called after init()')
+    }
+    return this._profilerStarted
   }
 
   use () {
