@@ -21,7 +21,7 @@ class Tracer {
   }
 
   profilerStarted () {
-    return Promise.resolve()
+    return Promise.resolve(false)
   }
 
   trace (name, options, fn) {

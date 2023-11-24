@@ -67,6 +67,9 @@ class Tracer extends NoopProxy {
           log.error(e)
         }
       }
+      if (!this._profilerStarted) {
+        this._profilerStarted = Promise.resolve(false)
+      }
 
       if (config.runtimeMetrics) {
         runtimeMetrics.start(config)
@@ -105,6 +108,9 @@ class Tracer extends NoopProxy {
   }
 
   profilerStarted () {
+    if (!this._profilerStarted) {
+      throw new Error('profilerStarted() must be called after init()')
+    }
     return this._profilerStarted
   }
 

@@ -23,14 +23,19 @@ class Profiler extends EventEmitter {
   }
 
   start (options) {
-    return this._start(options).catch((err) => { if (options.logger) options.logger.error(err) })
+    return this._start(options).catch((err) => {
+      if (options.logger) {
+        options.logger.error(err)
+      }
+      return false
+    })
   }
 
   async _start (options) {
-    if (this._enabled) return
+    if (this._enabled) return true
 
     const config = this._config = new Config(options)
-    if (!config.enabled) return
+    if (!config.enabled) return false
 
     this._logger = config.logger
     this._enabled = true
@@ -66,9 +71,11 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._timeoutInterval)
+      return true
     } catch (e) {
       this._logger.error(e)
       this._stop()
+      return false
     }
   }
 
