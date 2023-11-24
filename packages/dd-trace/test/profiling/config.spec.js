@@ -262,6 +262,18 @@ describe('config', () => {
     expect(config.tags).to.include({ env, service, version })
   })
 
+  it('should add source code integration tags if git metadata is available', () => {
+    const DUMMY_GIT_SHA = '13851f2b092e97acebab1b73f6c0e7818e795b50'
+    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
+
+    const config = new Config({
+      repositoryUrl: DUMMY_REPOSITORY_URL,
+      commitSHA: DUMMY_GIT_SHA
+    })
+
+    expect(config.tags).to.include({ 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
+  })
+
   it('should support IPv6 hostname', () => {
     const options = {
       hostname: '::1'
