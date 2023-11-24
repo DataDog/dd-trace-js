@@ -8,7 +8,7 @@ process.once('beforeExit', () => { profiler.stop() })
 
 module.exports = {
   start: config => {
-    const { service, version, env, url, hostname, port, tags } = config
+    const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
@@ -28,7 +28,9 @@ module.exports = {
       url,
       hostname,
       port,
-      tags
+      tags,
+      repositoryUrl,
+      commitSHA
     })
   },
 
