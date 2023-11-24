@@ -6,6 +6,7 @@ const dc = require('dc-polyfill')
 module.exports = {
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
   cookieParser: dc.channel('datadog:cookie-parser:read:finish'),
+  graphqlStartResolve: dc.channel('datadog:graphql:resolver:start'),
   graphqlFinishExecute: dc.channel('apm:graphql:execute:finish'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
