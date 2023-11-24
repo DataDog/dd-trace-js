@@ -11,6 +11,7 @@ const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
 const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 
@@ -72,6 +73,13 @@ class Config {
       tagger.parse(options.tags),
       tagger.parse({ env, host, service, version, functionname })
     )
+
+    // Add source code integration tags if available
+    if (options.repositoryUrl && options.commitSHA) {
+      this.tags[GIT_REPOSITORY_URL] = options.repositoryUrl
+      this.tags[GIT_COMMIT_SHA] = options.commitSHA
+    }
+
     this.logger = ensureLogger(options.logger)
     const logger = this.logger
     function logExperimentalVarDeprecation (shortVarName) {
