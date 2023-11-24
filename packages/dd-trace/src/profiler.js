@@ -17,7 +17,7 @@ module.exports = {
       error: (message) => log.error(message)
     }
 
-    profiler.start({
+    return profiler.start({
       enabled,
       service,
       version,
