@@ -6,7 +6,6 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { GraphQLError } = require('graphql')
 
 /** cached objects */
 
@@ -210,10 +209,9 @@ function wrapResolve (resolve) {
     graphqlWafCh.publish({ info, context, args, abortController })
 
     if (abortController.signal.aborted) {
-      // throw new GraphQLError('Invalid argument value', {
-      //   extensions: { code: 'BAD_USER_INPUT' }
-      // })
-      return null
+      // TODO: currently throwing generic error in order to stop the operation execution flow. Try
+      // to find another way (returning null?)
+      throw new Error('aborted')
     }
 
     if (!context) return resolve.apply(this, arguments)
