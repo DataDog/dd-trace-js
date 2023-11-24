@@ -13,10 +13,15 @@ const web = require('../plugins/util/web')
  *      - monitor threats (done)
  *      - mark the request as blocked somehow
  */
+// @apollo/server
 const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
 const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
 const startExecuteHTTPGraphQLRequest = channel('datadog:apollo:request:start')
 const startGraphqlWrite = channel('datadog:apollo:response-write:start')
+
+// apollo-server-core (used in apollo-server-fastify|express|...
+const startRunHttpQuery = channel('datadog:apollo-core:runhttpquery:start')
+const successRunHttpQuery = channel('datadog:apollo-core:runhttpquery:success')
 
 const graphqlRequestData = new WeakMap()
 
@@ -29,9 +34,10 @@ function disable () {
 }
 
 // Starts @apollo/server related logic
-function enterInApolloMiddleware ({ req, res }) {
+function enterInApolloMiddleware ({ req }) {
+  if (!req) return
+
   graphqlRequestData.set(req, {
-    res,
     inApolloMiddleware: true
   })
 }
@@ -49,27 +55,66 @@ function enterInApolloRequest () {
 }
 
 function beforeWriteGraphqlResponse ({ abortController }) {
-  const req = storage.getStore()?.req
+  const store = storage.getStore()
+  if (!store) return
+
+  const { req, res } = store
   const requestData = graphqlRequestData.get(req)
+
   if (requestData?.blocked) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
-    block(req, requestData.res, rootSpan, abortController)
+    block(req, res, rootSpan, abortController)
+  }
+}
+
+// Starts apollo-server-core related logic
+function enterInApolloCoreHttpQuery () {
+  const req = storage.getStore()?.req
+  if (!req) return
+
+  graphqlRequestData.set(req, {
+    isInGraphqlRequest: true,
+    blocked: true
+  })
+}
+function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
+  const req = storage.getStore()?.req
+  if (!req) return
+
+  const requestData = graphqlRequestData.get(req)
+
+  if (requestData?.blocked) {
+    // TODO
+    //  Change by real data, probably we should
+    //  implement new block method, just to get the data
+    abortData.code = 403
+    abortData.headers = {
+      'Content-Type': 'application/json'
+    }
+    abortData.message = JSON.stringify({
+      'message': 'you are blocked'
+    })
+    abortController.abort()
   }
 }
 
 function enableApollo () {
   startGraphqlMiddleware.subscribe(enterInApolloMiddleware)
+  startRunHttpQuery.subscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.subscribe(enterInApolloRequest)
   endGraphqlMiddleware.subscribe(exitFromApolloMiddleware)
   startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
+  successRunHttpQuery.subscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 function disableApollo () {
   startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
+  startRunHttpQuery.unsubscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
   endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
+  startGraphqlWrite.unsubscribe(beforeWriteGraphqlResponse)
+  successRunHttpQuery.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 module.exports = {
   enable, disable
