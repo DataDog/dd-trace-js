@@ -42,7 +42,7 @@ function getFilters (args, methodName) {
 
 addHook({
   name: 'mquery',
-  versions: ['>=4.0.0']
+  versions: ['>=3.2.3']
 }, Query => {
   [...methods, ...methodsOptionalArgs].forEach(methodName => {
     if (!(methodName in Query.prototype)) return

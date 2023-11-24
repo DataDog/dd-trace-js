@@ -57,20 +57,16 @@
     {
       "name": "body-parser",
       "versions": ["1.20.1"]
-    },
-    {
-      "name": "mquery",
-      "versions": [">=4.0.0"]
     }
   ],
   "mquery": [
     {
-      "name": "mongodb",
-      "versions": [">=3.3 <5", "5", ">=6"]
+      "name": "mquery",
+      "versions": [">=3.2.3"]
     },
     {
-      "name": "mquery",
-      "versions": [">=4.0.0"]
+      "name": "mongodb",
+      "versions": [">=3.3 <5", "5", ">=6"]
     }
   ],
   "fastify": [
