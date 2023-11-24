@@ -11,7 +11,9 @@ const {
   startGraphqlMiddleware,
   endGraphqlMiddleware,
   startExecuteHTTPGraphQLRequest,
-  startGraphqlWrite
+  startGraphqlWrite,
+  startRunHttpQuery,
+  successRunHttpQuery
 } = require('./channels')
 
 /** TODO
@@ -69,9 +71,10 @@ function onGraphqlStartResolve ({ info, context, args, abortController }) {
 }
 
 // Starts @apollo/server related logic
-function enterInApolloMiddleware ({ req, res }) {
+function enterInApolloMiddleware ({ req }) {
+  if (!req) return
+
   graphqlRequestData.set(req, {
-    res,
     inApolloMiddleware: true,
     blocked: false
   })
@@ -91,27 +94,66 @@ function enterInApolloRequest () {
 }
 
 function beforeWriteGraphqlResponse ({ abortController }) {
-  const req = storage.getStore()?.req
+  const store = storage.getStore()
+  if (!store) return
+
+  const { req, res } = store
   const requestData = graphqlRequestData.get(req)
+
   if (requestData?.blocked) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
-    block(req, requestData.res, rootSpan, abortController)
+    block(req, res, rootSpan, abortController)
+  }
+}
+
+// Starts apollo-server-core related logic
+function enterInApolloCoreHttpQuery () {
+  const req = storage.getStore()?.req
+  if (!req) return
+
+  graphqlRequestData.set(req, {
+    isInGraphqlRequest: true,
+    blocked: true
+  })
+}
+function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
+  const req = storage.getStore()?.req
+  if (!req) return
+
+  const requestData = graphqlRequestData.get(req)
+
+  if (requestData?.blocked) {
+    // TODO
+    //  Change by real data, probably we should
+    //  implement new block method, just to get the data
+    abortData.code = 403
+    abortData.headers = {
+      'Content-Type': 'application/json'
+    }
+    abortData.message = JSON.stringify({
+      'message': 'you are blocked'
+    })
+    abortController.abort()
   }
 }
 
 function enableApollo () {
   startGraphqlMiddleware.subscribe(enterInApolloMiddleware)
+  startRunHttpQuery.subscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.subscribe(enterInApolloRequest)
   endGraphqlMiddleware.subscribe(exitFromApolloMiddleware)
   startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
+  successRunHttpQuery.subscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 function disableApollo () {
   startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
+  startRunHttpQuery.unsubscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
   endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
+  startGraphqlWrite.unsubscribe(beforeWriteGraphqlResponse)
+  successRunHttpQuery.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 module.exports = {
