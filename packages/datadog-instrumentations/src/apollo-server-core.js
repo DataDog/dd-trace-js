@@ -6,9 +6,6 @@ const { AbortController } = require('node-abort-controller')
 
 const startRunHttpQuery = channel('datadog:apollo-core:runhttpquery:start')
 const successRunHttpQuery = channel('datadog:apollo-core:runhttpquery:success')
-// const startExecuteHTTPGraphQLRequest = channel('datadog:apollo:request:start')
-// const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
-// const startGraphqlWrite = channel('datadog:apollo:response-write:start')
 
 addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['>3.0.0'] }, runHttpQueryModule => {
   shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
@@ -29,7 +26,7 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
               const error = new Error()
               error.name = 'HttpQueryError'
               error.headers = abortData.headers
-              error.statusCode = abortData.code
+              error.statusCode = abortData.statusCode
               error.message = abortData.message
 
               reject(error)
