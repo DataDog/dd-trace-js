@@ -39,4 +39,4 @@ function runBusySpans () {
   })
 }
 
-setTimeout(runBusySpans, 100)
+tracer.profilerStarted().then(runBusySpans)
