@@ -281,31 +281,31 @@ describe('nosql injection detection with mquery', () => {
             }, 'NOSQL_MONGODB_INJECTION')
           })
 
-        // withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
-        //   prepareTestServerForIastInExpress('Test with sanitization middleware', expressVersion, (expressApp) => {
-        //     const mongoSanitize =
-        //         require(`../../../../../../versions/express-mongo-sanitize@${expressMongoSanitizeVersion}`).get()
-        //     expressApp.use(mongoSanitize())
-        //   }, (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
-        //     testThatRequestHasNoVulnerability({
-        //       fn: async (req, res) => {
-        //         const filter = {
-        //           name: req.query.key
-        //         }
-        //         try {
-        //           await require(tmpFilePath).vulnerableFindOne(collection, filter)
-        //         } catch (e) {
-        //           // do nothing
-        //         }
-        //         res.end()
-        //       },
-        //       vulnerability: 'NOSQL_MONGODB_INJECTION',
-        //       makeRequest: (done, config) => {
-        //         axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-        //       }
-        //     })
-        //   })
-        // })
+        withVersions('express-mongo-sanitize', 'express-mongo-sanitize', expressMongoSanitizeVersion => {
+          prepareTestServerForIastInExpress('Test with sanitization middleware', expressVersion, (expressApp) => {
+            const mongoSanitize =
+                require(`../../../../../../versions/express-mongo-sanitize@${expressMongoSanitizeVersion}`).get()
+            expressApp.use(mongoSanitize())
+          }, (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
+            testThatRequestHasNoVulnerability({
+              fn: async (req, res) => {
+                const filter = {
+                  name: req.query.key
+                }
+                try {
+                  await require(tmpFilePath).vulnerableFindOne(collection, filter)
+                } catch (e) {
+                  // do nothing
+                }
+                res.end()
+              },
+              vulnerability: 'NOSQL_MONGODB_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              }
+            })
+          })
+        })
       })
     })
   })

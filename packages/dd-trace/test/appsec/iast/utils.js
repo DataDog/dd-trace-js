@@ -328,7 +328,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     })
 
     function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
-      let testDescription
+      let testDescription = `should have ${vulnerability} vulnerability`
       if (typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
@@ -336,9 +336,8 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
         occurrencesAndLocation = obj.occurrencesAndLocation || obj.occurrences
         cb = obj.cb
         makeRequest = obj.makeRequest
-        testDescription = obj.testDescription
+        testDescription = obj.testDescription || testDescription
       }
-      testDescription = testDescription || `should have ${vulnerability} vulnerability`
 
       it(testDescription, function (done) {
         this.timeout(5000)
@@ -349,15 +348,14 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
     }
 
     function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
-      let testDescription
+      let testDescription = `should not have ${vulnerability} vulnerability`
       if (typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability
         makeRequest = obj.makeRequest
-        testDescription = obj.testDescription
+        testDescription = obj.testDescription || testDescription
       }
-      testDescription = testDescription || `should not have ${vulnerability} vulnerability`
 
       it(testDescription, function (done) {
         app = fn
