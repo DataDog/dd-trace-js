@@ -52,7 +52,8 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       startSendCh.publish({ targetAddress, host, port, msg })
       const delivery = send.apply(this, arguments)
       const context = {
-        asyncResource
+        asyncResource,
+        connection: this.connection
       }
       contexts.set(delivery, context)
 
@@ -80,7 +81,8 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
 
         if (msgObj.delivery) {
           const context = {
-            asyncResource
+            asyncResource,
+            connection: this.connection
           }
           contexts.set(msgObj.delivery, context)
           msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
