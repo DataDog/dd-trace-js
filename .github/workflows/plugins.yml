@@ -30,7 +30,7 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      AEROSPIKE_VERSION_RANGE: '3'
+      AEROSPIKE_VERSION_RANGE: '3.16.7'
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
