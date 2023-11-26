@@ -30,15 +30,16 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
+      AEROSPIKE_VERSION_RANGE: '5.8.0'
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engines
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      # - uses: ./.github/actions/node/20
+      # - uses: ./.github/actions/node/oldest
       # - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
