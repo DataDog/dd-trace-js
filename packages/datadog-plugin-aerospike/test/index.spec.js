@@ -269,6 +269,10 @@ describe('Plugin', () => {
           return agent.load('aerospike', { service: 'custom' })
         })
 
+        afterEach(() => {
+          client.close()
+        })
+
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
