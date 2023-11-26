@@ -37,7 +37,12 @@ function wrapProcess (process) {
   }
 }
 
-addHook({ name: 'aerospike', file: 'lib/commands/command.js', versions: ['5'] },
-  commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
+addHook({
+  name: 'aerospike',
+  file: 'lib/commands/command.js',
+  versions: process.env.AEROSPIKE_VERSION_RANGE ? [`${process.env.AEROSPIKE_VERSION_RANGE}`]
+    : ['3', '4', '5']
+},
+commandFactory => {
+  return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+})
