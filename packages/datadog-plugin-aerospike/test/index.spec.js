@@ -48,10 +48,6 @@ describe('Plugin', () => {
           return agent.load('aerospike')
         })
 
-        afterEach(() => {
-          client.close()
-        })
-
         describe('client', () => {
           it('should instrument put', done => {
             agent
@@ -72,7 +68,9 @@ describe('Plugin', () => {
               .catch(done)
 
             client.connect(() => {
-              client.put(key, { i: 123 }, () => {})
+              client.put(key, { i: 123 }, () => {
+                client.close()
+              })
             })
           })
 
@@ -90,7 +88,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            client.connect(() => {})
+            client.connect(() => {
+              client.close()
+            })
           })
 
           it('should instrument get', done => {
@@ -112,7 +112,9 @@ describe('Plugin', () => {
               .catch(done)
 
             client.connect(() => {
-              client.get(key, () => {})
+              client.get(key, () => {
+                client.close()
+              })
             })
           })
 
@@ -140,7 +142,9 @@ describe('Plugin', () => {
                   aerospike.operations.incr('i', 1),
                   aerospike.operations.read('i')
                 ]
-                client.operate(key, ops, () => {})
+                client.operate(key, ops, () => {
+                  client.close()
+                })
               })
             })
           })
@@ -173,6 +177,9 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
+                job.waitUntilDone(() => {
+                  client.close()
+                })
               })
             })
           })
@@ -217,7 +224,9 @@ describe('Plugin', () => {
                     query.select('id', 'tags')
                     query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                     const stream = query.foreach(queryPolicy)
-                    stream.on('end', () => {})
+                    stream.on('end', () => {
+                      client.close()
+                    })
                   })
                 })
               })
@@ -229,6 +238,7 @@ describe('Plugin', () => {
               tracer.scope().activate(obj, () => {
                 client.put(key, { i: 123 }, () => {
                   expect(tracer.scope().active()).to.equal(obj)
+                  client.close()
                   done()
                 })
               })
@@ -256,6 +266,7 @@ describe('Plugin', () => {
                 ]
 
                 client.operate(key, ops, (err) => {
+                  client.close()
                   error = err
                 })
               })
@@ -269,10 +280,6 @@ describe('Plugin', () => {
           return agent.load('aerospike', { service: 'custom' })
         })
 
-        afterEach(() => {
-          client.close()
-        })
-
         it('should be configured with the correct values', done => {
           agent
             .use(traces => {
@@ -283,13 +290,17 @@ describe('Plugin', () => {
             .catch(done)
 
           client.connect(() => {
-            client.put(key, { i: 123 }, () => {})
+            client.put(key, { i: 123 }, () => {
+              client.close()
+            })
           })
         })
 
         withNamingSchema(
           () => client.connect(() => {
-            client.put(key, { i: 123 }, () => {})
+            client.put(key, { i: 123 }, () => {
+              client.close()
+            })
           }),
           {
             v0: {
