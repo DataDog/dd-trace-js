@@ -42,6 +42,23 @@ type Query {
     books(title: String): [Book!]!
 }
 `
+    const query = `
+query GetBooks ($title: String) {
+  books(title: $title) {
+    title,
+    author
+  }
+}`
+    async function makeGraphqlRequest (variables) {
+      const headers = {
+        'content-type': 'application/json'
+      }
+      return axios.post(`http://localhost:${port}/graphql`, {
+        operationName: 'GetBooks',
+        query,
+        variables
+      }, { headers })
+    }
 
     before(() => {
       return agent.load(['fastify', 'graphql', 'apollo-server-core', 'http'], { client: false })
@@ -92,30 +109,21 @@ type Query {
       await app.close()
     })
 
-    it('test', async () => {
-      const query = `
-query GetBooks ($title: String) {
-  books(title: $title) {
-    title,
-    author
-  }
-}`
-      const variables = { title: 'testattack' }
-      const headers = {
-        'content-type': 'application/json'
-      }
+    it('Should block an attack', async () => {
       try {
-        await axios.post(`http://localhost:${port}/graphql`, {
-          operationName: 'GetBooks',
-          query,
-          variables
-        }, { headers })
+        await makeGraphqlRequest({ title: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
         expect(e.response.data).to.be.deep.equal(JSON.parse(json))
       }
+    })
+
+    it('Should not block a safe request', async () => {
+      const response = await makeGraphqlRequest({ title: 'Test' })
+
+      expect(response.data).to.be.deep.equal({ data: { books } })
     })
   })
 })
