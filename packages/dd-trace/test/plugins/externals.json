@@ -105,7 +105,15 @@
       "versions": [">=3"]
     },
     {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
       "name": "apollo-server-fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "apollo-server-express",
       "versions": [">=3"]
     },
     {

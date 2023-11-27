@@ -12,27 +12,26 @@ const {
   resolvers,
   makeGraphqlRequest
 } = require('./graphq.test-utils')
-
-withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
-  withVersions('apollo-server-core', 'apollo-server-fastify', apolloServerFastifyVersion => {
-    let fastify, ApolloServer, gql
+withVersions('apollo-server-core', 'express', '>=4', expressVersion => {
+  withVersions('apollo-server-core', 'apollo-server-express', apolloServerExpressVersion => {
+    let express, expressServer, ApolloServer, gql
     let app, server, port
 
     before(() => {
-      return agent.load(['fastify', 'graphql', 'apollo-server-core', 'http'], { client: false })
+      return agent.load(['express', 'graphql', 'apollo-server-core', 'http'], { client: false })
     })
 
     before(() => {
-      const apolloServerFastify =
-        require(`../../../../versions/apollo-server-fastify@${apolloServerFastifyVersion}`).get()
-      ApolloServer = apolloServerFastify.ApolloServer
-      gql = apolloServerFastify.gql
+      const apolloServerExpress =
+        require(`../../../../versions/apollo-server-express@${apolloServerExpressVersion}`).get()
+      ApolloServer = apolloServerExpress.ApolloServer
+      gql = apolloServerExpress.gql
 
-      fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
+      express = require(`../../../../versions/express@${expressVersion}`).get()
     })
 
     before(async () => {
-      app = fastify()
+      app = express()
 
       const typeDefs = gql(schema)
 
@@ -43,12 +42,12 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
 
       await server.start()
 
-      app.register(server.createHandler())
+      server.applyMiddleware({ app })
 
       port = await getPort()
 
       return new Promise(resolve => {
-        app.listen({ port }, (data) => {
+        expressServer = app.listen({ port }, (data) => {
           resolve()
         })
       })
@@ -64,7 +63,7 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
 
     after(async () => {
       await server.stop()
-      await app.close()
+      expressServer.close()
     })
 
     it('Should block an attack', async () => {
