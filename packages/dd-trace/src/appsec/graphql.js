@@ -49,7 +49,7 @@ function onGraphqlStartResolve ({ info, context }) {
   const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolvers }, req)
   if (actions.includes('block')) {
     const requestData = graphqlRequestData.get(req)
-    if (requestData.isInGraphqlRequest) {
+    if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
       context?.abortController?.abort()
     }
