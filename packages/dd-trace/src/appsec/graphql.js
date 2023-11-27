@@ -6,7 +6,6 @@ const web = require('../plugins/util/web')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const {
-  graphqlFinishExecute,
   graphqlStartResolve,
   startGraphqlMiddleware,
   endGraphqlMiddleware,
@@ -30,19 +29,16 @@ const graphqlRequestData = new WeakMap()
 
 function enable () {
   enableApollo()
-  graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
   graphqlStartResolve.subscribe(onGraphqlStartResolve)
 }
 
 function disable () {
   disableApollo()
-  if (graphqlFinishExecute.hasSubscribers) graphqlFinishExecute.unsubscribe(onGraphqlFinishExecute)
   if (graphqlStartResolve.hasSubscribers) graphqlStartResolve.unsubscribe(onGraphqlStartResolve)
 }
 
-function onGraphqlFinishExecute ({ context }) {
-  const store = storage.getStore()
-  const req = store?.req
+function onGraphqlStartResolve ({ info, context, abortController }) {
+  const req = storage.getStore()?.req
 
   if (!req) return
 
@@ -50,22 +46,12 @@ function onGraphqlFinishExecute ({ context }) {
 
   if (!resolvers || typeof resolvers !== 'object') return
 
-  // Don't collect blocking result because it only works in monitor mode.
-  waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers }, req)
-}
-
-function onGraphqlStartResolve ({ info, context, args, abortController }) {
-  const req = storage.getStore()?.req
-
-  if (!req) return
-
-  for (const [key, value] of Object.entries(args)) {
-    if (value === 'attack') {
-      const requestData = graphqlRequestData.get(req)
-      if (requestData.isInGraphqlRequest) {
-        requestData.blocked = true
-        abortController.abort()
-      }
+  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolvers }, req)
+  if (actions.includes('block')) {
+    const requestData = graphqlRequestData.get(req)
+    if (requestData.isInGraphqlRequest) {
+      requestData.blocked = true
+      abortController.abort()
     }
   }
 }

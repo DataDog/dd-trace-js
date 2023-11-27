@@ -205,15 +205,6 @@ function wrapResolve (resolve) {
 
     const context = contexts.get(contextValue)
 
-    const abortController = new AbortController()
-    graphqlWafCh.publish({ info, context, args, abortController })
-
-    if (abortController.signal.aborted) {
-      // TODO: currently throwing generic error in order to stop the operation execution flow. Try
-      // to find another way (returning null?)
-      throw new Error('aborted')
-    }
-
     if (!context) return resolve.apply(this, arguments)
 
     const field = assertField(context, info, args)
@@ -280,13 +271,24 @@ function assertField (context, info, args) {
       accesses the parent span from the storage unit in its own scope */
       const childResource = new AsyncResource('bound-anonymous-fn')
 
+      // TODO: move AbortController creation to context.
+      const abortController = new AbortController()
+
+      addResolver(context, info, args)
+
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
           context,
-          args
+          abortController
         })
       })
+
+      if (abortController.signal.aborted) {
+        // TODO: currently throwing generic error in order to stop the operation execution flow. Try
+        // to find another way (returning null?)
+        throw new Error('aborted')
+      }
 
       field = fields[pathString] = {
         parent,
@@ -346,6 +348,30 @@ function wrapFieldType (field) {
   }
 
   wrapFields(unwrappedType)
+}
+
+function addResolver (context, info, args) {
+  if (info.rootValue && !info.rootValue[info.fieldName]) {
+    return
+  }
+
+  if (!context.resolvers) {
+    context.resolvers = {}
+  }
+
+  const resolvers = context.resolvers
+
+  if (!resolvers[info.fieldName]) {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName] = [args]
+    } else {
+      resolvers[info.fieldName] = []
+    }
+  } else {
+    if (args && Object.keys(args).length) {
+      resolvers[info.fieldName].push(args)
+    }
+  }
 }
 
 function finishResolvers ({ fields }) {
