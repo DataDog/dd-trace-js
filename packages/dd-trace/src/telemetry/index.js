@@ -105,7 +105,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
     if (typeof value === 'object' && value !== null) {
       flatten(value, result, [...prefix, key], traversedObjects)
     } else {
-      result.push({ name: [...prefix, key].join('.'), value, origin: 'code' })
+      result.push({ name: [...prefix, key].join('.'), value })
     }
   }
   return result
@@ -114,7 +114,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: config.configWithOrigin ? config.configWithOrigin : flatten(config),
+    configuration: flatten(config),
     additional_payload: []
   }
   if (errors.agentError) {
