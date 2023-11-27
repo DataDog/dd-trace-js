@@ -89,19 +89,19 @@ describe('GraphQL', () => {
 
   describe('onGraphqlStartResolve', () => {
     beforeEach(() => {
+      sinon.stub(waf, 'run').returns([''])
+      sinon.stub(storage, 'getStore').returns({ req: {} })
+      sinon.stub(web, 'root').returns({})
       graphql.enable()
     })
 
     afterEach(() => {
+      sinon.restore()
       graphql.disable()
     })
 
     it('Should not call waf if resolvers is undefined', () => {
       const resolvers = undefined
-
-      sinon.stub(waf, 'run')
-      sinon.stub(storage, 'getStore').returns({ req: {} })
-      sinon.stub(web, 'root').returns({})
 
       graphqlStartResolve.publish({ resolvers })
 
@@ -110,11 +110,6 @@ describe('GraphQL', () => {
 
     it('Should not call waf if resolvers is not an object', () => {
       const resolvers = ''
-      const rootSpan = {}
-
-      sinon.stub(waf, 'run')
-      sinon.stub(storage, 'getStore').returns({ req: {} })
-      web.root.returns(rootSpan)
 
       graphqlStartResolve.publish({ resolvers })
 
@@ -123,8 +118,6 @@ describe('GraphQL', () => {
 
     it('Should not call waf if req is unavailable', () => {
       const resolvers = { user: [ { id: '1234' } ] }
-      sinon.stub(waf, 'run')
-      sinon.stub(storage, 'getStore').returns({})
 
       graphqlStartResolve.publish({ resolvers })
 
@@ -137,11 +130,6 @@ describe('GraphQL', () => {
           user: [ { id: '1234' } ]
         }
       }
-      const rootSpan = {}
-
-      sinon.stub(waf, 'run').returns([''])
-      sinon.stub(storage, 'getStore').returns({ req: {} })
-      web.root.returns(rootSpan)
 
       graphqlStartResolve.publish({ context })
 
@@ -227,7 +215,7 @@ describe('GraphQL', () => {
 
       startGraphqlWrite.publish({ abortController })
 
-      expect(blocking.block).to.have.been.calledOnceWithExactly(req, res, {}, abortController)
+      expect(blocking.block).to.have.been.calledOnceWithExactly(req, res, {}, abortController, 'graphql')
     })
   })
 })
