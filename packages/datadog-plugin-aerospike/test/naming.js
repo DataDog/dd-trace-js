@@ -8,7 +8,7 @@ const rawExpectedSchema = {
     },
     v1: {
       opName: 'aerospike.command',
-      serviceName: 'test-aerospike'
+      serviceName: 'test'
     }
   }
 }

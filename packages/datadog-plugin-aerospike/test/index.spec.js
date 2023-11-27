@@ -48,6 +48,10 @@ describe('Plugin', () => {
           return agent.load('aerospike')
         })
 
+        afterEach(() => {
+          return client.close()
+        })
+
         describe('client', () => {
           it('should instrument put', done => {
             agent
@@ -68,9 +72,7 @@ describe('Plugin', () => {
               .catch(done)
 
             client.connect(() => {
-              client.put(key, { i: 123 }, () => {
-                client.close()
-              })
+              client.put(key, { i: 123 }, () => {})
             })
           })
 
@@ -88,9 +90,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            client.connect(() => {
-              client.close()
-            })
+            client.connect(() => {})
           })
 
           it('should instrument get', done => {
@@ -112,9 +112,7 @@ describe('Plugin', () => {
               .catch(done)
 
             client.connect(() => {
-              client.get(key, () => {
-                client.close()
-              })
+              client.get(key, () => {})
             })
           })
 
@@ -142,9 +140,7 @@ describe('Plugin', () => {
                   aerospike.operations.incr('i', 1),
                   aerospike.operations.read('i')
                 ]
-                client.operate(key, ops, () => {
-                  client.close()
-                })
+                client.operate(key, ops, () => {})
               })
             })
           })
@@ -177,9 +173,7 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
-                job.waitUntilDone(() => {
-                  client.close()
-                })
+                job.waitUntilDone(() => {})
               })
             })
           })
@@ -224,9 +218,7 @@ describe('Plugin', () => {
                     query.select('id', 'tags')
                     query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                     const stream = query.foreach(queryPolicy)
-                    stream.on('end', () => {
-                      client.close()
-                    })
+                    stream.on('end', () => {})
                   })
                 })
               })
@@ -238,7 +230,6 @@ describe('Plugin', () => {
               tracer.scope().activate(obj, () => {
                 client.put(key, { i: 123 }, () => {
                   expect(tracer.scope().active()).to.equal(obj)
-                  client.close()
                   done()
                 })
               })
@@ -266,7 +257,6 @@ describe('Plugin', () => {
                 ]
 
                 client.operate(key, ops, (err) => {
-                  client.close()
                   error = err
                 })
               })
@@ -290,17 +280,13 @@ describe('Plugin', () => {
             .catch(done)
 
           client.connect(() => {
-            client.put(key, { i: 123 }, () => {
-              client.close()
-            })
+            client.put(key, { i: 123 }, () => {})
           })
         })
 
         withNamingSchema(
           () => client.connect(() => {
-            client.put(key, { i: 123 }, () => {
-              client.close()
-            })
+            client.put(key, { i: 123 }, () => {})
           }),
           {
             v0: {
