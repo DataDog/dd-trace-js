@@ -37,8 +37,6 @@ const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
 
-const graphqlWafCh = channel('datadog:graphql:resolver:start')
-
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
     return

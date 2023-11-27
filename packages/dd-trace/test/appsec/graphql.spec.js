@@ -1,5 +1,6 @@
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
+const web = require('../../src/plugins/util/web')
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
 
@@ -12,24 +13,18 @@ const {
   startGraphqlWrite,
   successRunHttpQuery
 } = require('../../src/appsec/channels')
-const {expect} = require('chai')
 
 describe('GraphQL', () => {
   let graphql
-  let web
   let blocking
 
   beforeEach(() => {
-    web = {
-      root: sinon.stub()
-    }
-
     blocking = {
-      setTemplates: sinon.stub()
+      setTemplates: sinon.stub(),
+      block: sinon.stub()
     }
 
     graphql = proxyquire('../../src/appsec/graphql', {
-      '../plugins/web': web,
       './blocking': blocking
     })
   })
@@ -103,11 +98,10 @@ describe('GraphQL', () => {
 
     it('Should not call waf if resolvers is undefined', () => {
       const resolvers = undefined
-      const rootSpan = {}
 
       sinon.stub(waf, 'run')
       sinon.stub(storage, 'getStore').returns({ req: {} })
-      web.root.returns(rootSpan)
+      sinon.stub(web, 'root').returns({})
 
       graphqlStartResolve.publish({ resolvers })
 
@@ -157,6 +151,83 @@ describe('GraphQL', () => {
         },
         {}
       )
+    })
+  })
+
+  describe('block response', () => {
+    const req = {}
+    const res = {}
+    beforeEach(() => {
+      sinon.stub(storage, 'getStore').returns({ req, res })
+
+      graphql.enable()
+      startGraphqlMiddleware.publish({ req, res })
+      startExecuteHTTPGraphQLRequest.publish()
+    })
+
+    afterEach(() => {
+      endGraphqlMiddleware.publish({ req })
+      graphql.disable()
+      sinon.restore()
+    })
+
+    it('Should not call abort', () => {
+      const context = {
+        resolvers: {
+          user: [ { id: '1234' } ]
+        },
+        abortController: {
+          abort: sinon.stub()
+        }
+      }
+
+      const abortController = {}
+
+      sinon.stub(waf, 'run').returns([''])
+
+      graphqlStartResolve.publish({ context })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly(
+        {
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolvers
+        },
+        {}
+      )
+      expect(context.abortController.abort).not.to.have.been.called
+
+      startGraphqlWrite.publish({ abortController })
+
+      expect(blocking.block).not.to.have.been.called
+    })
+
+    it('Should call abort', () => {
+      const context = {
+        resolvers: {
+          user: [ { id: '1234' } ]
+        },
+        abortController: {
+          abort: sinon.stub()
+        }
+      }
+
+      const abortController = {}
+
+      sinon.stub(waf, 'run').returns(['block'])
+      sinon.stub(web, 'root').returns({})
+
+      graphqlStartResolve.publish({ context })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly(
+        {
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolvers
+        },
+        {}
+      )
+      expect(context.abortController.abort).to.have.been.called
+
+      startGraphqlWrite.publish({ abortController })
+
+      expect(blocking.block).to.have.been.calledOnceWithExactly(req, res, {}, abortController)
     })
   })
 })
