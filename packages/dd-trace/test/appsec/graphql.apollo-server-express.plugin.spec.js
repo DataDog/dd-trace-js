@@ -5,7 +5,7 @@ const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { json } = require('../../src/appsec/blocked_templates')
+const { graphqlJson } = require('../../src/appsec/blocked_templates')
 const {
   books,
   schema,
@@ -73,7 +73,7 @@ withVersions('apollo-server-core', 'express', '>=4', expressVersion => {
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
-        expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+        expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
       }
     })
 
