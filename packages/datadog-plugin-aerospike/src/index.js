@@ -16,18 +16,7 @@ class AerospikePlugin extends DatabasePlugin {
     const resourceName = commandName.slice(0, commandName.indexOf('Command'))
     const store = storage.getStore()
     const childOf = store ? store.span : null
-    let meta = {}
-
-    if (resourceName.includes('Index')) {
-      const [ns, set, bin, index] = commandArgs
-      meta = getMetaForIndex(ns, set, bin, index)
-    } else if (resourceName === 'Query') {
-      const { ns, set } = commandArgs[2]
-      meta = getMetaForQuery({ ns, set })
-    } else if (isKeyObject(commandArgs[0])) {
-      const { ns, set, key } = commandArgs[0]
-      meta = getMetaForKey(ns, set, key)
-    }
+    const meta = getMeta(resourceName, commandArgs)
 
     const span = this.startSpan(this.operationName(), {
       childOf,
@@ -64,6 +53,21 @@ class AerospikePlugin extends DatabasePlugin {
       span.setTag('error', error)
     }
   }
+}
+
+function getMeta (resourceName, commandArgs) {
+  let meta = {}
+  if (resourceName.includes('Index')) {
+    const [ns, set, bin, index] = commandArgs
+    meta = getMetaForIndex(ns, set, bin, index)
+  } else if (resourceName === 'Query') {
+    const { ns, set } = commandArgs[2]
+    meta = getMetaForQuery({ ns, set })
+  } else if (isKeyObject(commandArgs[0])) {
+    const { ns, set, key } = commandArgs[0]
+    meta = getMetaForKey(ns, set, key)
+  }
+  return meta
 }
 
 function getMetaForIndex (ns, set, bin, index) {
