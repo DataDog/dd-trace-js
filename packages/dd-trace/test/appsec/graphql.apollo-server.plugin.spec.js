@@ -5,17 +5,16 @@ const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const { graphqlJson } = require('../../src/appsec/blocked_templates')
 const {
-  books,
   schema,
   resolvers,
-  makeGraphqlRequest
+  graphqlCommonTests
 } = require('./graphq.test-utils')
 
 withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
+  const config = {}
   let ApolloServer, startStandaloneServer
-  let server, port
+  let server
 
   before(() => {
     return agent.load(['express', 'graphql', 'apollo-server', 'http'], { client: false })
@@ -34,9 +33,9 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
       resolvers
     })
 
-    port = await getPort()
+    config.port = await getPort()
 
-    await startStandaloneServer(server, { listen: { port } })
+    await startStandaloneServer(server, { listen: { port: config.port } })
   })
 
   beforeEach(() => {
@@ -51,20 +50,5 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
     await server.stop()
   })
 
-  it('Should block an attack', async () => {
-    try {
-      await makeGraphqlRequest(port, { title: 'testattack' })
-
-      return Promise.reject(new Error('Request should not return 200'))
-    } catch (e) {
-      expect(e.response.status).to.be.equals(403)
-      expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
-    }
-  })
-
-  it('Should not block a safe request', async () => {
-    const response = await makeGraphqlRequest(port, { title: 'Test' })
-
-    expect(response.data).to.be.deep.equal({ data: { books } })
-  })
+  graphqlCommonTests(config)
 })

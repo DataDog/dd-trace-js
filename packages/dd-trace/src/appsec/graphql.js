@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { block, getBlockingData } = require('./blocking')
+const { addCustomEndpoint, block, getBlockingData } = require('./blocking')
 const web = require('../plugins/util/web')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -76,6 +76,7 @@ function enterInApolloRequest () {
   const requestData = graphqlRequestData.get(req)
   if (requestData?.inApolloMiddleware) {
     requestData.isInGraphqlRequest = true
+    addCustomEndpoint(req.method, req.originalUrl || req.url, 'graphql')
   }
 }
 
@@ -102,6 +103,7 @@ function enterInApolloCoreHttpQuery () {
     isInGraphqlRequest: true,
     blocked: false
   })
+  addCustomEndpoint(req.method, req.originalUrl || req.url, 'graphql')
 }
 function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
   const req = storage.getStore()?.req

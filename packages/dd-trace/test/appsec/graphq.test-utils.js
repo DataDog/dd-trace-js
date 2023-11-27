@@ -1,4 +1,5 @@
 const axios = require('axios')
+const { graphqlJson } = require('../../src/appsec/blocked_templates')
 
 const schema = `type Book {
   title: String,
@@ -33,9 +34,10 @@ const resolvers = {
   }
 }
 
-async function makeGraphqlRequest (port, variables) {
+async function makeGraphqlRequest (port, variables, extraHeaders = {}) {
   const headers = {
-    'content-type': 'application/json'
+    'content-type': 'application/json',
+    ...extraHeaders
   }
   return axios.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
@@ -43,10 +45,42 @@ async function makeGraphqlRequest (port, variables) {
     variables
   }, { headers })
 }
+
+function graphqlCommonTests (config) {
+  it('Should block an attack', async () => {
+    try {
+      await makeGraphqlRequest(config.port, { title: 'testattack' })
+
+      return Promise.reject(new Error('Request should not return 200'))
+    } catch (e) {
+      expect(e.response.status).to.be.equals(403)
+      expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+    }
+  })
+
+  it('Should not block a safe request', async () => {
+    const response = await makeGraphqlRequest(config.port, { title: 'Test' })
+
+    expect(response.data).to.be.deep.equal({ data: { books } })
+  })
+
+  it('Should block an http attack with graphql response', async () => {
+    await makeGraphqlRequest(config.port, { title: 'Test' })
+    try {
+      await makeGraphqlRequest(config.port, { title: 'Test' }, { customHeader: 'testattack' })
+
+      return Promise.reject(new Error('Request should not return 200'))
+    } catch (e) {
+      expect(e.response.status).to.be.equals(403)
+      expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+    }
+  })
+}
 module.exports = {
   books,
   schema,
   query,
   resolvers,
-  makeGraphqlRequest
+  makeGraphqlRequest,
+  graphqlCommonTests
 }
