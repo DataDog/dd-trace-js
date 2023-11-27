@@ -74,7 +74,7 @@ function getItrConfiguration ({
         let isCodeCoverageEnabled = attributes.code_coverage
         let isSuitesSkippingEnabled = attributes.tests_skipping
 
-        log.debug(() => `Remote settings: ${{ isCodeCoverageEnabled, isSuitesSkippingEnabled }}`)
+        log.debug(() => `Remote settings: ${JSON.stringify({ isCodeCoverageEnabled, isSuitesSkippingEnabled })}`)
 
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
           isCodeCoverageEnabled = true
