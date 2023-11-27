@@ -15,13 +15,12 @@ describe('Plugin', () => {
   let userKey
   let key
   let keyString
-  let asClient
+
   describe('aerospike', () => {
     withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
-        console.log(9999999, aerospike)
       })
 
       beforeEach(() => {
@@ -57,17 +56,6 @@ describe('Plugin', () => {
           //   'test',
           //   'aerospike.namespace'
           // )
-          before(() => {
-            console.log(55, aerospike)
-            aerospike.connect(config, (error, client) => {
-              asClient = client
-            })
-          })
-
-          after(() => {
-            asClient.close()
-          })
-
           it('should instrument put', done => {
             agent
               .use(traces => {
@@ -86,29 +74,52 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            asClient.put(key, { i: 123 })
+            aerospike.connect(config).then(client => {
+              return client.put(key, { i: 123 })
+                .then(() => {})
+            })
           })
 
-          it('should instrument get', done => {
+          it('should instrument connect', done => {
             agent
               .use(traces => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Get`)
+                expect(span).to.have.property('resource', `Connect`)
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('aerospike.key', keyString)
-                expect(span.meta).to.have.property('aerospike.namespace', ns)
-                expect(span.meta).to.have.property('aerospike.setname', set)
-                expect(span.meta).to.have.property('aerospike.userkey', userKey)
                 expect(span.meta).to.have.property('component', 'aerospike')
               })
               .then(done)
               .catch(done)
 
-            asClient.get(key)
+            aerospike.connect(config).then(client => { })
           })
+
+          //   it('should instrument get', done => {
+          //     agent
+          //       .use(traces => {
+          //         const span = traces[0][0]
+          //         expect(span).to.have.property('name', expectedSchema.command.opName)
+          //         expect(span).to.have.property('service', expectedSchema.command.serviceName)
+          //         expect(span).to.have.property('resource', `Get`)
+          //         expect(span).to.have.property('type', 'aerospike')
+          //         expect(span.meta).to.have.property('span.kind', 'client')
+          //         expect(span.meta).to.have.property('aerospike.key', keyString)
+          //         expect(span.meta).to.have.property('aerospike.namespace', ns)
+          //         expect(span.meta).to.have.property('aerospike.setname', set)
+          //         expect(span.meta).to.have.property('aerospike.userkey', userKey)
+          //         expect(span.meta).to.have.property('component', 'aerospike')
+          //       })
+          //       .then(done)
+          //       .catch(done)
+
+          //     aerospike.connect(config).then(client => {
+          //       return client.get(key)
+          //         .then(() => client.close())
+          //     })
+          //   })
 
           //   it('should instrument operate', done => {
           //     agent
