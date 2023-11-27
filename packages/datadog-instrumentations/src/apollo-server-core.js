@@ -28,7 +28,7 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
           successRunHttpQuery.publish({ abortController, abortData })
           if (abortController.signal.aborted) {
             return new Promise((resolve, reject) => {
-              const error = new HttpQueryError(abortData.statusCode, abortData.message, false, abortData.headers)
+              const error = new HttpQueryError(abortData.statusCode, abortData.message, true, abortData.headers)
 
               reject(error)
             })
