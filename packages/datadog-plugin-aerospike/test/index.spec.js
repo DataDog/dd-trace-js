@@ -42,7 +42,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          aerospike.connect(config).then(client => {
+          aerospike.connect(config, (error, client) => {
             asClient = client
           })
           return agent.load('aerospike')
