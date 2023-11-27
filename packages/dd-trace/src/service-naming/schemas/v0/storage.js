@@ -40,7 +40,7 @@ const storage = {
     aerospike: {
       opName: () => 'aerospike.command',
       serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || tracerService
+        pluginConfig.service || `${tracerService}-aerospike`
     },
     'cassandra-driver': {
       opName: () => 'cassandra.query',

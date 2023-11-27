@@ -80,7 +80,9 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = [].concat(instrumentation.versions || [])
+  const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+    : [].concat(instrumentation.versions || [])
+
   for (const version of versions) {
     if (version) {
       await assertModules(instrumentation.name, semver.coerce(version).version, external)

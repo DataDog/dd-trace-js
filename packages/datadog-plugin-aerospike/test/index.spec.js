@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema } = require('./naming')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
@@ -17,7 +17,7 @@ describe('Plugin', () => {
   let keyString
 
   describe('aerospike', () => {
-    withVersions('aerospike', 'aerospike', version => {
+    withVersions('aerospike', 'aerospike', '>=5.8.0', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
@@ -278,16 +278,7 @@ describe('Plugin', () => {
               return client.put(key, { i: 123 })
                 .then(() => client.close())
             }),
-            {
-              v0: {
-                opName: expectedSchema.command.opName,
-                serviceName: expectedSchema.command.serviceName
-              },
-              v1: {
-                opName: expectedSchema.command.opName,
-                serviceName: expectedSchema.command.serviceName
-              }
-            }
+            rawExpectedSchema.command
           )
         })
       })

@@ -4,7 +4,7 @@ const rawExpectedSchema = {
   command: {
     v0: {
       opName: 'aerospike.command',
-      serviceName: 'test'
+      serviceName: 'test-aerospike'
     },
     v1: {
       opName: 'aerospike.command',

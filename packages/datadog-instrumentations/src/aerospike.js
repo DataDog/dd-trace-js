@@ -37,22 +37,11 @@ function wrapProcess (process) {
   }
 }
 
-if (process.env.AEROSPIKE_VERSION_RANGE) {
-  addHook({
-    name: 'aerospike',
-    file: 'lib/commands/command.js',
-    versions: [process.env.AEROSPIKE_VERSION_RANGE]
-  },
-  commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
-} else {
-  addHook({
-    name: 'aerospike',
-    file: 'lib/commands/command.js',
-    versions: ['4', '5']
-  },
-  commandFactory => {
-    return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
-  })
-}
+addHook({
+  name: 'aerospike',
+  file: 'lib/commands/command.js',
+  versions: ['4', '5']
+},
+commandFactory => {
+  return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
+})
