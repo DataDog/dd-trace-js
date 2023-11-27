@@ -99,6 +99,29 @@
       "versions": ["^15.2.0"]
     }
   ],
+  "apollo-server-core": [
+    {
+      "name": "fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "apollo-server-fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "apollo-server-express",
+      "versions": [">=3"]
+    },
+    {
+      "name": "graphql",
+      "dep": true,
+      "versions": ["^15.2.0"]
+    }
+  ],
   "grpc": [
     {
       "name": "@grpc/proto-loader",

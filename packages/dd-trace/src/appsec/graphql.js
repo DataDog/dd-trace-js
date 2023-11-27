@@ -100,7 +100,7 @@ function enterInApolloCoreHttpQuery () {
 
   graphqlRequestData.set(req, {
     isInGraphqlRequest: true,
-    blocked: true
+    blocked: false
   })
 }
 function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
