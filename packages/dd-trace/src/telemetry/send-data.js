@@ -36,12 +36,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     url
   } = config
 
-  let namingSchemaVer
-  if (config.namingSchemaVer) {
-    namingSchemaVer = parseInt(config.namingSchemaVer.charAt(1))
-  } else {
-    namingSchemaVer = ''
-  }
   const options = {
     url,
     hostname,
@@ -52,7 +46,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   }
   const data = JSON.stringify({
     api_version: 'v2',
-    naming_schema_version: namingSchemaVer,
+    naming_schema_version: config.spanAttributeSchema ? config.spanAttributeSchema : '',
     request_type: reqType,
     tracer_time: Math.floor(Date.now() / 1000),
     runtime_id: config.tags['runtime-id'],

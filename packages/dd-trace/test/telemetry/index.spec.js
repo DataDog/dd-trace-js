@@ -15,7 +15,6 @@ const DEFAULT_HEARTBEAT_INTERVAL = 60000
 let traceAgent
 
 describe('telemetry', () => {
-  const HEARTBEAT_INTERVAL = 60000
   let telemetry
   let pluginsByName
 
@@ -60,7 +59,7 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -176,101 +175,91 @@ describe('telemetry', () => {
       clearTimeout()
     })
   })
+})
 
-  describe('telemetry app-heartbeat', () => {
-    const HEARTBEAT_INTERVAL = 60
-    let telemetry
-    let pluginsByName
+describe('telemetry app-heartbeat', () => {
+  let telemetry
+  const HEARTBEAT_INTERVAL = 60
 
-    before(done => {
-      storage.run({ noop: true }, () => {
-        traceAgent = http.createServer(async (req, res) => {
-          const chunks = []
-          for await (const chunk of req) {
-            chunks.push(chunk)
-          }
-          req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-          traceAgent.reqs.push(req)
-          traceAgent.emit('handled-req')
-          res.end()
-        }).listen(0, done)
-      })
-
-      traceAgent.reqs = []
-
-      telemetry = proxyquire('../../src/telemetry', {
-        '../exporters/common/docker': {
-          id () {
-            return 'test docker id'
-          }
+  before(done => {
+    storage.run({ noop: true }, () => {
+      traceAgent = http.createServer(async (req, res) => {
+        const chunks = []
+        for await (const chunk of req) {
+          chunks.push(chunk)
         }
-      })
-
-      pluginsByName = {
-        foo2: { _enabled: true },
-        bar2: { _enabled: false }
-      }
-
-      const circularObject = {
-        child: { parent: null, field: 'child_value' },
-        field: 'parent_value'
-      }
-      circularObject.child.parent = circularObject
-
-      telemetry.start({
-        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-        hostname: 'localhost',
-        port: traceAgent.address().port,
-        service: 'test service',
-        version: '1.2.3-beta4',
-        env: 'preprod',
-        tags: {
-          'runtime-id': '1a2b3c'
-        },
-        circularObject,
-        appsec: { enabled: false },
-        profiling: { enabled: false }
-      }, {
-        _pluginsByName: pluginsByName
-      })
+        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        traceAgent.reqs.push(req)
+        traceAgent.emit('handled-req')
+        res.end()
+      }).listen(0, done)
     })
 
-    after(() => {
-      setTimeout(() => {
-        telemetry.stop()
-        traceAgent.close()
-      }, HEARTBEAT_INTERVAL * 3)
+    traceAgent.reqs = []
+
+    telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      }
     })
 
-    it('should send app-heartbeat at uniform intervals', (done) => {
-    // TODO: switch to clock.tick
-      setTimeout(() => {
-        expect(getHeartbeatCount()).to.be.equal(0)
-      }, HEARTBEAT_INTERVAL * 0.75)
-      setTimeout(() => {
-        expect(getHeartbeatCount()).to.be.equal(1)
-      }, HEARTBEAT_INTERVAL * 1.2)
-      setTimeout(() => {
-        expect(getHeartbeatCount()).to.be.equal(1)
-      }, HEARTBEAT_INTERVAL * 1.9)
-      setTimeout(() => {
-        expect(getHeartbeatCount()).to.be.equal(2)
-        done()
-      }, HEARTBEAT_INTERVAL * 2.1)
+    telemetry.start({
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      hostname: 'localhost',
+      port: traceAgent.address().port,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c'
+      },
+      appsec: { enabled: false },
+      profiling: { enabled: false }
+    }, {
+      _pluginsByName: {}
     })
   })
 
-  function getHeartbeatCount () {
-    let heartbeatCount = 0
-    const reqCount = traceAgent.reqs.length
-    for (let i = 0; i < reqCount; i++) {
-      const req = traceAgent.reqs[i]
-      if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
-        heartbeatCount++
+  after(() => {
+    setTimeout(() => {
+      telemetry.stop()
+      traceAgent.close()
+    }, HEARTBEAT_INTERVAL * 3)
+    clearTimeout()
+  })
+
+  it('should send app-heartbeat at uniform intervals', (done) => {
+    function getHeartbeatCount () {
+      let heartbeatCount = 0
+      const reqCount = traceAgent.reqs.length
+      for (let i = 0; i < reqCount; i++) {
+        const req = traceAgent.reqs[i]
+        if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+          heartbeatCount++
+        }
       }
+      return heartbeatCount
     }
-    return heartbeatCount
-  }
+
+    // TODO: switch to clock.tick
+    // for some reason clock.tick works with the other tests but not this one
+    // Ida Liu spent fruitless hours to investigate ;u;
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(0)
+    }, HEARTBEAT_INTERVAL * 0.75)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.2)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.9)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(2)
+      done()
+    }, HEARTBEAT_INTERVAL * 2.1)
+  })
 })
 
 describe('Telemetry extended heartbeat', () => {
@@ -337,10 +326,10 @@ describe('Telemetry extended heartbeat', () => {
     done()
   })
 })
+
 // deleted this test for now since the global interval is now used for app-extended heartbeat
 // which is not supposed to be configurable
 // will ask Bryan why being able to change the interval is important after he is back from parental leave
-
 describe('Telemetry retry', () => {
   let telemetry
   let capturedRequestType
@@ -408,7 +397,6 @@ describe('Telemetry retry', () => {
     pluginsByName.boo3 = { _enabled: true }
     telemetry.updateIntegrations()
     expect(capturedRequestType).to.equal('app-integrations-change')
-
     expect(capturedPayload).to.deep.equal({
       'integrations': [{
         name: 'boo3',
@@ -755,6 +743,7 @@ async function testSeq (seqId, reqType, validatePayload) {
   }
   expect(req.body).to.deep.include({
     api_version: 'v2',
+    naming_schema_version: '',
     request_type: reqType,
     runtime_id: '1a2b3c',
     seq_id: seqId,

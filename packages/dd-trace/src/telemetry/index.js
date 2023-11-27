@@ -15,7 +15,6 @@ let pluginManager
 
 let application
 let host
-let interval
 let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
@@ -251,7 +250,7 @@ function stop () {
   if (!config) {
     return
   }
-  clearInterval(interval)
+  clearInterval(extendedInterval)
   clearTimeout(heartbeatTimeout)
   process.removeListener('beforeExit', onBeforeExit)
 
