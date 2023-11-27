@@ -308,6 +308,16 @@ class Config {
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
+    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+      appsec?.apiSecurity?.enabled,
+      isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
+      false
+    )
+    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
+      appsec?.apiSecurity?.requestSampling,
+      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
+      0.1
+    )
 
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
@@ -401,8 +411,14 @@ class Config {
       eventTracking: {
         enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+      },
+      apiSecurity: {
+        enabled: DD_EXPERIMENTAL_API_SECURITY_ENABLED,
+        // Coerce value between 0 and 1
+        requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
     }
+
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED
     }

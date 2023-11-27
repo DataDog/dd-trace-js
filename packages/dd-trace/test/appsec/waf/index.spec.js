@@ -26,10 +26,6 @@ describe('WAF Manager', () => {
         loaded: ['rule_1'], failed: []
       }
     }
-    DDWAF.prototype.requiredAddresses = new Map([
-      ['server.request.headers.no_cookies', { 'header': 'value' }],
-      ['server.request.uri.raw', 'https://testurl']
-    ])
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
@@ -43,6 +39,7 @@ describe('WAF Manager', () => {
     sinon.stub(Reporter, 'reportMetrics')
     sinon.stub(Reporter, 'reportAttack')
     sinon.stub(Reporter, 'reportWafUpdate')
+    sinon.stub(Reporter, 'reportSchemas')
 
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
@@ -213,39 +210,19 @@ describe('WAF Manager', () => {
         expect(ddwafContext.run).not.to.be.called
       })
 
-      it('should not call ddwafContext.run with invalid params', () => {
-        waf.run({
-          'invalid_address': 'value'
-        }, req)
-        expect(ddwafContext.run).not.to.be.called
-      })
-
       it('should call ddwafContext.run with params', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
 
         wafContextWrapper.run({
           'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl'
+          'server.request.uri.raw': 'https://testurl',
+          'processor.address': { 'extract-schema': true }
         })
 
         expect(ddwafContext.run).to.be.calledOnceWithExactly({
           'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl'
-        }, config.appsec.wafTimeout)
-      })
-
-      it('should call ddwafContext.run with filtered params', () => {
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
-
-        wafContextWrapper.run({
-          'server.request.headers.no_cookies': { 'header2': 'value2' },
-          'invalidaddress': 'invalid-value',
-          'server.request.uri.raw': 'https://othertesturl'
-        })
-
-        expect(ddwafContext.run).to.be.calledOnceWithExactly({
-          'server.request.headers.no_cookies': { 'header2': 'value2' },
-          'server.request.uri.raw': 'https://othertesturl'
+          'server.request.uri.raw': 'https://testurl',
+          'processor.address': { 'extract-schema': true }
         }, config.appsec.wafTimeout)
       })
 
@@ -319,6 +296,25 @@ describe('WAF Manager', () => {
         const result = wafContextWrapper.run(params)
 
         expect(result).to.be.equals(actions)
+      })
+
+      it('should report schemas when ddwafContext returns schemas in the derivatives', () => {
+        const result = {
+          totalRuntime: 1,
+          durationExt: 1,
+          derivatives: [{ '_dd.appsec.s.req.body': [8] }]
+        }
+        const params = {
+          'server.request.body': 'value',
+          'waf.context.processor': {
+            'extract-schema': true
+          }
+        }
+
+        ddwafContext.run.returns(result)
+
+        wafContextWrapper.run(params)
+        expect(Reporter.reportSchemas).to.be.calledOnceWithExactly(result.derivatives)
       })
     })
   })
