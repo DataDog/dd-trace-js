@@ -21,6 +21,7 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
+        console.log(9999999, aerospike)
       })
 
       beforeEach(() => {
