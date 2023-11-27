@@ -89,7 +89,7 @@ function beforeWriteGraphqlResponse ({ abortController }) {
   if (requestData?.blocked) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
-    block(req, res, rootSpan, abortController)
+    block(req, res, rootSpan, abortController, 'graphql')
   }
 }
 
@@ -110,7 +110,7 @@ function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
   const requestData = graphqlRequestData.get(req)
 
   if (requestData?.blocked) {
-    const blockingData = getBlockingData(req)
+    const blockingData = getBlockingData(req, 'graphql')
     abortData.statusCode = blockingData.statusCode
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body

@@ -3,9 +3,20 @@
 const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
 
+// TODO Find a better name, custom is not appropiate
+const detectedCustomEndpoints = {}
+
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
+const templateGraphqlJson = blockedTemplates.graphqlJson
 let blockingConfiguration
+
+function getCustomKey (method, url) {
+  return `${method}+${url}`
+}
+function addCustomEndpoint (method, url, type) {
+  detectedCustomEndpoints[getCustomKey(method, url)] = type
+}
 
 function getBlockWithRedirectData () {
   let statusCode = blockingConfiguration.parameters.status_code
@@ -37,29 +48,48 @@ function blockWithRedirect (res, rootSpan, abortController) {
   }
 }
 
-function getBlockWithContentData (req) {
+function getCustomBlockingData (type) {
+  switch (type) {
+    case 'graphql':
+      return {
+        type: 'application/json',
+        body: templateGraphqlJson
+      }
+  }
+}
+
+function getBlockWithContentData (req, customType) {
   let type
   let body
   let statusCode
 
-  // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
-  const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
+  const customBlockingType = customType || detectedCustomEndpoints[getCustomKey(req.method, req.url)]
+  if (customBlockingType) {
+    const customBlockingContent = getCustomBlockingData(customBlockingType)
+    type = customBlockingContent?.type
+    body = customBlockingContent?.body
+  }
 
-  if (!blockingConfiguration || blockingConfiguration.parameters.type === 'auto') {
-    if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
-      type = 'text/html; charset=utf-8'
-      body = templateHtml
+  if (!type) {
+    // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
+    const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
+
+    if (!blockingConfiguration || blockingConfiguration.parameters.type === 'auto') {
+      if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
+        type = 'text/html; charset=utf-8'
+        body = templateHtml
+      } else {
+        type = 'application/json'
+        body = templateJson
+      }
     } else {
-      type = 'application/json'
-      body = templateJson
-    }
-  } else {
-    if (blockingConfiguration.parameters.type === 'html') {
-      type = 'text/html; charset=utf-8'
-      body = templateHtml
-    } else {
-      type = 'application/json'
-      body = templateJson
+      if (blockingConfiguration.parameters.type === 'html') {
+        type = 'text/html; charset=utf-8'
+        body = templateHtml
+      } else {
+        type = 'application/json'
+        body = templateJson
+      }
     }
   }
 
@@ -78,8 +108,8 @@ function getBlockWithContentData (req) {
   return { body, statusCode, headers }
 }
 
-function blockWithContent (req, res, rootSpan, abortController) {
-  const { body, headers, statusCode } = getBlockWithContentData(req)
+function blockWithContent (req, res, rootSpan, abortController, type) {
+  const { body, headers, statusCode } = getBlockWithContentData(req, type)
 
   rootSpan.addTags({
     'appsec.blocked': 'true'
@@ -96,7 +126,7 @@ function blockWithContent (req, res, rootSpan, abortController) {
   }
 }
 
-function block (req, res, rootSpan, abortController) {
+function block (req, res, rootSpan, abortController, type) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
     return
@@ -106,16 +136,16 @@ function block (req, res, rootSpan, abortController) {
       blockingConfiguration.parameters.location) {
     blockWithRedirect(res, rootSpan, abortController)
   } else {
-    blockWithContent(req, res, rootSpan, abortController)
+    blockWithContent(req, res, rootSpan, abortController, type)
   }
 }
 
-function getBlockingData (req) {
+function getBlockingData (req, customType) {
   if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
     blockingConfiguration.parameters.location) {
     return getBlockWithRedirectData()
   } else {
-    return getBlockWithContentData(req)
+    return getBlockWithContentData(req, customType)
   }
 }
 
@@ -126,6 +156,9 @@ function setTemplates (config) {
   if (config.appsec.blockedTemplateJson) {
     templateJson = config.appsec.blockedTemplateJson
   }
+  if (config.appsec.blockedTemplateGraphql) {
+    templateJson = config.appsec.blockedTemplateGraphql
+  }
 }
 
 function updateBlockingConfiguration (newBlockingConfiguration) {
@@ -133,6 +166,7 @@ function updateBlockingConfiguration (newBlockingConfiguration) {
 }
 
 module.exports = {
+  addCustomEndpoint,
   block,
   getBlockingData,
   setTemplates,
