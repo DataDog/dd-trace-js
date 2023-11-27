@@ -47,11 +47,12 @@ addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: 
   shimmer.wrap(express4, 'expressMiddleware', function wrapExpressMiddleware (originalExpressMiddleware) {
     return function expressMiddleware (server, options) {
       const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
-      if (!startGraphqlMiddleware.hasSubscribers) {
-        return originalMiddleware
-      }
 
       return shimmer.wrap(originalMiddleware, function (req, res, next) {
+        if (!startGraphqlMiddleware.hasSubscribers) {
+          return originalMiddleware.apply(this, arguments)
+        }
+
         startGraphqlMiddleware.publish({ req, res })
         const middlewareResult = originalMiddleware.apply(this, arguments)
         endGraphqlMiddleware.publish({ req })

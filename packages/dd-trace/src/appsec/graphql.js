@@ -47,7 +47,7 @@ function onGraphqlStartResolve ({ info, context }) {
   if (!resolvers || typeof resolvers !== 'object') return
 
   const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolvers }, req)
-  if (actions.includes('block')) {
+  if (actions?.includes('block')) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
