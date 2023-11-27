@@ -39,7 +39,7 @@ jobs:
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
       - run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/node/20 #currently the latest version of aerospike only supports node 20
+      - uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
