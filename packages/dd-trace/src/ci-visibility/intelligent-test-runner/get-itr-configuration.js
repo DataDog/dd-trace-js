@@ -75,6 +75,7 @@ function getItrConfiguration ({
 
         let isCodeCoverageEnabled = attributes.code_coverage
         let isSuitesSkippingEnabled = attributes.tests_skipping
+        const { require_git: requireGit } = attributes
 
         log.debug(() => `Remote settings: ${JSON.stringify({ isCodeCoverageEnabled, isSuitesSkippingEnabled })}`)
 
@@ -87,7 +88,7 @@ function getItrConfiguration ({
           log.debug(() => 'Dangerously set test skipping to true')
         }
 
-        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled })
+        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled, requireGit })
       } catch (err) {
         done(err)
       }

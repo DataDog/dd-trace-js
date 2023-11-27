@@ -98,16 +98,21 @@ class CiVisibilityExporter extends AgentInfoExporter {
     if (!this.shouldRequestSkippableSuites()) {
       return callback(null, [])
     }
-    const configuration = {
-      url: this._getApiUrl(),
-      site: this._config.site,
-      env: this._config.env,
-      service: this._config.service,
-      isEvpProxy: !!this._isUsingEvpProxy,
-      custom: getTestConfigurationTags(this._config.tags),
-      ...testConfiguration
-    }
-    getSkippableSuitesRequest(configuration, callback)
+    this._gitUploadPromise.then(gitUploadError => {
+      if (gitUploadError) {
+        return callback(gitUploadError, [])
+      }
+      const configuration = {
+        url: this._getApiUrl(),
+        site: this._config.site,
+        env: this._config.env,
+        service: this._config.service,
+        isEvpProxy: !!this._isUsingEvpProxy,
+        custom: getTestConfigurationTags(this._config.tags),
+        ...testConfiguration
+      }
+      getSkippableSuitesRequest(configuration, callback)
+    })
   }
 
   /**
@@ -124,26 +129,35 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
       }
-      this._gitUploadPromise.then(gitUploadError => {
-        if (gitUploadError) {
-          return callback(gitUploadError, {})
-        }
-        const configuration = {
-          url: this._getApiUrl(),
-          env: this._config.env,
-          service: this._config.service,
-          isEvpProxy: !!this._isUsingEvpProxy,
-          custom: getTestConfigurationTags(this._config.tags),
-          ...testConfiguration
-        }
-        getItrConfigurationRequest(configuration, (err, itrConfig) => {
-          /**
-           * **Important**: this._itrConfig remains empty in testing frameworks
-           * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
-           */
-          this._itrConfig = itrConfig
+      const configuration = {
+        url: this._getApiUrl(),
+        env: this._config.env,
+        service: this._config.service,
+        isEvpProxy: !!this._isUsingEvpProxy,
+        custom: getTestConfigurationTags(this._config.tags),
+        ...testConfiguration
+      }
+      getItrConfigurationRequest(configuration, (err, itrConfig) => {
+        /**
+         * **Important**: this._itrConfig remains empty in testing frameworks
+         * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
+         */
+        this._itrConfig = itrConfig
+
+        // If it requires git upload, we'll wait for the request to finish and request it again
+        if (itrConfig.requireGit) {
+          this._gitUploadPromise.then(gitUploadError => {
+            if (gitUploadError) {
+              return callback(gitUploadError, {})
+            }
+            getItrConfigurationRequest(configuration, (err, finalItrConfig) => {
+              this._itrConfig = finalItrConfig
+              callback(err, finalItrConfig)
+            })
+          })
+        } else {
           callback(err, itrConfig)
-        })
+        }
       })
     })
   }
