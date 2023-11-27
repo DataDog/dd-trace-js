@@ -37,7 +37,7 @@ function disable () {
   if (graphqlStartResolve.hasSubscribers) graphqlStartResolve.unsubscribe(onGraphqlStartResolve)
 }
 
-function onGraphqlStartResolve ({ info, context, abortController }) {
+function onGraphqlStartResolve ({ info, context }) {
   const req = storage.getStore()?.req
 
   if (!req) return
@@ -51,7 +51,7 @@ function onGraphqlStartResolve ({ info, context, abortController }) {
     const requestData = graphqlRequestData.get(req)
     if (requestData.isInGraphqlRequest) {
       requestData.blocked = true
-      abortController.abort()
+      context?.abortController?.abort()
     }
   }
 }

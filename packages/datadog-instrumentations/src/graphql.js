@@ -177,7 +177,7 @@ function wrapExecute (execute) {
           docSource: documentSources.get(document)
         })
 
-        const context = { source, asyncResource, fields: {} }
+        const context = { source, asyncResource, fields: {}, abortController: new AbortController() }
 
         contexts.set(contextValue, context)
 
@@ -271,20 +271,16 @@ function assertField (context, info, args) {
       accesses the parent span from the storage unit in its own scope */
       const childResource = new AsyncResource('bound-anonymous-fn')
 
-      // TODO: move AbortController creation to context.
-      const abortController = new AbortController()
-
       addResolver(context, info, args)
 
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context,
-          abortController
+          context
         })
       })
 
-      if (abortController.signal.aborted) {
+      if (context.abortController?.signal.aborted) {
         // TODO: currently throwing generic error in order to stop the operation execution flow. Try
         // to find another way (returning null?)
         throw new Error('aborted')
