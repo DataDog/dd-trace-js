@@ -17,6 +17,9 @@
               "inputs": [
                 {
                   "address": "graphql.server.all_resolvers"
+                },
+                {
+                  "address": "graphql.server.resolver"
                 }
               ],
               "list": [
