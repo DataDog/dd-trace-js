@@ -43,15 +43,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          console.log(55, aerospike)
-          aerospike.connect(config, (error, client) => {
-            asClient = client
-          })
           return agent.load('aerospike')
-        })
-
-        after(() => {
-          asClient.close()
         })
 
         describe('client', () => {
@@ -65,6 +57,17 @@ describe('Plugin', () => {
           //   'test',
           //   'aerospike.namespace'
           // )
+          before(() => {
+            console.log(55, aerospike)
+            aerospike.connect(config, (error, client) => {
+              asClient = client
+            })
+          })
+
+          after(() => {
+            asClient.close()
+          })
+
           it('should instrument put', done => {
             agent
               .use(traces => {
