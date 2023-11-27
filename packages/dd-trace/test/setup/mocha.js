@@ -194,7 +194,6 @@ function withVersions (plugin, modules, range, cb) {
       .forEach(instrumentation => {
         const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
           : instrumentation.versions
-        console.log(100000, versions, process.env.PACKAGE_VERSION_RANGE, instrumentation.versions)
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {

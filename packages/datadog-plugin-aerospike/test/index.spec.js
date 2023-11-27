@@ -17,7 +17,7 @@ describe('Plugin', () => {
   let keyString
 
   describe('aerospike', () => {
-    withVersions('aerospike', 'aerospike', '>=5.8.0', version => {
+    withVersions('aerospike', 'aerospike', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         aerospike = require(`../../../versions/aerospike@${version}`).get()
