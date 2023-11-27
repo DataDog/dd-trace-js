@@ -3,12 +3,18 @@
 const { storage } = require('../../datadog-core')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
+const AEROSPIKE_PEER_SERVICE = 'aerospike.namespace'
+
 class AerospikePlugin extends DatabasePlugin {
   static get id () { return 'aerospike' }
   static get operation () { return 'command' }
   static get system () { return 'aerospike' }
   static get prefix () {
     return 'tracing:apm:aerospike:command'
+  }
+
+  static get peerServicePrecursors () {
+    return [AEROSPIKE_PEER_SERVICE]
   }
 
   bindStart (ctx) {
@@ -35,6 +41,8 @@ class AerospikePlugin extends DatabasePlugin {
 
   bindAsyncStart (ctx) {
     if (ctx.currentStore) {
+      // have to manually trigger peer service calculation when using tracing channel
+      this.tagPeerService(ctx.currentStore.span)
       ctx.currentStore.span.finish()
     }
     return ctx.parentStore
@@ -42,6 +50,8 @@ class AerospikePlugin extends DatabasePlugin {
 
   end (ctx) {
     if (ctx.result) {
+      // have to manually trigger peer service calculation when using tracing channel
+      this.tagPeerService(ctx.currentStore.span)
       ctx.currentStore.span.finish()
     }
   }
@@ -72,7 +82,7 @@ function getMeta (resourceName, commandArgs) {
 
 function getMetaForIndex (ns, set, bin, index) {
   return {
-    'aerospike.namespace': ns,
+    [AEROSPIKE_PEER_SERVICE]: ns,
     'aerospike.setname': set,
     'aerospike.bin': bin,
     'aerospike.index': index
@@ -82,7 +92,7 @@ function getMetaForIndex (ns, set, bin, index) {
 function getMetaForKey (ns, set, key) {
   return {
     'aerospike.key': `${ns}:${set}:${key}`,
-    'aerospike.namespace': ns,
+    [AEROSPIKE_PEER_SERVICE]: ns,
     'aerospike.setname': set,
     'aerospike.userkey': key
   }
@@ -91,7 +101,7 @@ function getMetaForKey (ns, set, key) {
 function getMetaForQuery (queryObj) {
   const { ns, set } = queryObj
   return {
-    'aerospike.namespace': ns,
+    [AEROSPIKE_PEER_SERVICE]: ns,
     'aerospike.setname': set
   }
 }
