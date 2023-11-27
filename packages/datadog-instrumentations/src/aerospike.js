@@ -50,7 +50,7 @@ if (process.env.AEROSPIKE_VERSION_RANGE) {
   addHook({
     name: 'aerospike',
     file: 'lib/commands/command.js',
-    versions: ['3', '4', '5']
+    versions: ['4', '5']
   },
   commandFactory => {
     return shimmer.wrap(commandFactory, wrapCreateCommand(commandFactory))
