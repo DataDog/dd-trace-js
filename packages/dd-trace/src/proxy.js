@@ -4,7 +4,7 @@ const DatadogTracer = require('./tracer')
 const Config = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager, errors } = require('./startup-log')
+const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
@@ -65,10 +65,6 @@ class Tracer extends NoopProxy {
           this._profilerStarted = profiler.start(config)
         } catch (e) {
           log.error(e)
-          errors.profilingError = {
-            code: e.code,
-            message: e.message + ',' + `Profiling error:${e.message}`
-          }
         }
       }
       if (!this._profilerStarted) {
@@ -106,12 +102,9 @@ class Tracer extends NoopProxy {
       }
     } catch (e) {
       log.error(e)
-      errors.initError = {
-        code: e.code,
-        message: `Initializing error:${e.message}`
-      }
-      return this
     }
+
+    return this
   }
 
   profilerStarted () {

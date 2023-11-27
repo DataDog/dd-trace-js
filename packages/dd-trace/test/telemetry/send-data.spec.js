@@ -59,7 +59,7 @@ describe('sendData', () => {
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
         'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version
