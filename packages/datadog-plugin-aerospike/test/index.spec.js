@@ -29,7 +29,7 @@ describe('Plugin', () => {
         userKey = 'key'
 
         config = {
-          hosts: 'http://aerospike:3000',
+          hosts: 'http://aerospike',
           port: '3000'
         }
         key = new aerospike.Key(ns, set, userKey)
