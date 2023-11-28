@@ -80,6 +80,7 @@ class DNSDecorator {
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
+    this.lanes = []
   }
 
   decorateSample (sampleInput, item) {
@@ -106,6 +107,32 @@ class DNSDecorator {
           addLabel(this.hostLabelKey, detail.host)
         }
     }
+    labels.push(this.getLaneLabelFor(item))
+  }
+
+  // Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
+  // decorator starts out with no lanes, and dynamically adds them as needed.
+  // Every event is put in the first lane where it doesn't overlap with the last
+  // event in that lane. If there's no lane without overlaps, a new lane is
+  // created.
+  getLaneLabelFor (item) {
+    const startTime = item.startTime
+    const endTime = startTime + item.duration
+
+    // Biases towards populating earlier lanes, but at least it's simple
+    for (const lane of this.lanes) {
+      if (lane.endTime <= startTime) {
+        lane.endTime = endTime
+        return lane.label
+      }
+    }
+    const label = labelFromStrStr(
+      this.stringTable,
+      THREAD_NAME,
+      `${threadNamePrefix} DNS-${this.lanes.length}`
+    )
+    this.lanes.push({ endTime, label })
+    return label
   }
 }
 
