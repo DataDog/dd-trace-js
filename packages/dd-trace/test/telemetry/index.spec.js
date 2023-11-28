@@ -92,20 +92,20 @@ describe('telemetry', () => {
         profiler: { version: '5.0.0-pre', enabled: true }
       })
       expect(payload).to.have.property('configuration').that.deep.equal([
-        { name: 'telemetry.enabled', value: true },
-        { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL },
-        { name: 'hostname', value: 'localhost' },
-        { name: 'port', value: traceAgent.address().port },
-        { name: 'service', value: 'test service' },
-        { name: 'version', value: '1.2.3-beta4' },
-        { name: 'env', value: 'preprod' },
-        { name: 'tags.runtime-id', value: '1a2b3c' },
-        { name: 'circularObject.child.field', value: 'child_value' },
-        { name: 'circularObject.field', value: 'parent_value' },
-        { name: 'appsec.enabled', value: true },
-        { name: 'profiling.enabled', value: true },
-        { name: 'peerServiceMapping.service_1', value: 'remapped_service_1' },
-        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2' }
+        { name: 'telemetry.enabled', value: true, origin: 'unknown' },
+        { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL, origin: 'unknown' },
+        { name: 'hostname', value: 'localhost', origin: 'unknown' },
+        { name: 'port', value: traceAgent.address().port, origin: 'unknown' },
+        { name: 'service', value: 'test service', origin: 'unknown' },
+        { name: 'version', value: '1.2.3-beta4', origin: 'unknown' },
+        { name: 'env', value: 'preprod', origin: 'unknown' },
+        { name: 'tags.runtime-id', value: '1a2b3c', origin: 'unknown' },
+        { name: 'circularObject.child.field', value: 'child_value', origin: 'unknown' },
+        { name: 'circularObject.field', value: 'parent_value', origin: 'unknown' },
+        { name: 'appsec.enabled', value: true, origin: 'unknown' },
+        { name: 'profiling.enabled', value: true, origin: 'unknown' },
+        { name: 'peerServiceMapping.service_1', value: 'remapped_service_1', origin: 'unknown' },
+        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'unknown' }
       ])
       expect(payload).to.have.property('additional_payload').that.deep.equal([])
     })

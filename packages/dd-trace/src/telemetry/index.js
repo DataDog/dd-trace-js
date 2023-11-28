@@ -105,7 +105,8 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
     if (typeof value === 'object' && value !== null) {
       flatten(value, result, [...prefix, key], traversedObjects)
     } else {
-      result.push({ name: [...prefix, key].join('.'), value })
+      // TODO: add correct origin value
+      result.push({ name: [...prefix, key].join('.'), value, origin: 'unknown' })
     }
   }
   return result
