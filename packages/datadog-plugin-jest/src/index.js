@@ -50,6 +50,7 @@ class JestPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       isSuitesSkippingEnabled,
+      isItrEnabled,
       isCodeCoverageEnabled,
       testCodeCoverageLinesTotal,
       numSkippedSuites,
@@ -71,6 +72,7 @@ class JestPlugin extends CiPlugin {
         {
           isSuitesSkipped,
           isSuitesSkippingEnabled,
+          isItrEnabled,
           isCodeCoverageEnabled,
           testCodeCoverageLinesTotal,
           skippingType: 'suite',

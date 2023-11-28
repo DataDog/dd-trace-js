@@ -44,6 +44,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isItrEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
 let hasUnskippableSuites = false
@@ -246,6 +247,7 @@ function cliWrapper (cli, jestVersion) {
       if (!err) {
         isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
         isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
+        isItrEnabled = itrConfig.isItrEnabled
       }
     } catch (err) {
       log.error(err)
@@ -312,6 +314,7 @@ function cliWrapper (cli, jestVersion) {
       testSessionFinishCh.publish({
         status,
         isSuitesSkipped,
+        isItrEnabled,
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
         testCodeCoverageLinesTotal,

@@ -367,6 +367,7 @@ function addIntelligentTestRunnerSpanTags (
   testModuleSpan,
   {
     isSuitesSkipped,
+    isItrEnabled,
     isSuitesSkippingEnabled,
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
@@ -397,8 +398,8 @@ function addIntelligentTestRunnerSpanTags (
     testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
   }
 
-  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
-  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+  // If ITR is enabled, we don't want to report the code coverage lines percentage
+  if (testCodeCoverageLinesTotal !== undefined && !isItrEnabled) {
     testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
     testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }

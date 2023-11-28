@@ -672,7 +672,8 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+          // If ITR is enabled, we don't report total code coverage %
+          assert.notProperty(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT)
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
@@ -703,6 +704,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -720,6 +722,8 @@ testFrameworks.forEach(({
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
+          // We can report total code coverage % if ITR is disabled
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
           const testModule = payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
@@ -879,6 +883,7 @@ testFrameworks.forEach(({
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })
@@ -1237,7 +1242,8 @@ testFrameworks.forEach(({
           assert.exists(coveragePayload.content.coverages[0].test_suite_id)
 
           const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+          // If ITR is enabled, we don't report total code coverage %
+          assert.notProperty(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT)
 
           const eventTypes = eventsRequest.payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
@@ -1268,6 +1274,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -1282,6 +1289,9 @@ testFrameworks.forEach(({
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          // We can report total code coverage % if ITR is disabled
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
@@ -1479,6 +1489,7 @@ testFrameworks.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })

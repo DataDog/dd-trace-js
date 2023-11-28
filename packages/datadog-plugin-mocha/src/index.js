@@ -154,7 +154,7 @@ class MochaPlugin extends CiPlugin {
       error
     }) => {
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+        const { isSuitesSkippingEnabled, isCodeCoverageEnabled, isItrEnabled } = this.itrConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -168,6 +168,7 @@ class MochaPlugin extends CiPlugin {
           this.testModuleSpan,
           {
             isSuitesSkipped,
+            isItrEnabled,
             isSuitesSkippingEnabled,
             isCodeCoverageEnabled,
             testCodeCoverageLinesTotal,
