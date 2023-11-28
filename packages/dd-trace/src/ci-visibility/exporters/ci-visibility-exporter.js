@@ -144,8 +144,10 @@ class CiVisibilityExporter extends AgentInfoExporter {
          */
         this._itrConfig = itrConfig
 
-        // If it requires git upload, we'll wait for the request to finish and request it again
-        if (itrConfig.requireGit) {
+        if (err) {
+          callback(err, {})
+        } else if (itrConfig?.requireGit) {
+          // If it requires git upload, we'll wait for the request to finish and request it again
           this._gitUploadPromise.then(gitUploadError => {
             if (gitUploadError) {
               return callback(gitUploadError, {})
@@ -156,7 +158,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
             })
           })
         } else {
-          callback(err, itrConfig)
+          callback(null, itrConfig)
         }
       })
     })
