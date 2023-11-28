@@ -14,9 +14,9 @@ const {
 
 /** TODO
  *    - Instrumentate @apollo/server to:
- *      - Mark a request as graphql endpoint
- *      - Detect graphql endpoints and use it to block even when the request is blocked on http level
- *      - When the graphql detects an rule to block, replace the response with the graphql blocking response
+ *      - Mark a request as graphql endpoint (done)
+ *      - Detect graphql endpoints and use it to block even when the request is blocked on http level (done)
+ *      - When the graphql detects an rule to block, replace the response with the graphql blocking response (done)
  *    - Instrumentate graphql to:
  *      - monitor threats (done)
  *      - mark the request as blocked somehow
@@ -53,7 +53,7 @@ function onGraphqlStartResolve ({ info, context }) {
   }
 }
 
-// Starts @apollo/server related logic
+// Starts @apollo/server and apollo-server-core related logic
 function enterInApolloMiddleware (data) {
   const req = data?.req || storage.getStore()?.req
   if (!req) return
