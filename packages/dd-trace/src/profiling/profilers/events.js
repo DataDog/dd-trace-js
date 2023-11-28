@@ -114,13 +114,9 @@ class DNSDecorator {
 const decoratorTypes = {
   gc: GCDecorator
 }
-const threadNames = {
-  gc: 'GC'
-}
 // Needs at least node 16 for DNS
 if (node16) {
   decoratorTypes.dns = DNSDecorator
-  threadNames.dns = 'DNS'
 }
 
 /**
@@ -177,8 +173,6 @@ class EventsProfiler {
     for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
       const decorator = new DecoratorCtor(stringTable)
       decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
-      decorator.threadNameLabel = labelFromStrStr(stringTable, THREAD_NAME,
-        `${threadNamePrefix} ${threadNames[eventType]}`)
       decorators[eventType] = decorator
     }
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
@@ -203,7 +197,6 @@ class EventsProfiler {
         locationId,
         label: [
           decorator.eventTypeLabel,
-          decorator.threadNameLabel,
           new Label({ key: timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
         ]
       }
