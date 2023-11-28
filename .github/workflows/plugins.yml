@@ -47,8 +47,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Yarn
         run: |
-          curl -o- -L https://yarnpkg.com/install.sh | bash
-          export PATH="$HOME/.yarn/bin:$PATH"
+          npm install -g yarn
       - uses: actions/setup-node@v3
         with:
           cache: yarn
