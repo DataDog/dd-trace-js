@@ -74,6 +74,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
+            console.log(333, aerospike)
             aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
                 .then(() => client.close())
