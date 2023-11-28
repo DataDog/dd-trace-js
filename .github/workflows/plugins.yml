@@ -55,6 +55,9 @@ jobs:
       - name: Install Yarn
         run: |
           npm install -g yarn
+      - name: Install wget or curl
+        run: |
+          apt-get install -y wget
       - run: yarn install --ignore-engines
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
