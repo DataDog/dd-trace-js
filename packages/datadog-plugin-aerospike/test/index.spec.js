@@ -30,7 +30,7 @@ describe('Plugin', () => {
 
         config = {
           hosts: [
-            { addr: 'aerospike', port: 3000 }
+            { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 }
           ]
         }
         key = new aerospike.Key(ns, set, userKey)

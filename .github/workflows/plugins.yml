@@ -43,6 +43,7 @@ jobs:
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: '3.16.7'
       DD_TEST_AGENT_URL: http://testagent:9126
+      AEROSPIKE_HOST_ADDRESS: aerospike
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v3
