@@ -1,0 +1,49 @@
+{
+  "version": "2.2",
+    "metadata": {
+      "rules_version": "1.5.0"
+    },
+    "rules": [
+      {
+        "id": "test-rule-id-1",
+        "name": "test-rule-name-1",
+        "tags": {
+          "type": "security_scanner",
+          "category": "attack_attempt"
+        },
+        "conditions": [
+          {
+            "parameters": {
+              "inputs": [
+                {
+                  "address": "graphql.server.all_resolvers"
+                },
+                {
+                  "address": "graphql.server.resolver"
+                },
+                {
+                  "address": "server.request.headers.no_cookies"
+                }
+              ],
+              "list": [
+                "testattack"
+              ]
+            },
+            "operator": "phrase_match"
+          }
+        ],
+        "transformers": ["lowercase"],
+        "on_match": ["block"]
+      }
+    ],
+  "actions": [
+    {
+      "id": "block",
+      "type": "redirect_request",
+      "parameters": {
+        "status_code": 301,
+        "location": "/you-have-been-blocked"
+      }
+    }
+  ]
+}

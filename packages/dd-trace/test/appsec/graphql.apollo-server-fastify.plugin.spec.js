@@ -1,10 +1,7 @@
 'use strict'
 
 const getPort = require('get-port')
-const path = require('path')
 const agent = require('../plugins/agent')
-const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
 const {
   schema,
   resolvers,
@@ -51,14 +48,6 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
           resolve()
         })
       })
-    })
-
-    beforeEach(() => {
-      appsec.enable(new Config({ appsec: { enabled: true, rules: path.join(__dirname, 'graphql-rules.json') } }))
-    })
-
-    afterEach(() => {
-      appsec.disable()
     })
 
     after(async () => {

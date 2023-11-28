@@ -207,6 +207,13 @@ function wrapResolve (resolve) {
 
     const field = assertField(context, info, args)
 
+    if (context.abortController?.signal.aborted) {
+      // TODO: currently throwing generic error in order to stop the operation execution flow. Try
+      // to find another way (returning null?)
+      // throw new Error('aborted')
+      return []
+    }
+
     return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
       updateFieldCh.publish({ field, info, err })
     })
@@ -277,12 +284,6 @@ function assertField (context, info, args) {
           context
         })
       })
-
-      if (context.abortController?.signal.aborted) {
-        // TODO: currently throwing generic error in order to stop the operation execution flow. Try
-        // to find another way (returning null?)
-        throw new Error('aborted')
-      }
 
       field = fields[pathString] = {
         parent,
