@@ -39,7 +39,6 @@ function getBlockWithRedirectData (rootSpan) {
 }
 
 function blockWithRedirect (res, rootSpan, abortController) {
-
   let statusCode = blockingConfiguration.parameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303

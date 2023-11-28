@@ -93,6 +93,5 @@ module.exports = {
   schema,
   query,
   resolvers,
-  makeGraphqlRequest,
   graphqlCommonTests
 }

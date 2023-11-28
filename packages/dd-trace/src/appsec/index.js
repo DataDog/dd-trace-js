@@ -6,7 +6,6 @@ const remoteConfig = require('./remote_config')
 const {
   bodyParser,
   cookieParser,
-  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   passportVerify,
