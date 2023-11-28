@@ -49,20 +49,11 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '14'
-      - id: set_var
+      - id: pkg
         run: |
-          content=`cat ./path/to/package.json`
-          # the following lines are only required for multi line json
-          content="${content//'%'/'%25'}"
-          content="${content//$'\n'/'%0A'}"
-          content="${content//$'\r'/'%0D'}"
-          # end of optional handling for multi line json
-          echo "::set-output name=packageJson::$content"
-      - run: |
-          echo "${{fromJson(steps.set_var.outputs.packageJson).version}}"
-          major_version=$(echo "$version" | cut -d '.' -f 1)
-          echo "::set-output name=majorVersion::$major_version"
-      - if: ${{ steps.extract_version.outputs.majorVersion == '3' }}
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - if: ${{ fromJson(steps.pkg.outputs.json).version == '3'}}
       - name: Install dependencies
         run: |
           apt-get update && \
