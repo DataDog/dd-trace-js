@@ -147,7 +147,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         if (err) {
           callback(err, {})
         } else if (itrConfig?.requireGit) {
-          // If it requires git upload, we'll wait for the request to finish and request it again
+          // If the backend requires git, we'll wait for the upload to finish and request settings again
           this._gitUploadPromise.then(gitUploadError => {
             if (gitUploadError) {
               return callback(gitUploadError, {})
