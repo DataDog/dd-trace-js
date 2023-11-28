@@ -289,43 +289,47 @@ describe('Plugin', () => {
         })
       })
 
-      // describe('with configuration', () => {
-      //   before(() => {
-      //     return agent.load('aerospike', { service: 'custom' })
-      //   })
+      describe('with configuration', () => {
+        before(() => {
+          return agent.load('aerospike', { service: 'custom' })
+        })
 
-      //   it('should be configured with the correct values', done => {
-      //     agent
-      //       .use(traces => {
-      //         expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
-      //         expect(traces[0][0]).to.have.property('service', 'custom')
-      //       })
-      //       .then(done)
-      //       .catch(done)
+        after(() => {
+          aerospike.releaseEventLoop()
+        })
 
-      //     aerospike.connect(config).then(client => {
-      //       return client.put(key, { i: 123 })
-      //         .then(() => client.close())
-      //     })
-      //   })
+        it('should be configured with the correct values', done => {
+          agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', expectedSchema.command.opName)
+              expect(traces[0][0]).to.have.property('service', 'custom')
+            })
+            .then(done)
+            .catch(done)
 
-      //   withNamingSchema(
-      //     () => aerospike.connect(config).then(client => {
-      //       return client.put(key, { i: 123 })
-      //         .then(() => client.close())
-      //     }),
-      //     {
-      //       v0: {
-      //         opName: 'aerospike.command',
-      //         serviceName: 'custom'
-      //       },
-      //       v1: {
-      //         opName: 'aerospike.command',
-      //         serviceName: 'custom'
-      //       }
-      //     }
-      //   )
-      // })
+          aerospike.connect(config).then(client => {
+            return client.put(key, { i: 123 })
+              .then(() => client.close(false))
+          })
+        })
+
+        withNamingSchema(
+          () => aerospike.connect(config).then(client => {
+            return client.put(key, { i: 123 })
+              .then(() => client.close(false))
+          }),
+          {
+            v0: {
+              opName: 'aerospike.command',
+              serviceName: 'custom'
+            },
+            v1: {
+              opName: 'aerospike.command',
+              serviceName: 'custom'
+            }
+          }
+        )
+      })
     })
   })
 })
