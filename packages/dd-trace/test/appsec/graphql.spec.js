@@ -7,11 +7,9 @@ const addresses = require('../../src/appsec/addresses')
 const {
   graphqlStartResolve,
   startGraphqlMiddleware,
-  startRunHttpQuery,
   startExecuteHTTPGraphQLRequest,
   endGraphqlMiddleware,
-  startGraphqlWrite,
-  successRunHttpQuery
+  startGraphqlWrite
 } = require('../../src/appsec/channels')
 
 describe('GraphQL', () => {
@@ -19,10 +17,18 @@ describe('GraphQL', () => {
   let blocking
 
   beforeEach(() => {
+    const getBlockingData = sinon.stub()
     blocking = {
+      getBlockingData,
       setTemplates: sinon.stub(),
       block: sinon.stub()
     }
+
+    getBlockingData.returns({
+      headers: { 'Content-type': 'application/json' },
+      body: '{ "message": "blocked" }',
+      statusCode: 403
+    })
 
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking
@@ -44,21 +50,17 @@ describe('GraphQL', () => {
 
     it('Should subscribe to all channels', () => {
       expect(startGraphqlMiddleware.hasSubscribers).to.be.false
-      expect(startRunHttpQuery.hasSubscribers).to.be.false
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
       expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
-      expect(successRunHttpQuery.hasSubscribers).to.be.false
       expect(graphqlStartResolve.hasSubscribers).to.be.false
 
       graphql.enable()
 
       expect(startGraphqlMiddleware.hasSubscribers).to.be.true
-      expect(startRunHttpQuery.hasSubscribers).to.be.true
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
       expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
-      expect(successRunHttpQuery.hasSubscribers).to.be.true
       expect(graphqlStartResolve.hasSubscribers).to.be.true
     })
   })
@@ -68,21 +70,17 @@ describe('GraphQL', () => {
       graphql.enable()
 
       expect(startGraphqlMiddleware.hasSubscribers).to.be.true
-      expect(startRunHttpQuery.hasSubscribers).to.be.true
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
       expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
-      expect(successRunHttpQuery.hasSubscribers).to.be.true
       expect(graphqlStartResolve.hasSubscribers).to.be.true
 
       graphql.disable()
 
       expect(startGraphqlMiddleware.hasSubscribers).to.be.false
-      expect(startRunHttpQuery.hasSubscribers).to.be.false
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
       expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
-      expect(successRunHttpQuery.hasSubscribers).to.be.false
       expect(graphqlStartResolve.hasSubscribers).to.be.false
     })
   })
@@ -185,7 +183,7 @@ describe('GraphQL', () => {
 
       startGraphqlWrite.publish({ abortController })
 
-      expect(blocking.block).not.to.have.been.called
+      expect(blocking.getBlockingData).not.to.have.been.called
     })
 
     it('Should call abort', () => {
@@ -198,7 +196,7 @@ describe('GraphQL', () => {
         }
       }
 
-      const abortController = {}
+      const abortController = context.abortController
 
       sinon.stub(waf, 'run').returns(['block'])
       sinon.stub(web, 'root').returns({})
@@ -212,10 +210,10 @@ describe('GraphQL', () => {
         {}
       )
       expect(context.abortController.abort).to.have.been.called
+      const abortData = {}
+      startGraphqlWrite.publish({ abortController, abortData })
 
-      startGraphqlWrite.publish({ abortController })
-
-      expect(blocking.block).to.have.been.calledOnceWithExactly(req, res, {}, abortController, 'graphql')
+      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', {})
     })
   })
 })
