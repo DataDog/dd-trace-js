@@ -86,7 +86,7 @@ class GCDecorator {
 class DNSDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
-    this.operationNameLabelKey = stringTable.dedup('operation name')
+    this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
   }
