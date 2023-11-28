@@ -1,9 +1,10 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { addCustomEndpoint, getBlockingData } = require('./blocking')
+const { addCustomEndpoint, customBlockingTypes, getBlockingData } = require('./blocking')
 const waf = require('./waf')
 const addresses = require('./addresses')
+const web = require('../plugins/util/web')
 const {
   graphqlStartResolve,
   startGraphqlMiddleware,
@@ -76,7 +77,7 @@ function enterInApolloRequest () {
   const requestData = graphqlRequestData.get(req)
   if (requestData?.inApolloMiddleware) {
     requestData.isInGraphqlRequest = true
-    addCustomEndpoint(req.method, req.originalUrl || req.url, 'graphql')
+    addCustomEndpoint(req.method, req.originalUrl || req.url, customBlockingTypes.GRAPHQL)
   }
 }
 
@@ -87,7 +88,10 @@ function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
   const requestData = graphqlRequestData.get(req)
 
   if (requestData?.blocked) {
-    const blockingData = getBlockingData(req, 'graphql')
+    const rootSpan = web.root(req)
+    if (!rootSpan) return
+
+    const blockingData = getBlockingData(req, customBlockingTypes.GRAPHQL, rootSpan)
     abortData.statusCode = blockingData.statusCode
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body

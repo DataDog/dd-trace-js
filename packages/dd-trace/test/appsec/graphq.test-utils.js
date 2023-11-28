@@ -1,5 +1,6 @@
 const axios = require('axios')
 const { graphqlJson } = require('../../src/appsec/blocked_templates')
+const agent = require('../plugins/agent')
 
 const schema = `type Book {
   title: String,
@@ -56,6 +57,17 @@ function graphqlCommonTests (config) {
       expect(e.response.status).to.be.equals(403)
       expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
     }
+  })
+
+  it('Should set appsec.blocked on blocked attack', (done) => {
+    agent.use(payload => {
+      expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
+      done()
+    })
+
+    makeGraphqlRequest(config.port, { title: 'testattack' }).then(() => {
+      done(new Error('block expected'))
+    })
   })
 
   it('Should not block a safe request', async () => {

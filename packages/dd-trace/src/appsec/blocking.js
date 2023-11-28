@@ -11,6 +11,10 @@ let templateJson = blockedTemplates.json
 const templateGraphqlJson = blockedTemplates.graphqlJson
 let blockingConfiguration
 
+const customBlockingTypes = {
+  GRAPHQL: 'graphql'
+}
+
 function getCustomKey (method, url) {
   return `${method}+${url}`
 }
@@ -18,7 +22,7 @@ function addCustomEndpoint (method, url, type) {
   detectedCustomEndpoints[getCustomKey(method, url)] = type
 }
 
-function getBlockWithRedirectData () {
+function getBlockWithRedirectData (rootSpan) {
   let statusCode = blockingConfiguration.parameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
@@ -26,13 +30,15 @@ function getBlockWithRedirectData () {
   const headers = {
     'Location': blockingConfiguration.parameters.location
   }
+
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
   return { headers, statusCode }
 }
 
 function blockWithRedirect (res, rootSpan, abortController) {
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
 
   let statusCode = blockingConfiguration.parameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
@@ -50,7 +56,7 @@ function blockWithRedirect (res, rootSpan, abortController) {
 
 function getCustomBlockingData (type) {
   switch (type) {
-    case 'graphql':
+    case customBlockingTypes.GRAPHQL:
       return {
         type: 'application/json',
         body: templateGraphqlJson
@@ -58,7 +64,7 @@ function getCustomBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, customType) {
+function getBlockWithContentData (req, customType, rootSpan) {
   let type
   let body
   let statusCode
@@ -105,15 +111,15 @@ function getBlockWithContentData (req, customType) {
     'Content-Length': Buffer.byteLength(body)
   }
 
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
   return { body, statusCode, headers }
 }
 
 function blockWithContent (req, res, rootSpan, abortController, type) {
-  const { body, headers, statusCode } = getBlockWithContentData(req, type)
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
+  const { body, headers, statusCode } = getBlockWithContentData(req, type, rootSpan)
 
   res.statusCode = statusCode
   for (const [headerName, headerValue] of Object.entries(headers)) {
@@ -140,12 +146,12 @@ function block (req, res, rootSpan, abortController, type) {
   }
 }
 
-function getBlockingData (req, customType) {
+function getBlockingData (req, customType, rootSpan) {
   if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
     blockingConfiguration.parameters.location) {
-    return getBlockWithRedirectData()
+    return getBlockWithRedirectData(rootSpan)
   } else {
-    return getBlockWithContentData(req, customType)
+    return getBlockWithContentData(req, customType, rootSpan)
   }
 }
 
@@ -168,6 +174,7 @@ function updateBlockingConfiguration (newBlockingConfiguration) {
 module.exports = {
   addCustomEndpoint,
   block,
+  customBlockingTypes,
   getBlockingData,
   setTemplates,
   updateBlockingConfiguration

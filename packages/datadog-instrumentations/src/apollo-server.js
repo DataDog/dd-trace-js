@@ -41,12 +41,7 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
   }
 }
 
-addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['>=4.0.0'] }, apolloServer => {
-  shimmer.wrap(apolloServer.ApolloServer.prototype, 'executeHTTPGraphQLRequest', wrapExecuteHTTPGraphQLRequest)
-  return apolloServer
-})
-
-addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['>=4.0.0'] }, express4 => {
+function apolloExpress4Hook (express4) {
   shimmer.wrap(express4, 'expressMiddleware', function wrapExpressMiddleware (originalExpressMiddleware) {
     return function expressMiddleware (server, options) {
       const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
@@ -64,4 +59,14 @@ addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: 
     }
   })
   return express4
-})
+}
+
+function apolloServerHook (apolloServer) {
+  shimmer.wrap(apolloServer.ApolloServer.prototype, 'executeHTTPGraphQLRequest', wrapExecuteHTTPGraphQLRequest)
+  return apolloServer
+}
+addHook({ name: '@apollo/server', file: 'dist/cjs/ApolloServer.js', versions: ['>=4.0.0'] }, apolloServerHook)
+addHook({ name: '@apollo/server', file: 'dist/esm/ApolloServer.js', versions: ['>=4.0.0'] }, apolloServerHook)
+
+addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
+addHook({ name: '@apollo/server', file: 'dist/esm/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
