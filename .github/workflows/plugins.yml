@@ -45,6 +45,10 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
       AEROSPIKE_HOST_ADDRESS: aerospike
     steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '14'
       - name: Check Node.js version
         run: |
           REQUIRED_NODE_VERSION=$(echo "${{fromJson(file('package.json')).engines.node}}")
@@ -54,10 +58,6 @@ jobs:
             echo "Node.js version mismatch. Required: $REQUIRED_NODE_VERSION, Actual: $CURRENT_NODE_VERSION"
             exit 78  # Mark the job as skipped
           fi
-      - uses: actions/checkout@v2
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '14'
       - name: Install dependencies
         run: |
           apt-get update && \
