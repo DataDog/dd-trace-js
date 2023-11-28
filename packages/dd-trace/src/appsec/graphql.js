@@ -1,8 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { addCustomEndpoint, block, getBlockingData } = require('./blocking')
-const web = require('../plugins/util/web')
+const { addCustomEndpoint, getBlockingData } = require('./blocking')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const {
@@ -10,9 +9,7 @@ const {
   startGraphqlMiddleware,
   endGraphqlMiddleware,
   startExecuteHTTPGraphQLRequest,
-  startGraphqlWrite,
-  startRunHttpQuery,
-  successRunHttpQuery
+  startGraphqlWrite
 } = require('./channels')
 
 /** TODO
@@ -57,7 +54,8 @@ function onGraphqlStartResolve ({ info, context }) {
 }
 
 // Starts @apollo/server related logic
-function enterInApolloMiddleware ({ req }) {
+function enterInApolloMiddleware (data) {
+  const req = data?.req || storage.getStore()?.req
   if (!req) return
 
   graphqlRequestData.set(req, {
@@ -66,13 +64,15 @@ function enterInApolloMiddleware ({ req }) {
   })
 }
 
-function exitFromApolloMiddleware ({ req }) {
+function exitFromApolloMiddleware (data) {
+  const req = data?.req || storage.getStore()?.req
   const requestData = graphqlRequestData.get(req)
   if (requestData) requestData.inApolloMiddleware = false
 }
 
 function enterInApolloRequest () {
   const req = storage.getStore()?.req
+
   const requestData = graphqlRequestData.get(req)
   if (requestData?.inApolloMiddleware) {
     requestData.isInGraphqlRequest = true
@@ -80,31 +80,6 @@ function enterInApolloRequest () {
   }
 }
 
-function beforeWriteGraphqlResponse ({ abortController }) {
-  const store = storage.getStore()
-  if (!store) return
-
-  const { req, res } = store
-  const requestData = graphqlRequestData.get(req)
-
-  if (requestData?.blocked) {
-    const rootSpan = web.root(req)
-    if (!rootSpan) return
-    block(req, res, rootSpan, abortController, 'graphql')
-  }
-}
-
-// Starts apollo-server-core related logic
-function enterInApolloCoreHttpQuery () {
-  const req = storage.getStore()?.req
-  if (!req) return
-
-  graphqlRequestData.set(req, {
-    isInGraphqlRequest: true,
-    blocked: false
-  })
-  addCustomEndpoint(req.method, req.originalUrl || req.url, 'graphql')
-}
 function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
   const req = storage.getStore()?.req
   if (!req) return
@@ -123,20 +98,16 @@ function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
 
 function enableApollo () {
   startGraphqlMiddleware.subscribe(enterInApolloMiddleware)
-  startRunHttpQuery.subscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.subscribe(enterInApolloRequest)
   endGraphqlMiddleware.subscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.subscribe(beforeWriteGraphqlResponse)
-  successRunHttpQuery.subscribe(beforeWriteApolloCoreGraphqlResponse)
+  startGraphqlWrite.subscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 function disableApollo () {
   startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
-  startRunHttpQuery.unsubscribe(enterInApolloCoreHttpQuery)
   startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
   endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.unsubscribe(beforeWriteGraphqlResponse)
-  successRunHttpQuery.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
+  startGraphqlWrite.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 module.exports = {

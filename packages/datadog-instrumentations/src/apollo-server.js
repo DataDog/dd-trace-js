@@ -5,36 +5,39 @@ const shimmer = require('../../datadog-shimmer')
 const { AbortController } = require('node-abort-controller')
 
 const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
-const startExecuteHTTPGraphQLRequest = channel('datadog:apollo:request:start')
 const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
-const startGraphqlWrite = channel('datadog:apollo:response-write:start')
+
+const startGraphQLRequest = channel('datadog:apollo:request:start')
+const successGraphqlRequest = channel('datadog:apollo:request:success')
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return function executeHTTPGraphQLRequest (httpGraphQLRequest) {
-    const requestPromise = originalExecuteHTTPGraphQLRequest.apply(this, arguments)
+  return async function executeHTTPGraphQLRequest (httpGraphQLRequest) {
+    if (!startGraphQLRequest.hasSubscribers) return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
 
-    if (!startExecuteHTTPGraphQLRequest.hasSubscribers) return requestPromise
+    startGraphQLRequest.publish()
 
-    startExecuteHTTPGraphQLRequest.publish()
+    const graphqlResponseData = await originalExecuteHTTPGraphQLRequest.apply(this, arguments)
 
-    shimmer.wrap(requestPromise, 'then', function wrapThen (originalThen) {
-      return function then (callback) {
-        if (typeof callback !== 'function') return originalThen.apply(this, arguments)
+    const abortController = new AbortController()
+    const abortData = {}
+    successGraphqlRequest.publish({ abortController, abortData })
 
-        arguments[0] = shimmer.wrap(callback, function () {
-          const abortController = new AbortController()
-          startGraphqlWrite.publish({ abortController })
-
-          if (abortController.signal.aborted) return
-
-          return callback.apply(this, arguments)
-        })
-
-        return originalThen.apply(this, arguments)
+    if (abortController.signal.aborted) {
+      const headers = []
+      Object.keys(abortData.headers).forEach(key => {
+        headers.push([key, abortData.headers[key]])
+      })
+      return {
+        headers: headers,
+        status: abortData.statusCode,
+        body: {
+          kind: 'complete',
+          string: abortData.message
+        }
       }
-    })
+    }
 
-    return requestPromise
+    return graphqlResponseData
   }
 }
 
@@ -53,7 +56,7 @@ addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: 
           return originalMiddleware.apply(this, arguments)
         }
 
-        startGraphqlMiddleware.publish({ req, res })
+        startGraphqlMiddleware.publish({ req })
         const middlewareResult = originalMiddleware.apply(this, arguments)
         endGraphqlMiddleware.publish({ req })
         return middlewareResult
