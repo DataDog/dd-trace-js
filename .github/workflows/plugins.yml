@@ -27,8 +27,6 @@ jobs:
     services:
       aerospike:
         image: aerospike:ce-6.4.0.3
-        env:
-          PORT: 3000
         ports:
           - 3000:3000
       testagent:
