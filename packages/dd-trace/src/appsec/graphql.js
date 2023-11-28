@@ -108,10 +108,10 @@ function enableApollo () {
 }
 
 function disableApollo () {
-  startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
-  startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
-  endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
+  if (startGraphqlMiddleware.hasSubscribers) startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
+  if (startExecuteHTTPGraphQLRequest.hasSubscribers) startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
+  if (endGraphqlMiddleware.hasSubscribers) endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
+  if (startGraphqlWrite.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
 }
 
 module.exports = {
