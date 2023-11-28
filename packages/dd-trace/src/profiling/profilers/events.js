@@ -24,12 +24,11 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
 }
 
 class GCDecorator {
-  constructor (stringTable, locations, functions) {
+  constructor (stringTable) {
     this.stringTable = stringTable
     this.reasonLabelKey = stringTable.dedup('gc reason')
     this.kindLabels = []
     this.reasonLabels = []
-    this.locationsPerKind = []
     this.flagObj = {}
 
     const kindLabelKey = stringTable.dedup('gc type')
@@ -42,13 +41,6 @@ class GCDecorator {
         // It's a constant for a kind of GC
         const kind = key.substring(20).toLowerCase()
         this.kindLabels[value] = labelFromStr(stringTable, kindLabelKey, kind)
-        // Construct a single-frame "location" too
-        const fn = new Function({ id: functions.length + 1, name: stringTable.dedup(`${kind} GC`) })
-        functions.push(fn)
-        const line = new Line({ functionId: fn.id })
-        const location = new Location({ id: locations.length + 1, line: [line] })
-        locations.push(location)
-        this.locationsPerKind[value] = [location.id]
       }
     }
   }
@@ -60,7 +52,6 @@ class GCDecorator {
     if (reasonLabel) {
       sampleInput.label.push(reasonLabel)
     }
-    sampleInput.locationId = this.locationsPerKind[kind]
   }
 
   getReasonLabel (flags) {
@@ -169,9 +160,22 @@ class EventsProfiler {
     const stringTable = new StringTable()
     const locations = []
     const functions = []
+
+    // A synthetic single-frame location to serve as the location for timeline
+    // samples. We need these as the profiling backend (mimicking official pprof
+    // tool's behavior) ignores these.
+    const locationId = (() => {
+      const fn = new Function({ id: functions.length + 1, name: stringTable.dedup('') })
+      functions.push(fn)
+      const line = new Line({ functionId: fn.id })
+      const location = new Location({ id: locations.length + 1, line: [line] })
+      locations.push(location)
+      return [location.id]
+    })()
+
     const decorators = {}
     for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
-      const decorator = new DecoratorCtor(stringTable, locations, functions)
+      const decorator = new DecoratorCtor(stringTable)
       decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
       decorator.threadNameLabel = labelFromStrStr(stringTable, THREAD_NAME,
         `${threadNamePrefix} ${threadNames[eventType]}`)
@@ -196,6 +200,7 @@ class EventsProfiler {
       if (durationTo < endTime) durationTo = endTime
       const sampleInput = {
         value: [Math.round(duration * MS_TO_NS)],
+        locationId,
         label: [
           decorator.eventTypeLabel,
           decorator.threadNameLabel,
