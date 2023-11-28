@@ -45,13 +45,12 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '14'
       - name: Install Yarn
         run: |
           npm install -g yarn
-      - uses: actions/setup-node@v3
-        with:
-          cache: yarn
-          node-version: '14'
       - run: yarn install --ignore-engines
       - uses: ./.github/actions/node/14
       - run: yarn test:plugins:ci
