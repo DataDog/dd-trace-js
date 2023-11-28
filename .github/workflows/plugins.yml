@@ -53,8 +53,13 @@ jobs:
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "::set-output name=json::$content"
+      - name: Extract major version
+        run: |
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "::set-output name=majorVersion::$majorVersion"
       - name: Check package version
-        if: fromJson(steps.pkg.outputs.json).version == '3'
+        if: steps.extract_major_version.outputs.majorVersion == '3'
         run: |
           echo "Package version is 3. Proceeding with the next steps."
       - name: Install dependencies
