@@ -119,6 +119,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: true
               }
@@ -148,6 +149,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: true
               }
@@ -159,6 +161,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
           expect(itrConfig).to.eql({
             isCodeCoverageEnabled: true,
+            isItrEnabled: true,
             isSuitesSkippingEnabled: true
           })
           expect(err).not.to.exist
@@ -173,6 +176,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: true
               }
