@@ -49,25 +49,17 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '14'
-      - name: Install Python 3
+      - name: Install dependencies
         run: |
-          apt-get update
-          apt-get install -y python3 python3-pip
-      - name: Install Yarn
-        run: |
+          apt-get update && \
+          apt-get install -y \
+            python3 python3-pip \
+            wget \
+            g++ libssl1.0.0 libssl-dev zlib1g-dev && \
           npm install -g yarn
-      - name: Install wget or curl
-        run: |
-          apt-get install -y wget
-      - name: Install additional dependencies
-        run: |
-          apt-get install -y g++ libssl1.0.0 libssl-dev zlib1g-dev
       - run: yarn install --ignore-engines --force
-      # - uses: ./.github/actions/node/14
-      # - run: yarn test:plugins:ci --force
-      - run: yarn install --ignore-engines
-      - run: yarn services
-      - run: yarn test:plugins
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci --force
       - uses: codecov/codecov-action@v2
   aerospike:
     runs-on: ubuntu-latest
