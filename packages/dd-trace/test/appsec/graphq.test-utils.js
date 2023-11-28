@@ -1,5 +1,7 @@
+'use strict'
+
 const axios = require('axios')
-const { graphqlJson } = require('../../src/appsec/blocked_templates')
+const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const agent = require('../plugins/agent')
 
 const schema = `type Book {
@@ -9,8 +11,8 @@ const schema = `type Book {
 
 type Query {
     books(title: String): [Book!]!
-}
-`
+}`
+
 const query = `
 query GetBooks ($title: String) {
   books(title: $title) {
@@ -18,6 +20,7 @@ query GetBooks ($title: String) {
     author
   }
 }`
+
 const books = [
   {
     title: 'Test title',
@@ -78,6 +81,7 @@ function graphqlCommonTests (config) {
 
   it('Should block an http attack with graphql response', async () => {
     await makeGraphqlRequest(config.port, { title: 'Test' })
+
     try {
       await makeGraphqlRequest(config.port, { title: 'Test' }, { customHeader: 'testattack' })
 
@@ -87,7 +91,21 @@ function graphqlCommonTests (config) {
       expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
     }
   })
+
+  it('Should block an http attack with json response when it is not a graphql endpoint', async () => {
+    await makeGraphqlRequest(config.port, { title: 'Test' })
+
+    try {
+      await axios.get(`http://localhost:${config.port}/hello`, { headers: { customHeader: 'testattack' } })
+
+      return Promise.reject(new Error('Request should not return 200'))
+    } catch (e) {
+      expect(e.response.status).to.be.equals(403)
+      expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+    }
+  })
 }
+
 module.exports = {
   books,
   schema,
