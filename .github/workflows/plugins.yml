@@ -41,7 +41,7 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '3.16.7'
+      PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
       DD_TEST_AGENT_URL: http://testagent:9126
       AEROSPIKE_HOST_ADDRESS: aerospike
     steps:
