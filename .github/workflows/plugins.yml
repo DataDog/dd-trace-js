@@ -53,7 +53,7 @@ jobs:
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "::set-output name=json::$content"
-      - if: ${{ fromJson(steps.pkg.outputs.json).version == '3'}}
+      # - if: ${{ fromJson(steps.pkg.outputs.json).version == '3'}}
       - name: Install dependencies
         run: |
           apt-get update && \
