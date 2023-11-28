@@ -27,8 +27,10 @@ jobs:
     services:
       aerospike:
         image: aerospike:ce-6.4.0.3
+        env:
+          PORT: 3000
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - 3000:3000
       testagent:
         image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
         env:
