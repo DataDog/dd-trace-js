@@ -138,7 +138,7 @@ jobs:
   graphql:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: apollo-server-fastify|apollo-server-core
+      PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
