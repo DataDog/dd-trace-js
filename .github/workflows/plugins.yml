@@ -64,7 +64,7 @@ jobs:
         run: |
           echo "Package version is 3. Proceeding with the next steps."
       - name: Install dependencies
-        if: steps.extract_major_version.outputs.majorVersion == '3'
+        if: steps.extract.outputs.majorVersion == '3'
         run: |
           apt-get update && \
           apt-get install -y \
@@ -72,13 +72,13 @@ jobs:
             wget \
             g++ libssl1.0.0 libssl-dev zlib1g-dev && \
           npm install -g yarn
-      - if: steps.extract_major_version.outputs.majorVersion == '3'
+      - if: steps.extract.outputs.majorVersion == '3'
         run: yarn install --ignore-engines
-      - if: steps.extract_major_version.outputs.majorVersion == '3'
+      - if: steps.extract.outputs.majorVersion == '3'
         uses: ./.github/actions/node/14
-      - if: steps.extract_major_version.outputs.majorVersion == '3'
+      - if: steps.extract.outputs.majorVersion == '3'
         run: yarn test:plugins:ci
-      - if: steps.extract_major_version.outputs.majorVersion == '3'
+      - if: steps.extract.outputs.majorVersion == '3'
         uses: codecov/codecov-action@v2
   aerospike:
     runs-on: ubuntu-latest
