@@ -144,14 +144,39 @@ class DNSDecorator {
   }
 }
 
+class NetDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationNameLabelKey = stringTable.dedup('operation')
+    this.addressLabelKey = stringTable.dedup('address')
+    this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    function addLabel (labelNameKey, labelValue) {
+      labels.push(labelFromStr(stringTable, labelNameKey, labelValue))
+    }
+    const op = item.name
+    addLabel(this.operationNameLabelKey, op)
+    if (op === 'connect') {
+      const detail = item.detail
+      addLabel(this.addressLabelKey, `${detail.host}:${detail.port}`)
+    }
+    labels.push(this.lanes.getLabelFor(item))
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
   gc: GCDecorator
 }
-// Needs at least node 16 for DNS
+// Needs at least node 16 for DNS and Net
 if (node16) {
   decoratorTypes.dns = DNSDecorator
+  decoratorTypes.net = NetDecorator
 }
 
 /**
