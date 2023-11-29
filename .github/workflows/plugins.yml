@@ -72,13 +72,13 @@ jobs:
             g++ libssl1.0.0 libssl-dev zlib1g-dev && \
           npm install -g yarn
       - if: steps.extract_major_version.outputs.majorVersion == '3'
-      - run: yarn install --ignore-engines
+        run: yarn install --ignore-engines
       - if: steps.extract_major_version.outputs.majorVersion == '3'
-      - uses: ./.github/actions/node/14
+        uses: ./.github/actions/node/14
       - if: steps.extract_major_version.outputs.majorVersion == '3'
-      - run: yarn test:plugins:ci
+        run: yarn test:plugins:ci
       - if: steps.extract_major_version.outputs.majorVersion == '3'
-      - uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v2
   aerospike:
     runs-on: ubuntu-latest
     services:
