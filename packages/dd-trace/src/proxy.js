@@ -40,6 +40,8 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config)
 
+        this._rc = rc
+
         rc.on('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
@@ -52,11 +54,6 @@ class Tracer extends NoopProxy {
             this._pluginManager.configure(config)
           }
         })
-
-        this.rcReady = rc.ready
-      } else {
-        // TODO: what should we set rcReady if RC is not enabled ?
-        this.rcReady = Promise.reject()
       }
 
       if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {
@@ -110,6 +107,10 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  rcReady (opts, cb) {
+    return this._rc?.isReady(opts, cb)
   }
 
   profilerStarted () {
