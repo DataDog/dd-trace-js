@@ -67,6 +67,10 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this.appliedConfigs = new Map()
+
+    let temp
+    this.ready = new Promise((resolve) => temp = resolve)
+    this.ready.resolve = temp
   }
 
   updateCapabilities (mask, value) {
@@ -136,6 +140,8 @@ class RemoteConfigManager extends EventEmitter {
         this.state.client.state.has_error = false
         this.state.client.state.error = ''
       }
+
+      this.ready.resolve()
 
       if (data && data !== '{}') { // '{}' means the tracer is up to date
         try {

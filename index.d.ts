@@ -120,6 +120,12 @@ export declare interface Tracer extends opentracing.Tracer {
 
   appsec: Appsec;
 
+  /**
+   * A promise that is resolved when the Remote Config client has received its first update from the Agent.
+   * Rejected when RC is disabled.
+   */
+  rcReady: Promise;
+
   TracerProvider: opentelemetry.TracerProvider;
 
   dogstatsd: DogStatsD;

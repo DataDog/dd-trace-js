@@ -52,6 +52,11 @@ class Tracer extends NoopProxy {
             this._pluginManager.configure(config)
           }
         })
+
+        this.rcReady = rc.ready
+      } else {
+        // TODO: what should we set rcReady if RC is not enabled ?
+        this.rcReady = Promise.reject()
       }
 
       if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {

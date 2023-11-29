@@ -10,6 +10,7 @@ class Tracer {
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
+    this.rcReady = Promise.reject()
   }
 
   init () {
