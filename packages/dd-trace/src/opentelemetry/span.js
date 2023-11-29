@@ -191,6 +191,10 @@ class Span {
     return this
   }
 
+  addLink (link) {
+    this.links.push(link)
+  }
+
   setStatus ({ code, message }) {
     if (!this.ended && !this._hasStatus && code) {
       this._hasStatus = true
