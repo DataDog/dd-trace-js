@@ -29,8 +29,9 @@ describe('Plugin', () => {
         userKey = 'key'
 
         config = {
-          hosts: '127.0.0.1:3000',
-          port: '3000'
+          hosts: [
+            { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 }
+          ]
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
@@ -45,13 +46,17 @@ describe('Plugin', () => {
           return agent.load('aerospike')
         })
 
+        after(() => {
+          aerospike.releaseEventLoop()
+        })
+
         describe('client', () => {
           withPeerService(
             () => tracer,
             'aerospike',
             () => aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             }),
             'test',
             'aerospike.namespace'
@@ -76,7 +81,9 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => {
+                  client.close(false)
+                })
             })
           })
 
@@ -94,7 +101,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            aerospike.connect(config).then(client => { client.close() })
+            aerospike.connect(config).then(client => { client.close(false) })
           })
 
           it('should instrument get', done => {
@@ -117,7 +124,7 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               return client.get(key)
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
@@ -148,7 +155,7 @@ describe('Plugin', () => {
                   ]
                   return client.operate(key, ops)
                 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
@@ -180,7 +187,7 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               return client.createIndex(index)
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
@@ -190,7 +197,7 @@ describe('Plugin', () => {
           // this test works on node 14, so it is not a problem with the test but most likely a problem with the package
           // version and aerospike server version mismatch which is really hard to pin down, since aerospike doesn't
           // provide info on package version's compatibility with each server version
-          if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4'))) {
+          if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4')) && !semver.intersects(version, '^3')) {
             it('should instrument query', done => {
               agent
                 .use(traces => {
@@ -224,7 +231,7 @@ describe('Plugin', () => {
                     query.select('id', 'tags')
                     query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                     const stream = query.foreach(queryPolicy)
-                    stream.on('end', () => { client.close() })
+                    stream.on('end', () => { client.close(false) })
                   })
                 })
               })
@@ -236,7 +243,7 @@ describe('Plugin', () => {
               tracer.scope().activate(obj, () => {
                 client.put(key, { i: 123 }, () => {
                   expect(tracer.scope().active()).to.equal(obj)
-                  client.close()
+                  client.close(false)
                   done()
                 })
               })
@@ -267,7 +274,7 @@ describe('Plugin', () => {
 
                     return client.operate(key, ops)
                   })
-                  .then(() => client.close())
+                  .then(() => client.close(false))
               })
               .catch(err => {
                 error = err
@@ -276,7 +283,7 @@ describe('Plugin', () => {
           withNamingSchema(
             () => aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             }),
             rawExpectedSchema.command
           )
@@ -286,6 +293,10 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => {
           return agent.load('aerospike', { service: 'custom' })
+        })
+
+        after(() => {
+          aerospike.releaseEventLoop()
         })
 
         it('should be configured with the correct values', done => {
@@ -299,14 +310,14 @@ describe('Plugin', () => {
 
           aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
-              .then(() => client.close())
+              .then(() => client.close(false))
           })
         })
 
         withNamingSchema(
           () => aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
-              .then(() => client.close())
+              .then(() => client.close(false))
           }),
           {
             v0: {
