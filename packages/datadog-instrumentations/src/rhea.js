@@ -224,9 +224,7 @@ function beforeFinish (delivery, state) {
     if (state) {
       dispatchReceiveCh.publish({ state })
     }
-    if (obj.connection && obj.connection[inFlightDeliveries]) {
-      obj.connection[inFlightDeliveries].delete(delivery)
-    }
+    obj.connection[inFlightDeliveries].delete(delivery)
   }
 }
 
