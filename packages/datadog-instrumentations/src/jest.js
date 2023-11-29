@@ -44,6 +44,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isUserCodeCoverageEnabled = false
 let isItrEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -291,11 +292,14 @@ function cliWrapper (cli, jestVersion) {
     } = result
 
     let testCodeCoverageLinesTotal
-    try {
-      const { pct, total } = coverageMap.getCoverageSummary().lines
-      testCodeCoverageLinesTotal = total !== 0 ? pct : 0
-    } catch (e) {
-      // ignore errors
+
+    if (isUserCodeCoverageEnabled) {
+      try {
+        const { pct, total } = coverageMap.getCoverageSummary().lines
+        testCodeCoverageLinesTotal = total !== 0 ? pct : 0
+      } catch (e) {
+        // ignore errors
+      }
     }
     let status, error
 
@@ -438,6 +442,8 @@ function configureTestEnvironment (readConfigsResult) {
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
   })
+
+  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 
   if (isCodeCoverageEnabled) {
     const globalConfig = {

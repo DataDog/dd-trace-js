@@ -334,8 +334,7 @@ versions.forEach(version => {
                   .events
                   .find(event => event.type === 'test_session_end')
                   .content
-                // If ITR is enabled, we don't report total code coverage %
-                assert.notProperty(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT)
+                assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
 
                 const eventTypes = eventsRequest.payload.events.map(event => event.type)
                 assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
@@ -384,7 +383,6 @@ versions.forEach(version => {
                 assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
                 assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
                 assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
-                // If ITR is disabled, we can report total code coverage %
                 assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
                 const testModule = payload.events.find(event => event.type === 'test_module_end').content
                 assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')

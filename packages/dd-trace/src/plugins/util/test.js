@@ -60,6 +60,7 @@ const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
+const TEST_ITR_ENABLED = 'test.itr.enabled'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -382,12 +383,14 @@ function addIntelligentTestRunnerSpanTags (
   testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
   testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+  testSessionSpan.setTag(TEST_ITR_ENABLED, isItrEnabled ? 'true' : 'false')
 
   testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
   testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, isSuitesSkippingEnabled ? 'true' : 'false')
   testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, skippingType)
   testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+  testModuleSpan.setTag(TEST_ITR_ENABLED, isItrEnabled ? 'true' : 'false')
 
   if (hasUnskippableSuites) {
     testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
@@ -398,8 +401,9 @@ function addIntelligentTestRunnerSpanTags (
     testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
   }
 
-  // If ITR is enabled, we don't want to report the code coverage lines percentage
-  if (testCodeCoverageLinesTotal !== undefined && !isItrEnabled) {
+  // This will not be reported unless the user has manually added code coverage.
+  // This is always the case for Mocha and Cucumber, but not for Jest.
+  if (testCodeCoverageLinesTotal !== undefined) {
     testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
     testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }
