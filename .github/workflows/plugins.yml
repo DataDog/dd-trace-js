@@ -57,6 +57,7 @@ jobs:
         run: |
           version="${{fromJson(steps.pkg.outputs.json).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
           echo "::set-output name=majorVersion::$majorVersion"
       - name: Check package version
         if: steps.extract_major_version.outputs.majorVersion == '3'
