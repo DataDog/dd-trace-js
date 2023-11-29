@@ -51,8 +51,8 @@ jobs:
           node-version: '14'
       - id: pkg
         run: |
-          content=$(cat ./package.json | tr '\n' ' ')
-          echo "PACKAGE_JSON_CONTENT=$content" >> $GITHUB_ENV
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
       - id: extract
         run: |
           version="${{fromJson(steps.pkg.outputs.json).version}}"
