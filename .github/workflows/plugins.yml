@@ -55,7 +55,6 @@ jobs:
           echo "::set-output name=json::$content"
       - id: extract
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
           version="${{fromJson(steps.pkg.outputs.json).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"

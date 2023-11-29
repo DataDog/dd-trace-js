@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "3.15.1",
+  "version": "5.0.0-pre",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -65,7 +65,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=14"
+    "node": ">=16"
   },
   "dependencies": {
     "@datadog/native-appsec": "5.0.0",
