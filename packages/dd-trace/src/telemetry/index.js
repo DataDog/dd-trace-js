@@ -236,8 +236,10 @@ function start (aConfig, thePluginManager) {
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
-  sendData(config, application, host, 'app-integrations-change',
-    { 'integrations': integrations }, updateRetryData)
+  if (integrations) {
+    sendData(config, application, host, 'app-integrations-change',
+      { 'integrations': integrations }, updateRetryData)
+  }
 
   heartbeat(config, application, host)
 
