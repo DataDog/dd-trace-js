@@ -118,7 +118,6 @@
     },
     {
       "name": "graphql",
-      "dep": true,
       "versions": ["^15.2.0"]
     }
   ],
