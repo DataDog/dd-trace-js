@@ -236,7 +236,7 @@ function start (aConfig, thePluginManager) {
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
-  if (integrations) {
+  if (integrations.length > 0) {
     sendData(config, application, host, 'app-integrations-change',
       { 'integrations': integrations }, updateRetryData)
   }
