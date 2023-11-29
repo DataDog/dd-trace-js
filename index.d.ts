@@ -121,10 +121,12 @@ export declare interface Tracer extends opentracing.Tracer {
   appsec: Appsec;
 
   /**
-   * A promise that is resolved when the Remote Config client has received its first update from the Agent.
-   * Rejected when RC is disabled.
+   * Checks if the Remote Config client has successfully received data from the agent.
+   * @param {function} cb If provided, will be called once the data has been received.
+   * @param {array} opts.products If provided, will be make sure that specified products have been succesfully applied to the client.
    */
-  rcReady: Promise;
+  rcReady (cb?: function): boolean;
+  rcReady (opts: { products?: string[] }, cb?: function): boolean;
 
   TracerProvider: opentelemetry.TracerProvider;
 
@@ -149,6 +151,8 @@ export declare interface TraceOptions extends Analyzable {
    */
   type?: string
 }
+
+export delcare
 
 /**
  * Span represents a logical unit of work as part of a broader Trace.
