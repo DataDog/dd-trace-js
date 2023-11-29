@@ -60,7 +60,7 @@ jobs:
           echo "Major Version: $majorVersion"
           echo "::set-output name=majorVersion::$majorVersion"
       - name: Check package version
-        if: steps.extract_major_version.outputs.majorVersion == '3'
+        if: env.majorVersion == '3'
         run: |
           echo "Package version is 3. Proceeding with the next steps."
       - name: Install dependencies
