@@ -1,5 +1,7 @@
 'use strict'
 
+const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
@@ -19,11 +21,11 @@ class Sqs extends BaseAwsSdkPlugin {
       const { request, response } = obj
       const store = storage.getStore()
       const plugin = this
-      const maybeChildOf = this.responseExtract(request.params, request.operation, response)
-      if (maybeChildOf) {
+      const responseExtraction = this.responseExtract(request.params, request.operation, response)
+      if (responseExtraction && responseExtraction.maybeChildOf) {
         obj.needsFinish = true
         const options = {
-          childOf: maybeChildOf,
+          childOf: responseExtraction.maybeChildOf,
           tags: Object.assign(
             {},
             this.requestTags.get(request) || {},
@@ -31,6 +33,7 @@ class Sqs extends BaseAwsSdkPlugin {
           )
         }
         const span = plugin.tracer.startSpan('aws.response', options)
+        this.responseExtractDSMContext(request.params, responseExtraction.traceContext, span)
         this.enter(span, store)
       }
     })
@@ -109,7 +112,7 @@ class Sqs extends BaseAwsSdkPlugin {
     return tags
   }
 
-  responseExtract (params, operation, response) {
+  responseExtract (params, operation, response, span = null) {
     if (operation !== 'receiveMessage') return
     if (params.MaxNumberOfMessages && params.MaxNumberOfMessages !== 1) return
     if (!response || !response.Messages || !response.Messages[0]) return
@@ -133,16 +136,35 @@ class Sqs extends BaseAwsSdkPlugin {
 
     const datadogAttribute = message.MessageAttributes._datadog
 
+    let parsedAttributes
     try {
       if (datadogAttribute.StringValue) {
         const textMap = datadogAttribute.StringValue
-        return this.tracer.extract('text_map', JSON.parse(textMap))
+        parsedAttributes = JSON.parse(textMap)
+        return {
+          maybeChildOf: this.tracer.extract('text_map', parsedAttributes),
+          traceContext: parsedAttributes
+        }
       } else if (datadogAttribute.Type === 'Binary') {
         const buffer = Buffer.from(datadogAttribute.Value, 'base64')
-        return this.tracer.extract('text_map', JSON.parse(buffer))
+        parsedAttributes = JSON.parse(buffer)
+        return {
+          maybeChildOf: this.tracer.extract('text_map', parsedAttributes),
+          traceContext: parsedAttributes
+        }
       }
     } catch (e) {
       log.error(e)
+    }
+  }
+
+  responseExtractDSMContext (params, context, span) {
+    if (this.config.dsmEnabled && context && context.CONTEXT_PROPAGATION_KEY) {
+      const payloadSize = getHeadersSize(params)
+      const queue = params.QueueUrl.split('/').pop()
+      this.tracer.decodeDataStreamsContext(Buffer.from(context[CONTEXT_PROPAGATION_KEY]))
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     }
   }
 
@@ -159,6 +181,14 @@ class Sqs extends BaseAwsSdkPlugin {
         return
       }
       const ddInfo = {}
+      if (this.config.dsmEnbled) {
+        const payloadSize = getHeadersSize(request.params)
+        const queue = request.params.QueueUrl.split('/').pop()
+        const dataStreamsContext = this.tracer
+          .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
+        const pathwayCtx = encodePathwayContext(dataStreamsContext)
+        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+      }
       this.tracer.inject(span, 'text_map', ddInfo)
       request.params.MessageAttributes._datadog = {
         DataType: 'String',
