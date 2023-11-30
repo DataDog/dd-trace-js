@@ -22,7 +22,7 @@ const dispatchReceiveCh = channel('apm:rhea:receive:dispatch')
 const errorReceiveCh = channel('apm:rhea:receive:error')
 const finishReceiveCh = channel('apm:rhea:receive:finish')
 
-const contexts = new WeakMap()
+const contexts = new WeakMap() // key: delivery Fn, val: context
 
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
@@ -216,16 +216,22 @@ function addToInFlightDeliveries (connection, delivery) {
     connection[inFlightDeliveries] = deliveries
   }
   deliveries.add(delivery)
+  // delivery[kDatadog].connection = connection
 }
 
 function beforeFinish (delivery, state) {
-  const obj = contexts.get(delivery)
-  if (obj) {
+  let didClose = false
+  const context = contexts.get(delivery)
+  if (context) {
     if (state) {
       dispatchReceiveCh.publish({ state })
     }
-    obj.connection[inFlightDeliveries].delete(delivery)
+    if (context.connection && context.connection[inFlightDeliveries]) {
+      didClose = true
+      context.connection[inFlightDeliveries].delete(delivery)
+    }
   }
+  console.log('>>> beforeFinish()', didClose ? 'closed properly' : 'DID NOT CLOSE CONNECTION')
 }
 
 function getStateFromData (stateData) {
