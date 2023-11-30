@@ -358,26 +358,33 @@ function wrapFieldType (field) {
 }
 
 function addResolver (context, info, args) {
-  if (info.rootValue && !info.rootValue[info.fieldName]) {
-    return
+  context.resolver = null
+
+  const resolverInfo = {}
+
+  if (args && Object.keys(args).length) {
+    Object.assign(resolverInfo, args)
   }
 
-  if (!context.resolvers) {
+  const directives = info.fieldNodes[0].directives
+  for (const directive of directives) {
+    const argList = {}
+    for (const argument of directive.arguments) {
+      const arg = {}
+      arg[argument.name.value] = argument.value.value
+      Object.assign(argList, arg)
+    }
+
+    if (Object.keys(argList).length) {
+      const directiveInfo = {}
+      directiveInfo[directive.name.value] = argList
+      Object.assign(resolverInfo, directiveInfo)
+    }
+  }
+
+  if (Object.keys(resolverInfo).length) {
     context.resolvers = {}
-  }
-
-  const resolvers = context.resolvers
-
-  if (!resolvers[info.fieldName]) {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName] = [args]
-    } else {
-      resolvers[info.fieldName] = []
-    }
-  } else {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName].push(args)
-    }
+    context.resolvers[info.fieldName] = resolverInfo
   }
 }
 
