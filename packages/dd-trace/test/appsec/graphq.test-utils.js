@@ -30,8 +30,8 @@ query GetBooks ($title: String) {
 function makeQuery (derivativeParam) {
   return `
     query GetBooks ($title: String) {
-      books(title: $title) {
-        title @case(format: "${derivativeParam}"),
+      books(title: $title) @case(format: "${derivativeParam}") {
+        title
         author
       }
     }`
@@ -89,6 +89,17 @@ function graphqlCommonTests (config) {
       }
     })
 
+    it('Should block an attack on directive', async () => {
+      try {
+        await makeGraphqlRequest(config.port, { title: 'Test' }, 'testattack')
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        expect(e.response.status).to.be.equals(403)
+        expect(e.response.data).to.be.deep.equal(JSON.parse(graphqlJson))
+      }
+    })
+
     it('Should set appsec.blocked on blocked attack', (done) => {
       agent.use(payload => {
         expect(payload[0][0].meta['appsec.blocked']).to.be.equal('true')
@@ -101,7 +112,7 @@ function graphqlCommonTests (config) {
     })
 
     it('Should not block a safe request', async () => {
-      const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'testattack')
+      const response = await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
       expect(response.data).to.be.deep.equal({ data: { books } })
     })
@@ -110,7 +121,7 @@ function graphqlCommonTests (config) {
       await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
       try {
-        await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower', { customHeader: 'testattack' })
+        await makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower', { customHeader: 'lower' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
