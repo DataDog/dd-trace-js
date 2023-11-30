@@ -185,7 +185,6 @@ module.exports = (on, config) => {
   let command = null
   let frameworkVersion
   let rootDir
-  let isItrEnabled = false
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
@@ -248,7 +247,6 @@ module.exports = (on, config) => {
       } else {
         isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
         isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
-        isItrEnabled = itrConfig.isItrEnabled
       }
 
       return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
@@ -363,7 +361,6 @@ module.exports = (on, config) => {
         testModuleSpan,
         {
           isSuitesSkipped: isTestsSkipped,
-          isItrEnabled,
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled,
           skippingType: 'test',
