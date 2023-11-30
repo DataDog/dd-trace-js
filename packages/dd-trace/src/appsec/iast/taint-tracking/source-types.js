@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  GRAPHQL_RESOLVER_ARGUMENT: 'graphql.resolver.argument',
   HTTP_REQUEST_BODY: 'http.request.body',
   HTTP_REQUEST_COOKIE_VALUE: 'http.request.cookie.value',
   HTTP_REQUEST_COOKIE_NAME: 'http.request.cookie.name',
