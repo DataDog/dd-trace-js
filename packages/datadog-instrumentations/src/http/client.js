@@ -18,9 +18,19 @@ addHook({ name: 'https' }, hookFn)
 
 addHook({ name: 'http' }, hookFn)
 
+let customAgent = false
+
 function hookFn (http) {
   patch(http, 'request')
   patch(http, 'get')
+
+  // shim Agent to track if a custom agent is used
+  shimmer.wrap(http, 'Agent', function checkCustomAgent (Agent) {
+    return function () {
+      customAgent = true
+      return Agent.apply(this, arguments)
+    }
+  })
 
   return http
 }
@@ -58,6 +68,7 @@ function patch (http, methodName) {
         }
 
         const options = args.options
+        // console.log('options', options)
         const finish = () => {
           if (!finished) {
             finished = true
@@ -68,8 +79,15 @@ function patch (http, methodName) {
         try {
           const req = request.call(this, options, callback)
           const emit = req.emit
+          const setTimeout = req.setTimeout
+          let reqTimeout = false
 
           ctx.req = req
+
+          req.setTimeout = function () {
+            reqTimeout = true
+            return setTimeout.apply(this, arguments)
+          }
 
           req.emit = function (eventName, arg) {
             switch (eventName) {
@@ -88,6 +106,8 @@ function patch (http, methodName) {
               case 'error':
               case 'timeout':
                 ctx.error = arg
+                ctx.agent = { customAgent, timeout: this.agent.options.timeout }
+                ctx.reqTimeout = reqTimeout
                 errorChannel.publish(ctx)
               case 'abort': // deprecated and replaced by `close` in node 17
               case 'close':
