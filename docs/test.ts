@@ -292,6 +292,9 @@ tracer.use('http', {
 tracer.use('http', {
   client: httpClientOptions
 });
+tracer.use('http', {
+  enableTracingWithAmazonSignature: true
+});
 tracer.use('http2');
 tracer.use('http2', {
   server: http2ServerOptions
