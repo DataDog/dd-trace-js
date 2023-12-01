@@ -21,7 +21,7 @@ describe('Plugin', () => {
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
       let AWS
       let sqs
-      let QueueUrl
+      let QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -40,14 +40,14 @@ describe('Plugin', () => {
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
-            QueueUrl = res.QueueUrl
+            //QueueUrl = res.QueueUrl
 
             done()
           })
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl }, done)
+          sqs.deleteQueue({ QueueUrl: QueueUrl }, done)
         })
 
         after(() => {
@@ -233,14 +233,14 @@ describe('Plugin', () => {
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
-            QueueUrl = res.QueueUrl
+            //QueueUrl = res.QueueUrl
 
             done()
           })
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl }, done)
+          sqs.deleteQueue({ QueueUrl: QueueUrl }, done)
         })
 
         after(() => {
@@ -314,7 +314,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
-          tracer.init()
+          tracer.init({ dsmEnabled: true })
           tracer.use('aws-sdk', { dsmEnabled: true })
 
           return agent.load('aws-sdk', {
@@ -333,14 +333,14 @@ describe('Plugin', () => {
           sqs.createQueue(queueOptions, (err, res) => {
             if (err) return done(err)
 
-            QueueUrl = res.QueueUrl
+            // QueueUrl = res.QueueUrl
 
             done()
           })
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl }, done)
+          sqs.deleteQueue({ QueueUrl: QueueUrl }, done)
         })
 
         after(() => {
