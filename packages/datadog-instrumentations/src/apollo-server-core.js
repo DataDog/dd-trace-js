@@ -1,8 +1,8 @@
 'use strict'
 
+const { AbortController } = require('node-abort-controller')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { AbortController } = require('node-abort-controller')
 
 const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
 const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
@@ -12,6 +12,7 @@ const successGraphqlRequest = channel('datadog:apollo:request:success')
 
 addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['>3.0.0'] }, runHttpQueryModule => {
   const HttpQueryError = runHttpQueryModule.HttpQueryError
+
   shimmer.wrap(runHttpQueryModule, 'runHttpQuery', function wrapRunHttpQuery (originalRunHttpQuery) {
     return async function runHttpQuery () {
       if (!startGraphQLRequest.hasSubscribers) {

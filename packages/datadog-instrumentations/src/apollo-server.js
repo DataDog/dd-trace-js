@@ -1,8 +1,8 @@
 'use strict'
 
+const { AbortController } = require('node-abort-controller')
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { AbortController } = require('node-abort-controller')
 
 const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
 const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
@@ -10,8 +10,9 @@ const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
 const startGraphQLRequest = channel('datadog:apollo:request:start')
 const successGraphqlRequest = channel('datadog:apollo:request:success')
 
+let HeaderMap
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
-  return async function executeHTTPGraphQLRequest (httpGraphQLRequest) {
+  return async function executeHTTPGraphQLRequest () {
     if (!startGraphQLRequest.hasSubscribers) return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
 
     startGraphQLRequest.publish()
@@ -23,10 +24,13 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
     successGraphqlRequest.publish({ abortController, abortData })
 
     if (abortController.signal.aborted) {
-      const headers = []
+      // This method is expected to return response data
+      // with headers, status and body
+      const headers = new HeaderMap()
       Object.keys(abortData.headers).forEach(key => {
-        headers.push([key, abortData.headers[key]])
+        headers.set(key, abortData.headers[key])
       })
+
       return {
         headers: headers,
         status: abortData.statusCode,
@@ -61,6 +65,11 @@ function apolloExpress4Hook (express4) {
   return express4
 }
 
+function apolloHeaderMapHook (headerMap) {
+  HeaderMap = headerMap.HeaderMap
+  return headerMap
+}
+
 function apolloServerHook (apolloServer) {
   shimmer.wrap(apolloServer.ApolloServer.prototype, 'executeHTTPGraphQLRequest', wrapExecuteHTTPGraphQLRequest)
   return apolloServer
@@ -70,3 +79,5 @@ addHook({ name: '@apollo/server', file: 'dist/esm/ApolloServer.js', versions: ['
 
 addHook({ name: '@apollo/server', file: 'dist/cjs/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
 addHook({ name: '@apollo/server', file: 'dist/esm/express4/index.js', versions: ['>=4.0.0'] }, apolloExpress4Hook)
+
+addHook({ name: '@apollo/server', file: 'dist/cjs/utils/HeaderMap.js', versions: ['>=4.0.0'] }, apolloHeaderMapHook)
