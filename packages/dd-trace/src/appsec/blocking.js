@@ -3,23 +3,23 @@
 const log = require('../log')
 const blockedTemplates = require('./blocked_templates')
 
-// TODO Find a better name, custom is not appropiate
-const detectedCustomEndpoints = {}
+const detectedSpecificEndpoints = {}
 
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
 let blockingConfiguration
 
-const customBlockingTypes = {
+const specificBlockingTypes = {
   GRAPHQL: 'graphql'
 }
 
-function getCustomKey (method, url) {
+function getSpecificKey (method, url) {
   return `${method}+${url}`
 }
-function addCustomEndpoint (method, url, type) {
-  detectedCustomEndpoints[getCustomKey(method, url)] = type
+
+function addSpecificEndpoint (method, url, type) {
+  detectedSpecificEndpoints[getSpecificKey(method, url)] = type
 }
 
 function getBlockWithRedirectData (rootSpan) {
@@ -53,9 +53,9 @@ function blockWithRedirect (res, rootSpan, abortController) {
   }
 }
 
-function getCustomBlockingData (type) {
+function getSpecificBlockingData (type) {
   switch (type) {
-    case customBlockingTypes.GRAPHQL:
+    case specificBlockingTypes.GRAPHQL:
       return {
         type: 'application/json',
         body: templateGraphqlJson
@@ -63,16 +63,16 @@ function getCustomBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, customType, rootSpan) {
+function getBlockWithContentData (req, specificType, rootSpan) {
   let type
   let body
   let statusCode
 
-  const customBlockingType = customType || detectedCustomEndpoints[getCustomKey(req.method, req.url)]
-  if (customBlockingType) {
-    const customBlockingContent = getCustomBlockingData(customBlockingType)
-    type = customBlockingContent?.type
-    body = customBlockingContent?.body
+  const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
+  if (specificBlockingType) {
+    const specificBlockingContent = getSpecificBlockingData(specificBlockingType)
+    type = specificBlockingContent?.type
+    body = specificBlockingContent?.body
   }
 
   if (!type) {
@@ -145,12 +145,12 @@ function block (req, res, rootSpan, abortController, type) {
   }
 }
 
-function getBlockingData (req, customType, rootSpan) {
+function getBlockingData (req, specificType, rootSpan) {
   if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
     blockingConfiguration.parameters.location) {
     return getBlockWithRedirectData(rootSpan)
   } else {
-    return getBlockWithContentData(req, customType, rootSpan)
+    return getBlockWithContentData(req, specificType, rootSpan)
   }
 }
 
@@ -179,9 +179,9 @@ function updateBlockingConfiguration (newBlockingConfiguration) {
 }
 
 module.exports = {
-  addCustomEndpoint,
+  addSpecificEndpoint,
   block,
-  customBlockingTypes,
+  specificBlockingTypes,
   getBlockingData,
   setTemplates,
   updateBlockingConfiguration
