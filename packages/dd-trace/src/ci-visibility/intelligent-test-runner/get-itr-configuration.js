@@ -69,26 +69,29 @@ function getItrConfiguration ({
       try {
         const {
           data: {
-            attributes
+            attributes: {
+              code_coverage: isCodeCoverageEnabled,
+              tests_skipping: isSuitesSkippingEnabled,
+              itr_enabled: isItrEnabled,
+              require_git: requireGit
+            }
           }
         } = JSON.parse(res)
 
-        let isCodeCoverageEnabled = attributes.code_coverage
-        let isSuitesSkippingEnabled = attributes.tests_skipping
-        const { require_git: requireGit } = attributes
+        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
 
-        log.debug(() => `Remote settings: ${JSON.stringify({ isCodeCoverageEnabled, isSuitesSkippingEnabled })}`)
+        log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
-          isCodeCoverageEnabled = true
+          settings.isCodeCoverageEnabled = true
           log.debug(() => 'Dangerously set code coverage to true')
         }
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
-          isSuitesSkippingEnabled = true
+          settings.isSuitesSkippingEnabled = true
           log.debug(() => 'Dangerously set test skipping to true')
         }
 
-        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled, requireGit })
+        done(null, settings)
       } catch (err) {
         done(err)
       }
