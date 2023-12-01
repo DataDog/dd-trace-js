@@ -58,7 +58,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
-    if (!(hasAmazonSignature(options) || !this.config.propagationFilter(uri))) {
+    if (this.shouldInjectTraceHeaders(options, uri)) {
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -69,6 +69,18 @@ class HttpClientPlugin extends ClientPlugin {
     message.currentStore = { ...store, span }
 
     return message.currentStore
+  }
+
+  shouldInjectTraceHeaders (options, uri) {
+    if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
+      return false
+    }
+
+    if (!this.config.propagationFilter(uri)) {
+      return false
+    }
+
+    return true
   }
 
   bindAsyncStart ({ parentStore }) {
