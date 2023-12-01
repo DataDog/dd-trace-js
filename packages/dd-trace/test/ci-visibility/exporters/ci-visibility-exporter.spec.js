@@ -119,6 +119,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
                 tests_skipping: true
@@ -149,6 +150,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
                 tests_skipping: true
@@ -162,6 +164,7 @@ describe('CI Visibility Exporter', () => {
           expect(itrConfig).to.eql({
             requireGit: false,
             isCodeCoverageEnabled: true,
+            isItrEnabled: true,
             isSuitesSkippingEnabled: true
           })
           expect(err).not.to.exist
@@ -176,6 +179,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                itr_enabled: true,
                 require_git: false,
                 code_coverage: true,
                 tests_skipping: true
