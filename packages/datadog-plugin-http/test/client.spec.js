@@ -12,6 +12,7 @@ const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
+const { satisfies } = require('semver')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -803,6 +804,103 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (satisfies(process.version, '>=20')) {
+          it('should not record default HTTP agent timeout as error with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000) // over 5s default
+              })
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 0)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = server(app, port, async () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => { })
+                })
+
+                req.on('error', () => {})
+
+                req.end()
+              })
+            })
+          }).timeout(10000)
+
+          it('should record error if custom Agent timeout is used with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000)
+              })
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 1)
+                })
+                .then(done)
+                .catch(done)
+
+              const options = {
+                agent: new http.Agent({ keepAlive: true, timeout: 5000 }) // custom agent with same default timeout
+              }
+
+              appListener = server(app, port, async () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
+                  res.on('data', () => { })
+                })
+
+                req.on('error', () => {})
+
+                req.end()
+              })
+            })
+          }).timeout(10000)
+
+          it('should record error if req.setTimeout is used with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000)
+              })
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 1)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = server(app, port, async () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => { })
+                })
+
+                req.on('error', () => {})
+                req.setTimeout(5000) // match default timeout
+
+                req.end()
+              })
+            })
+          }).timeout(10000)
+        }
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
