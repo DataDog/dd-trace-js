@@ -58,6 +58,7 @@ function patch (http, methodName) {
         }
 
         const options = args.options
+
         const finish = () => {
           if (!finished) {
             finished = true
@@ -68,8 +69,16 @@ function patch (http, methodName) {
         try {
           const req = request.call(this, options, callback)
           const emit = req.emit
+          const setTimeout = req.setTimeout
 
           ctx.req = req
+
+          // tracked to accurately discern custom request socket timeout
+          let customRequestTimeout = false
+          req.setTimeout = function () {
+            customRequestTimeout = true
+            return setTimeout.apply(this, arguments)
+          }
 
           req.emit = function (eventName, arg) {
             switch (eventName) {
@@ -88,6 +97,7 @@ function patch (http, methodName) {
               case 'error':
               case 'timeout':
                 ctx.error = arg
+                ctx.customRequestTimeout = customRequestTimeout
                 errorChannel.publish(ctx)
               case 'abort': // deprecated and replaced by `close` in node 17
               case 'close':
