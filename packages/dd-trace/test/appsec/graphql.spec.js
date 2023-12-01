@@ -5,7 +5,7 @@ const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
 
 const {
-  graphqlStartResolve,
+  startGraphqlResolve,
   startGraphqlMiddleware,
   startExecuteHTTPGraphQLRequest,
   endGraphqlMiddleware,
@@ -53,7 +53,7 @@ describe('GraphQL', () => {
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
       expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
-      expect(graphqlStartResolve.hasSubscribers).to.be.false
+      expect(startGraphqlResolve.hasSubscribers).to.be.false
 
       graphql.enable()
 
@@ -61,7 +61,7 @@ describe('GraphQL', () => {
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
       expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
-      expect(graphqlStartResolve.hasSubscribers).to.be.true
+      expect(startGraphqlResolve.hasSubscribers).to.be.true
     })
   })
 
@@ -73,7 +73,7 @@ describe('GraphQL', () => {
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
       expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
-      expect(graphqlStartResolve.hasSubscribers).to.be.true
+      expect(startGraphqlResolve.hasSubscribers).to.be.true
 
       graphql.disable()
 
@@ -81,7 +81,7 @@ describe('GraphQL', () => {
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
       expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
-      expect(graphqlStartResolve.hasSubscribers).to.be.false
+      expect(startGraphqlResolve.hasSubscribers).to.be.false
     })
   })
 
@@ -99,41 +99,49 @@ describe('GraphQL', () => {
     })
 
     it('Should not call waf if resolvers is undefined', () => {
-      const resolvers = undefined
+      const context = {
+        resolver: undefined
+      }
 
-      graphqlStartResolve.publish({ resolvers })
+      startGraphqlResolve.publish({ context })
 
       expect(waf.run).not.to.have.been.called
     })
 
     it('Should not call waf if resolvers is not an object', () => {
-      const resolvers = ''
+      const context = {
+        resolver: ''
+      }
 
-      graphqlStartResolve.publish({ resolvers })
+      startGraphqlResolve.publish({ context })
 
       expect(waf.run).not.to.have.been.called
     })
 
     it('Should not call waf if req is unavailable', () => {
-      const resolvers = { user: [ { id: '1234' } ] }
-
-      graphqlStartResolve.publish({ resolvers })
-
-      expect(waf.run).not.to.have.been.called
-    })
-
-    it('Should call waf if resolvers is well formatted', () => {
       const context = {
         resolvers: {
           user: [ { id: '1234' } ]
         }
       }
 
-      graphqlStartResolve.publish({ context })
+      startGraphqlResolve.publish({ context })
+
+      expect(waf.run).not.to.have.been.called
+    })
+
+    it('Should call waf if resolvers is well formatted', () => {
+      const context = {
+        resolver: {
+          user: [ { id: '1234' } ]
+        }
+      }
+
+      startGraphqlResolve.publish({ context })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolvers
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
         },
         {}
       )
@@ -159,7 +167,7 @@ describe('GraphQL', () => {
 
     it('Should not call abort', () => {
       const context = {
-        resolvers: {
+        resolver: {
           user: [ { id: '1234' } ]
         },
         abortController: {
@@ -171,11 +179,11 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns([''])
 
-      graphqlStartResolve.publish({ context })
+      startGraphqlResolve.publish({ context })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolvers
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
         },
         {}
       )
@@ -188,7 +196,7 @@ describe('GraphQL', () => {
 
     it('Should call abort', () => {
       const context = {
-        resolvers: {
+        resolver: {
           user: [ { id: '1234' } ]
         },
         abortController: {
@@ -201,11 +209,11 @@ describe('GraphQL', () => {
       sinon.stub(waf, 'run').returns(['block'])
       sinon.stub(web, 'root').returns({})
 
-      graphqlStartResolve.publish({ context })
+      startGraphqlResolve.publish({ context })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolvers
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
         },
         {}
       )

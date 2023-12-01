@@ -211,9 +211,6 @@ function wrapResolve (resolve) {
     const field = assertField(context, info, args)
 
     if (context.abortController?.signal.aborted) {
-      // TODO: currently throwing generic error in order to stop the operation execution flow. Try
-      // to find another way (returning null?)
-      // throw new Error('aborted')
       return []
     }
 
@@ -383,8 +380,8 @@ function addResolver (context, info, args) {
   }
 
   if (Object.keys(resolverInfo).length) {
-    context.resolvers = {}
-    context.resolvers[info.fieldName] = resolverInfo
+    context.resolver = {}
+    context.resolver[info.fieldName] = resolverInfo
   }
 }
 

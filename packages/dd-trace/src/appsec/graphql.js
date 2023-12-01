@@ -6,33 +6,23 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const web = require('../plugins/util/web')
 const {
-  graphqlStartResolve,
+  startGraphqlResolve,
   startGraphqlMiddleware,
   endGraphqlMiddleware,
   startExecuteHTTPGraphQLRequest,
   startGraphqlWrite
 } = require('./channels')
 
-/** TODO
- *    - Instrumentate @apollo/server to:
- *      - Mark a request as graphql endpoint (done)
- *      - Detect graphql endpoints and use it to block even when the request is blocked on http level (done)
- *      - When the graphql detects an rule to block, replace the response with the graphql blocking response (done)
- *    - Instrumentate graphql to:
- *      - monitor threats (done)
- *      - mark the request as blocked somehow
- */
-
 const graphqlRequestData = new WeakMap()
 
 function enable () {
   enableApollo()
-  graphqlStartResolve.subscribe(onGraphqlStartResolve)
+  enableGraphql()
 }
 
 function disable () {
   disableApollo()
-  if (graphqlStartResolve.hasSubscribers) graphqlStartResolve.unsubscribe(onGraphqlStartResolve)
+  disableGraphql()
 }
 
 function onGraphqlStartResolve ({ info, context }) {
@@ -40,11 +30,11 @@ function onGraphqlStartResolve ({ info, context }) {
 
   if (!req) return
 
-  const resolvers = context?.resolvers
+  const resolver = context?.resolver
 
-  if (!resolvers || typeof resolvers !== 'object') return
+  if (!resolver || typeof resolver !== 'object') return
 
-  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolvers }, req)
+  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolver }, req)
   if (actions?.includes('block')) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
@@ -112,6 +102,14 @@ function disableApollo () {
   if (startExecuteHTTPGraphQLRequest.hasSubscribers) startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
   if (endGraphqlMiddleware.hasSubscribers) endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
   if (startGraphqlWrite.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
+}
+
+function enableGraphql () {
+  startGraphqlResolve.subscribe(onGraphqlStartResolve)
+}
+
+function disableGraphql () {
+  if (startGraphqlResolve.hasSubscribers) startGraphqlResolve.unsubscribe(onGraphqlStartResolve)
 }
 
 module.exports = {
