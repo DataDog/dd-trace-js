@@ -950,7 +950,7 @@ declare namespace plugins {
      *
      * @default false
      */
-    enableTracingWithAmazonSignature?: boolean;
+    enablePropagationWithAmazonHeaders?: boolean;
   }
 
   /** @hidden */

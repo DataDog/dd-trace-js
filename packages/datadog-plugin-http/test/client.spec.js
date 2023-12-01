@@ -1052,12 +1052,12 @@ describe('Plugin', () => {
         })
       })
 
-      describe('with config enableTracingWithAmazonSignature enabled', () => {
+      describe('with config enablePropagationWithAmazonHeaders enabled', () => {
         let config
 
         beforeEach(() => {
           config = {
-            enableTracingWithAmazonSignature: true
+            enablePropagationWithAmazonHeaders: true
           }
 
           return agent.load('http', config)

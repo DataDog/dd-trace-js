@@ -72,7 +72,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 
   shouldInjectTraceHeaders (options, uri) {
-    if (hasAmazonSignature(options) && !this.config.enableTracingWithAmazonSignature) {
+    if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
       return false
     }
 

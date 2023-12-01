@@ -293,7 +293,7 @@ tracer.use('http', {
   client: httpClientOptions
 });
 tracer.use('http', {
-  enableTracingWithAmazonSignature: true
+  enablePropagationWithAmazonHeaders: true
 });
 tracer.use('http2');
 tracer.use('http2', {
