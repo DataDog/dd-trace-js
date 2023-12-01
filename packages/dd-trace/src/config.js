@@ -144,7 +144,7 @@ class Config {
     const DD_DATA_STREAMS_ENABLED = coalesce(
       options.dsmEnabled,
       process.env.DD_DATA_STREAMS_ENABLED,
-      false
+      true
     )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
