@@ -121,9 +121,9 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: yarn test:plugins
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: yarn test:plugins
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v2
