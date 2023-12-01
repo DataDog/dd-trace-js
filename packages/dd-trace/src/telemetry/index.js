@@ -292,7 +292,7 @@ function updateConfig (changes, config) {
     origin: change.origin
   }))
 
-  const { reqType, payload } = createPayload('app-integrations-change', { configuration })
+  const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
