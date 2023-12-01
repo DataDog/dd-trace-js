@@ -366,6 +366,7 @@ versions.forEach(version => {
             })
             it('does not report code coverage if disabled by the API', (done) => {
               receiver.setSettings({
+                itr_enabled: false,
                 code_coverage: false,
                 tests_skipping: false
               })
@@ -382,6 +383,7 @@ versions.forEach(version => {
                 assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
                 assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
                 assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
+                assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
                 const testModule = payload.events.find(event => event.type === 'test_module_end').content
                 assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
                 assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
@@ -514,6 +516,7 @@ versions.forEach(version => {
             })
             it('does not skip tests if test skipping is disabled by the API', (done) => {
               receiver.setSettings({
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: false
               })
@@ -551,6 +554,7 @@ versions.forEach(version => {
             })
             it('does not skip suites if suite is marked as unskippable', (done) => {
               receiver.setSettings({
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: true
               })
@@ -618,6 +622,7 @@ versions.forEach(version => {
             })
             it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
               receiver.setSettings({
+                itr_enabled: true,
                 code_coverage: true,
                 tests_skipping: true
               })
