@@ -124,7 +124,8 @@ module.exports = class CiPlugin extends Plugin {
       osArchitecture,
       runtimeName,
       runtimeVersion,
-      branch
+      branch,
+      testLevel: 'suite'
     }
   }
 
