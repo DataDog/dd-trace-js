@@ -98,9 +98,8 @@ class HttpClientPlugin extends ClientPlugin {
     span.finish()
   }
 
-  error ({ span, error, agent = {}, reqTimeout }) {
+  error ({ span, error, http, args, customRequestTimeout }) {
     if (!span) return
-    // explicit error is set
     if (error) {
       span.addTags({
         [ERROR_TYPE]: error.name,
@@ -108,9 +107,11 @@ class HttpClientPlugin extends ClientPlugin {
         [ERROR_STACK]: error.stack
       })
     } else {
-      // check default agent timeout settings, don't tag as error
-      // Node 20 default 5s timeout does not provide error - sent as undefined
-      if (!reqTimeout && agent.timeout && !agent.customAgent) return
+      // conditions for no error:
+      // 1. not using a custom agent instance (args.options.agent is undefined or false)
+      // 2. no custom request timeout
+      // 3. for a default agent, a timeout must be specified (Node >=20 specific)
+      if (!args.options.agent && !customRequestTimeout && http.globalAgent.options.timeout) return
 
       span.setTag('error', 1)
     }

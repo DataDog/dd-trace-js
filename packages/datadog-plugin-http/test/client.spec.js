@@ -806,21 +806,21 @@ describe('Plugin', () => {
         })
 
         if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error', done => {
+          it('should not record default HTTP agent timeout as error with Node 20', done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
               await new Promise(resolve => {
                 setTimeout(resolve, 6 * 1000) // over 5s default
               })
-              res.status(200).send() // mock success
+              res.status(200).send()
             })
 
             getPort().then(port => {
               agent
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('error', 0)
-                  // expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                  // expect(traces[0][0].meta).to.have.property('http.status_code', '200') - can this be set?
                 })
                 .then(done)
                 .catch(done)
@@ -831,6 +831,71 @@ describe('Plugin', () => {
                 })
 
                 req.on('error', () => {})
+
+                req.end()
+              })
+            })
+          }).timeout(10000)
+
+          it('should record error if custom Agent timeout is used with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000)
+              })
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 1)
+                })
+                .then(done)
+                .catch(done)
+
+              const options = {
+                agent: new http.Agent({ keepAlive: true, timeout: 5000 }) // custom agent with same default timeout
+              }
+
+              appListener = server(app, port, async () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, options, res => {
+                  res.on('data', () => { })
+                })
+
+                req.on('error', () => {})
+
+                req.end()
+              })
+            })
+          }).timeout(10000)
+
+          it('should record error if req.setTimeout is used with Node 20', done => {
+            const app = express()
+
+            app.get('/user', async (req, res) => {
+              await new Promise(resolve => {
+                setTimeout(resolve, 6 * 1000)
+              })
+              res.status(200).send()
+            })
+
+            getPort().then(port => {
+              agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 1)
+                })
+                .then(done)
+                .catch(done)
+
+              appListener = server(app, port, async () => {
+                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+                  res.on('data', () => { })
+                })
+
+                req.on('error', () => {})
+                req.setTimeout(5000)
 
                 req.end()
               })
