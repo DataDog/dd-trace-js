@@ -159,7 +159,7 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   responseExtractDSMContext (params, context, span) {
-    if (this.config.dsmEnabled && context && context.CONTEXT_PROPAGATION_KEY) {
+    if (this.config.dsmEnabled && context && context[CONTEXT_PROPAGATION_KEY]) {
       const payloadSize = getHeadersSize(params)
       const queue = params.QueueUrl.split('/').pop()
       this.tracer.decodeDataStreamsContext(Buffer.from(context[CONTEXT_PROPAGATION_KEY]))
@@ -181,7 +181,7 @@ class Sqs extends BaseAwsSdkPlugin {
         return
       }
       const ddInfo = {}
-      if (this.config.dsmEnbled) {
+      if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(request.params)
         const queue = request.params.QueueUrl.split('/').pop()
         const dataStreamsContext = this.tracer
