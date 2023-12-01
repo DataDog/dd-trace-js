@@ -51,6 +51,7 @@ describe('config', () => {
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
+    expect(config.cpuProfilingEnabled).false
   })
 
   it('should support configuration options', () => {
@@ -130,7 +131,8 @@ describe('config', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
     }
     const options = {
       logger: nullLogger
@@ -143,6 +145,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).true
     expect(config.v8ProfilerBugWorkaroundEnabled).false
+    expect(config.cpuProfilingEnabled).true
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {

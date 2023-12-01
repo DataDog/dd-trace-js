@@ -55,7 +55,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 
@@ -73,7 +74,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 
@@ -147,7 +149,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: mapper,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 })
