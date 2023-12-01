@@ -1,11 +1,12 @@
 'use strict'
 
 const axios = require('axios')
+const path = require('path')
+const fs = require('fs')
 const { graphqlJson, json } = require('../../src/appsec/blocked_templates')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const path = require('path')
 
 const schema = `
 directive @case(format: String) on FIELD
@@ -140,6 +141,36 @@ function graphqlCommonTests (config) {
       } catch (e) {
         expect(e.response.status).to.be.equals(403)
         expect(e.response.data).to.be.deep.equal(JSON.parse(json))
+      }
+    })
+  })
+
+  describe('Block with custom content', () => {
+    const blockedTemplateGraphql = path.join(__dirname, 'graphql.block.json')
+    const customGraphqlJson = fs.readFileSync(blockedTemplateGraphql)
+
+    beforeEach(() => {
+      appsec.enable(new Config({
+        appsec: {
+          enabled: true,
+          rules: path.join(__dirname, 'graphql-rules.json'),
+          blockedTemplateGraphql
+        }
+      }))
+    })
+
+    afterEach(() => {
+      appsec.disable()
+    })
+
+    it('Should block an attack on variable', async () => {
+      try {
+        await makeGraphqlRequest(config.port, { title: 'testattack' }, 'lower')
+
+        return Promise.reject(new Error('Request should not return 200'))
+      } catch (e) {
+        expect(e.response.status).to.be.equals(403)
+        expect(e.response.data).to.be.deep.equal(JSON.parse(customGraphqlJson))
       }
     })
   })

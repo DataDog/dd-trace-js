@@ -359,7 +359,7 @@ function addResolver (context, info, args) {
   const directives = info.fieldNodes[0].directives
   for (const directive of directives) {
     const argList = {}
-    for (const argument of directive.arguments) {
+    for (const argument of directive['arguments']) {
       const arg = {}
       arg[argument.name.value] = argument.value.value
       Object.assign(argList, arg)
