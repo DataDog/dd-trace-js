@@ -98,7 +98,7 @@ class HttpClientPlugin extends ClientPlugin {
     span.finish()
   }
 
-  error ({ span, error, http, args, customRequestTimeout }) {
+  error ({ span, error, args, customRequestTimeout }) {
     if (!span) return
     if (error) {
       span.addTags({
