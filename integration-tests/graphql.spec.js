@@ -92,7 +92,7 @@ describe('graphql', () => {
               parameters: [
                 {
                   address: 'graphql.server.resolver',
-                  key_path: ['images', '0', 'category'],
+                  key_path: ['images', 'category'],
                   value: 'testattack',
                   highlight: ['testattack']
                 }
