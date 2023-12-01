@@ -50,6 +50,19 @@ function processExitPromise (proc, timeout, expectBadExit = false) {
   })
 }
 
+async function getLatestProfile (cwd, pattern) {
+  const dirEntries = await fs.readdir(cwd)
+  // Get the latest file matching the pattern
+  const pprofEntries = dirEntries.filter(name => pattern.test(name))
+  assert.isTrue(pprofEntries.length > 0, `No file matching pattern ${pattern} found in ${cwd}`)
+  const pprofEntry = pprofEntries
+    .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
+    .reduce((a, b) => a.modified > b.modified ? a : b)
+    .name
+  const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
+  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
+  return Profile.decode(pprofUnzipped)
+}
 describe('profiler', () => {
   let agent
   let proc
@@ -90,17 +103,7 @@ describe('profiler', () => {
     await processExitPromise(proc, 5000)
     const procEnd = BigInt(Date.now() * 1000000)
 
-    const dirEntries = await fs.readdir(cwd)
-    // Get the latest wall_*.pprof file
-    const pprofEntries = dirEntries.filter(name => /^wall_.+\.pprof$/.test(name))
-    assert.isTrue(pprofEntries.length > 0, `No wall_*.pprof file found in ${cwd}`)
-    const pprofEntry = pprofEntries
-      .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
-      .reduce((a, b) => a.modified > b.modified ? a : b)
-      .name
-    const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
-    const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-    const prof = Profile.decode(pprofUnzipped)
+    const prof = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
     // We check the profile for following invariants:
     // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
@@ -172,6 +175,76 @@ describe('profiler', () => {
     assert.equal(spans.size, 9)
     assert.equal(rootSpans.size, 3)
     assert.equal(endpoints.size, 3)
+  })
+
+  it('dns timeline events work', async () => {
+    const procStart = BigInt(Date.now() * 1000000)
+    const proc = fork(path.join(cwd, 'profiler/dnstest.js'), {
+      cwd,
+      env: {
+        DD_PROFILING_PROFILERS: 'wall',
+        DD_PROFILING_EXPORTERS: 'file',
+        DD_PROFILING_ENABLED: 1,
+        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+      }
+    })
+
+    await processExitPromise(proc, 5000)
+    const procEnd = BigInt(Date.now() * 1000000)
+
+    const prof = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+    assert.isAtLeast(prof.sample.length, 5)
+
+    const strings = prof.stringTable
+    const tsKey = strings.dedup('end_timestamp_ns')
+    const eventKey = strings.dedup('event')
+    const hostKey = strings.dedup('host')
+    const addressKey = strings.dedup('address')
+    const threadNameKey = strings.dedup('thread name')
+    const nameKey = strings.dedup('operation name')
+    const threadNameValue = strings.dedup('Main DNS')
+    const dnsEventValue = strings.dedup('dns')
+    const dnsEvents = []
+    for (const sample of prof.sample) {
+      let ts, event, host, address, name, threadName
+      for (const label of sample.label) {
+        switch (label.key) {
+          case tsKey: ts = label.num; break
+          case nameKey: name = label.str; break
+          case eventKey: event = label.str; break
+          case hostKey: host = label.str; break
+          case addressKey: address = label.str; break
+          case threadNameKey: threadName = label.str; break
+          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
+        }
+      }
+      // Timestamp must be defined and be between process start and end time
+      assert.isDefined(ts)
+      assert.isTrue(ts <= procEnd)
+      assert.isTrue(ts >= procStart)
+      // Gather only DNS events; ignore sporadic GC events
+      if (event === dnsEventValue) {
+        // Thread name must be defined and exactly equal "Main DNS"
+        assert.equal(threadName, threadNameValue)
+        assert.isDefined(name)
+        // Exactly one of these is defined
+        assert.isTrue(!!address !== !!host)
+        const ev = { name: strings.strings[name] }
+        if (address) {
+          ev.address = strings.strings[address]
+        } else {
+          ev.host = strings.strings[host]
+        }
+        dnsEvents.push(ev)
+      }
+    }
+    assert.sameDeepMembers(dnsEvents, [
+      { name: 'lookup', host: 'example.org' },
+      { name: 'lookup', host: 'example.com' },
+      { name: 'lookup', host: 'datadoghq.com' },
+      { name: 'queryA', host: 'datadoghq.com' },
+      { name: 'lookupService', address: '13.224.103.60:80' }
+    ])
   })
 
   context('shutdown', () => {
