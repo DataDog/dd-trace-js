@@ -3,6 +3,7 @@
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
+const { isMainThread, threadId } = require('worker_threads')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -67,7 +68,7 @@ class Profiler extends EventEmitter {
           mapper,
           nearOOMCallback: this._nearOOMExport.bind(this)
         })
-        this._logger.debug(`Started ${profiler.type} profiler`)
+        this._logger.debug(`Started ${profiler.type} profiler in thread ${threadId}`)
       }
 
       this._capture(this._timeoutInterval)
