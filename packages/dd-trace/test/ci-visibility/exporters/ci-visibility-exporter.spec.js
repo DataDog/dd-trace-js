@@ -119,6 +119,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                require_git: false,
                 code_coverage: true,
                 tests_skipping: true
               }
@@ -133,7 +134,7 @@ describe('CI Visibility Exporter', () => {
           }
         })
 
-        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+        ciVisibilityExporter.getItrConfiguration({}, () => {
           expect(scope.isDone()).to.be.true
           expect(customConfig).to.eql({
             'my_custom_config': 'my_custom_config_value'
@@ -148,6 +149,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                require_git: false,
                 code_coverage: true,
                 tests_skipping: true
               }
@@ -158,6 +160,7 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
           expect(itrConfig).to.eql({
+            requireGit: false,
             isCodeCoverageEnabled: true,
             isSuitesSkippingEnabled: true
           })
@@ -173,6 +176,7 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
+                require_git: false,
                 code_coverage: true,
                 tests_skipping: true
               }
@@ -187,6 +191,87 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      })
+      it('will retry ITR configuration request if require_git is true', (done) => {
+        const TIME_TO_UPLOAD_GIT = 50
+        let hasUploadedGit = false
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port, isIntelligentTestRunnerEnabled: true
+        })
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        expect(ciVisibilityExporter.shouldRequestItrConfiguration()).to.be.true
+        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+          expect(scope.isDone()).to.be.true
+          expect(err).to.be.null
+          // the second request returns require_git: false
+          expect(itrConfig.requireGit).to.be.false
+          expect(hasUploadedGit).to.be.true
+          done()
+        })
+        // Git upload finishes after a bit
+        setTimeout(() => {
+          ciVisibilityExporter._resolveGit()
+          hasUploadedGit = true
+        }, TIME_TO_UPLOAD_GIT)
+      })
+      it('will retry ITR configuration request immediately if git upload is already finished', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true
+              }
+            }
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port, isIntelligentTestRunnerEnabled: true
+        })
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        expect(ciVisibilityExporter.shouldRequestItrConfiguration()).to.be.true
+        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+          expect(scope.isDone()).to.be.true
+          expect(err).to.be.null
+          // the second request returns require_git: false
+          expect(itrConfig.requireGit).to.be.false
+          done()
+        })
+        ciVisibilityExporter._resolveGit()
       })
     })
   })
