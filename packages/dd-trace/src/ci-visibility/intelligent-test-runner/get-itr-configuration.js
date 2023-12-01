@@ -15,6 +15,7 @@ function getItrConfiguration ({
   runtimeName,
   runtimeVersion,
   branch,
+  testLevel = 'suite',
   custom
 }, done) {
   const options = {
@@ -23,7 +24,8 @@ function getItrConfiguration ({
     headers: {
       'Content-Type': 'application/json'
     },
-    url
+    url,
+    timeout: 20000
   }
 
   if (isEvpProxy) {
@@ -42,7 +44,7 @@ function getItrConfiguration ({
       id: id().toString(10),
       type: 'ci_app_test_service_libraries_settings',
       attributes: {
-        test_level: 'suite',
+        test_level: testLevel,
         configurations: {
           'os.platform': osPlatform,
           'os.version': osVersion,
@@ -70,12 +72,13 @@ function getItrConfiguration ({
             attributes: {
               code_coverage: isCodeCoverageEnabled,
               tests_skipping: isSuitesSkippingEnabled,
-              itr_enabled: isItrEnabled
+              itr_enabled: isItrEnabled,
+              require_git: requireGit
             }
           }
         } = JSON.parse(res)
 
-        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled }
+        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
