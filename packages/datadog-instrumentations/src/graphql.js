@@ -24,7 +24,6 @@ const finishExecuteCh = channel('apm:graphql:execute:finish')
 const executeErrorCh = channel('apm:graphql:execute:error')
 
 // resolve channels
-const preStartResolveCh = channel('apm:graphql:resolve:prestart')
 const startResolveCh = channel('apm:graphql:resolve:start')
 const finishResolveCh = channel('apm:graphql:resolve:finish')
 const updateFieldCh = channel('apm:graphql:resolve:updateField')
@@ -279,15 +278,6 @@ function assertField (context, info, args) {
       addResolver(context, info, args)
 
       childResource.runInAsyncScope(() => {
-        preStartResolveCh.publish({
-          info,
-          context
-        })
-
-        if (context.abortController?.signal.aborted) {
-          return field
-        }
-
         startResolveCh.publish({
           info,
           context
@@ -366,7 +356,7 @@ function addResolver (context, info, args) {
   const directives = info.fieldNodes[0].directives
   for (const directive of directives) {
     const argList = {}
-    for (const argument of directive.arguments) {
+    for (const argument of directive['arguments']) {
       const arg = {}
       arg[argument.name.value] = argument.value.value
       Object.assign(argList, arg)

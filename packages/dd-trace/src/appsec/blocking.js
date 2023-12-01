@@ -8,7 +8,7 @@ const detectedCustomEndpoints = {}
 
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
-const templateGraphqlJson = blockedTemplates.graphqlJson
+let templateGraphqlJson = blockedTemplates.graphqlJson
 let blockingConfiguration
 
 const customBlockingTypes = {
@@ -157,12 +157,20 @@ function getBlockingData (req, customType, rootSpan) {
 function setTemplates (config) {
   if (config.appsec.blockedTemplateHtml) {
     templateHtml = config.appsec.blockedTemplateHtml
+  } else {
+    templateHtml = blockedTemplates.html
   }
+
   if (config.appsec.blockedTemplateJson) {
     templateJson = config.appsec.blockedTemplateJson
+  } else {
+    templateGraphqlJson = blockedTemplates.json
   }
+
   if (config.appsec.blockedTemplateGraphql) {
-    templateJson = config.appsec.blockedTemplateGraphql
+    templateGraphqlJson = config.appsec.blockedTemplateGraphql
+  } else {
+    templateGraphqlJson = blockedTemplates.graphqlJson
   }
 }
 
