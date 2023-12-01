@@ -46,7 +46,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
+function getCommitsToUpload ({ url, isEvpProxy, repositoryUrl }, callback) {
   const latestCommits = getLatestCommits()
 
   log.debug(`There were ${latestCommits.length} commits since last month.`)
@@ -89,7 +89,14 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
     } catch (e) {
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    callback(null, commitsToExclude, latestCommits)
+    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
+    const [headCommit] = latestCommits
+    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
+    log.debug(`There are ${commitsToInclude.length} commits to include.`)
+
+    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
+
+    callback(null, { commitsToUpload, headCommit })
   })
 }
 
@@ -150,6 +157,53 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
   })
 }
 
+function generateAndUploadPackFiles ({
+  url,
+  isEvpProxy,
+  commitsToUpload,
+  repositoryUrl,
+  headCommit
+}, callback) {
+  log.debug(`There are ${commitsToUpload.length} commits to upload`)
+
+  const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+
+  log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
+
+  if (!packFilesToUpload.length) {
+    return callback(new Error('Failed to generate packfiles'))
+  }
+
+  let packFileIndex = 0
+  // This uploads packfiles sequentially
+  const uploadPackFileCallback = (err) => {
+    if (err || packFileIndex === packFilesToUpload.length) {
+      return callback(err)
+    }
+    return uploadPackFile(
+      {
+        packFileToUpload: packFilesToUpload[packFileIndex++],
+        url,
+        isEvpProxy,
+        repositoryUrl,
+        headCommit
+      },
+      uploadPackFileCallback
+    )
+  }
+
+  uploadPackFile(
+    {
+      packFileToUpload: packFilesToUpload[packFileIndex++],
+      url,
+      isEvpProxy,
+      repositoryUrl,
+      headCommit
+    },
+    uploadPackFileCallback
+  )
+}
+
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
@@ -165,65 +219,27 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  if (isShallowRepository()) {
-    log.debug('It is shallow clone, unshallowing...')
-    unshallowRepository()
-  }
-
-  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, latestCommits) => {
+  const getOnGetCommitsToUpload = (hasCheckedShallow = false) => (err, { commitsToUpload, headCommit }) => {
     if (err) {
       return callback(err)
     }
-    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
-    const [headCommit] = latestCommits
-    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
-    log.debug(`There are ${commitsToInclude.length} commits to include.`)
-
-    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
       return callback(null)
     }
-    log.debug(`There are ${commitsToUpload.length} commits to upload`)
 
-    const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
-
-    log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
-
-    if (!packFilesToUpload.length) {
-      return callback(new Error('Failed to generate packfiles'))
+    if (!hasCheckedShallow && isShallowRepository()) {
+      log.debug('It is shallow clone, unshallowing...')
+      unshallowRepository()
+      // if it's shallow, we need to get the latest commits again after unshallowing
+      getCommitsToUpload({ url, repositoryUrl, isEvpProxy }, getOnGetCommitsToUpload(true))
+    } else {
+      generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
     }
+  }
 
-    let packFileIndex = 0
-    // This uploads packfiles sequentially
-    const uploadPackFileCallback = (err) => {
-      if (err || packFileIndex === packFilesToUpload.length) {
-        return callback(err)
-      }
-      return uploadPackFile(
-        {
-          packFileToUpload: packFilesToUpload[packFileIndex++],
-          url,
-          isEvpProxy,
-          repositoryUrl,
-          headCommit
-        },
-        uploadPackFileCallback
-      )
-    }
-
-    uploadPackFile(
-      {
-        packFileToUpload: packFilesToUpload[packFileIndex++],
-        url,
-        isEvpProxy,
-        repositoryUrl,
-        headCommit
-      },
-      uploadPackFileCallback
-    )
-  })
+  getCommitsToUpload({ url, repositoryUrl, isEvpProxy }, getOnGetCommitsToUpload(false))
 }
 
 module.exports = {
