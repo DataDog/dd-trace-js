@@ -108,10 +108,9 @@ class HttpClientPlugin extends ClientPlugin {
       })
     } else {
       // conditions for no error:
-      // 1. not using a custom agent instance (args.options.agent is undefined or false)
-      // 2. no custom request timeout
-      // 3. for a default agent, a timeout must be specified (Node >=20 specific)
-      if (!args.options.agent && !customRequestTimeout && http.globalAgent.options.timeout) return
+      // 1. not using a custom agent instance with custom timeout specified
+      // 2. no invocation of `req.setTimeout`
+      if (!args.options.agent?.options.timeout && !customRequestTimeout) return
 
       span.setTag('error', 1)
     }

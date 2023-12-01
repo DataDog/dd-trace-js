@@ -820,7 +820,6 @@ describe('Plugin', () => {
               agent
                 .use(traces => {
                   expect(traces[0][0]).to.have.property('error', 0)
-                  // expect(traces[0][0].meta).to.have.property('http.status_code', '200') - can this be set?
                 })
                 .then(done)
                 .catch(done)
@@ -895,7 +894,7 @@ describe('Plugin', () => {
                 })
 
                 req.on('error', () => {})
-                req.setTimeout(5000)
+                req.setTimeout(5000) // match default timeout
 
                 req.end()
               })
