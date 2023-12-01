@@ -7,6 +7,7 @@ const {
   resolvers,
   graphqlCommonTests
 } = require('./graphq.test-utils')
+
 withVersions('apollo-server-core', 'express', '>=4', expressVersion => {
   withVersions('apollo-server-core', 'apollo-server-express', apolloServerExpressVersion => {
     const config = {}
