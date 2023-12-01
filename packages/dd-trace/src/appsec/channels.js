@@ -13,5 +13,6 @@ module.exports = {
   queryParser: dc.channel('datadog:query:read:finish'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),
-  nextQueryParsed: dc.channel('apm:next:query-parsed')
+  nextQueryParsed: dc.channel('apm:next:query-parsed'),
+  responseEnd: dc.channel('apm:http:server:response:end:start')
 }

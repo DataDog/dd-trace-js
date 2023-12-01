@@ -12,7 +12,8 @@ const {
   passportVerify,
   queryParser,
   nextBodyParsed,
-  nextQueryParsed
+  nextQueryParsed,
+  responseEnd
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -58,6 +59,7 @@ function enable (_config) {
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     graphqlFinishExecute.subscribe(onGraphqlFinishExecute)
+    responseEnd.subscribe(onResponseEnd)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -108,14 +110,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
-  // TODO: this doesn't support headers sent with res.writeHead()
-  const responseHeaders = Object.assign({}, res.getHeaders())
-  delete responseHeaders['set-cookie']
-
-  const payload = {
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + res.statusCode,
-    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
-  }
+  const payload = {}
 
   // we need to keep this to support other body parsers
   // TODO: no need to analyze it if it was already done by the body-parser hook
@@ -219,6 +214,21 @@ function onGraphqlFinishExecute ({ context }) {
   waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: resolvers }, req)
 }
 
+function onResponseEnd ({ req, res, abortController, statusCode, responseHeaders }) {
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  responseHeaders = Object.assign({}, responseHeaders)
+  delete responseHeaders['set-cookie']
+
+  const results = waf.run({
+    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
+  }, req)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
@@ -245,6 +255,7 @@ function disable () {
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (responseEnd.hasSubscribers) responseEnd.unsubscribe(onResponseEnd)
 }
 
 module.exports = {
