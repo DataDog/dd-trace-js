@@ -15,6 +15,7 @@ function getItrConfiguration ({
   runtimeName,
   runtimeVersion,
   branch,
+  testLevel = 'suite',
   custom
 }, done) {
   const options = {
@@ -23,7 +24,8 @@ function getItrConfiguration ({
     headers: {
       'Content-Type': 'application/json'
     },
-    url
+    url,
+    timeout: 20000
   }
 
   if (isEvpProxy) {
@@ -42,7 +44,7 @@ function getItrConfiguration ({
       id: id().toString(10),
       type: 'ci_app_test_service_libraries_settings',
       attributes: {
-        test_level: 'suite',
+        test_level: testLevel,
         configurations: {
           'os.platform': osPlatform,
           'os.version': osVersion,
@@ -67,25 +69,29 @@ function getItrConfiguration ({
       try {
         const {
           data: {
-            attributes
+            attributes: {
+              code_coverage: isCodeCoverageEnabled,
+              tests_skipping: isSuitesSkippingEnabled,
+              itr_enabled: isItrEnabled,
+              require_git: requireGit
+            }
           }
         } = JSON.parse(res)
 
-        let isCodeCoverageEnabled = attributes.code_coverage
-        let isSuitesSkippingEnabled = attributes.tests_skipping
+        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
 
-        log.debug(() => `Remote settings: ${JSON.stringify({ isCodeCoverageEnabled, isSuitesSkippingEnabled })}`)
+        log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
-          isCodeCoverageEnabled = true
+          settings.isCodeCoverageEnabled = true
           log.debug(() => 'Dangerously set code coverage to true')
         }
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
-          isSuitesSkippingEnabled = true
+          settings.isSuitesSkippingEnabled = true
           log.debug(() => 'Dangerously set test skipping to true')
         }
 
-        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled })
+        done(null, settings)
       } catch (err) {
         done(err)
       }

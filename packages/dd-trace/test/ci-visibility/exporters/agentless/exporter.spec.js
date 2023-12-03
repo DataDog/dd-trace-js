@@ -41,6 +41,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -66,6 +67,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -96,6 +98,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -118,6 +121,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -141,6 +145,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
