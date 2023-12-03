@@ -177,90 +177,91 @@ describe('telemetry', () => {
   })
 })
 
-// describe('telemetry app-heartbeat', () => {
-//   let telemetry
-//   const HEARTBEAT_INTERVAL = 60
+describe('telemetry app-heartbeat', () => {
+  let telemetry
+  const HEARTBEAT_INTERVAL = 60
 
-//   before(done => {
-//     storage.run({ noop: true }, () => {
-//       traceAgent = http.createServer(async (req, res) => {
-//         const chunks = []
-//         for await (const chunk of req) {
-//           chunks.push(chunk)
-//         }
-//         req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-//         traceAgent.reqs.push(req)
-//         traceAgent.emit('handled-req')
-//         res.end()
-//       }).listen(0, done)
-//     })
+  before(done => {
+    storage.run({ noop: true }, () => {
+      traceAgent = http.createServer(async (req, res) => {
+        const chunks = []
+        for await (const chunk of req) {
+          chunks.push(chunk)
+        }
+        req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        traceAgent.reqs.push(req)
+        traceAgent.emit('handled-req')
+        res.end()
+      }).listen(0, done)
+    })
 
-//     traceAgent.reqs = []
+    traceAgent.reqs = []
 
-//     telemetry = proxyquire('../../src/telemetry', {
-//       '../exporters/common/docker': {
-//         id () {
-//           return 'test docker id'
-//         }
-//       }
-//     })
+    telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      }
+    })
 
-//     telemetry.start({
-//       telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-//       hostname: 'localhost',
-//       port: traceAgent.address().port,
-//       service: 'test service',
-//       version: '1.2.3-beta4',
-//       env: 'preprod',
-//       tags: {
-//         'runtime-id': '1a2b3c'
-//       },
-//       appsec: { enabled: false },
-//       profiling: { enabled: false }
-//     }, {
-//       _pluginsByName: {}
-//     })
-//   })
+    telemetry.start({
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      hostname: 'localhost',
+      port: traceAgent.address().port,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c'
+      },
+      appsec: { enabled: false },
+      profiling: { enabled: false }
+    }, {
+      _pluginsByName: {}
+    })
+  })
 
-//   after(() => {
-//     setTimeout(() => {
-//       telemetry.stop()
-//       traceAgent.close()
-//     }, HEARTBEAT_INTERVAL * 3)
-//     clearTimeout()
-//   })
+  after(() => {
+    setTimeout(() => {
+      telemetry.stop()
+      traceAgent.close()
+    }, HEARTBEAT_INTERVAL * 3)
+    clearTimeout()
+  })
 
-//   it('should send app-heartbeat at uniform intervals', (done) => {
-//     function getHeartbeatCount () {
-//       let heartbeatCount = 0
-//       const reqCount = traceAgent.reqs.length
-//       for (let i = 0; i < reqCount; i++) {
-//         const req = traceAgent.reqs[i]
-//         if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
-//           heartbeatCount++
-//         }
-//       }
-//       return heartbeatCount
-//     }
+  // flaky, will need to look into this later
+  it.skip('should send app-heartbeat at uniform intervals', (done) => {
+    function getHeartbeatCount () {
+      let heartbeatCount = 0
+      const reqCount = traceAgent.reqs.length
+      for (let i = 0; i < reqCount; i++) {
+        const req = traceAgent.reqs[i]
+        if (req.headers && req.headers['dd-telemetry-request-type'] === 'app-heartbeat') {
+          heartbeatCount++
+        }
+      }
+      return heartbeatCount
+    }
 
-//     // TODO: switch to clock.tick
-//     // for some reason clock.tick works with the other tests but not this one
-//     // Ida Liu spent fruitless hours to investigate ;u;
-//     setTimeout(() => {
-//       expect(getHeartbeatCount()).to.be.equal(0)
-//     }, HEARTBEAT_INTERVAL * 0.75)
-//     setTimeout(() => {
-//       expect(getHeartbeatCount()).to.be.equal(1)
-//     }, HEARTBEAT_INTERVAL * 1.2)
-//     setTimeout(() => {
-//       expect(getHeartbeatCount()).to.be.equal(1)
-//     }, HEARTBEAT_INTERVAL * 1.9)
-//     setTimeout(() => {
-//       expect(getHeartbeatCount()).to.be.equal(2)
-//       done()
-//     }, HEARTBEAT_INTERVAL * 2.1)
-//   })
-// })
+    // TODO: switch to clock.tick
+    // for some reason clock.tick works with the other tests but not this one
+    // Ida Liu spent fruitless hours to investigate ;u;
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(0)
+    }, HEARTBEAT_INTERVAL * 0.75)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.2)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(1)
+    }, HEARTBEAT_INTERVAL * 1.9)
+    setTimeout(() => {
+      expect(getHeartbeatCount()).to.be.equal(2)
+      done()
+    }, HEARTBEAT_INTERVAL * 2.1)
+  })
+})
 
 describe('Telemetry extended heartbeat', () => {
   const HEARTBEAT_INTERVAL = 43200000
