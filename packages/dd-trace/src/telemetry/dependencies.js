@@ -28,8 +28,6 @@ function createBatchPayload (payload) {
       'payload': item.payload
     })
   })
-  // eslint-disable-next-line no-console
-  // console.log(batchPayload)
 
   return batchPayload
 }
