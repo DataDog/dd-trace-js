@@ -39,10 +39,10 @@ const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
 
-class AsmAbortError extends Error {
+class AbortError extends Error {
   constructor (message) {
     super(message)
-    this.name = 'AsmAbortError'
+    this.name = 'AbortError'
   }
 }
 
@@ -232,7 +232,7 @@ function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
   return aR.runInAsyncScope(() => {
     try {
       if (abortController?.signal.aborted) {
-        throw new AsmAbortError('Aborted')
+        throw new AbortError('Aborted')
       }
 
       const result = fn.apply(thisArg, args)
@@ -247,7 +247,7 @@ function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
       }
       return result
     } catch (err) {
-      if (err instanceof AsmAbortError) {
+      if (err instanceof AbortError) {
         cb(null, null)
       } else {
         cb(err)
