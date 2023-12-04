@@ -39,6 +39,13 @@ const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
 
+class AsmAbortError extends Error {
+  constructor (message) {
+    super(message)
+    this.name = 'AsmAbortError'
+  }
+}
+
 function getOperation (document, operationName) {
   if (!document || !Array.isArray(document.definitions)) {
     return
@@ -181,7 +188,7 @@ function wrapExecute (execute) {
 
         contexts.set(contextValue, context)
 
-        return callInAsyncScope(exe, asyncResource, this, arguments, (err, res) => {
+        return callInAsyncScope(exe, asyncResource, this, arguments, context.abortController, (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(context)
 
           const error = err || (res && res.errors && res.errors[0])
@@ -209,11 +216,7 @@ function wrapResolve (resolve) {
 
     const field = assertField(context, info, args)
 
-    if (context.abortController?.signal.aborted) {
-      return []
-    }
-
-    return callInAsyncScope(resolve, field.asyncResource, this, arguments, (err) => {
+    return callInAsyncScope(resolve, field.asyncResource, this, arguments, context.abortController, (err) => {
       updateFieldCh.publish({ field, info, err })
     })
   }
@@ -223,11 +226,15 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, aR, thisArg, args, cb) {
+function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
   cb = cb || (() => {})
 
   return aR.runInAsyncScope(() => {
     try {
+      if (abortController?.signal.aborted) {
+        throw new AsmAbortError('Aborted')
+      }
+
       const result = fn.apply(thisArg, args)
       if (result && typeof result.then === 'function') {
         // bind callback to this scope
@@ -240,7 +247,11 @@ function callInAsyncScope (fn, aR, thisArg, args, cb) {
       }
       return result
     } catch (err) {
-      cb(err)
+      if (err instanceof AsmAbortError) {
+        cb(null, null)
+      } else {
+        cb(err)
+      }
       throw err
     }
   })
