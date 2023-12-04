@@ -10,7 +10,9 @@ const {
   startGraphqlMiddleware,
   endGraphqlMiddleware,
   startExecuteHTTPGraphQLRequest,
-  startGraphqlWrite
+  startGraphqlWrite,
+  startApolloServerCoreRequest,
+  successApolloServerCoreRequest
 } = require('./channels')
 
 const graphqlRequestData = new WeakMap()
@@ -53,6 +55,16 @@ function enterInApolloMiddleware (data) {
   })
 }
 
+function enterInApolloServerCoreRequest () {
+  const req = storage.getStore()?.req
+  if (!req) return
+
+  graphqlRequestData.set(req, {
+    isInGraphqlRequest: true,
+    blocked: false
+  })
+}
+
 function exitFromApolloMiddleware (data) {
   const req = data?.req || storage.getStore()?.req
   const requestData = graphqlRequestData.get(req)
@@ -69,7 +81,7 @@ function enterInApolloRequest () {
   }
 }
 
-function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
+function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
   const req = storage.getStore()?.req
   if (!req) return
 
@@ -91,15 +103,21 @@ function beforeWriteApolloCoreGraphqlResponse ({ abortController, abortData }) {
 function enableApollo () {
   startGraphqlMiddleware.subscribe(enterInApolloMiddleware)
   startExecuteHTTPGraphQLRequest.subscribe(enterInApolloRequest)
+  startApolloServerCoreRequest.subscribe(enterInApolloServerCoreRequest)
   endGraphqlMiddleware.subscribe(exitFromApolloMiddleware)
-  startGraphqlWrite.subscribe(beforeWriteApolloCoreGraphqlResponse)
+  startGraphqlWrite.subscribe(beforeWriteApolloGraphqlResponse)
+  successApolloServerCoreRequest.subscribe(beforeWriteApolloGraphqlResponse)
 }
 
 function disableApollo () {
   if (startGraphqlMiddleware.hasSubscribers) startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
   if (startExecuteHTTPGraphQLRequest.hasSubscribers) startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
+  if (startApolloServerCoreRequest.hasSubscribers) {
+    startApolloServerCoreRequest.unsubscribe(enterInApolloServerCoreRequest)
+  }
   if (endGraphqlMiddleware.hasSubscribers) endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
-  if (startGraphqlWrite.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloCoreGraphqlResponse)
+  if (startGraphqlWrite.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloGraphqlResponse)
+  if (successApolloServerCoreRequest.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloGraphqlResponse)
 }
 
 function enableGraphql () {
