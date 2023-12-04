@@ -79,7 +79,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     }
 
     // call the callback function so that we can track the error and payload
-    cb(error, { 'payload': payload, reqType: reqType })
+    cb(error, { payload, reqType })
   })
 }
 
