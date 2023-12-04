@@ -372,9 +372,7 @@ function getResolverInfo (info, args) {
     }
 
     if (Object.keys(argList).length) {
-      const directiveInfo = {}
-      directiveInfo[directive.name.value] = argList
-      Object.assign(resolverVars, directiveInfo)
+      resolverVars[directive.name.value] = argList
     }
   }
 
