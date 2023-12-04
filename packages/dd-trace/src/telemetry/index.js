@@ -271,7 +271,7 @@ function updateIntegrations () {
     return
   }
 
-  const { reqType, payload } = createPayload('app-integrations-change', { 'integrations': integrations })
+  const { reqType, payload } = createPayload('app-integrations-change', { integrations })
 
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
