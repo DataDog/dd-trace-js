@@ -80,12 +80,12 @@ function getIntegrations () {
 
 function getProducts (config) {
   const products = {
-    'appsec': {
-      'enabled': config.appsec.enabled
+    appsec: {
+      enabled: config.appsec.enabled
     },
-    'profiler': {
-      'version': tracerVersion,
-      'enabled': config.profiling.enabled
+    profiler: {
+      version: tracerVersion,
+      enabled: config.profiling.enabled
     }
   }
   if (errors.profilingError) {
