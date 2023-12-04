@@ -1,5 +1,7 @@
 
 const request = require('../exporters/common/request')
+const log = require('../log')
+let agentTelemetry = true
 
 function getHeaders (config, application, reqType) {
   const headers = {
@@ -58,13 +60,22 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   request(data, options, (error) => {
     if (error && process.env.DD_API_KEY) {
-      const backendHeader = { 'DD-API-KEY': process.env.DD_API_KEY, ...options.headers }
-      const backendOptions = {
-        url: 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry',
-        headers: backendHeader,
-        ...options
+      if (agentTelemetry) {
+        log.info('Agent telemetry failed, started agentless telemetry')
+        agentTelemetry = false
       }
-      request(data, backendOptions, () => {})
+      const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
+      const backendOptions = {
+        ...options,
+        url: 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry',
+        headers: backendHeader
+      }
+      request(data, backendOptions, (error) => { log.error(error) })
+    }
+
+    if (!error && !agentTelemetry) {
+      agentTelemetry = true
+      log.info('Started agent telemetry')
     }
 
     // call the callback function so that we can track the error and payload
