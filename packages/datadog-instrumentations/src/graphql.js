@@ -275,12 +275,11 @@ function assertField (context, info, args) {
       accesses the parent span from the storage unit in its own scope */
       const childResource = new AsyncResource('bound-anonymous-fn')
 
-      addResolver(context, info, args)
-
       childResource.runInAsyncScope(() => {
         startResolveCh.publish({
           info,
-          context
+          context,
+          resolverInfo: getResolverInfo(info, args)
         })
       })
 
@@ -344,13 +343,12 @@ function wrapFieldType (field) {
   wrapFields(unwrappedType)
 }
 
-function addResolver (context, info, args) {
-  context.resolver = null
-
-  const resolverInfo = {}
+function getResolverInfo (info, args) {
+  let resolverInfo = null
+  const resolverVars = {}
 
   if (args && Object.keys(args).length) {
-    Object.assign(resolverInfo, args)
+    Object.assign(resolverVars, args)
   }
 
   const directives = info.fieldNodes[0].directives
@@ -365,14 +363,16 @@ function addResolver (context, info, args) {
     if (Object.keys(argList).length) {
       const directiveInfo = {}
       directiveInfo[directive.name.value] = argList
-      Object.assign(resolverInfo, directiveInfo)
+      Object.assign(resolverVars, directiveInfo)
     }
   }
 
-  if (Object.keys(resolverInfo).length) {
-    context.resolver = {}
-    context.resolver[info.fieldName] = resolverInfo
+  if (Object.keys(resolverVars).length) {
+    resolverInfo = {}
+    resolverInfo[info.fieldName] = resolverVars
   }
+
+  return resolverInfo
 }
 
 function finishResolvers ({ fields }) {

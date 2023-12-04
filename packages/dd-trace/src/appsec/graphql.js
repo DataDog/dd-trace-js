@@ -25,16 +25,14 @@ function disable () {
   disableGraphql()
 }
 
-function onGraphqlStartResolve ({ info, context }) {
+function onGraphqlStartResolve ({ context, resolverInfo }) {
   const req = storage.getStore()?.req
 
   if (!req) return
 
-  const resolver = context?.resolver
+  if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  if (!resolver || typeof resolver !== 'object') return
-
-  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolver }, req)
+  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo }, req)
   if (actions?.includes('block')) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {

@@ -119,29 +119,30 @@ describe('GraphQL', () => {
     })
 
     it('Should not call waf if req is unavailable', () => {
-      const context = {
-        resolvers: {
-          user: [ { id: '1234' } ]
-        }
+      const context = {}
+      const resolverInfo = {
+        user: [ { id: '1234' } ]
       }
 
-      startGraphqlResolve.publish({ context })
+      storage.getStore().req = undefined
+
+      startGraphqlResolve.publish({ context, resolverInfo })
 
       expect(waf.run).not.to.have.been.called
     })
 
     it('Should call waf if resolvers is well formatted', () => {
-      const context = {
-        resolver: {
-          user: [ { id: '1234' } ]
-        }
+      const context = {}
+
+      const resolverInfo = {
+        user: [ { id: '1234' } ]
       }
 
-      startGraphqlResolve.publish({ context })
+      startGraphqlResolve.publish({ context, resolverInfo })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         },
         {}
       )
@@ -167,23 +168,24 @@ describe('GraphQL', () => {
 
     it('Should not call abort', () => {
       const context = {
-        resolver: {
-          user: [ { id: '1234' } ]
-        },
         abortController: {
           abort: sinon.stub()
         }
+      }
+
+      const resolverInfo = {
+        user: [ { id: '1234' } ]
       }
 
       const abortController = {}
 
       sinon.stub(waf, 'run').returns([''])
 
-      startGraphqlResolve.publish({ context })
+      startGraphqlResolve.publish({ context, resolverInfo })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         },
         {}
       )
@@ -196,12 +198,13 @@ describe('GraphQL', () => {
 
     it('Should call abort', () => {
       const context = {
-        resolver: {
-          user: [ { id: '1234' } ]
-        },
         abortController: {
           abort: sinon.stub()
         }
+      }
+
+      const resolverInfo = {
+        user: [ { id: '1234' } ]
       }
 
       const abortController = context.abortController
@@ -209,11 +212,11 @@ describe('GraphQL', () => {
       sinon.stub(waf, 'run').returns(['block'])
       sinon.stub(web, 'root').returns({})
 
-      startGraphqlResolve.publish({ context })
+      startGraphqlResolve.publish({ context, resolverInfo })
 
       expect(waf.run).to.have.been.calledOnceWithExactly(
         {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: context.resolver
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
         },
         {}
       )
