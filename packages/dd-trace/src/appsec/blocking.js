@@ -38,21 +38,6 @@ function getBlockWithRedirectData (rootSpan) {
   return { headers, statusCode }
 }
 
-function blockWithRedirect (res, rootSpan, abortController) {
-  let statusCode = blockingConfiguration.parameters.status_code
-  if (!statusCode || statusCode < 300 || statusCode >= 400) {
-    statusCode = 303
-  }
-
-  res.writeHead(statusCode, {
-    'Location': blockingConfiguration.parameters.location
-  }).end()
-
-  if (abortController) {
-    abortController.abort()
-  }
-}
-
 function getSpecificBlockingData (type) {
   switch (type) {
     case specificBlockingTypes.GRAPHQL:
@@ -117,17 +102,12 @@ function getBlockWithContentData (req, specificType, rootSpan) {
   return { body, statusCode, headers }
 }
 
-function blockWithContent (req, res, rootSpan, abortController, type) {
-  const { body, headers, statusCode } = getBlockWithContentData(req, type, rootSpan)
-
-  res.statusCode = statusCode
-  for (const [headerName, headerValue] of Object.entries(headers)) {
-    res.setHeader(headerName, headerValue)
-  }
-  res.end(body)
-
-  if (abortController) {
-    abortController.abort()
+function getBlockingData (req, specificType, rootSpan) {
+  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
+    blockingConfiguration.parameters.location) {
+    return getBlockWithRedirectData(rootSpan)
+  } else {
+    return getBlockWithContentData(req, specificType, rootSpan)
   }
 }
 
@@ -137,20 +117,12 @@ function block (req, res, rootSpan, abortController, type) {
     return
   }
 
-  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
-      blockingConfiguration.parameters.location) {
-    blockWithRedirect(res, rootSpan, abortController)
-  } else {
-    blockWithContent(req, res, rootSpan, abortController, type)
-  }
-}
+  const { body, headers, statusCode } = getBlockingData(req, type, rootSpan)
 
-function getBlockingData (req, specificType, rootSpan) {
-  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
-    blockingConfiguration.parameters.location) {
-    return getBlockWithRedirectData(rootSpan)
-  } else {
-    return getBlockWithContentData(req, specificType, rootSpan)
+  res.writeHead(statusCode, headers).end(body)
+
+  if (abortController) {
+    abortController.abort()
   }
 }
 
