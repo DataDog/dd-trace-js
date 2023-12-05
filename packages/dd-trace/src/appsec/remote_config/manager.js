@@ -122,7 +122,7 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   poll (cb) {
-    request(this.getPayload(), this.requestOptions, (err, data, statusCode) => {
+    request(this.getPayload(), Object.assign({}, this.requestOptions), (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
 
