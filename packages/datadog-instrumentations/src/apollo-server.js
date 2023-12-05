@@ -13,7 +13,9 @@ const successGraphqlRequest = channel('datadog:apollo:request:success')
 let HeaderMap
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
   return async function executeHTTPGraphQLRequest () {
-    if (!startGraphQLRequest.hasSubscribers) return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
+    if (!HeaderMap || !startGraphQLRequest.hasSubscribers) {
+      return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
+    }
 
     startGraphQLRequest.publish()
 
