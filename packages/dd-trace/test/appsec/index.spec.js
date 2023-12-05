@@ -550,9 +550,10 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }),
-        setHeader: sinon.stub(),
+        writeHead: sinon.stub(),
         end: sinon.stub()
       }
+      res.writeHead.returns(res)
 
       AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
