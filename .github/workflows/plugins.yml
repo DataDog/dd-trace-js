@@ -112,9 +112,26 @@ jobs:
           START_WEB: '0'
         ports:
           - 4566:4566
+      # we have two localstacks since upgrading localstack was causing lambda tests to fail
+      # To-Do: Debug localstack and lambda
+      localstack-lambda:
+        image: localstack/localstack:1.1.0
+        ports:
+          - "127.0.0.1:4567:4567" # Edge
+        env:
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
+          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          AWS_DEFAULT_REGION: us-east-1
+          FORCE_NONINTERACTIVE: 'true'
+          LAMBDA_EXECUTOR: local
+          START_WEB: '0'
+          GATEWAY_LISTEN: 127.0.0.1:4567
+          EDGE_PORT: 4567
+          EDGE_PORT_HTTP: 4567
     env:
       PLUGINS: aws-sdk
-      SERVICES: localstack
+      SERVICES: localstack localstack-lambda
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
