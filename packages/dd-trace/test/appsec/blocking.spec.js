@@ -181,7 +181,6 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
-
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
     })
@@ -200,7 +199,6 @@ describe('blocking', () => {
       setTemplates(config)
 
       block(req, res, rootSpan)
-
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)

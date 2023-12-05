@@ -44,7 +44,6 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   }
 }
 
-// Starts @apollo/server and apollo-server-core related logic
 function enterInApolloMiddleware (data) {
   const req = data?.req || storage.getStore()?.req
   if (!req) return
@@ -98,6 +97,8 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
     abortController.abort()
   }
+
+  graphqlRequestData.delete(req)
 }
 
 function enableApollo () {
