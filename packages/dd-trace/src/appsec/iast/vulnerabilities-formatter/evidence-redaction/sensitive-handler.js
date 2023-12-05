@@ -28,7 +28,9 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, headerSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
+      return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
+    })
   }
 
   isSensibleName (name) {
