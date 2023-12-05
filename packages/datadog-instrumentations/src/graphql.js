@@ -366,9 +366,7 @@ function getResolverInfo (info, args) {
   for (const directive of directives) {
     const argList = {}
     for (const argument of directive['arguments']) {
-      const arg = {}
-      arg[argument.name.value] = argument.value.value
-      Object.assign(argList, arg)
+      argList[argument.name.value] = argument.value.value
     }
 
     if (Object.keys(argList).length) {
@@ -377,8 +375,7 @@ function getResolverInfo (info, args) {
   }
 
   if (Object.keys(resolverVars).length) {
-    resolverInfo = {}
-    resolverInfo[info.fieldName] = resolverVars
+    resolverInfo = { [info.fieldName]: resolverVars }
   }
 
   return resolverInfo
