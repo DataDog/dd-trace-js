@@ -101,7 +101,7 @@ services:
       - DOCKER_HOST=unix:///var/run/docker.sock
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-  localstack-lambda:
+  localstack-legacy:
     image: localstack/localstack:1.1.0
     ports:
       - "127.0.0.1:4567:4567" # Edge
