@@ -10,7 +10,7 @@ const {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload,
+  getCommitsRevList,
   isShallowRepository,
   unshallowRepository
 } = require('../../../plugins/util/git')
@@ -46,11 +46,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToUpload ({ url, isEvpProxy, repositoryUrl }, callback) {
-  const latestCommits = getLatestCommits()
-
-  log.debug(`There were ${latestCommits.length} commits since last month.`)
-
+function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -83,20 +79,23 @@ function getCommitsToUpload ({ url, isEvpProxy, repositoryUrl }, callback) {
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
-    let commitsToExclude
+    let alreadySeenCommits
     try {
-      commitsToExclude = validateCommits(JSON.parse(response).data)
+      alreadySeenCommits = validateCommits(JSON.parse(response).data)
     } catch (e) {
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
-    const [headCommit] = latestCommits
-    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
+    log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
+    const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
     log.debug(`There are ${commitsToInclude.length} commits to include.`)
 
-    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
+    if (!commitsToInclude.length) {
+      return callback(null, [])
+    }
 
-    callback(null, { commitsToUpload, headCommit })
+    const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
+
+    callback(null, commitsToUpload)
   })
 }
 
@@ -219,7 +218,11 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  const getOnGetCommitsToUpload = (hasCheckedShallow = false) => (err, { commitsToUpload, headCommit }) => {
+  const latestCommits = getLatestCommits()
+  log.debug(`There were ${latestCommits.length} commits since last month.`)
+  const [headCommit] = latestCommits
+
+  const getOnGetCommitsToUpload = (hasCheckedShallow = false) => (err, commitsToUpload) => {
     if (err) {
       return callback(err)
     }
@@ -228,18 +231,15 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
       log.debug('No commits to upload')
       return callback(null)
     }
-
-    if (!hasCheckedShallow && isShallowRepository()) {
-      log.debug('It is shallow clone, unshallowing...')
-      unshallowRepository()
-      // if it's shallow, we need to get the latest commits again after unshallowing
-      getCommitsToUpload({ url, repositoryUrl, isEvpProxy }, getOnGetCommitsToUpload(true))
-    } else {
-      generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
+    if (hasCheckedShallow || !isShallowRepository()) {
+      return generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
     }
+    log.debug('It is shallow clone, unshallowing...')
+    unshallowRepository()
+    getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnGetCommitsToUpload(true))
   }
 
-  getCommitsToUpload({ url, repositoryUrl, isEvpProxy }, getOnGetCommitsToUpload(false))
+  getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnGetCommitsToUpload(false))
 }
 
 module.exports = {
