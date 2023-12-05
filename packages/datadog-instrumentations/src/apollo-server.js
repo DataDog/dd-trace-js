@@ -56,7 +56,9 @@ function apolloExpress4Hook (express4) {
         }
 
         startGraphqlMiddleware.publish({ req })
+
         const middlewareResult = originalMiddleware.apply(this, arguments)
+
         endGraphqlMiddleware.publish({ req })
         return middlewareResult
       })

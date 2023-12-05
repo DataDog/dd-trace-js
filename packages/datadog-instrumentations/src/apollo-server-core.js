@@ -20,14 +20,13 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
       return asyncResource.runInAsyncScope(async () => {
         startApolloServerCoreRequest.publish()
 
-        const abortController = new AbortController()
-        const abortData = {}
+        const runHttpQueryResult = await originalRunHttpQuery.apply(this, arguments)
 
-        const httpRunPromise = originalRunHttpQuery.apply(this, arguments)
-
-        const result = await httpRunPromise
         return asyncResource.runInAsyncScope(() => {
+          const abortController = new AbortController()
+          const abortData = {}
           successApolloServerCoreRequest.publish({ abortController, abortData })
+
           if (abortController.signal.aborted) {
             return new Promise((resolve, reject) => {
               // runHttpQuery callbacks are writing the response on resolve/reject.
@@ -38,7 +37,7 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
             })
           }
 
-          return result
+          return runHttpQueryResult
         })
       })
     }
