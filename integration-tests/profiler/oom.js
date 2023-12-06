@@ -1,16 +1,32 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 require('dd-trace').init()
 
-const { Worker, isMainThread } = require('worker_threads')
+const { Worker, isMainThread, threadId } = require('worker_threads')
+
+const nworkers = Number(process.argv[2] || 0)
+const workerMaxOldGenerationSizeMb = process.argv[3]
+const maxCount = process.argv[4] || 12
+const sleepMs = process.argv[5] || 50
+const sizeQuantum = process.argv[6] || 5 * 1024 * 1024
+
+console.log(`${isMainThread ? 'Main thread' : `Worker ${threadId}`}: \
+nworkers=${nworkers} workerMaxOldGenerationSizeMb=${workerMaxOldGenerationSizeMb} \
+maxCount=${maxCount} sleepMs=${sleepMs} sizeQuantum=${sizeQuantum}`)
 
 if (isMainThread) {
-  const nworkers = Number(process.argv[2])
-  const workers = []
-  if (nworkers) {
-    for (let i = 0; i < nworkers; i++) {
-      workers.push(new Worker(__filename))
-    }
+  for (let i = 0; i < nworkers; i++) {
+    const worker = new Worker(__filename,
+      {
+        argv: [0, ...process.argv.slice(3)],
+        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {})
+      })
+    const threadId = worker.threadId
+    worker
+      .on('error', (err) => { console.log(`Worker ${threadId} error: ${err}`) })
+      .on('exit', (code) => { console.log(`Worker ${threadId} exit: ${code}`) })
   }
 }
 
@@ -28,7 +44,4 @@ function foo (size) {
   if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
 }
 
-const maxCount = process.argv[3] || 12
-const sleepMs = process.argv[4] || 50
-
-setTimeout(() => foo(5 * 1024 * 1024), sleepMs)
+setTimeout(() => foo(sizeQuantum), sleepMs)
