@@ -59,15 +59,25 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && process.env.DD_API_KEY) {
+    if (error && process.env.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.info('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
+      // figure out which data center to send to
+      let prefix
+      if (config.site) {
+        if (config.site.endsWith('datad0g.com')) {
+          prefix = 'all-http-intake.logs.'
+        } else if (config.site.endsWith('datadoghq.com')) {
+          prefix = 'instrumentation-telemetry-intake.'
+        }
+      }
+      const backendUrl = 'https://' + prefix + config.site + '/api/v2/apmtelemetry'
       const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
       const backendOptions = {
         ...options,
-        url: 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry',
+        url: backendUrl,
         headers: backendHeader
       }
       request(data, backendOptions, (error) => { log.error(error) })
