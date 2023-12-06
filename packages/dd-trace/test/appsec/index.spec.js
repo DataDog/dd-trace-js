@@ -11,6 +11,7 @@ const {
   graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  paramsParser,
   queryParser,
   passportVerify
 } = require('../../src/appsec/channels')
@@ -132,6 +133,7 @@ describe('AppSec Index', () => {
     it('should subscribe to blockable channels', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
+      expect(paramsParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(graphqlFinishExecute.hasSubscribers).to.be.false
@@ -141,6 +143,7 @@ describe('AppSec Index', () => {
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
       expect(graphqlFinishExecute.hasSubscribers).to.be.true
+      expect(paramsParser.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
     })
@@ -203,6 +206,7 @@ describe('AppSec Index', () => {
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
       expect(graphqlFinishExecute.hasSubscribers).to.be.false
+      expect(paramsParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
     })
@@ -733,7 +737,7 @@ describe('AppSec Index', () => {
       })
 
       it('Should not call waf if req is unavailable', () => {
-        const resolvers = { user: [ { id: '1234' } ] }
+        const resolvers = { user: [{ id: '1234' }] }
         sinon.stub(waf, 'run')
         sinon.stub(storage, 'getStore').returns({})
 
@@ -745,7 +749,7 @@ describe('AppSec Index', () => {
       it('Should call waf if resolvers is well formatted', () => {
         const context = {
           resolvers: {
-            user: [ { id: '1234' } ]
+            user: [{ id: '1234' }]
           }
         }
         const rootSpan = {}
