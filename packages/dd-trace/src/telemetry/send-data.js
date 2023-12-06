@@ -65,22 +65,30 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         agentTelemetry = false
       }
       // figure out which data center to send to
-      let prefix
-      if (config.site) {
-        if (config.site.endsWith('datad0g.com')) {
-          prefix = 'all-http-intake.logs.'
-        } else if (config.site.endsWith('datadoghq.com')) {
-          prefix = 'instrumentation-telemetry-intake.'
-        }
+      let backendUrl
+      const dataCenters = [
+        'datadoghq.com',
+        'us3.datadoghq.com',
+        'us5.datadoghq.com',
+        'ap1.datadoghq.com',
+        'eu1.datadoghq.com'
+      ]
+      if (config.site === 'datad0g.com') { // staging
+        backendUrl = 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry'
+      } else if (config.site in dataCenters) {
+        backendUrl = 'https://instrumentation-telemetry-intake.' + config.site + '/api/v2/apmtelemetry'
       }
-      const backendUrl = 'https://' + prefix + config.site + '/api/v2/apmtelemetry'
       const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
       const backendOptions = {
         ...options,
         url: backendUrl,
         headers: backendHeader
       }
-      request(data, backendOptions, (error) => { log.error(error) })
+      if (backendUrl) {
+        request(data, backendOptions, (error) => { log.error(error) })
+      } else {
+        log.error('Invalid Telemetry URL')
+      }
     }
 
     if (!error && !agentTelemetry) {
