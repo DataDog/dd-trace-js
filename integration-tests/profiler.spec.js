@@ -201,8 +201,7 @@ describe('profiler', () => {
     const hostKey = strings.dedup('host')
     const addressKey = strings.dedup('address')
     const threadNameKey = strings.dedup('thread name')
-    const nameKey = strings.dedup('operation name')
-    const threadNameValue = strings.dedup('Main DNS')
+    const nameKey = strings.dedup('operation')
     const dnsEventValue = strings.dedup('dns')
     const dnsEvents = []
     for (const sample of prof.sample) {
@@ -215,7 +214,7 @@ describe('profiler', () => {
           case hostKey: host = label.str; break
           case addressKey: address = label.str; break
           case threadNameKey: threadName = label.str; break
-          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
+          default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
         }
       }
       // Timestamp must be defined and be between process start and end time
@@ -225,7 +224,7 @@ describe('profiler', () => {
       // Gather only DNS events; ignore sporadic GC events
       if (event === dnsEventValue) {
         // Thread name must be defined and exactly equal "Main DNS"
-        assert.equal(threadName, threadNameValue)
+        assert.isTrue(strings.strings[threadName].startsWith('Main DNS-'))
         assert.isDefined(name)
         // Exactly one of these is defined
         assert.isTrue(!!address !== !!host)
@@ -253,8 +252,6 @@ describe('profiler', () => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process',
         DD_TRACE_DEBUG: 1,
         DD_TRACE_LOG_LEVEL: 'warn'
       }
@@ -285,7 +282,7 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout, ['space'], true)
     })
 
-    it('sends a heap profile on OOM with external process and ends successfully', async () => {
+    it('sends a heap profile on OOM with external process and exits successfully', async () => {
       proc = fork(oomTestFile, {
         cwd,
         execArgv: oomExecArgv,
@@ -324,6 +321,14 @@ describe('profiler', () => {
         }
       })
       return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+    })
+
+    it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
+      proc = fork(oomTestFile, [1, 50], {
+        cwd,
+        env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], false, 2)
     })
   })
 })
