@@ -80,12 +80,12 @@ function getIntegrations () {
 
 function getProducts (config) {
   const products = {
-    'appsec': {
-      'enabled': config.appsec.enabled
+    appsec: {
+      enabled: config.appsec.enabled
     },
-    'profiler': {
-      'version': tracerVersion,
-      'enabled': config.profiling.enabled
+    profiler: {
+      version: tracerVersion,
+      enabled: config.profiling.enabled
     }
   }
   if (errors.profilingError) {
@@ -179,8 +179,8 @@ function createBatchPayload (payload) {
   const batchPayload = []
   payload.map(item => {
     batchPayload.push({
-      'request_type': item.reqType,
-      'payload': item.payload
+      request_type: item.reqType,
+      payload: item.payload
     })
   })
 
@@ -238,7 +238,7 @@ function start (aConfig, thePluginManager) {
 
   if (integrations.length > 0) {
     sendData(config, application, host, 'app-integrations-change',
-      { 'integrations': integrations }, updateRetryData)
+      { integrations }, updateRetryData)
   }
 
   heartbeat(config, application, host)
@@ -271,7 +271,7 @@ function updateIntegrations () {
     return
   }
 
-  const { reqType, payload } = createPayload('app-integrations-change', { 'integrations': integrations })
+  const { reqType, payload } = createPayload('app-integrations-change', { integrations })
 
   sendData(config, application, host, reqType, payload, updateRetryData)
 }

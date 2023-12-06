@@ -24,12 +24,10 @@ function createBatchPayload (payload) {
   const batchPayload = []
   payload.map(item => {
     batchPayload.push({
-      'request_type': item.reqType,
-      'payload': item.payload
+      request_type: item.reqType,
+      payload: item.payload
     })
   })
-  // eslint-disable-next-line no-console
-  // console.log(batchPayload)
 
   return batchPayload
 }
