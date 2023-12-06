@@ -252,8 +252,6 @@ describe('profiler', () => {
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process',
         DD_TRACE_DEBUG: 1,
         DD_TRACE_LOG_LEVEL: 'warn'
       }
@@ -284,7 +282,7 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout, ['space'], true)
     })
 
-    it('sends a heap profile on OOM with external process and ends successfully', async () => {
+    it('sends a heap profile on OOM with external process and exits successfully', async () => {
       proc = fork(oomTestFile, {
         cwd,
         execArgv: oomExecArgv,
@@ -323,6 +321,14 @@ describe('profiler', () => {
         }
       })
       return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+    })
+
+    it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
+      proc = fork(oomTestFile, [1, 50], {
+        cwd,
+        env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], false, 2)
     })
   })
 })
