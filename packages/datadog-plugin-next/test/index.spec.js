@@ -42,7 +42,7 @@ describe('Plugin', function () {
               VERSION: version,
               PORT: port,
               DD_TRACE_AGENT_PORT: agent.server.address().port,
-              WITH_CONFIG: withConfig,
+              WITH_CONFIG: Number(withConfig),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
@@ -489,6 +489,28 @@ describe('Plugin', function () {
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
+
+        if (satisfies(pkg.version, '<14')) {
+          // In Next.js 14, the only page loaded is "not_found", so there's no need to overwrite it in hooks
+          it('should propagate resource name changes to web span', done => {
+            agent
+              .use(traces => {
+                const webSpan = traces[0][0]
+                const nextSpan = traces[0][1]
+
+                expect(webSpan).to.have.property('name', 'web.request')
+                expect(webSpan).to.have.property('resource', 'GET /404')
+
+                expect(nextSpan).to.have.property('name', 'next.request')
+                expect(nextSpan).to.have.property('resource', 'GET /404')
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://127.0.0.1:${port}/missing`)
+              .catch(() => {}) // ignore default axios errors for 404
+          })
+        }
 
         if (satisfies(pkg.version, '>=13.3.0')) {
           it('should attach the error to the span from a NextRequest', done => {

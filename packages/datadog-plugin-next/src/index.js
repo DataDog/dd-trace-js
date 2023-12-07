@@ -17,7 +17,7 @@ class NextPlugin extends ServerPlugin {
     this.addSub('apm:next:page:load', message => this.pageLoad(message))
   }
 
-  bindStart ({ req, res }) {
+  bindStart ({ req }) {
     const store = storage.getStore()
     const childOf = store ? store.span : store
     const span = this.tracer.startSpan(this.operationName(), {
@@ -62,6 +62,11 @@ class NextPlugin extends ServerPlugin {
 
     this.config.hooks.request(span, req, res)
 
+    // propagate up web resource name if changed in the request hooks
+    const fullResource = span.context()._tags['resource.name']
+    const resource = fullResource.split(' ')[1] // GET x/y/z --> x/y/z
+    web.setRoute(req, resource)
+
     span.finish()
   }
 
@@ -73,14 +78,18 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const req = this._requests.get(span)
 
+    const errorPages = ['/404', '/500', '/_error', '/_not-found']
+
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    if (current && ['/404', '/500', '/_error', '/_not-found'].includes(page)) {
+    if (current && errorPages.includes(page)) {
       return
     }
 
     // remove ending /route or /page for appDir projects
-    if (isAppPath) page = page.substring(0, page.lastIndexOf('/'))
+    // need to check if not an error page too, as those are marked as app directory
+    //  in newer versions
+    if (isAppPath && !errorPages.includes(page)) page = page.substring(0, page.lastIndexOf('/'))
 
     // handle static resource
     if (isStatic) {
