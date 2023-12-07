@@ -5,6 +5,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
+const { expect } = require('chai')
 
 describe('Kinesis', () => {
   setup()
@@ -12,7 +13,7 @@ describe('Kinesis', () => {
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let AWS
     let kinesis
-
+    const streamName = 'MyStream'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
     before(() => {
@@ -35,7 +36,7 @@ describe('Kinesis', () => {
 
       kinesis = new AWS.Kinesis(params)
       kinesis.createStream({
-        StreamName: 'MyStream',
+        StreamName: streamName,
         ShardCount: 1
       }, (err, res) => {
         if (err) return done(err)
@@ -46,7 +47,7 @@ describe('Kinesis', () => {
 
     after(done => {
       kinesis.deleteStream({
-        StreamName: 'MyStream'
+        StreamName: streamName
       }, (err, res) => {
         if (err) return done(err)
 
@@ -56,7 +57,7 @@ describe('Kinesis', () => {
 
     withNamingSchema(
       (done) => kinesis.describeStream({
-        StreamName: 'MyStream'
+        StreamName: streamName
       }, (err) => err && done(err)),
       rawExpectedSchema.outbound
     )
@@ -113,15 +114,46 @@ describe('Kinesis', () => {
       agent.use(traces => {
         const span = traces[0][0]
         expect(span.meta).to.include({
-          'streamname': 'MyStream',
+          'streamname': streamName,
           'aws_service': 'Kinesis',
           'region': 'us-east-1'
         })
-        expect(span.resource).to.equal('putRecord MyStream')
-        expect(span.meta).to.have.property('streamname', 'MyStream')
+        expect(span.resource).to.equal(`putRecord ${streamName}`)
+        expect(span.meta).to.have.property('streamname', streamName)
       }).then(done, done)
 
       helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))
+    })
+
+    describe('Trace Context Propagation', () => {
+      it('injects trace context to Kinesis putRecord and extracts data during Kinesis getRecord', function (done) {
+        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, data, (err, data) => {
+            if (err) return done(err)
+
+            expect(data).to.have.property('_datadog')
+            expect(data._datadog).to.have.property('x-datadog-trace-id')
+            expect(data._datadog).to.have.property('x-datadog-parent-id')
+            expect(data._datadog).to.have.property('dd-pathway-ctx')
+
+            agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span.parent_id).to.not.equal(0)
+              expect(span.resource).to.equal(`aws.response`)
+              expect(span.meta).to.include({
+                'aws_service': 'Kinesis',
+                'aws.service': 'Kinesis',
+                'aws.operation': 'getRecords'
+              })
+              expect(Object.keys(span.meta)).to.include('pathway.hash')
+              done()
+            })
+          })
+        })
+      })
     })
 
     describe('Disabled', () => {

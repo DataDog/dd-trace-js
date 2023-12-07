@@ -4,7 +4,7 @@
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { rawExpectedSchema } = require('./sns-naming')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
@@ -65,7 +65,7 @@ describe('Sns', () => {
       parentId = '0'
       spanId = '0'
 
-      return agent.load('aws-sdk', {sns: { dsmEnabled: true}, sqs: { dsmEnabled: true}}, { dsmEnabled: true })
+      return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
     })
 
     before(done => {
@@ -256,11 +256,9 @@ describe('Sns', () => {
             done()
           })
         sns.publish(
-          { TopicArn, Message: 'message 1' }, 
+          { TopicArn, Message: 'message 1' },
           (err) => {
             if (err) return done(err)
-
-            console.log("running callback")
           })
       })
     })

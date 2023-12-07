@@ -88,12 +88,12 @@ class Sns extends BaseAwsSdkPlugin {
 }
 
 function getTopicName (topicArn) {
-    // Split the ARN into its parts
-    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
-    const arnParts = topicArn.split(':')
+  // Split the ARN into its parts
+  // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
+  const arnParts = topicArn.split(':')
 
-    // Get the topic name from the last part of the ARN
-    return arnParts[arnParts.length - 1] 
+  // Get the topic name from the last part of the ARN
+  return arnParts[arnParts.length - 1]
 }
 
 module.exports = Sns
