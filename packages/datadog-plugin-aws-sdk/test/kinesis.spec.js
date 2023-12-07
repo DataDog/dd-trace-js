@@ -6,6 +6,22 @@ const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 const { expect } = require('chai')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:MyStream', 'type:kinesis'],
+  ENTRY_PARENT_HASH
+)
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'topic:MyStream', 'type:kinesis'],
+  expectedProducerHash
+)
 
 describe('Kinesis', () => {
   setup()
@@ -174,6 +190,33 @@ describe('Kinesis', () => {
 
             expect(data).not.to.have.property('_datadog')
 
+            done()
+          })
+        })
+      })
+    })
+
+    describe('DSM Context Propagation', () => {
+      it('injects DSM trace context to Kinesis putRecord', done => {
+        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
+          DataStreamsContext.setDataStreamsContext.restore()
+        }
+        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+
+        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, data, (err, data) => {
+            if (err) return done(err)
+
+            expect(
+              setDataStreamsContextSpy.args[0][0].hash
+            ).to.equal(expectedProducerHash)
+
+            expect(
+              setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
+            ).to.equal(expectedConsumerHash)
+            setDataStreamsContextSpy.restore()
             done()
           })
         })
