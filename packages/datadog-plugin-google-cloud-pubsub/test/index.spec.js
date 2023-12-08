@@ -6,9 +6,26 @@ const id = require('../../dd-trace/src/id')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
+
+const dsmTopicName = 'dsm-topic'
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:' + dsmTopicName, 'type:pub/sub'],
+  ENTRY_PARENT_HASH
+)
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'topic:' + dsmTopicName, 'type:pub/sub'],
+  expectedProducerHash
+)
 
 describe('Plugin', () => {
   let tracer
@@ -18,6 +35,7 @@ describe('Plugin', () => {
 
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
+      process.env.DD_DATA_STREAMS_ENABLED = true
     })
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
@@ -35,7 +53,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('google-cloud-pubsub')
+          return agent.load('google-cloud-pubsub', { dsmEnabled: false })
         })
         beforeEach(() => {
           tracer = require('../../dd-trace')
@@ -274,7 +292,8 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', {
-            service: 'a_test_service'
+            service: 'a_test_service',
+            dsmEnabled: false
           })
         })
 
@@ -296,6 +315,89 @@ describe('Plugin', () => {
             })
             await pubsub.createTopic(topicName)
             return expectedSpanPromise
+          })
+        })
+      })
+
+      describe('data stream monitoring', () => {
+        let dsmTopic
+        let sub
+        let consume
+        beforeEach(async () => {
+          const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          resource = `projects/${project}/topics/${dsmTopicName}`
+          pubsub = new PubSub({ projectId: project })
+          tracer.use('google-cloud-pubsub', { dsmEnabled: true })
+
+          dsmTopic = await pubsub.createTopic(dsmTopicName)
+          dsmTopic = dsmTopic[0]
+          sub = await dsmTopic.createSubscription('DSM')
+          sub = sub[0]
+          consume = function (cb) {
+            sub.on('message', cb)
+          }
+        })
+
+        describe('should set a DSM checkpoint', () => {
+          let setDataStreamsContextSpy
+          beforeEach(() => {
+            setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+          })
+
+          afterEach(() => {
+            setDataStreamsContextSpy.restore()
+          })
+
+          it('on produce', async () => {
+            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
+
+            let testPassed
+            for (const checkpointCall of setDataStreamsContextSpy.args) {
+              if (checkpointCall[0].hash === expectedProducerHash) {
+                testPassed = true
+                break
+              }
+            }
+            expect(testPassed).to.equal(true)
+          })
+
+          it('on consume', async () => {
+            await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
+            await consume(async () => {
+              let testPassed
+              for (const checkpointCall of setDataStreamsContextSpy.args) {
+                if (checkpointCall[0].hash === expectedConsumerHash) {
+                  testPassed = true
+                  break
+                }
+              }
+              expect(testPassed).to.equal(true)
+            })
+          })
+        })
+
+        describe('it should set a message payload size', () => {
+          let recordCheckpointSpy
+          beforeEach(() => {
+            recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+          })
+
+          afterEach(() => {
+            DataStreamsProcessor.prototype.recordCheckpoint.restore()
+          })
+
+          it('when producing a message', async () => {
+            await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
+            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+          })
+
+          it('when consuming a message', async () => {
+            await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
+
+            await consume(async () => {
+              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            })
           })
         })
       })

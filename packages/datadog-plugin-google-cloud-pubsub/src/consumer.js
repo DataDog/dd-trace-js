@@ -1,5 +1,6 @@
 'use strict'
 
+const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
 class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
@@ -11,7 +12,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const topic = subscription.metadata && subscription.metadata.topic
     const childOf = this.tracer.extract('text_map', message.attributes) || null
 
-    this.startSpan({
+    const span = this.startSpan({
       childOf,
       resource: topic,
       type: 'worker',
@@ -23,6 +24,13 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         'pubsub.ack': 0
       }
     })
+    if (this.config.dsmEnabled && message.attributes && message.attributes.CONTEXT_PROPAGATION_KEY) {
+      const payloadSize = getMessageSize(message)
+      const topicName = topic.split('/').pop()
+      this.tracer.decodeDataStreamsContext(Buffer.from(JSON.parse(message.attributes[CONTEXT_PROPAGATION_KEY])))
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${topicName}`, 'type:pub/sub'], span, payloadSize)
+    }
   }
 
   finish (message) {
