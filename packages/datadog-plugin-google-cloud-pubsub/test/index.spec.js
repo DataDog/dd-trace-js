@@ -323,6 +323,12 @@ describe('Plugin', () => {
         let dsmTopic
         let sub
         let consume
+        beforeEach(() => {
+          return agent.load('google-cloud-pubsub', {
+            dsmEnabled: true
+          })
+        })
+
         beforeEach(async () => {
           const { PubSub } = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
