@@ -45,12 +45,16 @@ function putTestRecord (kinesis, data, cb) {
   }, cb)
 }
 
-function waitForActiveStream (kinesis, cb) {
+function waitForActiveStream (mocha, kinesis, cb) {
   kinesis.describeStream({
     StreamName: 'MyStream'
   }, (err, data) => {
-    if (err) return waitForActiveStream(kinesis, cb)
+    if (err) {
+      mocha.timeout(250)
+      return waitForActiveStream(kinesis, cb)
+    }
     if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
+      mocha.timeout(250)
       return waitForActiveStream(kinesis, cb)
     }
 
@@ -62,7 +66,7 @@ function waitForDeletedStream (kinesis, cb) {
   kinesis.describeStream({
     StreamName: 'MyStream'
   }, (err, data) => {
-    if (!err) return waitForDeletedStream(kinesis, cb)
+    if (err) return waitForDeletedStream(kinesis, cb)
     cb()
   })
 }

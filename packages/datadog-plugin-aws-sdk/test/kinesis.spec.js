@@ -19,7 +19,7 @@ describe('Kinesis', () => {
       return agent.load('aws-sdk')
     })
 
-    before(done => {
+    before(function (done) {
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
       const params = {
@@ -40,7 +40,7 @@ describe('Kinesis', () => {
       }, (err, res) => {
         if (err) return done(err)
 
-        helpers.waitForActiveStream(kinesis, done)
+        helpers.waitForActiveStream(this, kinesis, done)
       })
     })
 
