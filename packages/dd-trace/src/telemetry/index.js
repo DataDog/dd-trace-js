@@ -117,10 +117,11 @@ function appStarted (config) {
     products: getProducts(config),
     configuration: flatten(config)
   }
-  if (errors.agentError) {
-    app.error = errors.agentError
-    errors.agentError = {}
-  }
+  // TODO: add app.error with correct error codes
+  // if (errors.agentError) {
+  //   app.error = errors.agentError
+  //   errors.agentError = {}
+  // }
   return app
 }
 
