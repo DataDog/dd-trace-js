@@ -115,8 +115,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: flatten(config),
-    additional_payload: []
+    configuration: flatten(config)
   }
   if (errors.agentError) {
     app.error = errors.agentError

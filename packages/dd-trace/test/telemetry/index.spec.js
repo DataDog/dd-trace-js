@@ -107,7 +107,6 @@ describe('telemetry', () => {
         { name: 'peerServiceMapping.service_1', value: 'remapped_service_1', origin: 'unknown' },
         { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'unknown' }
       ])
-      expect(payload).to.have.property('additional_payload').that.deep.equal([])
     })
   })
 
@@ -361,7 +360,6 @@ describe('Telemetry retry', () => {
           count += 1
           return
         }
-
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload: payload,
