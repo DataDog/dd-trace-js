@@ -66,7 +66,7 @@ function waitForDeletedStream (kinesis, cb) {
   kinesis.describeStream({
     StreamName: 'MyStream'
   }, (err, data) => {
-    if (err) return waitForDeletedStream(kinesis, cb)
+    if (!err) return waitForDeletedStream(kinesis, cb)
     cb()
   })
 }
