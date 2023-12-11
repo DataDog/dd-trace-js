@@ -20,6 +20,7 @@ describe('Kinesis', () => {
     })
 
     before(function (done) {
+      this.timeout(0)
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
       const params = {
