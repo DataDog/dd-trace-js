@@ -1,13 +1,11 @@
 'use strict'
-
 const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
 const os = require('os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
-
+const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
-const logs = require('./logs')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -17,10 +15,52 @@ let pluginManager
 
 let application
 let host
-let interval
 let heartbeatTimeout
 let heartbeatInterval
+let extendedInterval
+let integrations
+let retryData = null
+const extendedHeartbeatPayload = {}
+
 const sentIntegrations = new Set()
+
+function getRetryData () {
+  return retryData
+}
+
+function updateRetryData (error, retryObj) {
+  if (error) {
+    if (retryObj.reqType === 'message-batch') {
+      const payload = retryObj.payload[0].payload
+      const reqType = retryObj.payload[0].request_type
+      retryData = { payload: payload, reqType: reqType }
+
+      // Since this payload failed twice it now gets save in to the extended heartbeat
+      const failedPayload = retryObj.payload[1].payload
+      const failedReqType = retryObj.payload[1].request_type
+
+      // save away the dependencies and integration request for extended heartbeat.
+      if (failedReqType === 'app-integrations-change') {
+        if (extendedHeartbeatPayload['integrations']) {
+          extendedHeartbeatPayload['integrations'].push(failedPayload)
+        } else {
+          extendedHeartbeatPayload['integrations'] = [failedPayload]
+        }
+      }
+      if (failedReqType === 'app-dependencies-loaded') {
+        if (extendedHeartbeatPayload['dependencies']) {
+          extendedHeartbeatPayload['dependencies'].push(failedPayload)
+        } else {
+          extendedHeartbeatPayload['dependencies'] = [failedPayload]
+        }
+      }
+    } else {
+      retryData = retryObj
+    }
+  } else {
+    retryData = null
+  }
+}
 
 function getIntegrations () {
   const newIntegrations = []
@@ -38,6 +78,23 @@ function getIntegrations () {
   return newIntegrations
 }
 
+function getProducts (config) {
+  const products = {
+    appsec: {
+      enabled: config.appsec.enabled
+    },
+    profiler: {
+      version: tracerVersion,
+      enabled: config.profiling.enabled
+    }
+  }
+  if (errors.profilingError) {
+    products.profiler.error = errors.profilingError
+    errors.profilingError = {}
+  }
+  return products
+}
+
 function flatten (input, result = [], prefix = [], traversedObjects = null) {
   traversedObjects = traversedObjects || new WeakSet()
   if (traversedObjects.has(input)) {
@@ -48,33 +105,30 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
     if (typeof value === 'object' && value !== null) {
       flatten(value, result, [...prefix, key], traversedObjects)
     } else {
-      result.push({ name: [...prefix, key].join('.'), value })
+      // TODO: add correct origin value
+      result.push({ name: [...prefix, key].join('.'), value, origin: 'unknown' })
     }
   }
   return result
 }
 
-function appStarted () {
-  return {
-    integrations: getIntegrations(),
-    dependencies: [],
-    configuration: flatten(formatConfig(config)),
-    additional_payload: []
+function appStarted (config) {
+  const app = {
+    products: getProducts(config),
+    configuration: flatten(config)
   }
-}
-
-function formatConfig (config) {
-  // format peerServiceMapping from an object to a string map in order for
-  // telemetry intake to accept the configuration
-  config.peerServiceMapping = config.peerServiceMapping
-    ? Object.entries(config.peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
-    : ''
-  return config
+  // TODO: add app.error with correct error codes
+  // if (errors.agentError) {
+  //   app.error = errors.agentError
+  //   errors.agentError = {}
+  // }
+  return app
 }
 
 function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
-  sendData(config, application, host, 'app-closing')
+  const { reqType, payload } = createPayload('app-closing')
+  sendData(config, application, host, reqType, payload)
 }
 
 function createAppObject (config) {
@@ -121,12 +175,50 @@ function getTelemetryData () {
   return { config, application, host, heartbeatInterval }
 }
 
+function createBatchPayload (payload) {
+  const batchPayload = []
+  payload.map(item => {
+    batchPayload.push({
+      request_type: item.reqType,
+      payload: item.payload
+    })
+  })
+
+  return batchPayload
+}
+
+function createPayload (currReqType, currPayload = {}) {
+  if (getRetryData()) {
+    const payload = { reqType: currReqType, payload: currPayload }
+    const batchPayload = createBatchPayload([payload, retryData])
+    return { 'reqType': 'message-batch', 'payload': batchPayload }
+  }
+
+  return { 'reqType': currReqType, 'payload': currPayload }
+}
+
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
-    sendData(config, application, host, 'app-heartbeat')
+    metricsManager.send(config, application, host)
+
+    const { reqType, payload } = createPayload('app-heartbeat')
+    sendData(config, application, host, reqType, payload, updateRetryData)
     heartbeat(config, application, host)
   }, heartbeatInterval).unref()
   return heartbeatTimeout
+}
+
+function extendedHeartbeat (config) {
+  extendedInterval = setInterval(() => {
+    const appPayload = appStarted(config)
+    const payload = {
+      ...appPayload,
+      ...extendedHeartbeatPayload
+    }
+    sendData(config, application, host, 'app-extended-heartbeat', payload)
+    Object.keys(extendedHeartbeatPayload).forEach(key => delete extendedHeartbeatPayload[key])
+  }, 1000 * 60 * 60 * 24).unref()
+  return extendedInterval
 }
 
 function start (aConfig, thePluginManager) {
@@ -138,19 +230,22 @@ function start (aConfig, thePluginManager) {
   application = createAppObject(config)
   host = createHostObject()
   heartbeatInterval = config.telemetry.heartbeatInterval
+  integrations = getIntegrations()
 
-  dependencies.start(config, application, host)
-  logs.start(config)
+  dependencies.start(config, application, host, getRetryData, updateRetryData)
 
-  sendData(config, application, host, 'app-started', appStarted())
+  sendData(config, application, host, 'app-started', appStarted(config))
+
+  if (integrations.length > 0) {
+    sendData(config, application, host, 'app-integrations-change',
+      { integrations }, updateRetryData)
+  }
+
   heartbeat(config, application, host)
-  interval = setInterval(() => {
-    metricsManager.send(config, application, host)
-    logs.send(config, application, host)
-  }, heartbeatInterval)
-  interval.unref()
-  process.on('beforeExit', onBeforeExit)
 
+  extendedHeartbeat(config)
+
+  process.on('beforeExit', onBeforeExit)
   telemetryStartChannel.publish(getTelemetryData())
 }
 
@@ -158,7 +253,7 @@ function stop () {
   if (!config) {
     return
   }
-  clearInterval(interval)
+  clearInterval(extendedInterval)
   clearTimeout(heartbeatTimeout)
   process.removeListener('beforeExit', onBeforeExit)
 
@@ -175,7 +270,10 @@ function updateIntegrations () {
   if (integrations.length === 0) {
     return
   }
-  sendData(config, application, host, 'app-integrations-change', { integrations })
+
+  const { reqType, payload } = createPayload('app-integrations-change', { integrations })
+
+  sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
 function updateConfig (changes, config) {
@@ -188,21 +286,15 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const names = {
-    sampleRate: 'DD_TRACE_SAMPLE_RATE',
-    logInjection: 'DD_LOG_INJECTION',
-    headerTags: 'DD_TRACE_HEADER_TAGS'
-  }
-
   const configuration = changes.map(change => ({
-    name: names[change.name],
+    name: change.name,
     value: Array.isArray(change.value) ? change.value.join(',') : change.value,
     origin: change.origin
   }))
 
-  sendData(config, application, host, 'app-client-configuration-change', {
-    configuration
-  })
+  const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
+
+  sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
 module.exports = {
