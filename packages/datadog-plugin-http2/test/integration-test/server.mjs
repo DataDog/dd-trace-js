@@ -7,5 +7,7 @@ const server = http2.createServer((req, res) => {
 
 server.listen(0, () => {
   const port = server.address().port
-  process.send({ port })
+  if (process.send) {
+    process.send({ port })
+  }
 })
