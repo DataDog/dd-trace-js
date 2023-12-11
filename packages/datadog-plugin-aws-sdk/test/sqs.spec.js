@@ -28,7 +28,6 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
-          process.env.DD_DATA_STREAMS_ENABLED = true
           tracer = require('../../dd-trace')
 
           return agent.load('aws-sdk', { sqs: { dsmEnabled: false } })
@@ -311,7 +310,10 @@ describe('Plugin', () => {
         )
 
         beforeEach(async () => {
-          tracer.use('aws-sdk', { dsmEnabled: true })
+          process.env.DD_DATA_STREAMS_ENABLED = true
+          tracer = require('../../dd-trace')
+          tracer.init({ dsmEnabled: true })
+          tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
 
           return agent.load('aws-sdk', {
             sqs: {

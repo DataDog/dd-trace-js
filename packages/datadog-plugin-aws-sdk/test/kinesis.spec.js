@@ -22,6 +22,7 @@ describe('Kinesis', () => {
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let AWS
     let kinesis
+    let tracer
 
     const streamName = 'MyStream'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
@@ -163,7 +164,9 @@ describe('Kinesis', () => {
 
     describe('DSM Context Propagation', () => {
       before(() => {
-        process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
+        tracer = require('../../dd-trace')
+        tracer.init({ dsmEnabled: true })
+        tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } })
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } })
       })
 

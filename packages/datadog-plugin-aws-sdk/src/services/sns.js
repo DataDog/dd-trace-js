@@ -73,8 +73,10 @@ class Sns extends BaseAwsSdkPlugin {
       const topicName = getTopicName(params.TopicArn)
       const dataStreamsContext = this.tracer
         .setCheckpoint(['direction:out', `topic:${topicName}`, 'type:sns'], span, payloadSize)
-      const pathwayCtx = encodePathwayContext(dataStreamsContext)
-      ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+      if (dataStreamsContext) {
+        const pathwayCtx = encodePathwayContext(dataStreamsContext)
+        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+      }
     }
     this.tracer.inject(span, 'text_map', ddInfo)
     params.MessageAttributes._datadog = {

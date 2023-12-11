@@ -50,8 +50,10 @@ class Kinesis extends BaseAwsSdkPlugin {
         const stream = request.params.StreamName
         const dataStreamsContext = this.tracer
           .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
-        const pathwayCtx = encodePathwayContext(dataStreamsContext)
-        traceData[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+        if (dataStreamsContext) {
+          const pathwayCtx = encodePathwayContext(dataStreamsContext)
+          traceData[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+        }
       }
       this.tracer.inject(span, 'text_map', traceData)
       let injectPath

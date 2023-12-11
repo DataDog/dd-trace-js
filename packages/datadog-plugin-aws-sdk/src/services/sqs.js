@@ -186,8 +186,10 @@ class Sqs extends BaseAwsSdkPlugin {
         const queue = request.params.QueueUrl.split('/').pop()
         const dataStreamsContext = this.tracer
           .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-        const pathwayCtx = encodePathwayContext(dataStreamsContext)
-        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+        if (dataStreamsContext) {
+          const pathwayCtx = encodePathwayContext(dataStreamsContext)
+          ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+        }
       }
       this.tracer.inject(span, 'text_map', ddInfo)
       request.params.MessageAttributes._datadog = {
