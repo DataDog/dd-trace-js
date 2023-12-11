@@ -5,6 +5,16 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:MyStream', 'type:kinesis'],
+  ENTRY_PARENT_HASH
+)
 
 describe('Kinesis', () => {
   setup()
@@ -13,9 +23,11 @@ describe('Kinesis', () => {
     let AWS
     let kinesis
 
+    const streamName = 'MyStream'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
     before(() => {
+      process.env.DD_DATA_STREAMS_ENABLED = true
       return agent.load('aws-sdk')
     })
 
@@ -36,7 +48,7 @@ describe('Kinesis', () => {
 
       kinesis = new AWS.Kinesis(params)
       kinesis.createStream({
-        StreamName: 'MyStream',
+        StreamName: streamName,
         ShardCount: 1
       }, (err, res) => {
         if (err) return done(err)
@@ -47,7 +59,7 @@ describe('Kinesis', () => {
 
     after(done => {
       kinesis.deleteStream({
-        StreamName: 'MyStream'
+        StreamName: streamName
       }, (err, res) => {
         if (err) return done(err)
 
@@ -57,7 +69,7 @@ describe('Kinesis', () => {
 
     withNamingSchema(
       (done) => kinesis.describeStream({
-        StreamName: 'MyStream'
+        StreamName: streamName
       }, (err) => err && done(err)),
       rawExpectedSchema.outbound
     )
@@ -114,12 +126,12 @@ describe('Kinesis', () => {
       agent.use(traces => {
         const span = traces[0][0]
         expect(span.meta).to.include({
-          'streamname': 'MyStream',
+          'streamname': streamName,
           'aws_service': 'Kinesis',
           'region': 'us-east-1'
         })
-        expect(span.resource).to.equal('putRecord MyStream')
-        expect(span.meta).to.have.property('streamname', 'MyStream')
+        expect(span.resource).to.equal(`putRecord ${streamName}`)
+        expect(span.meta).to.have.property('streamname', streamName)
       }).then(done, done)
 
       helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))
@@ -145,6 +157,31 @@ describe('Kinesis', () => {
 
             done()
           })
+        })
+      })
+    })
+
+    describe('DSM Context Propagation', () => {
+      before(() => {
+        process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
+        return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } })
+      })
+
+      it('injects DSM trace context to Kinesis putRecord', done => {
+        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
+          DataStreamsContext.setDataStreamsContext.restore()
+        }
+        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+
+        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          expect(
+            setDataStreamsContextSpy.args[0][0].hash
+          ).to.equal(expectedProducerHash)
+
+          setDataStreamsContextSpy.restore()
+          done()
         })
       })
     })

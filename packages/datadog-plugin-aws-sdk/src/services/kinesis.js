@@ -1,6 +1,12 @@
 'use strict'
+const {
+  CONTEXT_PROPAGATION_KEY,
+  getHeadersSize
+} = require('../../../dd-trace/src/datastreams/processor')
+const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
   static get peerServicePrecursors () { return ['streamname'] }
@@ -39,6 +45,14 @@ class Kinesis extends BaseAwsSdkPlugin {
       }
 
       const traceData = {}
+      if (this.config.dsmEnabled) {
+        const payloadSize = getHeadersSize(request.params)
+        const stream = request.params.StreamName
+        const dataStreamsContext = this.tracer
+          .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
+        const pathwayCtx = encodePathwayContext(dataStreamsContext)
+        traceData[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+      }
       this.tracer.inject(span, 'text_map', traceData)
       let injectPath
       if (request.params.Records && request.params.Records.length > 0) {

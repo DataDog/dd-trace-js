@@ -5,6 +5,22 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+
+const expectedProducerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:out', 'topic:TestTopic', 'type:sns'],
+  ENTRY_PARENT_HASH
+)
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'topic:TestQueue', 'type:sqs'],
+  expectedProducerHash
+)
 
 describe('Sns', () => {
   setup()
@@ -40,14 +56,16 @@ describe('Sns', () => {
     }
 
     beforeEach(() => {
+      process.env.DD_DATA_STREAMS_ENABLED = true
       tracer = require('../../dd-trace')
+      tracer.init({ dsmEnabled: true })
     })
 
     before(() => {
       parentId = '0'
       spanId = '0'
 
-      return agent.load('aws-sdk')
+      return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
     })
 
     before(done => {
@@ -215,6 +233,34 @@ describe('Sns', () => {
       }).then(done, done)
 
       sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
+    })
+
+    it('injects DSM trace context to SNS publish', done => {
+      if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
+        DataStreamsContext.setDataStreamsContext.restore()
+      }
+      const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+
+      sns.subscribe(subParams, (err, data) => {
+        if (err) return done(err)
+
+        sqs.receiveMessage(
+          receiveParams,
+          (err, res) => {
+            if (err) return done(err)
+
+            expect(
+              setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
+            ).to.equal(expectedConsumerHash)
+            setDataStreamsContextSpy.restore()
+            done()
+          })
+        sns.publish(
+          { TopicArn, Message: 'message 1' },
+          (err) => {
+            if (err) return done(err)
+          })
+      })
     })
   })
 })

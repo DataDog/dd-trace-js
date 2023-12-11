@@ -1,4 +1,6 @@
 'use strict'
+const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
@@ -11,12 +13,7 @@ class Sns extends BaseAwsSdkPlugin {
 
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
-    // Split the ARN into its parts
-    // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
-    const arnParts = TopicArn.split(':')
-
-    // Get the topic name from the last part of the ARN
-    const topicName = arnParts[arnParts.length - 1]
+    const topicName = getTopicName(TopicArn)
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
@@ -71,12 +68,29 @@ class Sns extends BaseAwsSdkPlugin {
       return
     }
     const ddInfo = {}
+    if (this.config.dsmEnabled) {
+      const payloadSize = getHeadersSize(params)
+      const topicName = getTopicName(params.TopicArn)
+      const dataStreamsContext = this.tracer
+        .setCheckpoint(['direction:out', `topic:${topicName}`, 'type:sns'], span, payloadSize)
+      const pathwayCtx = encodePathwayContext(dataStreamsContext)
+      ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+    }
     this.tracer.inject(span, 'text_map', ddInfo)
     params.MessageAttributes._datadog = {
       DataType: 'Binary',
       BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
     }
   }
+}
+
+function getTopicName (topicArn) {
+  // Split the ARN into its parts
+  // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
+  const arnParts = topicArn.split(':')
+
+  // Get the topic name from the last part of the ARN
+  return arnParts[arnParts.length - 1]
 }
 
 module.exports = Sns
