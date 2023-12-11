@@ -474,6 +474,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_IAST_ENABLED
     )
 
+    const DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
+      true
+    )
+
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
       parseInt(iastOptions?.requestSampling),
@@ -618,7 +623,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       debug: isTrue(DD_TELEMETRY_DEBUG),
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
+      dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
