@@ -74,13 +74,46 @@ class GCDecorator {
   }
 }
 
+// Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
+// decorator starts out with no lanes, and dynamically adds them as needed.
+// Every event is put in the first lane where it doesn't overlap with the last
+// event in that lane. If there's no lane without overlaps, a new lane is
+// created.
+class Lanes {
+  constructor (stringTable, name) {
+    this.stringTable = stringTable
+    this.name = name
+    this.lanes = []
+  }
+
+  getLabelFor (item) {
+    const startTime = item.startTime
+    const endTime = startTime + item.duration
+
+    // Biases towards populating earlier lanes, but at least it's simple
+    for (const lane of this.lanes) {
+      if (lane.endTime <= startTime) {
+        lane.endTime = endTime
+        return lane.label
+      }
+    }
+    const label = labelFromStrStr(
+      this.stringTable,
+      THREAD_NAME,
+      `${this.name}-${this.lanes.length}`
+    )
+    this.lanes.push({ endTime, label })
+    return label
+  }
+}
+
 class DNSDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
-    this.lanes = []
+    this.lanes = new Lanes(stringTable, `${threadNamePrefix} DNS`)
   }
 
   decorateSample (sampleInput, item) {
@@ -107,32 +140,31 @@ class DNSDecorator {
           addLabel(this.hostLabelKey, detail.host)
         }
     }
-    labels.push(this.getLaneLabelFor(item))
+    labels.push(this.lanes.getLabelFor(item))
+  }
+}
+
+class NetDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+    this.operationNameLabelKey = stringTable.dedup('operation')
+    this.addressLabelKey = stringTable.dedup('address')
+    this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
   }
 
-  // Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
-  // decorator starts out with no lanes, and dynamically adds them as needed.
-  // Every event is put in the first lane where it doesn't overlap with the last
-  // event in that lane. If there's no lane without overlaps, a new lane is
-  // created.
-  getLaneLabelFor (item) {
-    const startTime = item.startTime
-    const endTime = startTime + item.duration
-
-    // Biases towards populating earlier lanes, but at least it's simple
-    for (const lane of this.lanes) {
-      if (lane.endTime <= startTime) {
-        lane.endTime = endTime
-        return lane.label
-      }
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    function addLabel (labelNameKey, labelValue) {
+      labels.push(labelFromStr(stringTable, labelNameKey, labelValue))
     }
-    const label = labelFromStrStr(
-      this.stringTable,
-      THREAD_NAME,
-      `${threadNamePrefix} DNS-${this.lanes.length}`
-    )
-    this.lanes.push({ endTime, label })
-    return label
+    const op = item.name
+    addLabel(this.operationNameLabelKey, op)
+    if (op === 'connect') {
+      const detail = item.detail
+      addLabel(this.addressLabelKey, `${detail.host}:${detail.port}`)
+    }
+    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -141,9 +173,10 @@ class DNSDecorator {
 const decoratorTypes = {
   gc: GCDecorator
 }
-// Needs at least node 16 for DNS
+// Needs at least node 16 for DNS and Net
 if (node16) {
   decoratorTypes.dns = DNSDecorator
+  decoratorTypes.net = NetDecorator
 }
 
 /**
