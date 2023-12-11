@@ -50,11 +50,11 @@ function waitForActiveStream (mocha, kinesis, cb) {
     StreamName: 'MyStream'
   }, (err, data) => {
     if (err) {
-      mocha.timeout(250)
+      mocha.timeout(2000)
       return waitForActiveStream(mocha, kinesis, cb)
     }
     if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
-      mocha.timeout(250)
+      mocha.timeout(2000)
       return waitForActiveStream(mocha, kinesis, cb)
     }
 
