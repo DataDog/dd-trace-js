@@ -68,6 +68,12 @@ class Sns extends BaseAwsSdkPlugin {
       return
     }
     const ddInfo = {}
+    this.tracer.inject(span, 'text_map', ddInfo)
+    // add ddInfo before checking DSM so we can include DD attributes in payload size
+    params.MessageAttributes._datadog = {
+      DataType: 'Binary',
+      BinaryValue: ddInfo
+    }
     if (this.config.dsmEnabled) {
       const payloadSize = getHeadersSize(params)
       const topicName = getTopicName(params.TopicArn)
@@ -78,11 +84,8 @@ class Sns extends BaseAwsSdkPlugin {
         ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
       }
     }
-    this.tracer.inject(span, 'text_map', ddInfo)
-    params.MessageAttributes._datadog = {
-      DataType: 'Binary',
-      BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
-    }
+    // BINARY types are automatically base64 encoded
+    params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
   }
 }
 

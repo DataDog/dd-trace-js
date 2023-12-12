@@ -66,6 +66,21 @@ function getSizeOrZero (obj) {
   if (Buffer.isBuffer(obj)) {
     return obj.length
   }
+  if (Array.isArray(obj) && obj.length > 0) {
+    if (typeof obj[0] === 'number') return Buffer.from(obj).length
+    let payloadSize = 0
+    obj.forEach(item => {
+      payloadSize += getSizeOrZero(item)
+    })
+    return payloadSize
+  }
+  if (typeof obj === 'object') {
+    try {
+      return getHeadersSize(obj)
+    } catch {
+      // pass
+    }
+  }
   return 0
 }
 
@@ -191,7 +206,7 @@ class DataStreamsProcessor {
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
-      payloadSize += getSizeOrZero(encodePathwayContext(dataStreamsContext))
+      payloadSize += getHeadersSize(encodePathwayContext(dataStreamsContext).toJSON())
       payloadSize += CONTEXT_PROPAGATION_KEY.length
     }
     const checkpoint = {

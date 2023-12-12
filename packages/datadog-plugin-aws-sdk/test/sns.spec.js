@@ -5,9 +5,10 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH, getHeadersSize, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const snsPlugin = require('../src/services/sns')
 
 const expectedProducerHash = computePathwayHash(
   'test',
@@ -300,6 +301,39 @@ describe('Sns', () => {
             { TopicArn, Message: 'message DSM' },
             (err) => {
               if (err) return done(err)
+            })
+        })
+      })
+
+      it('sets a message payload size when DSM is enabled', done => {
+        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+          DataStreamsProcessor.prototype.recordCheckpoint.restore()
+        }
+        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+
+        if (snsPlugin.prototype._injectMessageAttributes.isSinonProxy) {
+          snsPlugin.prototype._injectMessageAttributes.restore()
+        }
+        const injectMessageSpy = sinon.spy(snsPlugin.prototype, '_injectMessageAttributes')
+
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+
+              const params = injectMessageSpy.args[0][1]
+              // decode the raw buffer
+              params.MessageAttributes._datadog.BinaryValue = JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
+              const payloadSize = getHeadersSize(params)
+
+              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+              injectMessageSpy.restore()
+              recordCheckpointSpy.restore()
+              done()
             })
         })
       })

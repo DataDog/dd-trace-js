@@ -5,7 +5,11 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const {
+  ENTRY_PARENT_HASH,
+  DataStreamsProcessor,
+  getHeadersSize
+} = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 
@@ -209,6 +213,28 @@ describe('Kinesis', () => {
 
           setDataStreamsContextSpy.restore()
           done()
+        })
+      })
+
+      it('Should set a message payload size when producing a message', (done) => {
+        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+          DataStreamsProcessor.prototype.recordCheckpoint.restore()
+        }
+        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
+            if (err) return done(err)
+
+            const payloadSize = getHeadersSize(data)
+
+            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+            recordCheckpointSpy.restore()
+            done()
+          })
         })
       })
     })

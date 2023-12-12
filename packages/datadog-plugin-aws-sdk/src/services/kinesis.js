@@ -43,18 +43,9 @@ class Kinesis extends BaseAwsSdkPlugin {
       if (!request.params) {
         return
       }
-
       const traceData = {}
-      if (this.config.dsmEnabled) {
-        const payloadSize = getHeadersSize(request.params)
-        const stream = request.params.StreamName
-        const dataStreamsContext = this.tracer
-          .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
-        if (dataStreamsContext) {
-          const pathwayCtx = encodePathwayContext(dataStreamsContext)
-          traceData[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
-        }
-      }
+
+      // inject data with DD context
       this.tracer.inject(span, 'text_map', traceData)
       let injectPath
       if (request.params.Records && request.params.Records.length > 0) {
@@ -65,9 +56,24 @@ class Kinesis extends BaseAwsSdkPlugin {
         log.error('No valid payload passed, unable to pass trace context')
         return
       }
+
       const parsedData = this._tryParse(injectPath.Data)
       if (parsedData) {
         parsedData._datadog = traceData
+
+        // set DSM hash if enabled
+        if (this.config.dsmEnabled) {
+          // get payload size of request data
+          const payloadSize = getHeadersSize(parsedData)
+          const stream = request.params.StreamName
+          const dataStreamsContext = this.tracer
+            .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
+          if (dataStreamsContext) {
+            const pathwayCtx = encodePathwayContext(dataStreamsContext)
+            parsedData._datadog[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+          }
+        }
+
         const finalData = Buffer.from(JSON.stringify(parsedData))
         const byteSize = finalData.length
         // Kinesis max payload size is 1MB
