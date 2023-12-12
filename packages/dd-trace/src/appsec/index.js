@@ -18,6 +18,7 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
+const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
@@ -27,14 +28,6 @@ const { storage } = require('../../../datadog-core')
 
 let isEnabled = false
 let config
-
-function sampleRequest ({ enabled, requestSampling }) {
-  if (!enabled || !requestSampling) {
-    return false
-  }
-
-  return Math.random() <= requestSampling
-}
 
 function enable (_config) {
   if (isEnabled) return
@@ -49,6 +42,8 @@ function enable (_config) {
     remoteConfig.enableWafUpdate(_config.appsec)
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
+
+    apiSecuritySampler.configure(_config.appsec.apiSecurity)
 
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
@@ -98,7 +93,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     payload[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (sampleRequest(config.appsec.apiSecurity)) {
+  if (apiSecuritySampler.sampleRequest()) {
     payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
@@ -195,7 +190,7 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
 
 function onPassportVerify ({ credentials, user }) {
   const store = storage.getStore()
-  const rootSpan = store && store.req && web.root(store.req)
+  const rootSpan = store?.req && web.root(store.req)
 
   if (!rootSpan) {
     log.warn('No rootSpan found in onPassportVerify')
@@ -236,6 +231,8 @@ function disable () {
   appsecTelemetry.disable()
 
   remoteConfig.disableWafUpdate()
+
+  apiSecuritySampler.disable()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)

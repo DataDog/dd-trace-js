@@ -1,32 +1,31 @@
 'use strict'
 
+const Activation = require('../activation')
+
 const RemoteConfigManager = require('./manager')
 const RemoteConfigCapabilities = require('./capabilities')
+const apiSecuritySampler = require('../api_security_sampler')
 
 let rc
 
 function enable (config) {
   rc = new RemoteConfigManager(config)
 
-  if (config.appsec.enabled === undefined) { // only activate ASM_FEATURES when conf is not set locally
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+  const activation = Activation.fromConfig(config)
 
-    rc.on('ASM_FEATURES', (action, conf) => {
-      if (conf && conf.asm && typeof conf.asm.enabled === 'boolean') {
-        let shouldEnable
+  if (activation !== Activation.Disabled) {
+    if (activation === Activation.OneClick) {
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+    }
 
-        if (action === 'apply' || action === 'modify') {
-          shouldEnable = conf.asm.enabled // take control
-        } else {
-          shouldEnable = config.appsec.enabled // give back control to local config
-        }
+    rc.on('ASM_FEATURES', (action, rcConfig) => {
+      if (!rcConfig) return
 
-        if (shouldEnable) {
-          require('..').enable(config)
-        } else {
-          require('..').disable()
-        }
+      if (activation === Activation.OneClick) {
+        enableOrDisableAppsec(action, rcConfig, config)
       }
+
+      updateApiSecuritySampleRate(rcConfig)
     })
   }
 
@@ -47,6 +46,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
 
     rc.on('ASM_DATA', noop)
     rc.on('ASM_DD', noop)
@@ -68,12 +68,41 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, false)
 
     rc.off('ASM_DATA', noop)
     rc.off('ASM_DD', noop)
     rc.off('ASM', noop)
 
     rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
+  }
+}
+
+function enableOrDisableAppsec (action, rcConfig, config) {
+  if (typeof rcConfig.asm?.enabled === 'boolean') {
+    let shouldEnable
+
+    if (action === 'apply' || action === 'modify') {
+      shouldEnable = rcConfig.asm.enabled // take control
+    } else {
+      shouldEnable = config.appsec.enabled // give back control to local config
+    }
+
+    if (shouldEnable) {
+      require('..').enable(config)
+    } else {
+      require('..').disable()
+    }
+  }
+}
+
+function updateApiSecuritySampleRate (rcConfig) {
+  if (rcConfig.api_security?.request_sample_rate !== undefined) {
+    const requestSampling = parseFloat(rcConfig.api_security?.request_sample_rate)
+
+    if (!isNaN(requestSampling) && requestSampling >= 0 && requestSampling <= 1) {
+      apiSecuritySampler.configure({ enabled: requestSampling > 0, requestSampling })
+    }
   }
 }
 
