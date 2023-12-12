@@ -176,6 +176,8 @@ describe('Kinesis', () => {
         }
         const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
 
+        console.log(tracer._pluginManager._tracerConfig)
+
         helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
