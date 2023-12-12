@@ -30,6 +30,7 @@ require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,pprof-format,MIT,Copyright 2022 Stephen Belanger
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
+require,tlhunter-sorted-set,MIT,Copyright (c) 2023 Datadog Inc.
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,@types/node,MIT,Copyright Authors
