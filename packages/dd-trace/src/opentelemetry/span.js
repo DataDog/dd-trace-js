@@ -14,6 +14,7 @@ const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
+const SpanLink = require('./span_link')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -192,7 +193,11 @@ class Span {
   }
 
   addLink (link) {
-    this.links.push(link)
+    this.links.push(new SpanLink(link))
+  }
+
+  getLink (/** way of identifying the span - distributed tracing headers? traceID/spanID combo? */) {
+    // something
   }
 
   setStatus ({ code, message }) {
