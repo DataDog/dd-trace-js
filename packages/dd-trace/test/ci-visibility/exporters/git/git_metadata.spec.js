@@ -23,7 +23,7 @@ describe('git_metadata', () => {
 
   let getLatestCommitsStub
   let getRepositoryUrlStub
-  let getCommitsToUploadStub
+  let getCommitsRevListStub
   let generatePackFilesForCommitsStub
   let isShallowRepositoryStub
   let unshallowRepositoryStub
@@ -42,7 +42,7 @@ describe('git_metadata', () => {
 
   beforeEach(() => {
     getLatestCommitsStub = sinon.stub().returns(latestCommits)
-    getCommitsToUploadStub = sinon.stub().returns(latestCommits)
+    getCommitsRevListStub = sinon.stub().returns(latestCommits)
     getRepositoryUrlStub = sinon.stub().returns('git@github.com:DataDog/dd-trace-js.git')
     isShallowRepositoryStub = sinon.stub().returns(false)
     unshallowRepositoryStub = sinon.stub()
@@ -54,7 +54,7 @@ describe('git_metadata', () => {
         getLatestCommits: getLatestCommitsStub,
         getRepositoryUrl: getRepositoryUrlStub,
         generatePackFilesForCommits: generatePackFilesForCommitsStub,
-        getCommitsToUpload: getCommitsToUploadStub,
+        getCommitsRevList: getCommitsRevListStub,
         isShallowRepository: isShallowRepositoryStub,
         unshallowRepository: unshallowRepositoryStub
       }
@@ -65,9 +65,25 @@ describe('git_metadata', () => {
     nock.cleanAll()
   })
 
-  it('should unshallow if the repo is shallow', (done) => {
+  it('does not unshallow if every commit is already in backend', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
+
+    isShallowRepositoryStub.returns(true)
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
+      expect(unshallowRepositoryStub).not.to.have.been.called
+      expect(err).to.be.null
+      expect(scope.isDone()).to.be.true
+      done()
+    })
+  })
+
+  it('should unshallow if the repo is shallow and not every commit is in the backend', (done) => {
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+      .post('/api/v2/git/repository/search_commits') // calls a second time after unshallowing
       .reply(200, JSON.stringify({ data: [] }))
       .post('/api/v2/git/repository/packfile')
       .reply(204)
@@ -102,7 +118,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    getCommitsToUploadStub.returns([])
+    getCommitsRevListStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), false, '', (err) => {
       expect(err).to.be.null
@@ -165,7 +181,7 @@ describe('git_metadata', () => {
   it('should fail if the packfile request returns anything other than 204', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
+      .reply(200, JSON.stringify({ data: [] }))
       .post('/api/v2/git/repository/packfile')
       .reply(502)
 
