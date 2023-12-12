@@ -62,10 +62,10 @@ function getBlockWithContentData (req, specificType, rootSpan) {
 
   if (!type) {
     // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
-    const accept = req.headers.accept && req.headers.accept.split(',').map((str) => str.split(';', 1)[0].trim())
+    const accept = req.headers.accept?.split(',').map((str) => str.split(';', 1)[0].trim())
 
     if (!blockingConfiguration || blockingConfiguration.parameters.type === 'auto') {
-      if (accept && accept.includes('text/html') && !accept.includes('application/json')) {
+      if (accept?.includes('text/html') && !accept.includes('application/json')) {
         type = 'text/html; charset=utf-8'
         body = templateHtml
       } else {
@@ -83,8 +83,7 @@ function getBlockWithContentData (req, specificType, rootSpan) {
     }
   }
 
-  if (blockingConfiguration && blockingConfiguration.type === 'block_request' &&
-    blockingConfiguration.parameters.status_code) {
+  if (blockingConfiguration?.type === 'block_request' && blockingConfiguration.parameters.status_code) {
     statusCode = blockingConfiguration.parameters.status_code
   } else {
     statusCode = 403
@@ -103,8 +102,7 @@ function getBlockWithContentData (req, specificType, rootSpan) {
 }
 
 function getBlockingData (req, specificType, rootSpan) {
-  if (blockingConfiguration && blockingConfiguration.type === 'redirect_request' &&
-    blockingConfiguration.parameters.location) {
+  if (blockingConfiguration?.type === 'redirect_request' && blockingConfiguration.parameters.location) {
     return getBlockWithRedirectData(rootSpan)
   } else {
     return getBlockWithContentData(req, specificType, rootSpan)
@@ -121,9 +119,7 @@ function block (req, res, rootSpan, abortController, type) {
 
   res.writeHead(statusCode, headers).end(body)
 
-  if (abortController) {
-    abortController.abort()
-  }
+  abortController?.abort()
 }
 
 function setTemplates (config) {
@@ -136,7 +132,7 @@ function setTemplates (config) {
   if (config.appsec.blockedTemplateJson) {
     templateJson = config.appsec.blockedTemplateJson
   } else {
-    templateGraphqlJson = blockedTemplates.json
+    templateJson = blockedTemplates.json
   }
 
   if (config.appsec.blockedTemplateGraphql) {
