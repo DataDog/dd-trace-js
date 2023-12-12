@@ -8,7 +8,6 @@ const { rawExpectedSchema } = require('./sns-naming')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const { producer } = require('../../dd-trace/src/service-naming/schemas/v0/messaging')
 
 const expectedProducerHash = computePathwayHash(
   'test',
@@ -23,7 +22,7 @@ const expectedConsumerHash = computePathwayHash(
   expectedProducerHash
 )
 
-describe('Sns', function() {
+describe('Sns', () => {
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -64,17 +63,17 @@ describe('Sns', function() {
       sqs = new SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
 
       sns.createTopic({ Name: topicName }, (err, data) => {
-        if (err) return done(err)
+        if (err) return cb(err)
 
         TopicArn = data.TopicArn
 
         sqs.createQueue({ QueueName: queueName }, (err, data) => {
-          if (err) return done(err)
+          if (err) return cb(err)
 
           QueueUrl = data.QueueUrl
 
           sqs.getQueueAttributes({ QueueUrl, AttributeNames: ['All'] }, (err, data) => {
-            if (err) return done(err)
+            if (err) return cb(err)
 
             QueueArn = data.Attributes.QueueArn
 
@@ -97,18 +96,17 @@ describe('Sns', function() {
     }
 
     describe('no configuration', () => {
-
       before(() => {
         parentId = '0'
         spanId = '0'
 
-        return agent.load('aws-sdk', { sns: { dsmEnabled: false }}, { dsmEnabled: true })
+        return agent.load('aws-sdk', { sns: { dsmEnabled: false } }, { dsmEnabled: true })
       })
 
       before(done => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { sns: { dsmEnabled: false }})
+        tracer.use('aws-sdk', { sns: { dsmEnabled: false } })
 
         createResources('TestQueue', 'TestTopic', done)
       })
@@ -133,7 +131,7 @@ describe('Sns', function() {
           Message: 'message 1'
         }, (err) => err && done()),
         'TestTopic', 'topicname')
-  
+
       withNamingSchema(
         (done) => sns.publish({
           TopicArn,
@@ -144,7 +142,7 @@ describe('Sns', function() {
           desc: 'producer'
         }
       )
-  
+
       withNamingSchema(
         (done) => sns.getTopicAttributes({
           TopicArn
@@ -154,29 +152,29 @@ describe('Sns', function() {
           desc: 'client'
         }
       )
-  
+
       it('injects trace context to SNS publish', done => {
         assertPropagation(done)
-  
+
         sns.subscribe(subParams, (err, data) => {
           if (err) return done(err)
-  
+
           sqs.receiveMessage(receiveParams, e => e && done(e))
           sns.publish({ TopicArn, Message: 'message 1' }, (e) => {
             if (e) done(e)
           })
         })
       })
-  
+
       // There is a bug in 3.x (but not 3.0.0) that will be fixed in 3.261
       // https://github.com/aws/aws-sdk-js-v3/issues/2861
       if (!semver.intersects(version, '<3 || >3.0.0')) {
         it('injects trace context to SNS publishBatch', done => {
           assertPropagation(done)
-  
+
           sns.subscribe(subParams, (err, data) => {
             if (err) return done(err)
-  
+
             sqs.receiveMessage(receiveParams, e => e && done(e))
             sns.publishBatch({
               TopicArn,
@@ -188,16 +186,16 @@ describe('Sns', function() {
           })
         })
       }
-  
+
       // TODO: Figure out why this fails only in 3.0.0
       if (version !== '3.0.0') {
         it('skips injecting trace context to SNS if message attributes are full', done => {
           sns.subscribe(subParams, (err, data) => {
             if (err) return done(err)
-  
+
             sqs.receiveMessage(receiveParams, (err, data) => {
               if (err) return done(err)
-  
+
               try {
                 expect(data.Messages[0].Body).to.not.include('datadog')
                 done()
@@ -205,7 +203,7 @@ describe('Sns', function() {
                 done(e)
               }
             })
-  
+
             sns.publish({
               TopicArn,
               Message: 'message 1',
@@ -225,11 +223,11 @@ describe('Sns', function() {
           })
         })
       }
-  
+
       it('generates tags for proper publish calls', done => {
         agent.use(traces => {
           const span = traces[0][0]
-  
+
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
@@ -238,7 +236,7 @@ describe('Sns', function() {
             'region': 'us-east-1'
           })
         }).then(done, done)
-  
+
         sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
       })
     })
@@ -251,7 +249,7 @@ describe('Sns', function() {
       before(done => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true }})
+        tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
 
         createResources('TestQueueDSM', 'TestTopicDSM', done)
       })
@@ -271,7 +269,7 @@ describe('Sns', function() {
       it('injects DSM trace context to SNS publish', done => {
         let producerHashCreated = false
         let consumerHashCreated = false
-        
+
         if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
           DataStreamsContext.setDataStreamsContext.restore()
         }
@@ -292,7 +290,6 @@ describe('Sns', function() {
                   producerHashCreated = true
                 }
               })
-              
 
               expect(consumerHashCreated).to.equal(true)
               expect(producerHashCreated).to.equal(true)
