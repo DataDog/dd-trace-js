@@ -113,6 +113,7 @@ class DNSDecorator {
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
+    this.portLabelKey = stringTable.dedup('port')
     this.lanes = new Lanes(stringTable, `${threadNamePrefix} DNS`)
   }
 
@@ -130,7 +131,8 @@ class DNSDecorator {
         addLabel(this.hostLabelKey, detail.hostname)
         break
       case 'lookupService':
-        addLabel(this.addressLabelKey, `${detail.host}:${detail.port}`)
+        addLabel(this.addressLabelKey, detail.host)
+        labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
         break
       case 'getHostByAddr':
         addLabel(this.addressLabelKey, detail.host)
@@ -148,7 +150,8 @@ class NetDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
     this.operationNameLabelKey = stringTable.dedup('operation')
-    this.addressLabelKey = stringTable.dedup('address')
+    this.hostLabelKey = stringTable.dedup('host')
+    this.portLabelKey = stringTable.dedup('port')
     this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
   }
 
@@ -162,7 +165,8 @@ class NetDecorator {
     addLabel(this.operationNameLabelKey, op)
     if (op === 'connect') {
       const detail = item.detail
-      addLabel(this.addressLabelKey, `${detail.host}:${detail.port}`)
+      addLabel(this.stringTable, this.hostLabelKey, detail.host)
+      labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
     }
     labels.push(this.lanes.getLabelFor(item))
   }
