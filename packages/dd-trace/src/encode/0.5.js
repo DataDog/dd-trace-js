@@ -47,6 +47,7 @@ class AgentEncoder extends BaseEncoder {
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
+      // encode span links
     }
   }
 

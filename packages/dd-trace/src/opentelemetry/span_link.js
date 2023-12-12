@@ -29,7 +29,8 @@ class SpanLink {
             `Cannot sanitize type ${typeof maybeScalar} with key ${index}.
             \rSupported types are string, number, or boolean.`
           )
-          this._droppedAttributesCount++
+          this._droppedAttributesCount++ // is this an appropriate spot to increment this
+          // or should it be when serializing for the payload?
         }
       }
     }
@@ -50,7 +51,7 @@ class SpanLink {
   }
 
   // not sure if this is the right spot
-  toObject () {
+  serialize () {
     const link = {}
 
     // these values are conditionally added

@@ -196,8 +196,10 @@ class Span {
     this.links.push(new SpanLink(link))
   }
 
-  getLink (/** way of identifying the span - distributed tracing headers? traceID/spanID combo? */) {
-    // something
+  getLink ({ traceId, spanId }) {
+    // there should only be one link for (traceId, spanId) tuple
+    // how they're passed here can be up to the use case (distributed tracing, etc.)
+    return this.links.find(link => link.traceId === traceId && link.spanId === spanId)
   }
 
   setStatus ({ code, message }) {
