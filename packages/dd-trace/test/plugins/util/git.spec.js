@@ -142,11 +142,11 @@ describe('git', () => {
   })
 })
 
-describe('getCommitsToUpload', () => {
+describe('getCommitsRevList', () => {
   it('gets the commits to upload if the repository is smaller than the limit', () => {
     const logErrorSpy = sinon.spy()
 
-    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
           'execFileSync': (command, flags, options) =>
@@ -157,14 +157,14 @@ describe('getCommitsToUpload', () => {
         }
       }
     )
-    getCommitsToUpload([], [])
+    getCommitsRevList([], [])
     expect(logErrorSpy).not.to.have.been.called
   })
 
   it('does not crash and logs the error if the repository is bigger than the limit', () => {
     const logErrorSpy = sinon.spy()
 
-    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
         'child_process': {
           'execFileSync': (command, flags, options) =>
@@ -175,7 +175,7 @@ describe('getCommitsToUpload', () => {
         }
       }
     )
-    const commitsToUpload = getCommitsToUpload([], [])
+    const commitsToUpload = getCommitsRevList([], [])
     expect(logErrorSpy).to.have.been.called
     expect(commitsToUpload.length).to.equal(0)
   })
