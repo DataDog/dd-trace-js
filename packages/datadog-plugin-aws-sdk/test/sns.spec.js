@@ -56,17 +56,15 @@ describe('Sns', () => {
     }
 
     beforeEach(() => {
-      process.env.DD_DATA_STREAMS_ENABLED = true
       tracer = require('../../dd-trace')
-      tracer.init({ dsmEnabled: true })
-      tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
+      tracer.use('aws-sdk')
     })
 
     before(() => {
       parentId = '0'
       spanId = '0'
 
-      return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
+      return agent.load('aws-sdk')
     })
 
     before(done => {
@@ -236,31 +234,40 @@ describe('Sns', () => {
       sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
     })
 
-    it('injects DSM trace context to SNS publish', done => {
-      if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-        DataStreamsContext.setDataStreamsContext.restore()
-      }
-      const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+    describe('Data Streams Monitoring', () => {
+      beforeEach(() => {
+        tracer._initialized = false
+        tracer.init({ dsmEnabled: true })
+        tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
+        return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
+      })
 
-      sns.subscribe(subParams, (err, data) => {
-        if (err) return done(err)
+      it('injects DSM trace context to SNS publish', done => {
+        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
+          DataStreamsContext.setDataStreamsContext.restore()
+        }
+        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
 
-        sqs.receiveMessage(
-          receiveParams,
-          (err, res) => {
-            if (err) return done(err)
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
 
-            expect(
-              setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
-            ).to.equal(expectedConsumerHash)
-            setDataStreamsContextSpy.restore()
-            done()
-          })
-        sns.publish(
-          { TopicArn, Message: 'message 1' },
-          (err) => {
-            if (err) return done(err)
-          })
+          sqs.receiveMessage(
+            receiveParams,
+            (err, res) => {
+              if (err) return done(err)
+
+              expect(
+                setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
+              ).to.equal(expectedConsumerHash)
+              setDataStreamsContextSpy.restore()
+              done()
+            })
+          sns.publish(
+            { TopicArn, Message: 'message 1' },
+            (err) => {
+              if (err) return done(err)
+            })
+        })
       })
     })
   })

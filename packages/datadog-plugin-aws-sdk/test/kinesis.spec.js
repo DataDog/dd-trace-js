@@ -28,7 +28,6 @@ describe('Kinesis', () => {
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
     before(() => {
-      process.env.DD_DATA_STREAMS_ENABLED = true
       return agent.load('aws-sdk')
     })
 
@@ -165,6 +164,7 @@ describe('Kinesis', () => {
     describe('DSM Context Propagation', () => {
       before(() => {
         tracer = require('../../dd-trace')
+        tracer._initialized = false
         tracer.init({ dsmEnabled: true })
         tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } })
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } })
@@ -175,8 +175,6 @@ describe('Kinesis', () => {
           DataStreamsContext.setDataStreamsContext.restore()
         }
         const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-
-        console.log(tracer._pluginManager._tracerConfig)
 
         helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
