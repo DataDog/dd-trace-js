@@ -540,6 +540,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
+    // 0: disabled, 1: logging, 2: garbage collection + logging
+    const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
+      process.env.DD_TRACE_SPAN_LEAK_DEBUG,
+      0
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -721,6 +727,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.isGCPFunction = isGCPFunction
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
+
+    this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
 
     tagger.add(this.tags, {
       service: this.service,
