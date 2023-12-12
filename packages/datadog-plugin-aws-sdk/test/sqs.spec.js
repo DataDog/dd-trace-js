@@ -309,12 +309,14 @@ describe('Plugin', () => {
           expectedProducerHash
         )
 
-        beforeEach(async () => {
+        before(done => {
+          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
-          tracer._initialized = false
-          tracer.init({ dsmEnabled: true })
-          tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
+          tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true }})
+          done()
+        })
 
+        beforeEach(async () => {
           return agent.load('aws-sdk', {
             sqs: {
               consumer: false,

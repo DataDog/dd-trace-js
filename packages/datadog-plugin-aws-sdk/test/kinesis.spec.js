@@ -12,29 +12,25 @@ const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const expectedProducerHash = computePathwayHash(
   'test',
   'tester',
-  ['direction:out', 'topic:MyStream', 'type:kinesis'],
+  ['direction:out', 'topic:MyStreamDSM', 'type:kinesis'],
   ENTRY_PARENT_HASH
 )
 
 describe('Kinesis', () => {
   setup()
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withVersions('aws-sdk', ['aws-sdk'], (version, moduleName) => {
     let AWS
     let kinesis
     let tracer
 
     const streamName = 'MyStream'
+    const streamNameDSM = 'MyStreamDSM'
     const kinesisClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-kinesis' : 'aws-sdk'
 
-    before(() => {
-      return agent.load('aws-sdk')
-    })
-
-    before(function (done) {
-      this.timeout(0)
+    function createResources (mocha, streamName, cb) {
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
-
+  
       const params = {
         endpoint: 'http://127.0.0.1:4566',
         region: 'us-east-1'
@@ -47,115 +43,130 @@ describe('Kinesis', () => {
       }
 
       kinesis = new AWS.Kinesis(params)
+
       kinesis.createStream({
         StreamName: streamName,
         ShardCount: 1
       }, (err, res) => {
-        if (err) return done(err)
+        if (err) return cb(err)
 
-        helpers.waitForActiveStream(this, kinesis, done)
+        helpers.waitForActiveStream(kinesis, streamName, cb)
       })
+    }
+
+    before(() => {
+      process.env.DD_DATA_STREAMS_ENABLED = 'true'
     })
 
-    after(done => {
-      kinesis.deleteStream({
-        StreamName: streamName
-      }, (err, res) => {
-        if (err) return done(err)
-
-        helpers.waitForDeletedStream(kinesis, done)
-      })
-    })
-
-    withNamingSchema(
-      (done) => kinesis.describeStream({
-        StreamName: streamName
-      }, (err) => err && done(err)),
-      rawExpectedSchema.outbound
-    )
-
-    it('injects trace context to Kinesis putRecord', done => {
-      helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
-        if (err) return done(err)
-
-        helpers.getTestData(kinesis, data, (err, data) => {
-          if (err) return done(err)
-
-          expect(data).to.have.property('_datadog')
-          expect(data._datadog).to.have.property('x-datadog-trace-id')
-
-          done()
-        })
-      })
-    })
-
-    it('handles already b64 encoded data', done => {
-      helpers.putTestRecord(kinesis, helpers.dataBuffer.toString('base64'), (err, data) => {
-        if (err) return done(err)
-
-        helpers.getTestData(kinesis, data, (err, data) => {
-          if (err) return done(err)
-
-          expect(data).to.have.property('_datadog')
-          expect(data._datadog).to.have.property('x-datadog-trace-id')
-
-          done()
-        })
-      })
-    })
-
-    it('skips injecting trace context to Kinesis if message is full', done => {
-      const dataBuffer = Buffer.from(JSON.stringify({
-        myData: Array(1048576 - 100).join('a')
-      }))
-
-      helpers.putTestRecord(kinesis, dataBuffer, (err, data) => {
-        if (err) return done(err)
-
-        helpers.getTestData(kinesis, data, (err, data) => {
-          if (err) return done(err)
-
-          expect(data).to.not.have.property('_datadog')
-
-          done()
-        })
-      })
-    })
-
-    it('generates tags for proper input', done => {
-      agent.use(traces => {
-        const span = traces[0][0]
-        expect(span.meta).to.include({
-          'streamname': streamName,
-          'aws_service': 'Kinesis',
-          'region': 'us-east-1'
-        })
-        expect(span.resource).to.equal(`putRecord ${streamName}`)
-        expect(span.meta).to.have.property('streamname', streamName)
-      }).then(done, done)
-
-      helpers.putTestRecord(kinesis, helpers.dataBuffer, e => e && done(e))
-    })
-
-    describe('Disabled', () => {
+    describe('no configuration', () => {
       before(() => {
-        process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
+        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false }}, { dsmEnabled: true })
       })
-
-      after(() => {
-        delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+  
+      before(function(done) {
+        createResources(this, streamName, done)
       })
-
-      it('skip injects trace context to Kinesis putRecord when disabled', done => {
-        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+  
+      after(done => {
+        kinesis.deleteStream({
+          StreamName: streamName
+        }, (err, res) => {
           if (err) return done(err)
-
-          helpers.getTestData(kinesis, data, (err, data) => {
+  
+          helpers.waitForDeletedStream(kinesis, streamName, done)
+        })
+      })
+  
+      withNamingSchema(
+        (done) => kinesis.describeStream({
+          StreamName: streamName
+        }, (err) => err && done(err)),
+        rawExpectedSchema.outbound
+      )
+  
+      it('injects trace context to Kinesis putRecord', done => {
+        helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+  
+          helpers.getTestData(kinesis, streamName, data, (err, data) => {
             if (err) return done(err)
-
-            expect(data).not.to.have.property('_datadog')
-
+  
+            expect(data).to.have.property('_datadog')
+            expect(data._datadog).to.have.property('x-datadog-trace-id')
+  
             done()
+          })
+        })
+      })
+  
+      it('handles already b64 encoded data', done => {
+        helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer.toString('base64'), (err, data) => {
+          if (err) return done(err)
+  
+          helpers.getTestData(kinesis, streamName, data, (err, data) => {
+            if (err) return done(err)
+  
+            expect(data).to.have.property('_datadog')
+            expect(data._datadog).to.have.property('x-datadog-trace-id')
+  
+            done()
+          })
+        })
+      })
+  
+      it('skips injecting trace context to Kinesis if message is full', done => {
+        const dataBuffer = Buffer.from(JSON.stringify({
+          myData: Array(1048576 - 100).join('a')
+        }))
+  
+        helpers.putTestRecord(kinesis, streamName, dataBuffer, (err, data) => {
+          if (err) return done(err)
+  
+          helpers.getTestData(kinesis, streamName, data, (err, data) => {
+            if (err) return done(err)
+  
+            expect(data).to.not.have.property('_datadog')
+  
+            done()
+          })
+        })
+      })
+  
+      it('generates tags for proper input', done => {
+        agent.use(traces => {
+          const span = traces[0][0]
+          expect(span.meta).to.include({
+            'streamname': streamName,
+            'aws_service': 'Kinesis',
+            'region': 'us-east-1'
+          })
+          expect(span.resource).to.equal(`putRecord ${streamName}`)
+          expect(span.meta).to.have.property('streamname', streamName)
+        }).then(done, done)
+  
+        helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, e => e && done(e))
+      })
+
+      describe('Disabled', () => {
+        before(() => {
+          process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED = 'false'
+        })
+  
+        after(() => {
+          delete process.env.DD_TRACE_AWS_SDK_KINESIS_ENABLED
+        })
+  
+        it('skip injects trace context to Kinesis putRecord when disabled', done => {
+          helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, (err, data) => {
+            if (err) return done(err)
+  
+            helpers.getTestData(kinesis, streamName, data, (err, data) => {
+              if (err) return done(err)
+  
+              expect(data).not.to.have.property('_datadog')
+  
+              done()
+            })
           })
         })
       })
@@ -163,11 +174,24 @@ describe('Kinesis', () => {
 
     describe('DSM Context Propagation', () => {
       before(() => {
+        return agent.load('aws-sdk', { kinesis: { dsmEnabled: true }}, { dsmEnabled: true })
+      })
+
+      before(function(done) {
         tracer = require('../../dd-trace')
-        tracer._initialized = false
-        tracer.init({ dsmEnabled: true })
-        tracer.use('aws-sdk', { kinesis: { dsmEnabled: true } })
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } })
+        tracer.use('aws-sdk', { kinesis: { dsmEnabled: true }}, { dsmEnabled: true })
+
+        createResources(this, streamNameDSM, done)
+      })
+
+      after(done => {
+        kinesis.deleteStream({
+          StreamName: streamNameDSM
+        }, (err, res) => {
+          if (err) return done(err)
+  
+          helpers.waitForDeletedStream(kinesis, streamNameDSM, done)
+        })
       })
 
       it('injects DSM trace context to Kinesis putRecord', done => {
@@ -176,7 +200,7 @@ describe('Kinesis', () => {
         }
         const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
 
-        helpers.putTestRecord(kinesis, helpers.dataBuffer, (err, data) => {
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
           expect(
