@@ -111,7 +111,7 @@ function getLatestCommits () {
   }
 }
 
-function getCommitsToUpload (commitsToExclude, commitsToInclude) {
+function getCommitsRevList (commitsToExclude, commitsToInclude) {
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   try {
@@ -236,7 +236,7 @@ module.exports = {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload,
+  getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository
