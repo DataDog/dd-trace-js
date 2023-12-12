@@ -97,8 +97,9 @@
     "node-abort-controller": "^3.1.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
-    "pprof-format": "^2.0.7", 
+    "pprof-format": "^2.0.7",
     "protobufjs": "^7.2.5",
+    "tlhunter-sorted-set": "^0.1.0",
     "retry": "^0.13.1",
     "semver": "^7.5.4"
   },
