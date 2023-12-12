@@ -84,6 +84,22 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+            'when is the header same header',
+          fn: (req, res) => {
+            setHeaderFunction('testheader', req.get('testheader'), res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.get(`http://localhost:${config.port}/`, {
+              headers: {
+                testheader: 'headerValue'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
           testDescription: 'should not have HEADER_INJECTION vulnerability when the header value is not tainted',
           fn: (req, res) => {
             setHeaderFunction('custom', 'not tainted string', res)
