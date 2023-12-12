@@ -200,12 +200,13 @@ describe('profiler', () => {
     const eventKey = strings.dedup('event')
     const hostKey = strings.dedup('host')
     const addressKey = strings.dedup('address')
+    const portKey = strings.dedup('port')
     const threadNameKey = strings.dedup('thread name')
     const nameKey = strings.dedup('operation')
     const dnsEventValue = strings.dedup('dns')
     const dnsEvents = []
     for (const sample of prof.sample) {
-      let ts, event, host, address, name, threadName
+      let ts, event, host, address, port, name, threadName
       for (const label of sample.label) {
         switch (label.key) {
           case tsKey: ts = label.num; break
@@ -213,6 +214,7 @@ describe('profiler', () => {
           case eventKey: event = label.str; break
           case hostKey: host = label.str; break
           case addressKey: address = label.str; break
+          case portKey: port = label.num; break
           case threadNameKey: threadName = label.str; break
           default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
         }
@@ -231,6 +233,7 @@ describe('profiler', () => {
         const ev = { name: strings.strings[name] }
         if (address) {
           ev.address = strings.strings[address]
+          ev.port = port
         } else {
           ev.host = strings.strings[host]
         }
@@ -242,7 +245,7 @@ describe('profiler', () => {
       { name: 'lookup', host: 'example.com' },
       { name: 'lookup', host: 'datadoghq.com' },
       { name: 'queryA', host: 'datadoghq.com' },
-      { name: 'lookupService', address: '13.224.103.60:80' }
+      { name: 'lookupService', address: '13.224.103.60', port: 80 }
     ])
   })
 

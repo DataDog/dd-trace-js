@@ -6,6 +6,7 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 
+const errors = {}
 let config
 let pluginManager
 let samplingRules = []
@@ -89,6 +90,10 @@ function startupLog ({ agentError } = {}) {
   info('DATADOG TRACER CONFIGURATION - ' + out)
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+    errors.agentError = {
+      code: agentError.code ? agentError.code : '',
+      message: `Agent Error:${agentError.message}`
+    }
   }
 
   config = undefined
@@ -112,5 +117,6 @@ module.exports = {
   startupLog,
   setStartupLogConfig,
   setStartupLogPluginManager,
-  setSamplingRules
+  setSamplingRules,
+  errors
 }
