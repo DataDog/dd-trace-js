@@ -8,6 +8,3 @@ require('dd-trace').init().profilerStarted().then(() => {
   dns.resolve4('datadoghq.com', () => {})
   dns.lookup('dfslkgsjkrtgrdg.com', () => {})
 })
-
-// Give the event processor chance to collect events
-setTimeout(() => {}, 3000)
