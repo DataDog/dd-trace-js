@@ -214,24 +214,36 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
+              const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key')
+              const recordBins = {
+                id: 1,
+                tags: ['green', 'blue', 'red']
+              }
+
               aerospike.connect(config).then(client => {
-                const index = {
-                  ns: ns,
-                  set: 'demo',
-                  bin: 'tags',
-                  index: 'tags_idx',
-                  datatype: aerospike.indexDataType.STRING
-                }
-                client.createIndex(index, (error, job) => {
-                  job.waitUntilDone((waitError) => {
-                    const query = client.query(ns, 'demo')
-                    const queryPolicy = {
-                      totalTimeout: 10000
-                    }
-                    query.select('id', 'tags')
-                    query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-                    const stream = query.foreach(queryPolicy)
-                    stream.on('end', () => { client.close(false) })
+                // Save the record
+                client.put(recordKey, recordBins, (putError) => {
+                  const index = {
+                    ns: ns,
+                    set: 'demo',
+                    bin: 'tags',
+                    index: 'unique',
+                    datatype: aerospike.indexDataType.STRING
+                  }
+
+                  client.createIndex(index, (indexError, job) => {
+                    job.waitUntilDone((waitError) => {
+                      const query = client.query(ns, 'demo')
+                      const queryPolicy = {
+                        totalTimeout: 10000
+                      }
+                      query.select('id', 'tags')
+                      query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
+                      const stream = query.foreach(queryPolicy)
+                      stream.on('end', () => {
+                        client.close(false)
+                      })
+                    })
                   })
                 })
               })
