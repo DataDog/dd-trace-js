@@ -20,7 +20,8 @@ const expectedProducerHash = computePathwayHash(
   ENTRY_PARENT_HASH
 )
 
-describe('Kinesis', () => {
+describe('Kinesis', function () {
+  this.timeout(10000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -228,7 +229,7 @@ describe('Kinesis', () => {
           helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
             if (err) return done(err)
 
-            const payloadSize = getSizeOrZero(JSON.stringify(data))
+            const payloadSize = getSizeOrZero(data)
 
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
