@@ -221,49 +221,37 @@ describe('Plugin', () => {
               // Add other bins as needed
             }
 
-            aerospike.connect(config).then(client => {
-              // Save the record
-              client.put(recordKey, recordBins).then(() => {
-                // Create an index
-                const index = {
-                  ns: ns,
-                  set: 'demo',
-                  bin: 'tags',
-                  index: 'unique_tags_idx', // Change to a unique name
-                  data_type: aerospike.indexDataType.NUMERIC
-                }
+            aerospike.connect((error, client) => {
+              if (error) throw error
+              const index = {
+                ns: ns,
+                set: set,
+                bin: 'tags',
+                index: 'tags_idx',
+                type: aerospike.indexType.LIST,
+                datatype: aerospike.indexDataType.STRING
+              }
+              client.createIndex(index, (error, job) => {
+                if (error) throw error
+                job.waitUntilDone((error) => {
+                  if (error) throw error
 
-                client.createIndex(index).then(job => {
-                  job.waitUntilDone().then(() => {
-                    // Perform a query
-                    const query = client.query(ns, 'demo')
-                    const queryPolicy = {
-                      totalTimeout: 10000
-                    }
-
-                    query.select('id', 'tags')
-                    query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-
-                    const stream = query.foreach(queryPolicy)
-                    stream.on('data', (result) => {
-                      console.log('Query result:', result.bins)
-                    })
-
-                    stream.on('end', () => {
-                      console.log('Query completed')
-                      client.close(false)
-                    })
-                  }).catch(err => {
-                    console.error('Error waiting for index creation:', err)
+                  const query = client.query('test', 'demo')
+                  const queryPolicy = { filterExpression: aerospike.exp.keyExist('uniqueExpKey') }
+                  query.select('id', 'tags')
+                  query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
+                  const stream = query.foreach(queryPolicy)
+                  stream.on('error', (error) => {
+                    console.error(error)
+                    throw error
+                  })
+                  stream.on('data', (record) => {
+                    console.info(record)
+                  })
+                  stream.on('end', () => {
                     client.close(false)
                   })
-                }).catch(err => {
-                  console.error('Error creating index:', err)
-                  client.close(false)
                 })
-              }).catch(err => {
-                console.error('Error putting record:', err)
-                client.close(false)
               })
             })
           })
