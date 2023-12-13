@@ -129,6 +129,7 @@ function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  metricsManager.send(config, application, host)
 }
 
 function createAppObject (config) {

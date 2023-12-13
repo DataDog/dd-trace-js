@@ -86,8 +86,11 @@ class Tracer extends NoopProxy {
       }
 
       if (config.tracing) {
-        // TODO: This should probably not require tracing to be enabled.
-        telemetry.start(config, this._pluginManager)
+        // ** TODO ** make sure this is disabled for agentless
+        if (!config.isCiVisibility) {
+          // TODO: This should probably not require tracing to be enabled.
+          telemetry.start(config, this._pluginManager)
+        }
 
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
@@ -109,6 +112,12 @@ class Tracer extends NoopProxy {
           this._testApiManualPlugin = new TestApiManualPlugin(this)
           this._testApiManualPlugin.configure({ ...config, enabled: true })
         }
+      }
+
+      // ** TODO ** we can probably use the same telemetry for agent based
+      if (config.isCiVisibility) {
+        debugger
+        telemetry.start(config, this._pluginManager)
       }
     } catch (e) {
       log.error(e)
