@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const SpanLink = require('../opentelemetry/span_link')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -52,7 +53,7 @@ function getIntegrationCounter (event, integration) {
 }
 
 class DatadogSpan {
-  constructor (tracer, processor, prioritySampler, fields, debug) {
+  constructor (tracer, processor, prioritySampler, fields, debug, links) {
     const operationName = fields.operationName
     const parent = fields.parent || null
     const tags = Object.assign({}, fields.tags)
@@ -64,6 +65,7 @@ class DatadogSpan {
     this._prioritySampler = prioritySampler
     this._store = storage.getStore()
     this._duration = undefined
+    this._links = links
 
     // For internal use only. You probably want `context()._name`.
     // This name property is not updated when the span name changes.
@@ -142,6 +144,16 @@ class DatadogSpan {
   addTags (keyValueMap) {
     this._addTags(keyValueMap)
     return this
+  }
+
+  addLink (link) {
+    this._links.push(new SpanLink(link))
+  }
+
+  getLink ({ traceID, spanID }) {
+    // there should only be one link for (traceId, spanId) tuple
+    // how they're passed here can be up to the use case (distributed tracing, etc.)
+    return this._links.find(link => link.traceID === traceID && link.spanID === spanID)
   }
 
   log () {

@@ -27,7 +27,7 @@ class SpanLink {
         } else {
           log.warn(
             `Cannot sanitize type ${typeof maybeScalar} with key ${index}.
-            \rSupported types are string, number, or boolean.`
+            \rSupported types are string, number, or boolean. Dropping attribute.`
           )
           this._droppedAttributesCount++ // is this an appropriate spot to increment this
           // or should it be when serializing for the payload?
@@ -50,6 +50,11 @@ class SpanLink {
     Object.assign(this.attributes, attribute)
   }
 
+  flushAttributes () {
+    this._droppedAttributesCount += this.attributesCount
+    this.attributes = {}
+  }
+
   // not sure if this is the right spot
   serialize () {
     const link = {}
@@ -58,13 +63,17 @@ class SpanLink {
     if (this._droppedAttributesCount) link.droppedAttributesCount = this._droppedAttributesCount
     if (this.traceState) link.traceState = this.traceState
     if (this.traceFlags) link.traceFlags = this.traceFlags
-    if (Object.keys(this.attributes).length) link.attributes = this.attributes
+    if (this.attributesCount) link.attributes = this.attributes
 
     // these values are always added
     link.traceId = this.traceId
     link.spanId = this.spanId
 
     return link
+  }
+
+  get attributesCount () {
+    return Object.keys(this.attributes).length
   }
 }
 

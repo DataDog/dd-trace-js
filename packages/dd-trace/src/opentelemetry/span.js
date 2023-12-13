@@ -134,7 +134,7 @@ class Span {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
       }
-    }, _tracer._debug)
+    }, _tracer._debug, links)
 
     if (attributes) {
       this.setAttributes(attributes)
@@ -149,7 +149,6 @@ class Span {
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
-    this.links = links
     this._spanProcessor.onStart(this, context)
   }
 
@@ -193,13 +192,12 @@ class Span {
   }
 
   addLink (link) {
-    this.links.push(new SpanLink(link))
+    this._ddSpan.addLink(link)
   }
 
-  getLink ({ traceId, spanId }) {
-    // there should only be one link for (traceId, spanId) tuple
-    // how they're passed here can be up to the use case (distributed tracing, etc.)
-    return this.links.find(link => link.traceId === traceId && link.spanId === spanId)
+  // TODO flush out what 'state' means and looks like (tracestate)
+  getLink (state) {
+    return this._ddSpan.getLink(state)
   }
 
   setStatus ({ code, message }) {

@@ -37,6 +37,8 @@ function format (span) {
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
 
+  // format span.links for serialization/encoding here
+
   return formatted
 }
 
