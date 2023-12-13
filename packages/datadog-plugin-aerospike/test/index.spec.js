@@ -1,10 +1,8 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let aerospike
@@ -191,13 +189,6 @@ describe('Plugin', () => {
             })
           })
 
-          // skip query tests for node 16 and aerospike 4 because of an aerospike error that occurs when using query:
-          // AerospikeError: Sometimes our doc, or our customers' wishes, get ahead of us.
-          // We may have processed something that the server is not ready for (unsupported feature).
-          // this test works on node 14, so it is not a problem with the test but most likely a problem with the package
-          // version and aerospike server version mismatch which is really hard to pin down, since aerospike doesn't
-          // provide info on package version's compatibility with each server version
-          // if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4')) && !semver.intersects(version, '^3')) {
           it('should instrument query', done => {
             agent
               .use(traces => {
@@ -236,7 +227,7 @@ describe('Plugin', () => {
               })
             })
           })
-          // }
+
           it('should run the callback in the parent context', done => {
             const obj = {}
             aerospike.connect(config).then(client => {

@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       aerospike:
-        image: aerospike:ce-5.3.0.16
+        image: aerospike:ce-5.7.0.15
         ports: 
           - "127.0.0.1:3000-3002:3000-3002"
     env:
