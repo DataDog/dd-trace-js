@@ -325,8 +325,10 @@ describe('Sns', () => {
               if (err) return done(err)
 
               const params = injectMessageSpy.args[0][1]
-              // decode the raw buffer
-              params.MessageAttributes._datadog.BinaryValue = JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
+              // decode the raw buffer to JSON string
+              params.MessageAttributes._datadog.BinaryValue = JSON.stringify(
+                JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
+              )
               const payloadSize = getHeadersSize(params)
 
               expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))

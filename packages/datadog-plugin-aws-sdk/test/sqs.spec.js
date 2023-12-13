@@ -3,9 +3,10 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor, getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const sqsPlugin = require('../src/services/sqs')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -28,9 +29,10 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => {
+          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
 
-          return agent.load('aws-sdk')
+          return agent.load('aws-sdk', { sqs: { dsmEnabled: false } }, { dsmEnabled: true })
         })
 
         before(done => {
@@ -222,7 +224,9 @@ describe('Plugin', () => {
               consumer: false,
               dsmEnabled: false
             }
-          })
+          },
+          { dsmEnabled: true }
+          )
         })
 
         before(done => {
@@ -312,7 +316,7 @@ describe('Plugin', () => {
         before(done => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
-          tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
+          tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
           done()
         })
 
@@ -409,27 +413,46 @@ describe('Plugin', () => {
             DataStreamsProcessor.prototype.recordCheckpoint.restore()
           }
           const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+
+          if (sqsPlugin.prototype.requestInject.isSinonProxy) {
+            sqsPlugin.prototype.requestInject.restore()
+          }
+          const injectMessageSpy = sinon.spy(sqsPlugin.prototype, 'requestInject')
+
           sqs.sendMessage({
             MessageBody: 'test DSM',
             QueueUrl
           }, (err) => {
             if (err) return done(err)
+
+            const payloadSize = getHeadersSize(injectMessageSpy.args[0][1].params)
+
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+
             recordCheckpointSpy.restore()
+            injectMessageSpy.restore()
+
             done()
           })
         })
 
         it('Should set a message payload size when consuming a message', (done) => {
-          if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
+          if (sqsPlugin.prototype.responseExtractDSMContext.isSinonProxy) {
+            sqsPlugin.prototype.responseExtractDSMContext.restore()
           }
-          const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+          const extractContextSpy = sinon.spy(sqsPlugin.prototype, 'responseExtractDSMContext')
+
           sqs.sendMessage({
             MessageBody: 'test DSM',
             QueueUrl
           }, (err) => {
             if (err) return done(err)
+
+            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+              DataStreamsProcessor.prototype.recordCheckpoint.restore()
+            }
+            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
 
             sqs.receiveMessage({
               QueueUrl,
@@ -437,8 +460,17 @@ describe('Plugin', () => {
             }, (err) => {
               if (err) return done(err)
 
+              const payloadSize = getHeadersSize({
+                Body: extractContextSpy.args[0][1].message.Body,
+                MessageAttributes: extractContextSpy.args[0][1].message.MessageAttributes
+              })
+
               expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+
               recordCheckpointSpy.restore()
+              extractContextSpy.restore()
+
               done()
             })
           })

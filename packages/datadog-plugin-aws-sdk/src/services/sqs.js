@@ -33,7 +33,7 @@ class Sqs extends BaseAwsSdkPlugin {
           )
         }
         const span = plugin.tracer.startSpan('aws.response', options)
-        this.responseExtractDSMContext(request.params, responseExtraction.traceContext, span)
+        this.responseExtractDSMContext(request.params, responseExtraction, span)
         this.enter(span, store)
       }
     })
@@ -143,14 +143,16 @@ class Sqs extends BaseAwsSdkPlugin {
         parsedAttributes = JSON.parse(textMap)
         return {
           maybeChildOf: this.tracer.extract('text_map', parsedAttributes),
-          traceContext: parsedAttributes
+          traceContext: parsedAttributes,
+          message: message
         }
       } else if (datadogAttribute.Type === 'Binary') {
         const buffer = Buffer.from(datadogAttribute.Value, 'base64')
         parsedAttributes = JSON.parse(buffer)
         return {
           maybeChildOf: this.tracer.extract('text_map', parsedAttributes),
-          traceContext: parsedAttributes
+          traceContext: parsedAttributes,
+          message: message
         }
       }
     } catch (e) {
@@ -159,10 +161,13 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   responseExtractDSMContext (params, context, span) {
-    if (this.config.dsmEnabled && context && context[CONTEXT_PROPAGATION_KEY]) {
-      const payloadSize = getHeadersSize(params)
+    if (this.config.dsmEnabled && context && context.traceContext && context.traceContext[CONTEXT_PROPAGATION_KEY]) {
+      const payloadSize = getHeadersSize({
+        Body: context.message.Body,
+        MessageAttributes: context.message.MessageAttributes
+      })
       const queue = params.QueueUrl.split('/').pop()
-      this.tracer.decodeDataStreamsContext(Buffer.from(context[CONTEXT_PROPAGATION_KEY]))
+      this.tracer.decodeDataStreamsContext(Buffer.from(context.traceContext[CONTEXT_PROPAGATION_KEY]))
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     }
@@ -181,6 +186,11 @@ class Sqs extends BaseAwsSdkPlugin {
         return
       }
       const ddInfo = {}
+      this.tracer.inject(span, 'text_map', ddInfo)
+      request.params.MessageAttributes._datadog = {
+        DataType: 'String',
+        StringValue: JSON.stringify(ddInfo)
+      }
       if (this.config.dsmEnabled) {
         const payloadSize = getHeadersSize(request.params)
         const queue = request.params.QueueUrl.split('/').pop()
@@ -191,11 +201,7 @@ class Sqs extends BaseAwsSdkPlugin {
           ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
         }
       }
-      this.tracer.inject(span, 'text_map', ddInfo)
-      request.params.MessageAttributes._datadog = {
-        DataType: 'String',
-        StringValue: JSON.stringify(ddInfo)
-      }
+      request.params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
     }
   }
 }

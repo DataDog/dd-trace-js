@@ -206,8 +206,10 @@ class DataStreamsProcessor {
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
-      payloadSize += getHeadersSize(encodePathwayContext(dataStreamsContext).toJSON())
-      payloadSize += CONTEXT_PROPAGATION_KEY.length
+      // - 1 to account for extra byte for {
+      const ddInfoContinued = {}
+      ddInfoContinued[CONTEXT_PROPAGATION_KEY] = encodePathwayContext(dataStreamsContext).toJSON()
+      payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
     }
     const checkpoint = {
       currentTimestamp: nowNs,
