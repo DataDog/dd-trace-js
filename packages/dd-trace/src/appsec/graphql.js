@@ -95,7 +95,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body
 
-    abortController.abort()
+    abortController?.abort()
   }
 
   graphqlRequestData.delete(req)

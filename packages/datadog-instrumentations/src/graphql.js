@@ -230,11 +230,12 @@ function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
   cb = cb || (() => {})
 
   return aR.runInAsyncScope(() => {
-    try {
-      if (abortController?.signal.aborted) {
-        throw new AbortError('Aborted')
-      }
+    if (abortController?.signal.aborted) {
+      cb(null, null)
+      throw new AbortError('Aborted')
+    }
 
+    try {
       const result = fn.apply(thisArg, args)
       if (result && typeof result.then === 'function') {
         // bind callback to this scope
@@ -247,11 +248,7 @@ function callInAsyncScope (fn, aR, thisArg, args, abortController, cb) {
       }
       return result
     } catch (err) {
-      if (err instanceof AbortError) {
-        cb(null, null)
-      } else {
-        cb(err)
-      }
+      cb(err)
       throw err
     }
   })
