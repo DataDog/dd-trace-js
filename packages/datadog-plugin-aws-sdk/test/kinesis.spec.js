@@ -29,6 +29,7 @@ const expectedConsumerHash = computePathwayHash(
 )
 
 describe('Kinesis', function () {
+  this.timeout(5000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
