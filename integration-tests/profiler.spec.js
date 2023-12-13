@@ -10,6 +10,7 @@ const path = require('path')
 const { assert } = require('chai')
 const fs = require('node:fs/promises')
 const fsync = require('node:fs')
+const net = require('node:net')
 const zlib = require('node:zlib')
 const { Profile } = require('pprof-format')
 
@@ -63,6 +64,74 @@ async function getLatestProfile (cwd, pattern) {
   const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
   return Profile.decode(pprofUnzipped)
 }
+
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, threadName, args) {
+  const procStart = BigInt(Date.now() * 1000000)
+  const proc = fork(path.join(cwd, scriptFilePath), args, {
+    cwd,
+    env: {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_EXPORTERS: 'file',
+      DD_PROFILING_ENABLED: 1,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+    }
+  })
+
+  await processExitPromise(proc, 5000)
+  const procEnd = BigInt(Date.now() * 1000000)
+
+  const prof = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+
+  const strings = prof.stringTable
+  const tsKey = strings.dedup('end_timestamp_ns')
+  const eventKey = strings.dedup('event')
+  const hostKey = strings.dedup('host')
+  const addressKey = strings.dedup('address')
+  const portKey = strings.dedup('port')
+  const threadNameKey = strings.dedup('thread name')
+  const nameKey = strings.dedup('operation')
+  const eventValue = strings.dedup(eventType)
+  const events = []
+  const threadNamePrefix = `Main ${threadName}-`
+  for (const sample of prof.sample) {
+    let ts, event, host, address, port, name, threadName
+    for (const label of sample.label) {
+      switch (label.key) {
+        case tsKey: ts = label.num; break
+        case nameKey: name = label.str; break
+        case eventKey: event = label.str; break
+        case hostKey: host = label.str; break
+        case addressKey: address = label.str; break
+        case portKey: port = label.num; break
+        case threadNameKey: threadName = label.str; break
+        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
+      }
+    }
+    // Timestamp must be defined and be between process start and end time
+    assert.isDefined(ts)
+    assert.isTrue(ts <= procEnd)
+    assert.isTrue(ts >= procStart)
+    // Gather only DNS events; ignore sporadic GC events
+    if (event === eventValue) {
+      assert.isTrue(strings.strings[threadName].startsWith(threadNamePrefix))
+      assert.isDefined(name)
+      // Exactly one of these is defined
+      assert.isTrue(!!address !== !!host)
+      const ev = { name: strings.strings[name] }
+      if (address) {
+        ev.address = strings.strings[address]
+      } else {
+        ev.host = strings.strings[host]
+      }
+      if (port) {
+        ev.port = port
+      }
+      events.push(ev)
+    }
+  }
+  return events
+}
+
 describe('profiler', () => {
   let agent
   let proc
@@ -178,68 +247,7 @@ describe('profiler', () => {
   })
 
   it('dns timeline events work', async () => {
-    const procStart = BigInt(Date.now() * 1000000)
-    const proc = fork(path.join(cwd, 'profiler/dnstest.js'), {
-      cwd,
-      env: {
-        DD_PROFILING_PROFILERS: 'wall',
-        DD_PROFILING_EXPORTERS: 'file',
-        DD_PROFILING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
-      }
-    })
-
-    await processExitPromise(proc, 5000)
-    const procEnd = BigInt(Date.now() * 1000000)
-
-    const prof = await getLatestProfile(cwd, /^events_.+\.pprof$/)
-    assert.isAtLeast(prof.sample.length, 5)
-
-    const strings = prof.stringTable
-    const tsKey = strings.dedup('end_timestamp_ns')
-    const eventKey = strings.dedup('event')
-    const hostKey = strings.dedup('host')
-    const addressKey = strings.dedup('address')
-    const portKey = strings.dedup('port')
-    const threadNameKey = strings.dedup('thread name')
-    const nameKey = strings.dedup('operation')
-    const dnsEventValue = strings.dedup('dns')
-    const dnsEvents = []
-    for (const sample of prof.sample) {
-      let ts, event, host, address, port, name, threadName
-      for (const label of sample.label) {
-        switch (label.key) {
-          case tsKey: ts = label.num; break
-          case nameKey: name = label.str; break
-          case eventKey: event = label.str; break
-          case hostKey: host = label.str; break
-          case addressKey: address = label.str; break
-          case portKey: port = label.num; break
-          case threadNameKey: threadName = label.str; break
-          default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
-        }
-      }
-      // Timestamp must be defined and be between process start and end time
-      assert.isDefined(ts)
-      assert.isTrue(ts <= procEnd)
-      assert.isTrue(ts >= procStart)
-      // Gather only DNS events; ignore sporadic GC events
-      if (event === dnsEventValue) {
-        // Thread name must be defined and exactly equal "Main DNS"
-        assert.isTrue(strings.strings[threadName].startsWith('Main DNS-'))
-        assert.isDefined(name)
-        // Exactly one of these is defined
-        assert.isTrue(!!address !== !!host)
-        const ev = { name: strings.strings[name] }
-        if (address) {
-          ev.address = strings.strings[address]
-          ev.port = port
-        } else {
-          ev.host = strings.strings[host]
-        }
-        dnsEvents.push(ev)
-      }
-    }
+    const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns', 'DNS')
     assert.sameDeepMembers(dnsEvents, [
       { name: 'lookup', host: 'example.org' },
       { name: 'lookup', host: 'example.com' },
@@ -247,6 +255,49 @@ describe('profiler', () => {
       { name: 'queryA', host: 'datadoghq.com' },
       { name: 'lookupService', address: '13.224.103.60', port: 80 }
     ])
+  })
+
+  it('net timeline events work', async () => {
+    // Simple server that writes a constant message to the socket.
+    const msg = 'cya later!\n'
+    function createServer () {
+      const server = net.createServer((socket) => {
+        socket.end(msg, 'utf8')
+      }).on('error', (err) => {
+        throw err
+      })
+      return server
+    }
+    // Create two instances of the server
+    const server1 = createServer()
+    try {
+      const server2 = createServer()
+      try {
+        // Have the servers listen on ephemeral ports
+        const p = new Promise(resolve => {
+          server1.listen(0, () => {
+            server2.listen(0, async () => {
+              resolve([server1.address().port, server2.address().port])
+            })
+          })
+        })
+        const [ port1, port2 ] = await p
+        const args = [String(port1), String(port2), msg]
+        // Invoke the profiled program, passing it the ports of the servers and
+        // the expected message.
+        const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', 'Net', args)
+        // The profiled program should have two TCP connection events to the two
+        // servers.
+        assert.sameDeepMembers(events, [
+          { name: 'connect', host: '127.0.0.1', port: port1 },
+          { name: 'connect', host: '127.0.0.1', port: port2 }
+        ])
+      } finally {
+        server2.close()
+      }
+    } finally {
+      server1.close()
+    }
   })
 
   context('shutdown', () => {
