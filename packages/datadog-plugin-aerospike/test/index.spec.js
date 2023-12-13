@@ -230,7 +230,7 @@ describe('Plugin', () => {
                   set: 'demo',
                   bin: 'tags',
                   index: 'unique_tags_idx', // Change to a unique name
-                  data_type: aerospike.indexDataType.STRING
+                  data_type: aerospike.indexDataType.NUMERIC
                 }
 
                 client.createIndex(index).then(job => {
@@ -251,19 +251,19 @@ describe('Plugin', () => {
 
                     stream.on('end', () => {
                       console.log('Query completed')
-                      client.close()
+                      client.close(false)
                     })
                   }).catch(err => {
                     console.error('Error waiting for index creation:', err)
-                    client.close()
+                    client.close(false)
                   })
                 }).catch(err => {
                   console.error('Error creating index:', err)
-                  client.close()
+                  client.close(false)
                 })
               }).catch(err => {
                 console.error('Error putting record:', err)
-                client.close()
+                client.close(false)
               })
             })
           })
