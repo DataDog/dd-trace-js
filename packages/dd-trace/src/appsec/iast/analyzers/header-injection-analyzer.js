@@ -47,8 +47,8 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     const ranges = getRanges(iastContext, value)
     if (ranges?.length > 0) {
       return !(this.isCookieExclusion(lowerCasedHeaderName, ranges) ||
-        this.isAccessControlAllowOriginExclusion(lowerCasedHeaderName, ranges) ||
-        this.isSameHeaderExclusion(lowerCasedHeaderName, ranges))
+        this.isSameHeaderExclusion(lowerCasedHeaderName, ranges) ||
+        this.isAccessControlAllowOriginExclusion(lowerCasedHeaderName, ranges))
     }
 
     return false
