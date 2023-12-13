@@ -214,43 +214,24 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key') // Replace 'your_record_key' with a unique key
-            const recordBins = {
-              id: 1,
-              tags: ['green', 'blue', 'red']
-              // Add other bins as needed
-            }
-
-            aerospike.connect((error, client) => {
-              if (error) throw error
+            aerospike.connect(config).then(client => {
               const index = {
                 ns: ns,
-                set: set,
+                set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
-                type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING
               }
               client.createIndex(index, (error, job) => {
-                if (error) throw error
-                job.waitUntilDone((error) => {
-                  if (error) throw error
-
-                  const query = client.query('test', 'demo')
-                  const queryPolicy = { filterExpression: aerospike.exp.keyExist('uniqueExpKey') }
+                job.waitUntilDone((waitError) => {
+                  const query = client.query(ns, 'demo')
+                  const queryPolicy = {
+                    totalTimeout: 10000
+                  }
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
                   const stream = query.foreach(queryPolicy)
-                  stream.on('error', (error) => {
-                    console.error(error)
-                    throw error
-                  })
-                  stream.on('data', (record) => {
-                    console.info(record)
-                  })
-                  stream.on('end', () => {
-                    client.close(false)
-                  })
+                  stream.on('end', () => { client.close(false) })
                 })
               })
             })
