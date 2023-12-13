@@ -10,8 +10,15 @@ let rc
 
 function enable (config) {
   rc = new RemoteConfigManager(config)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
 
   const activation = Activation.fromConfig(config)
+
+  if (config.appsec.enabled === undefined) { // only activate ASM_FEATURES when conf is not set locally
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
 
   if (activation !== Activation.DISABLED) {
     if (activation === Activation.ONECLICK) {
