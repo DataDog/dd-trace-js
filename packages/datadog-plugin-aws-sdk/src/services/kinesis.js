@@ -1,15 +1,55 @@
 'use strict'
 const {
   CONTEXT_PROPAGATION_KEY,
-  getSizeOrZero
+  getSizeOrZero,
+  getHeadersSize
 } = require('../../../dd-trace/src/datastreams/processor')
 const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const { storage } = require('../../../datadog-core')
 
 class Kinesis extends BaseAwsSdkPlugin {
   static get id () { return 'kinesis' }
   static get peerServicePrecursors () { return ['streamname'] }
+
+  constructor (...args) {
+    super(...args)
+
+    // TODO(bengl) Find a way to create the response span tags without this WeakMap being populated
+    // in the base class
+    this.requestTags = new WeakMap()
+
+    this.addSub('apm:aws:response:start:kinesis', obj => {
+      const { request, response } = obj
+      const store = storage.getStore()
+      const plugin = this
+      const streamName = this.getStreamName(request.params, request.operation)
+      if (streamName) {
+        this.requestTags.streamName = streamName
+      }
+      const responseExtraction = this.responseExtract(request.params, request.operation, response)
+      if (responseExtraction && responseExtraction.maybeChildOf) {
+        obj.needsFinish = true
+        const options = {
+          childOf: responseExtraction.maybeChildOf,
+          tags: Object.assign(
+            {},
+            this.requestTags.get(request) || {},
+            { 'span.kind': 'server' }
+          )
+        }
+        const span = plugin.tracer.startSpan('aws.response', options)
+        this.responseExtractDSMContext(response, responseExtraction.traceContext, this.requestTags.streamName, span)
+        this.enter(span, store)
+      }
+    })
+
+    this.addSub('apm:aws:response:finish:kinesis', err => {
+      const { span } = storage.getStore()
+      this.finish(span, null, err)
+    })
+  }
 
   generateTags (params, operation, response) {
     if (!params || !params.StreamName) return {}
@@ -18,6 +58,46 @@ class Kinesis extends BaseAwsSdkPlugin {
       'resource.name': `${operation} ${params.StreamName}`,
       'aws.kinesis.stream_name': params.StreamName,
       'streamname': params.StreamName
+    }
+  }
+
+  getStreamName (params, operation) {
+    if (!operation || operation !== 'getShardIterator') return null
+    if (!params || !params.StreamName) return null
+
+    return params.StreamName
+  }
+
+  responseExtract (params, operation, response) {
+    if (operation !== 'getRecords') return
+    if (params.Limit && params.Limit !== 1) return
+    if (!response || !response.Records || !response.Records[0] || response.Records.length > 1) return
+
+    const record = response.Records[0]
+
+    try {
+      const decodedData = JSON.parse(Buffer.from(record.Data).toString())
+
+      return {
+        maybeChildOf: this.tracer.extract('text_map', decodedData._datadog),
+        traceContext: decodedData._datadog
+      }
+    } catch (e) {
+      log.error(e)
+    }
+  }
+
+  responseExtractDSMContext (response, context, streamName, span) {
+    if (this.config.dsmEnabled && context && context[CONTEXT_PROPAGATION_KEY] && streamName) {
+      let payloadSize = 0
+      if (response && response.Records) {
+        for (const record of response.Records) {
+          payloadSize += getSizeOrZero(record.Data)
+        }
+      }
+      this.tracer.decodeDataStreamsContext(Buffer.from(context[CONTEXT_PROPAGATION_KEY]))
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
     }
   }
 
@@ -60,11 +140,15 @@ class Kinesis extends BaseAwsSdkPlugin {
       const parsedData = this._tryParse(injectPath.Data)
       if (parsedData) {
         parsedData._datadog = traceData
+        const originalData = injectPath.Data
+
+        // set this now so that computed dsm payload size is correct
+        injectPath.Data = JSON.stringify(parsedData)
 
         // set DSM hash if enabled
         if (this.config.dsmEnabled) {
           // get payload size of request data
-          const payloadSize = getSizeOrZero(JSON.stringify(parsedData))
+          const payloadSize = getHeadersSize(request.params)
           const stream = request.params.StreamName
           const dataStreamsContext = this.tracer
             .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
@@ -79,6 +163,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         // Kinesis max payload size is 1MB
         // So we must ensure adding DD context won't go over that (512b is an estimate)
         if (byteSize >= 1048576) {
+          injectPath.Data = originalData
           log.info('Payload size too large to pass context')
           return
         }

@@ -8,10 +8,12 @@ const { rawExpectedSchema } = require('./kinesis-naming')
 const {
   ENTRY_PARENT_HASH,
   DataStreamsProcessor,
-  getSizeOrZero
+  getSizeOrZero,
+  getHeadersSize
 } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
+const kinesisPlugin = require('../src/services/kinesis')
 
 const expectedProducerHash = computePathwayHash(
   'test',
@@ -223,18 +225,53 @@ describe('Kinesis', function () {
         }
         const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
 
+        if (kinesisPlugin.prototype.requestInject.isSinonProxy) {
+          kinesisPlugin.prototype.requestInject.restore()
+        }
+        const requestInjectSpy = sinon.spy(kinesisPlugin.prototype, 'requestInject')
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err) => {
+          if (err) return done(err)
+
+          const payloadSize = getHeadersSize(requestInjectSpy.args[0][1].params)
+
+          expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+          expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+          recordCheckpointSpy.restore()
+          requestInjectSpy.restore()
+          done()
+        })
+      })
+
+      it('Should set a message payload size when consuming a message', (done) => {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
+          if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
+            DataStreamsProcessor.prototype.recordCheckpoint.restore()
+          }
+          const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+
+          kinesis.getShardIterator({
+            ShardId: data.ShardId,
+            ShardIteratorType: 'AT_SEQUENCE_NUMBER',
+            StartingSequenceNumber: data.SequenceNumber,
+            StreamName: streamNameDSM
+          }, (err, { ShardIterator } = {}) => {
             if (err) return done(err)
 
-            const payloadSize = getSizeOrZero(data)
+            kinesis.getRecords({
+              ShardIterator
+            }, (err, response) => {
+              if (err) return done(err)
 
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-            recordCheckpointSpy.restore()
-            done()
+              const payloadSize = getSizeOrZero(response.Records[0].Data)
+
+              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+              recordCheckpointSpy.restore()
+              done()
+            })
           })
         })
       })
