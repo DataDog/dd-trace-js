@@ -222,29 +222,47 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               // Save the record
-              client.put(recordKey, recordBins, (putError) => {
+              client.put(recordKey, recordBins).then(() => {
+                // Create an index
                 const index = {
                   ns: ns,
                   set: 'demo',
                   bin: 'tags',
-                  index: 'unique',
-                  datatype: aerospike.indexDataType.STRING
+                  index: 'unique_tags_idx', // Change to a unique name
+                  data_type: aerospike.indexDataType.STRING
                 }
 
-                client.createIndex(index, (indexError, job) => {
-                  job.waitUntilDone((waitError) => {
+                client.createIndex(index).then(job => {
+                  job.waitUntilDone().then(() => {
+                    // Perform a query
                     const query = client.query(ns, 'demo')
                     const queryPolicy = {
                       totalTimeout: 10000
                     }
+
                     query.select('id', 'tags')
                     query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
+
                     const stream = query.foreach(queryPolicy)
+                    stream.on('data', (result) => {
+                      console.log('Query result:', result.bins)
+                    })
+
                     stream.on('end', () => {
+                      console.log('Query completed')
                       client.close(false)
                     })
+                  }).catch(err => {
+                    console.error('Error waiting for index creation:', err)
+                    client.close(false)
                   })
+                }).catch(err => {
+                  console.error('Error creating index:', err)
+                  client.close(false)
                 })
+              }).catch(err => {
+                console.error('Error putting record:', err)
+                client.close(false)
               })
             })
           })
