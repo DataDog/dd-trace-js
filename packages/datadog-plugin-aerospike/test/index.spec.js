@@ -197,58 +197,58 @@ describe('Plugin', () => {
           // this test works on node 14, so it is not a problem with the test but most likely a problem with the package
           // version and aerospike server version mismatch which is really hard to pin down, since aerospike doesn't
           // provide info on package version's compatibility with each server version
-          if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4')) && !semver.intersects(version, '^3')) {
-            it('should instrument query', done => {
-              agent
-                .use(traces => {
-                  const span = traces[0][0]
-                  expect(span).to.have.property('name', expectedSchema.command.opName)
-                  expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                  expect(span).to.have.property('resource', `Query`)
-                  expect(span).to.have.property('type', 'aerospike')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('aerospike.namespace', ns)
-                  expect(span.meta).to.have.property('aerospike.setname', set)
-                  expect(span.meta).to.have.property('component', 'aerospike')
-                })
-                .then(done)
-                .catch(done)
+          // if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4')) && !semver.intersects(version, '^3')) {
+          it('should instrument query', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Query`)
+                expect(span).to.have.property('type', 'aerospike')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('aerospike.namespace', ns)
+                expect(span.meta).to.have.property('aerospike.setname', set)
+                expect(span.meta).to.have.property('component', 'aerospike')
+              })
+              .then(done)
+              .catch(done)
 
-              const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key')
-              const recordBins = {
-                id: 1,
-                tags: ['green', 'blue', 'red']
-              }
+            const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key')
+            const recordBins = {
+              id: 1,
+              tags: ['green', 'blue', 'red']
+            }
 
-              aerospike.connect(config).then(client => {
-                // Save the record
-                client.put(recordKey, recordBins, (putError) => {
-                  const index = {
-                    ns: ns,
-                    set: 'demo',
-                    bin: 'tags',
-                    index: 'unique',
-                    datatype: aerospike.indexDataType.STRING
-                  }
+            aerospike.connect(config).then(client => {
+              // Save the record
+              client.put(recordKey, recordBins, (putError) => {
+                const index = {
+                  ns: ns,
+                  set: 'demo',
+                  bin: 'tags',
+                  index: 'unique',
+                  datatype: aerospike.indexDataType.STRING
+                }
 
-                  client.createIndex(index, (indexError, job) => {
-                    job.waitUntilDone((waitError) => {
-                      const query = client.query(ns, 'demo')
-                      const queryPolicy = {
-                        totalTimeout: 10000
-                      }
-                      query.select('id', 'tags')
-                      query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-                      const stream = query.foreach(queryPolicy)
-                      stream.on('end', () => {
-                        client.close(false)
-                      })
+                client.createIndex(index, (indexError, job) => {
+                  job.waitUntilDone((waitError) => {
+                    const query = client.query(ns, 'demo')
+                    const queryPolicy = {
+                      totalTimeout: 10000
+                    }
+                    query.select('id', 'tags')
+                    query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
+                    const stream = query.foreach(queryPolicy)
+                    stream.on('end', () => {
+                      client.close(false)
                     })
                   })
                 })
               })
             })
-          }
+          })
+          // }
           it('should run the callback in the parent context', done => {
             const obj = {}
             aerospike.connect(config).then(client => {
