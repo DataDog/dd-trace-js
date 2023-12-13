@@ -214,10 +214,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key')
+            const recordKey = new aerospike.Key(ns, 'demo', 'your_record_key') // Replace 'your_record_key' with a unique key
             const recordBins = {
               id: 1,
               tags: ['green', 'blue', 'red']
+              // Add other bins as needed
             }
 
             aerospike.connect(config).then(client => {
@@ -250,19 +251,19 @@ describe('Plugin', () => {
 
                     stream.on('end', () => {
                       console.log('Query completed')
-                      client.close(false)
+                      client.close()
                     })
                   }).catch(err => {
                     console.error('Error waiting for index creation:', err)
-                    client.close(false)
+                    client.close()
                   })
                 }).catch(err => {
                   console.error('Error creating index:', err)
-                  client.close(false)
+                  client.close()
                 })
               }).catch(err => {
                 console.error('Error putting record:', err)
-                client.close(false)
+                client.close()
               })
             })
           })
