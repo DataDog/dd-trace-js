@@ -17,9 +17,6 @@ function enable (config) {
 
   const activation = Activation.fromConfig(config)
 
-  if (config.appsec.enabled === undefined) { // only activate ASM_FEATURES when conf is not set locally
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-
   if (activation !== Activation.DISABLED) {
     if (activation === Activation.ONECLICK) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)

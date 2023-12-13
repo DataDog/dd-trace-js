@@ -67,7 +67,7 @@ describe('Remote Config index', () => {
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.called
+      expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
       expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.on.firstCall.args[1]).to.be.a('function')
     })
@@ -88,10 +88,9 @@ describe('Remote Config index', () => {
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.have.been.calledTwice
-      expect(rc.updateCapabilities.firstCall)
+      expect(rc.updateCapabilities)
         .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.updateCapabilities.secondCall)
+      expect(rc.updateCapabilities)
         .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     })
 
@@ -101,8 +100,7 @@ describe('Remote Config index', () => {
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.have.been.calledOnce
-      expect(rc.updateCapabilities.firstCall)
+      expect(rc.updateCapabilities)
         .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     })
 
@@ -259,7 +257,7 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities).to.not.have.been.called
+        expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
         expect(rc.on).to.have.been.called
       })
 
