@@ -8,7 +8,7 @@ const { rawExpectedSchema } = require('./kinesis-naming')
 const {
   ENTRY_PARENT_HASH,
   DataStreamsProcessor,
-  getHeadersSize
+  getSizeOrZero
 } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
@@ -228,7 +228,7 @@ describe('Kinesis', () => {
           helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
             if (err) return done(err)
 
-            const payloadSize = getHeadersSize(data)
+            const payloadSize = getSizeOrZero(JSON.stringify(data))
 
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
