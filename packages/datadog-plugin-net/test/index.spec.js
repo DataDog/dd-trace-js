@@ -6,6 +6,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let net
@@ -209,7 +210,9 @@ describe('Plugin', () => {
       const socket = new net.Socket()
 
       tracer.scope().activate(parent, () => {
-        const events = ['connect', 'error', 'close', 'timeout']
+        const events = NODE_MAJOR >= 21
+          ? ['close', 'error', 'prefinish', 'finish', 'drain', 'data', 'end', 'readable', 'connect', 'timeout']
+          : ['connect', 'error', 'close', 'timeout']
 
         socket.connect({ port })
         socket.destroy()
