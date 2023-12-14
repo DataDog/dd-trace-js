@@ -104,6 +104,7 @@
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#allowlist" class="tsd-kind-icon">allowlist</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#blocklist" class="tsd-kind-icon">blocklist</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface"><a href="plugins.http2.html#client" class="tsd-kind-icon">client</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#enablepropagationwithamazonheaders" class="tsd-kind-icon">enable<wbr>Propagation<wbr>With<wbr>Amazon<wbr>Headers</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#enabled" class="tsd-kind-icon">enabled</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#headers" class="tsd-kind-icon">headers</a></li>
 								<li class="tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited"><a href="plugins.http2.html#measured" class="tsd-kind-icon">measured</a></li>
@@ -126,7 +127,7 @@
 						<p>Inherited from Http.allowlist</p>
 						<p>Overrides Http.allowlist</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L889">index.d.ts:889</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L905">index.d.ts:905</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -148,7 +149,7 @@
 						<p>Inherited from Http.blocklist</p>
 						<p>Overrides Http.blocklist</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L905">index.d.ts:905</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L921">index.d.ts:921</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -169,13 +170,36 @@
 					<div class="tsd-signature tsd-kind-icon">client<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Http2Client</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L1340">index.d.ts:1340</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L1364">index.d.ts:1364</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
 						<div class="lead">
 							<p>Configuration for HTTP clients.</p>
 						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
+					<a name="enablepropagationwithamazonheaders" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagOptional">Optional</span> enable<wbr>Propagation<wbr>With<wbr>Amazon<wbr>Headers</h3>
+					<div class="tsd-signature tsd-kind-icon">enable<wbr>Propagation<wbr>With<wbr>Amazon<wbr>Headers<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">false</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">true</span></div>
+					<aside class="tsd-sources">
+						<p>Inherited from Http.enablePropagationWithAmazonHeaders</p>
+						<p>Overrides Http.enablePropagationWithAmazonHeaders</p>
+						<ul>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L953">index.d.ts:953</a></li>
+						</ul>
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Enable injection of tracing headers into requests signed with AWS IAM headers.
+							Disable this if you get AWS signature errors (HTTP 403).</p>
+						</div>
+						<dl class="tsd-comment-tags">
+							<dt>default</dt>
+							<dd><p>false</p>
+							</dd>
+						</dl>
 					</div>
 				</section>
 				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
@@ -186,7 +210,7 @@
 						<p>Inherited from Integration.enabled</p>
 						<p>Overrides Integration.enabled</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L876">index.d.ts:876</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L892">index.d.ts:892</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -208,7 +232,7 @@
 						<p>Inherited from Http.headers</p>
 						<p>Overrides Http.headers</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L920">index.d.ts:920</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L936">index.d.ts:936</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -230,7 +254,7 @@
 						<p>Inherited from <a href="traceoptions.html">TraceOptions</a>.<a href="traceoptions.html#measured">measured</a></p>
 						<p>Overrides <a href="traceoptions.html">TraceOptions</a>.<a href="traceoptions.html#measured">measured</a></p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L862">index.d.ts:862</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L878">index.d.ts:878</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -246,7 +270,7 @@
 					<div class="tsd-signature tsd-kind-icon">server<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Http2Server</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">boolean</span></div>
 					<aside class="tsd-sources">
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L1345">index.d.ts:1345</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L1369">index.d.ts:1369</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -263,7 +287,7 @@
 						<p>Inherited from Integration.service</p>
 						<p>Overrides Integration.service</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L871">index.d.ts:871</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L887">index.d.ts:887</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -279,7 +303,7 @@
 					<aside class="tsd-sources">
 						<p>Inherited from Http2Client.splitByDomain</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L1002">index.d.ts:1002</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L1026">index.d.ts:1026</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -301,7 +325,7 @@
 						<p>Inherited from Http2Client.validateStatus</p>
 						<p>Overrides Http.validateStatus</p>
 						<ul>
-							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/8c9f5bb/index.d.ts#L1011">index.d.ts:1011</a></li>
+							<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/bcd805b/index.d.ts#L1035">index.d.ts:1035</a></li>
 						</ul>
 					</aside>
 					<div class="tsd-comment tsd-typography">
@@ -348,6 +372,9 @@
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface">
 								<a href="plugins.http2.html#client" class="tsd-kind-icon">client</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
+								<a href="plugins.http2.html#enablepropagationwithamazonheaders" class="tsd-kind-icon">enable<wbr>Propagation<wbr>With<wbr>Amazon<wbr>Headers</a>
 							</li>
 							<li class=" tsd-kind-property tsd-parent-kind-interface tsd-is-overwrite tsd-is-inherited">
 								<a href="plugins.http2.html#enabled" class="tsd-kind-icon">enabled</a>
