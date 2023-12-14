@@ -56,7 +56,6 @@ describe('GraphQL', () => {
 
       graphql.enable()
 
-
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
       expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
