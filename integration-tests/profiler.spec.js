@@ -10,6 +10,7 @@ const path = require('path')
 const { assert } = require('chai')
 const fs = require('node:fs/promises')
 const fsync = require('node:fs')
+const net = require('node:net')
 const zlib = require('node:zlib')
 const { Profile } = require('pprof-format')
 
@@ -48,6 +49,87 @@ function processExitPromise (proc, timeout, expectBadExit = false) {
       .on('error', reject)
       .on('exit', checkExitCode)
   })
+}
+
+async function getLatestProfile (cwd, pattern) {
+  const dirEntries = await fs.readdir(cwd)
+  // Get the latest file matching the pattern
+  const pprofEntries = dirEntries.filter(name => pattern.test(name))
+  assert.isTrue(pprofEntries.length > 0, `No file matching pattern ${pattern} found in ${cwd}`)
+  const pprofEntry = pprofEntries
+    .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
+    .reduce((a, b) => a.modified > b.modified ? a : b)
+    .name
+  const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
+  const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
+  return Profile.decode(pprofUnzipped)
+}
+
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, threadName, args) {
+  const procStart = BigInt(Date.now() * 1000000)
+  const proc = fork(path.join(cwd, scriptFilePath), args, {
+    cwd,
+    env: {
+      DD_PROFILING_PROFILERS: 'wall',
+      DD_PROFILING_EXPORTERS: 'file',
+      DD_PROFILING_ENABLED: 1,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
+    }
+  })
+
+  await processExitPromise(proc, 5000)
+  const procEnd = BigInt(Date.now() * 1000000)
+
+  const prof = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+
+  const strings = prof.stringTable
+  const tsKey = strings.dedup('end_timestamp_ns')
+  const eventKey = strings.dedup('event')
+  const hostKey = strings.dedup('host')
+  const addressKey = strings.dedup('address')
+  const portKey = strings.dedup('port')
+  const threadNameKey = strings.dedup('thread name')
+  const nameKey = strings.dedup('operation')
+  const eventValue = strings.dedup(eventType)
+  const events = []
+  const threadNamePrefix = `Main ${threadName}-`
+  for (const sample of prof.sample) {
+    let ts, event, host, address, port, name, threadName
+    for (const label of sample.label) {
+      switch (label.key) {
+        case tsKey: ts = label.num; break
+        case nameKey: name = label.str; break
+        case eventKey: event = label.str; break
+        case hostKey: host = label.str; break
+        case addressKey: address = label.str; break
+        case portKey: port = label.num; break
+        case threadNameKey: threadName = label.str; break
+        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
+      }
+    }
+    // Timestamp must be defined and be between process start and end time
+    assert.isDefined(ts)
+    assert.isTrue(ts <= procEnd)
+    assert.isTrue(ts >= procStart)
+    // Gather only DNS events; ignore sporadic GC events
+    if (event === eventValue) {
+      assert.isTrue(strings.strings[threadName].startsWith(threadNamePrefix))
+      assert.isDefined(name)
+      // Exactly one of these is defined
+      assert.isTrue(!!address !== !!host)
+      const ev = { name: strings.strings[name] }
+      if (address) {
+        ev.address = strings.strings[address]
+      } else {
+        ev.host = strings.strings[host]
+      }
+      if (port) {
+        ev.port = port
+      }
+      events.push(ev)
+    }
+  }
+  return events
 }
 
 describe('profiler', () => {
@@ -90,17 +172,7 @@ describe('profiler', () => {
     await processExitPromise(proc, 5000)
     const procEnd = BigInt(Date.now() * 1000000)
 
-    const dirEntries = await fs.readdir(cwd)
-    // Get the latest wall_*.pprof file
-    const pprofEntries = dirEntries.filter(name => /^wall_.+\.pprof$/.test(name))
-    assert.isTrue(pprofEntries.length > 0, `No wall_*.pprof file found in ${cwd}`)
-    const pprofEntry = pprofEntries
-      .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
-      .reduce((a, b) => a.modified > b.modified ? a : b)
-      .name
-    const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
-    const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-    const prof = Profile.decode(pprofUnzipped)
+    const prof = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
     // We check the profile for following invariants:
     // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
@@ -174,14 +246,66 @@ describe('profiler', () => {
     assert.equal(endpoints.size, 3)
   })
 
+  it('dns timeline events work', async () => {
+    const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns', 'DNS')
+    assert.sameDeepMembers(dnsEvents, [
+      { name: 'lookup', host: 'example.org' },
+      { name: 'lookup', host: 'example.com' },
+      { name: 'lookup', host: 'datadoghq.com' },
+      { name: 'queryA', host: 'datadoghq.com' },
+      { name: 'lookupService', address: '13.224.103.60', port: 80 }
+    ])
+  })
+
+  it('net timeline events work', async () => {
+    // Simple server that writes a constant message to the socket.
+    const msg = 'cya later!\n'
+    function createServer () {
+      const server = net.createServer((socket) => {
+        socket.end(msg, 'utf8')
+      }).on('error', (err) => {
+        throw err
+      })
+      return server
+    }
+    // Create two instances of the server
+    const server1 = createServer()
+    try {
+      const server2 = createServer()
+      try {
+        // Have the servers listen on ephemeral ports
+        const p = new Promise(resolve => {
+          server1.listen(0, () => {
+            server2.listen(0, async () => {
+              resolve([server1.address().port, server2.address().port])
+            })
+          })
+        })
+        const [ port1, port2 ] = await p
+        const args = [String(port1), String(port2), msg]
+        // Invoke the profiled program, passing it the ports of the servers and
+        // the expected message.
+        const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', 'Net', args)
+        // The profiled program should have two TCP connection events to the two
+        // servers.
+        assert.sameDeepMembers(events, [
+          { name: 'connect', host: '127.0.0.1', port: port1 },
+          { name: 'connect', host: '127.0.0.1', port: port2 }
+        ])
+      } finally {
+        server2.close()
+      }
+    } finally {
+      server1.close()
+    }
+  })
+
   context('shutdown', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
       oomEnv = {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process',
         DD_TRACE_DEBUG: 1,
         DD_TRACE_LOG_LEVEL: 'warn'
       }
@@ -212,7 +336,7 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout, ['space'], true)
     })
 
-    it('sends a heap profile on OOM with external process and ends successfully', async () => {
+    it('sends a heap profile on OOM with external process and exits successfully', async () => {
       proc = fork(oomTestFile, {
         cwd,
         execArgv: oomExecArgv,
@@ -251,6 +375,14 @@ describe('profiler', () => {
         }
       })
       return checkProfiles(agent, proc, timeout, ['space'], true, 2)
+    })
+
+    it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
+      proc = fork(oomTestFile, [1, 50], {
+        cwd,
+        env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }
+      })
+      return checkProfiles(agent, proc, timeout, ['space'], false, 2)
     })
   })
 })

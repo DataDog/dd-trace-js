@@ -20,7 +20,88 @@ env:
 
 
 jobs:
-  aerospike:
+  aerospike-3:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:18.04
+    services:
+      aerospike:
+        image: aerospike:ce-5.3.0.16
+        ports:
+          - 3000:3000
+      testagent:
+        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+        env:
+          LOG_LEVEL: DEBUG
+          TRACE_LANGUAGE: javascript
+          DISABLED_CHECKS: trace_content_length
+          PORT: 9126
+        ports:
+          - 9126:9126
+    env:
+      PLUGINS: aerospike
+      SERVICES: aerospike
+      PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
+      DD_TEST_AGENT_URL: http://testagent:9126
+      AEROSPIKE_HOST_ADDRESS: aerospike
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '14'
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - id: extract
+        run: |
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+      - name: Check package version
+        if: env.MAJOR_VERSION == '3'
+        run: |
+          echo "Package version is 3. Proceeding with the next steps."
+      - name: Install dependencies
+        if: env.MAJOR_VERSION == '3'
+        run: |
+          apt-get update && \
+          apt-get install -y \
+            python3 python3-pip \
+            wget \
+            g++ libssl1.0.0 libssl-dev zlib1g-dev && \
+          npm install -g yarn
+      - if: env.MAJOR_VERSION == '3'
+        run: yarn install --ignore-engines
+      - if: env.MAJOR_VERSION == '3'
+        uses: ./.github/actions/node/14
+      - if: env.MAJOR_VERSION == '3'
+        run: yarn test:plugins:ci
+      - if: env.MAJOR_VERSION == '3'
+        uses: codecov/codecov-action@v2
+  aerospike-4:
+    runs-on: ubuntu-latest
+    services:
+      aerospike:
+        image: aerospike:ce-5.7.0.15
+        ports: 
+          - "127.0.0.1:3000-3002:3000-3002"
+    env:
+      PLUGINS: aerospike
+      SERVICES: aerospike
+      PACKAGE_VERSION_RANGE: '4.0.0 - 5.4.0'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
+  aerospike-5:
     runs-on: ubuntu-latest
     services:
       aerospike:
@@ -30,20 +111,41 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '4.0.0 - 5.7.0'
+      PACKAGE_VERSION_RANGE: '5.5.0 - 5.7.0'
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engines
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
-      - run: yarn test:plugins:ci
-      - if: always()
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - id: extract
+        run: |
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+      - name: Check package version
+        if: env.MAJOR_VERSION != '3'
+        run: |
+          echo "Package version is not 3. Proceeding with the next steps."
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn install --ignore-engines
+      - if: env.MAJOR_VERSION != '3'
+        uses: ./.github/actions/node/oldest
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn test:plugins:ci
+      - if: env.MAJOR_VERSION != '3'
+        run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
+      - if: env.MAJOR_VERSION != '3'
+        uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn test:plugins:ci
+      - if: env.MAJOR_VERSION != '3'
         uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v2
+      - if: env.MAJOR_VERSION != '3'
+        uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
@@ -101,9 +203,9 @@ jobs:
     runs-on: ubuntu-latest
     services:
       localstack:
-        image: localstack/localstack:1.1.0
+        image: localstack/localstack:3.0.2
         env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
@@ -112,9 +214,26 @@ jobs:
           START_WEB: '0'
         ports:
           - 4566:4566
+      # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
+      # To-Do: Debug localstack / lambda and localstack / S3
+      localstack-legacy:
+        image: localstack/localstack:1.1.0
+        ports:
+          - "127.0.0.1:4567:4567" # Edge
+        env:
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
+          EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
+          AWS_DEFAULT_REGION: us-east-1
+          FORCE_NONINTERACTIVE: 'true'
+          LAMBDA_EXECUTOR: local
+          START_WEB: '0'
+          GATEWAY_LISTEN: 127.0.0.1:4567
+          EDGE_PORT: 4567
+          EDGE_PORT_HTTP: 4567
     env:
       PLUGINS: aws-sdk
-      SERVICES: localstack
+      SERVICES: localstack localstack-legacy
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
