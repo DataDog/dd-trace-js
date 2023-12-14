@@ -66,7 +66,7 @@ async function getLatestProfile (cwd, pattern) {
   return Profile.decode(pprofUnzipped)
 }
 
-async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, threadName, args) {
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
@@ -89,13 +89,11 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
   const hostKey = strings.dedup('host')
   const addressKey = strings.dedup('address')
   const portKey = strings.dedup('port')
-  const threadNameKey = strings.dedup('thread name')
   const nameKey = strings.dedup('operation')
   const eventValue = strings.dedup(eventType)
   const events = []
-  const threadNamePrefix = `Main ${threadName}-`
   for (const sample of prof.sample) {
-    let ts, event, host, address, port, name, threadName
+    let ts, event, host, address, port, name
     for (const label of sample.label) {
       switch (label.key) {
         case tsKey: ts = label.num; break
@@ -104,7 +102,6 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
         case hostKey: host = label.str; break
         case addressKey: address = label.str; break
         case portKey: port = label.num; break
-        case threadNameKey: threadName = label.str; break
         default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
       }
     }
@@ -114,7 +111,6 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
     assert.isTrue(ts >= procStart)
     // Gather only DNS events; ignore sporadic GC events
     if (event === eventValue) {
-      assert.isTrue(strings.strings[threadName].startsWith(threadNamePrefix))
       assert.isDefined(name)
       // Exactly one of these is defined
       assert.isTrue(!!address !== !!host)
@@ -249,7 +245,7 @@ describe('profiler', () => {
 
   if (semver.gte(process.version, '16.0.0')) {
     it('dns timeline events work', async () => {
-      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns', 'DNS')
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
       assert.sameDeepMembers(dnsEvents, [
         { name: 'lookup', host: 'example.org' },
         { name: 'lookup', host: 'example.com' },
@@ -287,7 +283,7 @@ describe('profiler', () => {
           const args = [String(port1), String(port2), msg]
           // Invoke the profiled program, passing it the ports of the servers and
           // the expected message.
-          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', 'Net', args)
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
           // The profiled program should have two TCP connection events to the two
           // servers.
           assert.sameDeepMembers(events, [
