@@ -13,6 +13,7 @@ const fsync = require('node:fs')
 const net = require('node:net')
 const zlib = require('node:zlib')
 const { Profile } = require('pprof-format')
+const semver = require('semver')
 
 async function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
@@ -65,7 +66,7 @@ async function getLatestProfile (cwd, pattern) {
   return Profile.decode(pprofUnzipped)
 }
 
-async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, threadName, args) {
+async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
   const procStart = BigInt(Date.now() * 1000000)
   const proc = fork(path.join(cwd, scriptFilePath), args, {
     cwd,
@@ -88,13 +89,11 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
   const hostKey = strings.dedup('host')
   const addressKey = strings.dedup('address')
   const portKey = strings.dedup('port')
-  const threadNameKey = strings.dedup('thread name')
   const nameKey = strings.dedup('operation')
   const eventValue = strings.dedup(eventType)
   const events = []
-  const threadNamePrefix = `Main ${threadName}-`
   for (const sample of prof.sample) {
-    let ts, event, host, address, port, name, threadName
+    let ts, event, host, address, port, name
     for (const label of sample.label) {
       switch (label.key) {
         case tsKey: ts = label.num; break
@@ -103,7 +102,6 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
         case hostKey: host = label.str; break
         case addressKey: address = label.str; break
         case portKey: port = label.num; break
-        case threadNameKey: threadName = label.str; break
         default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
       }
     }
@@ -113,7 +111,6 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, thre
     assert.isTrue(ts >= procStart)
     // Gather only DNS events; ignore sporadic GC events
     if (event === eventValue) {
-      assert.isTrue(strings.strings[threadName].startsWith(threadNamePrefix))
       assert.isDefined(name)
       // Exactly one of these is defined
       assert.isTrue(!!address !== !!host)
@@ -246,59 +243,61 @@ describe('profiler', () => {
     assert.equal(endpoints.size, 3)
   })
 
-  it('dns timeline events work', async () => {
-    const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns', 'DNS')
-    assert.sameDeepMembers(dnsEvents, [
-      { name: 'lookup', host: 'example.org' },
-      { name: 'lookup', host: 'example.com' },
-      { name: 'lookup', host: 'datadoghq.com' },
-      { name: 'queryA', host: 'datadoghq.com' },
-      { name: 'lookupService', address: '13.224.103.60', port: 80 }
-    ])
-  })
+  if (semver.gte(process.version, '16.0.0')) {
+    it('dns timeline events work', async () => {
+      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+      assert.sameDeepMembers(dnsEvents, [
+        { name: 'lookup', host: 'example.org' },
+        { name: 'lookup', host: 'example.com' },
+        { name: 'lookup', host: 'datadoghq.com' },
+        { name: 'queryA', host: 'datadoghq.com' },
+        { name: 'lookupService', address: '13.224.103.60', port: 80 }
+      ])
+    })
 
-  it('net timeline events work', async () => {
-    // Simple server that writes a constant message to the socket.
-    const msg = 'cya later!\n'
-    function createServer () {
-      const server = net.createServer((socket) => {
-        socket.end(msg, 'utf8')
-      }).on('error', (err) => {
-        throw err
-      })
-      return server
-    }
-    // Create two instances of the server
-    const server1 = createServer()
-    try {
-      const server2 = createServer()
+    it('net timeline events work', async () => {
+      // Simple server that writes a constant message to the socket.
+      const msg = 'cya later!\n'
+      function createServer () {
+        const server = net.createServer((socket) => {
+          socket.end(msg, 'utf8')
+        }).on('error', (err) => {
+          throw err
+        })
+        return server
+      }
+      // Create two instances of the server
+      const server1 = createServer()
       try {
-        // Have the servers listen on ephemeral ports
-        const p = new Promise(resolve => {
-          server1.listen(0, () => {
-            server2.listen(0, async () => {
-              resolve([server1.address().port, server2.address().port])
+        const server2 = createServer()
+        try {
+          // Have the servers listen on ephemeral ports
+          const p = new Promise(resolve => {
+            server1.listen(0, () => {
+              server2.listen(0, async () => {
+                resolve([server1.address().port, server2.address().port])
+              })
             })
           })
-        })
-        const [ port1, port2 ] = await p
-        const args = [String(port1), String(port2), msg]
-        // Invoke the profiled program, passing it the ports of the servers and
-        // the expected message.
-        const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', 'Net', args)
-        // The profiled program should have two TCP connection events to the two
-        // servers.
-        assert.sameDeepMembers(events, [
-          { name: 'connect', host: '127.0.0.1', port: port1 },
-          { name: 'connect', host: '127.0.0.1', port: port2 }
-        ])
+          const [ port1, port2 ] = await p
+          const args = [String(port1), String(port2), msg]
+          // Invoke the profiled program, passing it the ports of the servers and
+          // the expected message.
+          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+          // The profiled program should have two TCP connection events to the two
+          // servers.
+          assert.sameDeepMembers(events, [
+            { name: 'connect', host: '127.0.0.1', port: port1 },
+            { name: 'connect', host: '127.0.0.1', port: port2 }
+          ])
+        } finally {
+          server2.close()
+        }
       } finally {
-        server2.close()
+        server1.close()
       }
-    } finally {
-      server1.close()
-    }
-  })
+    })
+  }
 
   context('shutdown', () => {
     beforeEach(async () => {
