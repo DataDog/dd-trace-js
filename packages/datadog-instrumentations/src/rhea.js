@@ -116,7 +116,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
 
           asyncResource.runInAsyncScope(() => {
             errorReceiveCh.publish(error)
-            beforeFinish(delivery, null)
+            exports.beforeFinish(delivery, null)
             finishReceiveCh.publish()
           })
         })
@@ -189,7 +189,7 @@ function patchCircularBuffer (proto, Session) {
                 const state = remoteState && remoteState.constructor
                   ? entry.remote_state.constructor.composite_type : undefined
                 asyncResource.runInAsyncScope(() => {
-                  beforeFinish(entry, state)
+                  exports.beforeFinish(entry, state)
                   finishSendCh.publish()
                 })
               }
@@ -216,22 +216,18 @@ function addToInFlightDeliveries (connection, delivery) {
     connection[inFlightDeliveries] = deliveries
   }
   deliveries.add(delivery)
-  // delivery[kDatadog].connection = connection
 }
 
 function beforeFinish (delivery, state) {
-  let didClose = false
   const context = contexts.get(delivery)
   if (context) {
     if (state) {
       dispatchReceiveCh.publish({ state })
     }
     if (context.connection && context.connection[inFlightDeliveries]) {
-      didClose = true
       context.connection[inFlightDeliveries].delete(delivery)
     }
   }
-  console.log('>>> beforeFinish()', didClose ? 'closed properly' : 'DID NOT CLOSE CONNECTION')
 }
 
 function getStateFromData (stateData) {
@@ -244,3 +240,7 @@ function getStateFromData (stateData) {
     }
   }
 }
+
+module.exports.inFlightDeliveries = inFlightDeliveries
+module.exports.beforeFinish = beforeFinish
+module.exports.contexts = contexts
