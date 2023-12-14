@@ -165,7 +165,7 @@ class NetDecorator {
     addLabel(this.operationNameLabelKey, op)
     if (op === 'connect') {
       const detail = item.detail
-      addLabel(this.stringTable, this.hostLabelKey, detail.host)
+      addLabel(this.hostLabelKey, detail.host)
       labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
     }
     labels.push(this.lanes.getLabelFor(item))
