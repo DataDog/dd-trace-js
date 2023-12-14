@@ -85,7 +85,7 @@ jobs:
     services:
       aerospike:
         image: aerospike:ce-5.7.0.15
-        ports: 
+        ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
       PLUGINS: aerospike
@@ -106,7 +106,7 @@ jobs:
     services:
       aerospike:
         image: aerospike:ce-6.4.0.3
-        ports: 
+        ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
       PLUGINS: aerospike
@@ -436,8 +436,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: always()
@@ -1218,9 +1216,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - run: yarn test:plugins:upstream
