@@ -60,9 +60,12 @@ jobs:
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - name: Check package version
-        if: env.MAJOR_VERSION == '3'
+        if: env.MAJOR_VERSION != '3'
         run: |
-          echo "Package version is 3. Proceeding with the next steps."
+          gh run cancel ${{ github.run_id }}
+          gh run watch ${{ github.run_id }}
+        env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
         if: env.MAJOR_VERSION == '3'
         run: |
