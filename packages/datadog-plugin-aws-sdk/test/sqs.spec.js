@@ -362,16 +362,8 @@ describe('Plugin', () => {
 
             expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
             setDataStreamsContextSpy.restore()
+            done()
           })
-
-          setTimeout(() => {
-            try {
-              expect(DataStreamsContext.setDataStreamsContext.isSinonProxy).to.equal(undefined)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
         })
 
         it('Should set a checkpoint on consume', (done) => {
@@ -395,17 +387,9 @@ describe('Plugin', () => {
                 setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
               ).to.equal(expectedConsumerHash)
               setDataStreamsContextSpy.restore()
+              done()
             })
           })
-
-          setTimeout(() => {
-            try {
-              expect(DataStreamsContext.setDataStreamsContext.isSinonProxy).to.equal(undefined)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
         })
 
         it('Should set a message payload size when producing a message', (done) => {
@@ -461,8 +445,10 @@ describe('Plugin', () => {
               if (err) return done(err)
 
               const payloadSize = getHeadersSize({
-                Body: extractContextSpy.args[0][1].message.Body,
-                MessageAttributes: extractContextSpy.args[0][1].message.MessageAttributes
+                Body: extractContextSpy.args[extractContextSpy.args.length - 1][2].Messages[0].Body,
+                MessageAttributes: extractContextSpy.args[
+                  extractContextSpy.args.length - 1
+                ][2].Messages[0].MessageAttributes
               })
 
               expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
