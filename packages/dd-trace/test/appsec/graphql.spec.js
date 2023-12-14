@@ -6,9 +6,8 @@ const addresses = require('../../src/appsec/addresses')
 
 const {
   startGraphqlResolve,
-  startGraphqlMiddleware,
+  graphqlMiddlewareChannel,
   startExecuteHTTPGraphQLRequest,
-  endGraphqlMiddleware,
   startGraphqlWrite
 } = require('../../src/appsec/channels')
 
@@ -49,17 +48,18 @@ describe('GraphQL', () => {
     })
 
     it('Should subscribe to all channels', () => {
-      expect(startGraphqlMiddleware.hasSubscribers).to.be.false
+      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
+      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
-      expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
       expect(startGraphqlResolve.hasSubscribers).to.be.false
 
       graphql.enable()
 
-      expect(startGraphqlMiddleware.hasSubscribers).to.be.true
+
+      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
+      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
-      expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
       expect(startGraphqlResolve.hasSubscribers).to.be.true
     })
@@ -69,17 +69,17 @@ describe('GraphQL', () => {
     it('Should unsubscribe from all channels', () => {
       graphql.enable()
 
-      expect(startGraphqlMiddleware.hasSubscribers).to.be.true
+      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
+      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
-      expect(endGraphqlMiddleware.hasSubscribers).to.be.true
       expect(startGraphqlWrite.hasSubscribers).to.be.true
       expect(startGraphqlResolve.hasSubscribers).to.be.true
 
       graphql.disable()
 
-      expect(startGraphqlMiddleware.hasSubscribers).to.be.false
+      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
+      expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
       expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
-      expect(endGraphqlMiddleware.hasSubscribers).to.be.false
       expect(startGraphqlWrite.hasSubscribers).to.be.false
       expect(startGraphqlResolve.hasSubscribers).to.be.false
     })
@@ -156,12 +156,12 @@ describe('GraphQL', () => {
       sinon.stub(storage, 'getStore').returns({ req, res })
 
       graphql.enable()
-      startGraphqlMiddleware.publish({ req, res })
+      graphqlMiddlewareChannel.start.publish({ req, res })
       startExecuteHTTPGraphQLRequest.publish()
     })
 
     afterEach(() => {
-      endGraphqlMiddleware.publish({ req })
+      graphqlMiddlewareChannel.end.publish({ req })
       graphql.disable()
       sinon.restore()
     })
