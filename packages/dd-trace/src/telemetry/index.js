@@ -129,6 +129,7 @@ function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  // we flush before shutting down
   metricsManager.send(config, application, host)
 }
 
