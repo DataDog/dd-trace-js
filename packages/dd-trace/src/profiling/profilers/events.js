@@ -1,5 +1,5 @@
 const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
-const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
+const { END_TIMESTAMP } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
@@ -74,39 +74,6 @@ class GCDecorator {
   }
 }
 
-// Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
-// decorator starts out with no lanes, and dynamically adds them as needed.
-// Every event is put in the first lane where it doesn't overlap with the last
-// event in that lane. If there's no lane without overlaps, a new lane is
-// created.
-class Lanes {
-  constructor (stringTable, name) {
-    this.stringTable = stringTable
-    this.name = name
-    this.lanes = []
-  }
-
-  getLabelFor (item) {
-    const startTime = item.startTime
-    const endTime = startTime + item.duration
-
-    // Biases towards populating earlier lanes, but at least it's simple
-    for (const lane of this.lanes) {
-      if (lane.endTime <= startTime) {
-        lane.endTime = endTime
-        return lane.label
-      }
-    }
-    const label = labelFromStrStr(
-      this.stringTable,
-      THREAD_NAME,
-      `${this.name}-${this.lanes.length}`
-    )
-    this.lanes.push({ endTime, label })
-    return label
-  }
-}
-
 class DNSDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
@@ -114,7 +81,6 @@ class DNSDecorator {
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} DNS`)
   }
 
   decorateSample (sampleInput, item) {
@@ -142,7 +108,6 @@ class DNSDecorator {
           addLabel(this.hostLabelKey, detail.host)
         }
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -152,7 +117,6 @@ class NetDecorator {
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
   }
 
   decorateSample (sampleInput, item) {
@@ -168,7 +132,6 @@ class NetDecorator {
       addLabel(this.hostLabelKey, detail.host)
       labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
