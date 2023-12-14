@@ -7,8 +7,10 @@ describe('Api Security Sampler', () => {
 
   beforeEach(() => {
     config = {
-      enabled: true,
-      requestSampling: 1
+      apiSecurity: {
+        enabled: true,
+        requestSampling: 1
+      }
     }
 
     sinon.stub(Math, 'random').returns(0.3)
@@ -24,14 +26,14 @@ describe('Api Security Sampler', () => {
     })
 
     it('should not sample request if enabled and sampling 0', () => {
-      config.requestSampling = 0
+      config.apiSecurity.requestSampling = 0
       apiSecuritySampler.configure(config)
 
       expect(apiSecuritySampler.sampleRequest()).to.false
     })
 
     it('should sample request if enabled and sampling greater than random', () => {
-      config.requestSampling = 0.5
+      config.apiSecurity.requestSampling = 0.5
 
       apiSecuritySampler.configure(config)
 
@@ -39,7 +41,7 @@ describe('Api Security Sampler', () => {
     })
 
     it('should not sample request if enabled and sampling greater than random', () => {
-      config.requestSampling = 0.1
+      config.apiSecurity.requestSampling = 0.1
 
       apiSecuritySampler.configure(config)
 
@@ -47,13 +49,13 @@ describe('Api Security Sampler', () => {
     })
 
     it('should sample request according to the config', () => {
-      config.requestSampling = 1
+      config.apiSecurity.requestSampling = 1
 
       apiSecuritySampler.configure(config)
 
       expect(apiSecuritySampler.sampleRequest()).to.true
 
-      apiSecuritySampler.configure({ enabled: false, requestSampling: 0 })
+      apiSecuritySampler.setRequestSampling(0)
 
       expect(apiSecuritySampler.sampleRequest()).to.false
     })

@@ -25,7 +25,7 @@ function enable (config) {
         enableOrDisableAppsec(action, rcConfig, config)
       }
 
-      updateApiSecuritySampleRate(rcConfig)
+      apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
     })
   }
 
@@ -46,7 +46,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, !!appsecConfig.apiSecurity?.enabled)
 
     rc.on('ASM_DATA', noop)
     rc.on('ASM_DD', noop)
@@ -92,16 +92,6 @@ function enableOrDisableAppsec (action, rcConfig, config) {
       require('..').enable(config)
     } else {
       require('..').disable()
-    }
-  }
-}
-
-function updateApiSecuritySampleRate (rcConfig) {
-  if (rcConfig.api_security?.request_sample_rate !== undefined) {
-    const requestSampling = parseFloat(rcConfig.api_security?.request_sample_rate)
-
-    if (!isNaN(requestSampling) && requestSampling >= 0 && requestSampling <= 1) {
-      apiSecuritySampler.configure({ enabled: requestSampling > 0, requestSampling })
     }
   }
 }

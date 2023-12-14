@@ -43,7 +43,7 @@ function enable (_config) {
 
     Reporter.setRateLimit(_config.appsec.rateLimit)
 
-    apiSecuritySampler.configure(_config.appsec.apiSecurity)
+    apiSecuritySampler.configure(_config.appsec)
 
     incomingHttpRequestStart.subscribe(incomingHttpStartTranslator)
     incomingHttpRequestEnd.subscribe(incomingHttpEndTranslator)
