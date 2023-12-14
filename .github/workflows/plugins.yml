@@ -26,7 +26,7 @@ jobs:
       image: ubuntu:18.04
     services:
       aerospike:
-        image: aerospike:ce-6.4.0.3
+        image: aerospike:ce-5.3.0.16
         ports:
           - 3000:3000
       testagent:
@@ -80,7 +80,28 @@ jobs:
         run: yarn test:plugins:ci
       - if: env.MAJOR_VERSION == '3'
         uses: codecov/codecov-action@v2
-  aerospike:
+  aerospike-4:
+    runs-on: ubuntu-latest
+    services:
+      aerospike:
+        image: aerospike:ce-5.7.0.15
+        ports: 
+          - "127.0.0.1:3000-3002:3000-3002"
+    env:
+      PLUGINS: aerospike
+      SERVICES: aerospike
+      PACKAGE_VERSION_RANGE: '4.0.0 - 5.4.0'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
+  aerospike-5:
     runs-on: ubuntu-latest
     services:
       aerospike:
@@ -90,20 +111,41 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '4.0.0 - 5.7.0'
+      PACKAGE_VERSION_RANGE: '5.5.0 - 5.7.0'
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engines
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
-      - run: yarn test:plugins:ci
-      - if: always()
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "::set-output name=json::$content"
+      - id: extract
+        run: |
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+      - name: Check package version
+        if: env.MAJOR_VERSION != '3'
+        run: |
+          echo "Package version is not 3. Proceeding with the next steps."
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn install --ignore-engines
+      - if: env.MAJOR_VERSION != '3'
+        uses: ./.github/actions/node/oldest
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn test:plugins:ci
+      - if: env.MAJOR_VERSION != '3'
+        run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
+      - if: env.MAJOR_VERSION != '3'
+        uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
+      - if: env.MAJOR_VERSION != '3'
+        run: yarn test:plugins:ci
+      - if: env.MAJOR_VERSION != '3'
         uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v2
+      - if: env.MAJOR_VERSION != '3'
+        uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
