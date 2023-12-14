@@ -22,7 +22,7 @@ const dispatchReceiveCh = channel('apm:rhea:receive:dispatch')
 const errorReceiveCh = channel('apm:rhea:receive:error')
 const finishReceiveCh = channel('apm:rhea:receive:finish')
 
-const contexts = new WeakMap()
+const contexts = new WeakMap() // key: delivery Fn, val: context
 
 addHook({ name: 'rhea', versions: ['>=1'] }, rhea => {
   shimmer.wrap(rhea.message, 'encode', encode => function (msg) {
@@ -52,7 +52,8 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
       startSendCh.publish({ targetAddress, host, port, msg })
       const delivery = send.apply(this, arguments)
       const context = {
-        asyncResource
+        asyncResource,
+        connection: this.connection
       }
       contexts.set(delivery, context)
 
@@ -80,7 +81,8 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
 
         if (msgObj.delivery) {
           const context = {
-            asyncResource
+            asyncResource,
+            connection: this.connection
           }
           contexts.set(msgObj.delivery, context)
           msgObj.delivery.update = wrapDeliveryUpdate(msgObj.delivery, msgObj.delivery.update)
@@ -114,7 +116,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/connection.js' }, Connecti
 
           asyncResource.runInAsyncScope(() => {
             errorReceiveCh.publish(error)
-            beforeFinish(delivery, null)
+            exports.beforeFinish(delivery, null)
             finishReceiveCh.publish()
           })
         })
@@ -187,7 +189,7 @@ function patchCircularBuffer (proto, Session) {
                 const state = remoteState && remoteState.constructor
                   ? entry.remote_state.constructor.composite_type : undefined
                 asyncResource.runInAsyncScope(() => {
-                  beforeFinish(entry, state)
+                  exports.beforeFinish(entry, state)
                   finishSendCh.publish()
                 })
               }
@@ -217,13 +219,13 @@ function addToInFlightDeliveries (connection, delivery) {
 }
 
 function beforeFinish (delivery, state) {
-  const obj = contexts.get(delivery)
-  if (obj) {
+  const context = contexts.get(delivery)
+  if (context) {
     if (state) {
       dispatchReceiveCh.publish({ state })
     }
-    if (obj.connection && obj.connection[inFlightDeliveries]) {
-      obj.connection[inFlightDeliveries].delete(delivery)
+    if (context.connection && context.connection[inFlightDeliveries]) {
+      context.connection[inFlightDeliveries].delete(delivery)
     }
   }
 }
@@ -238,3 +240,7 @@ function getStateFromData (stateData) {
     }
   }
 }
+
+module.exports.inFlightDeliveries = inFlightDeliveries
+module.exports.beforeFinish = beforeFinish
+module.exports.contexts = contexts
