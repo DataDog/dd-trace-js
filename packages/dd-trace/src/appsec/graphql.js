@@ -7,8 +7,7 @@ const addresses = require('./addresses')
 const web = require('../plugins/util/web')
 const {
   startGraphqlResolve,
-  startGraphqlMiddleware,
-  endGraphqlMiddleware,
+  graphqlMiddlewareChannel,
   startExecuteHTTPGraphQLRequest,
   startGraphqlWrite,
   startApolloServerCoreRequest,
@@ -102,21 +101,25 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 }
 
 function enableApollo () {
-  startGraphqlMiddleware.subscribe(enterInApolloMiddleware)
+  graphqlMiddlewareChannel.subscribe({
+    start: enterInApolloMiddleware,
+    end: exitFromApolloMiddleware
+  })
   startExecuteHTTPGraphQLRequest.subscribe(enterInApolloRequest)
   startApolloServerCoreRequest.subscribe(enterInApolloServerCoreRequest)
-  endGraphqlMiddleware.subscribe(exitFromApolloMiddleware)
   startGraphqlWrite.subscribe(beforeWriteApolloGraphqlResponse)
   successApolloServerCoreRequest.subscribe(beforeWriteApolloGraphqlResponse)
 }
 
 function disableApollo () {
-  if (startGraphqlMiddleware.hasSubscribers) startGraphqlMiddleware.unsubscribe(enterInApolloMiddleware)
+  graphqlMiddlewareChannel.unsubscribe({
+    start: enterInApolloMiddleware,
+    end: exitFromApolloMiddleware
+  })
   if (startExecuteHTTPGraphQLRequest.hasSubscribers) startExecuteHTTPGraphQLRequest.unsubscribe(enterInApolloRequest)
   if (startApolloServerCoreRequest.hasSubscribers) {
     startApolloServerCoreRequest.unsubscribe(enterInApolloServerCoreRequest)
   }
-  if (endGraphqlMiddleware.hasSubscribers) endGraphqlMiddleware.unsubscribe(exitFromApolloMiddleware)
   if (startGraphqlWrite.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloGraphqlResponse)
   if (successApolloServerCoreRequest.hasSubscribers) startGraphqlWrite.unsubscribe(beforeWriteApolloGraphqlResponse)
 }

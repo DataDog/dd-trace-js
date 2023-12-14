@@ -1,11 +1,12 @@
 'use strict'
 
 const { AbortController } = require('node-abort-controller')
+const dc = require('dc-polyfill')
+
 const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startGraphqlMiddleware = channel('datadog:apollo:middleware:start')
-const endGraphqlMiddleware = channel('datadog:apollo:middleware:end')
+const graphqlMiddlewareChannel = dc.tracingChannel('datadog:apollo:middleware')
 
 const startGraphQLRequest = channel('datadog:apollo:request:start')
 const successGraphqlRequest = channel('datadog:apollo:request:success')
@@ -54,17 +55,11 @@ function apolloExpress4Hook (express4) {
       const originalMiddleware = originalExpressMiddleware.apply(this, arguments)
 
       return shimmer.wrap(originalMiddleware, function (req, res, next) {
-        if (!startGraphqlMiddleware.hasSubscribers) {
+        if (!graphqlMiddlewareChannel.start.hasSubscribers) {
           return originalMiddleware.apply(this, arguments)
         }
 
-        startGraphqlMiddleware.publish({ req })
-
-        try {
-          return originalMiddleware.apply(this, arguments)
-        } finally {
-          endGraphqlMiddleware.publish({ req })
-        }
+        graphqlMiddlewareChannel.traceSync(originalMiddleware, { req }, this, ...arguments)
       })
     }
   })
