@@ -73,9 +73,9 @@ function getItrConfiguration ({
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
 
-  const startTime = performance.now()
+  const startTime = Date.now()
   request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, performance.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
       const errorType = getErrorTypeFromStatusCode(statusCode)
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { errorType })

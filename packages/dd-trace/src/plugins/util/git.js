@@ -86,7 +86,7 @@ function unshallowRepository () {
   ]
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
-  const start = performance.now()
+  const start = Date.now()
   try {
     execFileSync('git', [
       ...baseGitOptions,
@@ -116,7 +116,7 @@ function unshallowRepository () {
       )
     }
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, performance.now() - start)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
 }
 
 function getRepositoryUrl () {
@@ -131,13 +131,13 @@ function getRepositoryUrl () {
 
 function getLatestCommits () {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
-  const startTime = performance.now()
+  const startTime = Date.now()
   try {
     const result = execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
       .toString()
       .split('\n')
       .filter(commit => commit)
-    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, performance.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
     return result
   } catch (err) {
     log.error(`Get latest commits failed: ${err.message}`)
@@ -152,7 +152,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
-  const startTime = performance.now()
+  const startTime = Date.now()
   try {
     result = execFileSync(
       'git',
@@ -173,7 +173,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
     log.error(`Get commits to upload failed: ${err.message}`)
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'get_objects', errorType: err.status })
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, performance.now() - startTime)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, Date.now() - startTime)
   return result
 }
 
@@ -191,7 +191,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   const cwdPath = path.join(process.cwd(), randomPrefix)
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'pack_objects' })
-  const startTime = performance.now()
+  const startTime = Date.now()
   // Generates pack files to upload and
   // returns the ordered list of packfiles' paths
   function execGitPackObjects (targetPath) {
@@ -231,7 +231,7 @@ function generatePackFilesForCommits (commitsToUpload) {
       incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'pack_objects', errorType: err.status })
     }
   }
-  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, performance.now() - startTime)
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, Date.now() - startTime)
 
   return result
 }

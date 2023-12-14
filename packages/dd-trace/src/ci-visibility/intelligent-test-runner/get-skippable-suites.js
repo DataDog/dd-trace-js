@@ -72,10 +72,10 @@ function getSkippableSuites ({
 
   incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS)
 
-  const startTime = performance.now()
+  const startTime = Date.now()
 
   request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, performance.now() - startTime)
+    distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
       const errorType = getErrorTypeFromStatusCode(statusCode)
       incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS, { errorType })

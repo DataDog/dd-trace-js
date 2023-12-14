@@ -89,9 +89,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
   })
 
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
-  const startTime = performance.now()
+  const startTime = Date.now()
   request(localCommitData, options, (err, response, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, performance.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
     if (err) {
       const errorType = getErrorTypeFromStatusCode(statusCode)
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType })
@@ -171,9 +171,9 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
 
   const uploadSize = form.size()
 
-  const startTime = performance.now()
+  const startTime = Date.now()
   request(form, options, (err, _, statusCode) => {
-    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, performance.now() - startTime)
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
     if (err) {
       const errorType = getErrorTypeFromStatusCode(statusCode)
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { errorType })

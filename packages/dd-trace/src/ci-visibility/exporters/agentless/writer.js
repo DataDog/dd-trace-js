@@ -45,7 +45,7 @@ class Writer extends BaseWriter {
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
-    const startRequestTime = performance.now()
+    const startRequestTime = Date.now()
 
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, data.length)
@@ -54,7 +54,7 @@ class Writer extends BaseWriter {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
-        performance.now() - startRequestTime
+        Date.now() - startRequestTime
       )
       if (err) {
         const errorType = getErrorTypeFromStatusCode(statusCode)

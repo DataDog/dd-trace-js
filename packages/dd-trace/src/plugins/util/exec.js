@@ -14,12 +14,12 @@ const sanitizedExec = (
     incrementCountMetric(operationMetric.name, operationMetric.tags)
   }
   if (durationMetric) {
-    startTime = performance.now()
+    startTime = Date.now()
   }
   try {
     const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
     if (durationMetric) {
-      distributionMetric(durationMetric.name, durationMetric.tags, performance.now() - startTime)
+      distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
     return result
   } catch (e) {

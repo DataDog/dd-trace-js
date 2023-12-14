@@ -26,7 +26,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   encode (coverage) {
-    const startTime = performance.now()
+    const startTime = Date.now()
 
     this._coveragesCount++
     this.encodeCodeCoverage(this._coverageBytes, coverage)
@@ -34,7 +34,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
       { endpoint: 'code_coverage' },
-      performance.now() - startTime
+      Date.now() - startTime
     )
   }
 

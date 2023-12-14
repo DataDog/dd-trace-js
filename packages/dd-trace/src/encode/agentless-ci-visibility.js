@@ -252,7 +252,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    const startTime = performance.now()
+    const startTime = Date.now()
 
     const rawEvents = trace.map(formatSpan)
 
@@ -271,7 +271,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
       { endpoint: 'test_cycle' },
-      performance.now() - startTime
+      Date.now() - startTime
     )
   }
 
