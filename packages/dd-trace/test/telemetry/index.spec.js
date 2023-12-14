@@ -89,7 +89,7 @@ describe('telemetry', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
-        profiler: { version: '5.0.0-pre', enabled: true }
+        profiler: { version: tracerVersion, enabled: true }
       })
       expect(payload).to.have.property('configuration').that.deep.equal([
         { name: 'telemetry.enabled', value: true, origin: 'unknown' },
