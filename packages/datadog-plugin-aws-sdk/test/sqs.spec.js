@@ -362,16 +362,8 @@ describe('Plugin', () => {
 
             expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
             setDataStreamsContextSpy.restore()
+            done()
           })
-
-          setTimeout(() => {
-            try {
-              expect(DataStreamsContext.setDataStreamsContext.isSinonProxy).to.equal(undefined)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
         })
 
         it('Should set a checkpoint on consume', (done) => {
@@ -395,17 +387,9 @@ describe('Plugin', () => {
                 setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
               ).to.equal(expectedConsumerHash)
               setDataStreamsContextSpy.restore()
+              done()
             })
           })
-
-          setTimeout(() => {
-            try {
-              expect(DataStreamsContext.setDataStreamsContext.isSinonProxy).to.equal(undefined)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
         })
 
         it('Should set a message payload size when producing a message', (done) => {
@@ -425,7 +409,10 @@ describe('Plugin', () => {
           }, (err) => {
             if (err) return done(err)
 
-            const payloadSize = getHeadersSize(injectMessageSpy.args[0][1].params)
+            const payloadSize = getHeadersSize({
+              Body: injectMessageSpy.args[0][1].params.MessageBody,
+              MessageAttributes: injectMessageSpy.args[0][1].params.MessageAttributes
+            })
 
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
@@ -441,7 +428,7 @@ describe('Plugin', () => {
           if (sqsPlugin.prototype.responseExtractDSMContext.isSinonProxy) {
             sqsPlugin.prototype.responseExtractDSMContext.restore()
           }
-          const extractContextSpy = sinon.spy(sqsPlugin.prototype, 'responseExtractDSMContext')
+          const extractSpy = sinon.spy(sqsPlugin.prototype, 'responseExtractDSMContext')
 
           sqs.sendMessage({
             MessageBody: 'test DSM',
@@ -461,15 +448,15 @@ describe('Plugin', () => {
               if (err) return done(err)
 
               const payloadSize = getHeadersSize({
-                Body: extractContextSpy.args[0][1].message.Body,
-                MessageAttributes: extractContextSpy.args[0][1].message.MessageAttributes
+                Body: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].Body,
+                MessageAttributes: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].MessageAttributes
               })
 
               expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
               expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
 
               recordCheckpointSpy.restore()
-              extractContextSpy.restore()
+              extractSpy.restore()
 
               done()
             })

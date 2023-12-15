@@ -148,8 +148,14 @@ class Kinesis extends BaseAwsSdkPlugin {
         // set DSM hash if enabled
         if (this.config.dsmEnabled) {
           // get payload size of request data
-          const payloadSize = getHeadersSize(request.params)
-          const stream = request.params.StreamName
+          const payloadSize = getSizeOrZero(JSON.stringify(parsedData))
+          let stream
+          // users can optionally use either stream name or stream arn
+          if (request.params && request.params.StreamArn) {
+            stream = request.params.StreamArn
+          } else if (request.params && request.params.StreamName) {
+            stream = request.params.StreamName
+          }
           const dataStreamsContext = this.tracer
             .setCheckpoint(['direction:out', `topic:${stream}`, 'type:kinesis'], span, payloadSize)
           if (dataStreamsContext) {
