@@ -125,13 +125,15 @@ jobs:
         run: |
           echo "Package version is not 3. Proceeding with the next steps."
           yarn install --ignore-engines
-          ./.github/actions/node/oldest/script.sh
-          yarn test:plugins:ci
-          echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
-          ./.github/actions/node/20
-          yarn test:plugins:ci
-          ./.github/actions/testagent/logs
-          codecov/codecov-action@v2
+        - uses: ./.github/actions/node/oldest
+        - run: |
+            yarn test:plugins:ci
+            echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
+          - uses: ./.github/actions/node/20
+          - run: yarn test:plugins:ci
+          - if: always()
+            uses: ./.github/actions/testagent/logs
+          - uses: codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
