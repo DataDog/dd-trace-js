@@ -134,13 +134,9 @@ jobs:
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
-      - name: Check package version
-        if: env.MAJOR_VERSION != '3'
-        run: |
-          echo "Package version is not 3. Proceeding with the next steps."
-          uses: actions/setup-node@v3
-          with:
-            node-version: ${{ matrix.node-version }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - if: env.MAJOR_VERSION != '3'
         run: |
           yarn install --ignore-engines
