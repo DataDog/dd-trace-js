@@ -125,7 +125,7 @@ jobs:
         run: |
           echo "Package version is not 3. Proceeding with the next steps."
           yarn install --ignore-engines
-          ./.github/actions/node/oldest
+          ./.github/actions/node/oldest/script.sh
           yarn test:plugins:ci
           echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
           ./.github/actions/node/20
