@@ -68,7 +68,7 @@ jobs:
         run: |
           if [ "$MAJOR_VERSION" != '3' ]; then
             echo "Package version is not 3. Exiting."
-            exit 0
+            done
           fi
 
       - name: Install dependencies
