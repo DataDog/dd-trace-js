@@ -358,7 +358,7 @@ describe('Remote Config index', () => {
         rc.updateCapabilities.resetHistory()
         remoteConfig.disableWafUpdate()
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(9)
+        expect(rc.updateCapabilities.callCount).to.be.equal(8)
         expect(rc.updateCapabilities.getCall(0))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
         expect(rc.updateCapabilities.getCall(1))
@@ -375,8 +375,6 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
         expect(rc.updateCapabilities.getCall(7))
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
-        expect(rc.updateCapabilities.getCall(8))
-          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, false)
 
         expect(rc.off.callCount).to.be.equal(4)
         expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')
