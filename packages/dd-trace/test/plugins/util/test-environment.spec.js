@@ -39,6 +39,7 @@ describe('test environment data', () => {
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
+        const { DD_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
         const {
           [CI_ENV_VARS]: expectedEnvVars,
@@ -46,7 +47,7 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags).to.contain(restOfExpectedTags)
+        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
         // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
         if (envVars && expectedEnvVars) {
           expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))
