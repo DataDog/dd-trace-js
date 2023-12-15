@@ -36,6 +36,24 @@ function enable (config) {
   return rc
 }
 
+function enableOrDisableAppsec (action, rcConfig, config) {
+  if (typeof rcConfig.asm?.enabled === 'boolean') {
+    let shouldEnable
+
+    if (action === 'apply' || action === 'modify') {
+      shouldEnable = rcConfig.asm.enabled // take control
+    } else {
+      shouldEnable = config.appsec.enabled // give back control to local config
+    }
+
+    if (shouldEnable) {
+      require('..').enable(config)
+    } else {
+      require('..').disable()
+    }
+  }
+}
+
 function enableWafUpdate (appsecConfig) {
   if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
     // dirty require to make startup faster for serverless
@@ -78,24 +96,6 @@ function disableWafUpdate () {
     rc.off('ASM', noop)
 
     rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
-  }
-}
-
-function enableOrDisableAppsec (action, rcConfig, config) {
-  if (typeof rcConfig.asm?.enabled === 'boolean') {
-    let shouldEnable
-
-    if (action === 'apply' || action === 'modify') {
-      shouldEnable = rcConfig.asm.enabled // take control
-    } else {
-      shouldEnable = config.appsec.enabled // give back control to local config
-    }
-
-    if (shouldEnable) {
-      require('..').enable(config)
-    } else {
-      require('..').disable()
-    }
   }
 }
 
