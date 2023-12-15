@@ -287,7 +287,7 @@ function assertField (context, info, args) {
         startResolveCh.publish({
           info,
           context,
-          resolverInfo: getResolverInfo(info, args)
+          args
         })
       })
 
@@ -349,33 +349,6 @@ function wrapFieldType (field) {
   }
 
   wrapFields(unwrappedType)
-}
-
-function getResolverInfo (info, args) {
-  let resolverInfo = null
-  const resolverVars = {}
-
-  if (args && Object.keys(args).length) {
-    Object.assign(resolverVars, args)
-  }
-
-  const directives = info.fieldNodes[0].directives
-  for (const directive of directives) {
-    const argList = {}
-    for (const argument of directive['arguments']) {
-      argList[argument.name.value] = argument.value.value
-    }
-
-    if (Object.keys(argList).length) {
-      resolverVars[directive.name.value] = argList
-    }
-  }
-
-  if (Object.keys(resolverVars).length) {
-    resolverInfo = { [info.fieldName]: resolverVars }
-  }
-
-  return resolverInfo
 }
 
 function finishResolvers ({ fields }) {

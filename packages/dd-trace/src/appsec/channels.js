@@ -7,7 +7,7 @@ const { channel } = require('../../../datadog-instrumentations/src/helpers/instr
 module.exports = {
   bodyParser: dc.channel('datadog:body-parser:read:finish'),
   cookieParser: dc.channel('datadog:cookie-parser:read:finish'),
-  startGraphqlResolve: dc.channel('apm:graphql:resolve:start'),
+  startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
   graphqlMiddlewareChannel: dc.tracingChannel('datadog:apollo:middleware'),
   startExecuteHTTPGraphQLRequest: dc.channel('datadog:apollo:request:start'),
   startGraphqlWrite: dc.channel('datadog:apollo:request:success'),

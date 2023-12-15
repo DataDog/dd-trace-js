@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const dc = require('dc-polyfill')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 
@@ -8,7 +9,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static get id () { return 'graphql' }
   static get operation () { return 'resolve' }
 
-  start ({ info, context }) {
+  start ({ info, context, args }) {
     const path = getPath(info, this.config)
 
     if (!shouldInstrument(this.config, path)) return
@@ -53,6 +54,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
           span.setTag(`graphql.variables.${name}`, variables[name])
         })
     }
+
+    if (this.resolverStartCh.hasSubscribers) {
+      this.resolverStartCh.publish({ context, resolverInfo: getResolverInfo(info, args) })
+    }
   }
 
   constructor (...args) {
@@ -67,6 +72,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
       field.finishTime = span._getTime ? span._getTime() : 0
       field.error = field.error || err
     })
+
+    this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
   }
 
   configure (config) {
@@ -105,6 +112,33 @@ function withCollapse (responsePathAsArray) {
     return responsePathAsArray.apply(this, arguments)
       .map(segment => typeof segment === 'number' ? '*' : segment)
   }
+}
+
+function getResolverInfo (info, args) {
+  let resolverInfo = null
+  const resolverVars = {}
+
+  if (args && Object.keys(args).length) {
+    Object.assign(resolverVars, args)
+  }
+
+  const directives = info.fieldNodes[0].directives
+  for (const directive of directives) {
+    const argList = {}
+    for (const argument of directive['arguments']) {
+      argList[argument.name.value] = argument.value.value
+    }
+
+    if (Object.keys(argList).length) {
+      resolverVars[directive.name.value] = argList
+    }
+  }
+
+  if (Object.keys(resolverVars).length) {
+    resolverInfo = { [info.fieldName]: resolverVars }
+  }
+
+  return resolverInfo
 }
 
 module.exports = GraphQLResolvePlugin
