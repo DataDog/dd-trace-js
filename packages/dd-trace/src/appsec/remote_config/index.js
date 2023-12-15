@@ -13,15 +13,15 @@ function enable (config) {
 
   const activation = Activation.fromConfig(config)
 
-  if (activation !== Activation.Disabled) {
-    if (activation === Activation.OneClick) {
+  if (activation !== Activation.DISABLED) {
+    if (activation === Activation.ONECLICK) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
     }
 
     rc.on('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
 
-      if (activation === Activation.OneClick) {
+      if (activation === Activation.ONECLICK) {
         enableOrDisableAppsec(action, rcConfig, config)
       }
 

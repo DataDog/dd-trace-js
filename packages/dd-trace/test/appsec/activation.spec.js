@@ -11,31 +11,31 @@ describe('Appsec Activation', () => {
     }
   })
 
-  it('should return OneClick with undefined value', () => {
+  it('should return ONECLICK with undefined value', () => {
     config.appsec.enabled = undefined
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.OneClick)
+    expect(activation).to.equal(Activation.ONECLICK)
   })
 
-  it('should return Enabled with true value', () => {
+  it('should return ENABLED with true value', () => {
     config.appsec.enabled = true
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.Enabled)
+    expect(activation).to.equal(Activation.ENABLED)
   })
 
-  it('should return Disabled with false value', () => {
+  it('should return DISABLED with false value', () => {
     config.appsec.enabled = false
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.Disabled)
+    expect(activation).to.equal(Activation.DISABLED)
   })
 
-  it('should return Disabled with invalid value', () => {
+  it('should return DISABLED with invalid value', () => {
     config.appsec.enabled = 'invalid'
     const activation = Activation.fromConfig(config)
 
-    expect(activation).to.equal(Activation.Disabled)
+    expect(activation).to.equal(Activation.DISABLED)
   })
 })
