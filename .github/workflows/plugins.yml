@@ -60,14 +60,13 @@ jobs:
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - name: Check package version
-        if: env.MAJOR_VERSION != '3'
         run: |
-          gh run cancel ${{ github.run_id }}
-          gh run watch ${{ github.run_id }}
-        env:
+          if [ "$MAJOR_VERSION" != '3' ]; then
+            echo "Package version is not 3. Exiting."
+            exit 0
+          fi
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
-        if: env.MAJOR_VERSION == '3'
         run: |
           apt-get update && \
           apt-get install -y \
@@ -75,14 +74,12 @@ jobs:
             wget \
             g++ libssl1.0.0 libssl-dev zlib1g-dev && \
           npm install -g yarn
-      - if: env.MAJOR_VERSION == '3'
-        run: yarn install --ignore-engines
-      - if: env.MAJOR_VERSION == '3'
-        uses: ./.github/actions/node/14
-      - if: env.MAJOR_VERSION == '3'
-        run: yarn test:plugins:ci
-      - if: env.MAJOR_VERSION == '3'
-        uses: codecov/codecov-action@v2
+      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/node/14
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
   aerospike-4:
     runs-on: ubuntu-latest
     services:
