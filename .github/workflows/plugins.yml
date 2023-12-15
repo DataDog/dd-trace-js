@@ -124,22 +124,14 @@ jobs:
         if: env.MAJOR_VERSION != '3'
         run: |
           echo "Package version is not 3. Proceeding with the next steps."
-      - if: env.MAJOR_VERSION != '3'
-        run: yarn install --ignore-engines
-      - if: env.MAJOR_VERSION != '3'
-        uses: ./.github/actions/node/oldest
-      - if: env.MAJOR_VERSION != '3'
-        run: yarn test:plugins:ci
-      - if: env.MAJOR_VERSION != '3'
-        run: echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
-      - if: env.MAJOR_VERSION != '3'
-        uses: ./.github/actions/node/20 # currently the latest version of aerospike only supports node 20
-      - if: env.MAJOR_VERSION != '3'
-        run: yarn test:plugins:ci
-      - if: env.MAJOR_VERSION != '3'
-        uses: ./.github/actions/testagent/logs
-      - if: env.MAJOR_VERSION != '3'
-        uses: codecov/codecov-action@v2
+          yarn install --ignore-engines
+          ./.github/actions/node/oldest
+          yarn test:plugins:ci
+          echo "PACKAGE_VERSION_RANGE=>=5.8.0" >> "$GITHUB_ENV"
+          ./.github/actions/node/20
+          yarn test:plugins:ci
+          ./.github/actions/testagent/logs
+          codecov/codecov-action@v2
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
     services:
