@@ -95,12 +95,9 @@ class NativeWallProfiler {
         this._enter = this._enter.bind(this)
         this._spanFinished = this._spanFinished.bind(this)
       }
-      this._generateLabels = this._generateLabels.bind(this)
-    } else {
-      // Explicitly assigning, to express the intent that this is meant to be
-      // undefined when passed to pprof.time.stop() when not using sample contexts.
-      this._generateLabels = undefined
     }
+    this._generateLabels = this._generateLabels.bind(this)
+
     this._logger = options.logger
     this._started = false
   }
@@ -238,8 +235,17 @@ class NativeWallProfiler {
     return profile
   }
 
-  _generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
+  _generateLabels (context) {
+    if (context == null) {
+      // generateLabels is also called for samples without context.
+      // In that case just return thread labels.
+      return getThreadLabels()
+    }
+
     const labels = { ...getThreadLabels() }
+
+    const { context: { spanId, rootSpanId, webTags, endpoint }, timestamp } = context
+
     if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
       labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
