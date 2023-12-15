@@ -229,7 +229,7 @@ describe('Kinesis', function () {
           helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
             if (err) return done(err)
 
-            const payloadSize = getSizeOrZero(data)
+            const payloadSize = getSizeOrZero(JSON.stringify(data))
 
             expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
             expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
