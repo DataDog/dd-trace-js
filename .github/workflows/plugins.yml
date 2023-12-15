@@ -70,8 +70,7 @@ jobs:
           yarn install --ignore-engines
           yarn test:plugins:ci
       - if: always()
-        uses: ./.github/actions/testagent/logs
-      - uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v2
 
   aerospike-4:
     runs-on: ubuntu-latest
@@ -135,7 +134,8 @@ jobs:
           yarn install --ignore-engines
           yarn test:plugins:ci
       - if: always()
-        uses: codecov/codecov-action@v2
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v2
 
   amqp10: # TODO: move rhea to its own job
     runs-on: ubuntu-latest
