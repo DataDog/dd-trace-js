@@ -18,6 +18,10 @@ function enable (config) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
     }
 
+    if (config.appsec.apiSecurity?.enabled) {
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
+    }
+
     rc.on('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
 
@@ -46,7 +50,6 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, !!appsecConfig.apiSecurity?.enabled)
 
     rc.on('ASM_DATA', noop)
     rc.on('ASM_DD', noop)
