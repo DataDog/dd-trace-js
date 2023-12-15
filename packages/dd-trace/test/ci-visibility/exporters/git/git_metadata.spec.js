@@ -220,28 +220,29 @@ describe('git_metadata', () => {
   })
   describe('validateGitRepositoryUrl', () => {
     it('should return false if Git repository URL is invalid', () => {
-      const invalidUrl1 = 'https://test.com'
-      const invalidUrl2 = 'https://test.com'
-      const invalidUrl3 = 'http://test.com/repo/dummy.4git'
-      const invalidUrl4 = 'https://test.com/repo/dummy.gi'
-      const invalidUrl5 = 'www.test.com/repo/dummy.git'
-      const invalidUrl6 = 'test.com/repo/dummy.git'
-
-      const invalidUrls = [invalidUrl1, invalidUrl2, invalidUrl3, invalidUrl4, invalidUrl5, invalidUrl6]
+      const invalidUrls = [
+        'www.test.com/repo/dummy.git',
+        'test.com/repo/dummy.git',
+        'test.com/repo/dummy'
+      ]
       invalidUrls.forEach((invalidUrl) => {
-        expect(validateGitRepositoryUrl(invalidUrl)).to.be.false
+        expect(validateGitRepositoryUrl(invalidUrl), `${invalidUrl} is a valid URL`).to.be.false
       })
     })
     it('should return true if Git repository URL is valid', () => {
-      const validUrl1 = 'https://test.com/repo/dummy.git'
-      const validUrl2 = 'http://test.com/repo/dummy.git'
-      const validUrl3 = 'https://github.com/DataDog/dd-trace-js.git'
-      const validUrl4 = 'git@github.com:DataDog/dd-trace-js.git'
-      const validUrl5 = 'git@github.com:user/repo.git'
+      const validUrls = [
+        'https://test.com',
+        'https://test.com/repo/dummy.git',
+        'http://test.com/repo/dummy.git',
+        'https://github.com/DataDog/dd-trace-js.git',
+        'https://github.com/DataDog/dd-trace-js',
+        'git@github.com:DataDog/dd-trace-js.git',
+        'git@github.com:user/repo.git',
+        'git@github.com:user/repo'
+      ]
 
-      const validUrls = [validUrl1, validUrl2, validUrl3, validUrl4, validUrl5]
       validUrls.forEach((validUrl) => {
-        expect(validateGitRepositoryUrl(validUrl)).to.be.true
+        expect(validateGitRepositoryUrl(validUrl), `${validUrl} is an invalid URL`).to.be.true
       })
     })
   })
