@@ -214,7 +214,10 @@ class Sqs extends BaseAwsSdkPlugin {
         StringValue: JSON.stringify(ddInfo)
       }
       if (this.config.dsmEnabled) {
-        const payloadSize = getHeadersSize(request.params)
+        const payloadSize = getHeadersSize({
+          Body: request.params.MessageBody,
+          MessageAttributes: request.params.MessageAttributes
+        })
         const queue = request.params.QueueUrl.split('/').pop()
         const dataStreamsContext = this.tracer
           .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)

@@ -10,19 +10,6 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const snsPlugin = require('../src/services/sns')
 
-const expectedProducerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:out', 'topic:TestTopicDSM', 'type:sns'],
-  ENTRY_PARENT_HASH
-)
-const expectedConsumerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:in', 'topic:TestQueueDSM', 'type:sqs'],
-  expectedProducerHash
-)
-
 describe('Sns', () => {
   setup()
 
@@ -243,6 +230,23 @@ describe('Sns', () => {
     })
 
     describe('Data Streams Monitoring', () => {
+      const expectedProducerHash = function (topicArn) {
+        return computePathwayHash(
+          'test',
+          'tester',
+          ['direction:out', `topic:${topicArn}`, 'type:sns'],
+          ENTRY_PARENT_HASH
+        )
+      }
+      const expectedConsumerHash = function (topicArn) {
+        return computePathwayHash(
+          'test',
+          'tester',
+          ['direction:in', 'topic:TestQueueDSM', 'type:sqs'],
+          expectedProducerHash(topicArn)
+        )
+      }
+
       before(() => {
         return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
       })
@@ -285,9 +289,9 @@ describe('Sns', () => {
               if (err) return done(err)
 
               setDataStreamsContextSpy.args.forEach(functionCall => {
-                if (functionCall[0].hash === expectedConsumerHash) {
+                if (functionCall[0].hash === expectedConsumerHash(TopicArn)) {
                   consumerHashCreated = true
-                } else if (functionCall[0].hash === expectedProducerHash) {
+                } else if (functionCall[0].hash === expectedProducerHash(TopicArn)) {
                   producerHashCreated = true
                 }
               })
@@ -329,7 +333,10 @@ describe('Sns', () => {
               params.MessageAttributes._datadog.BinaryValue = JSON.stringify(
                 JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
               )
-              const payloadSize = getHeadersSize(params)
+              const payloadSize = getHeadersSize({
+                Message: params.Message,
+                MessageAttributes: params.MessageAttributes
+              })
 
               expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
               expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
