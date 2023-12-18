@@ -7,10 +7,11 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
+const prepareCh = channel('datadog:mquery:filter:prepare')
 const startCh = channel('datadog:mquery:filter:start')
 const finishCh = channel('datadog:mquery:filter:finish')
 
-const methods = ['find', 'findOne', 'findOneAndRemove', 'count', 'distinct', 'where']
+const methods = ['find', 'findOne', 'findOneAndRemove', 'findOneAndDelete', 'count', 'distinct', 'where']
 
 const methodsOptionalArgs = ['findOneAndUpdate']
 
@@ -56,7 +57,7 @@ addHook({
         const asyncResource = new AsyncResource('bound-anonymous-fn')
 
         return asyncResource.runInAsyncScope(() => {
-          startCh.publish({ filters: getFilters(arguments, methodName), setNosqlAnalyzedFlag: false })
+          prepareCh.publish({ filters: getFilters(arguments, methodName) })
 
           const query = method.apply(this, arguments)
 
@@ -67,7 +68,7 @@ addHook({
               arguments[1] = wrapCallback(asyncResource, reject)
 
               // send start with no filters to set the nosqlAnalyzed flag
-              startCh.publish({ setNosqlAnalyzedFlag: true })
+              startCh.publish()
 
               return origThen.apply(this, arguments)
             })
@@ -78,7 +79,7 @@ addHook({
             query.exec = asyncResource.bind(function () {
               try {
                 // send start with no filters to set the nosqlAnalyzed flag
-                startCh.publish({ setNosqlAnalyzedFlag: true })
+                startCh.publish()
 
                 return origExec.apply(this, arguments)
               } finally {

@@ -39,26 +39,18 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:mongodb:collection:filter:start', ({ filters }) => {
       const store = storage.getStore()
-      if (store && !store.nosqlAnalyzed && filters?.length) {
-        filters.forEach(filter => {
-          this.analyze({ filter }, store)
-        })
+      if (store && !store.nosqlAnalyzed) {
+        this._analyzeFilters(filters, store)
       }
     })
 
-    const start = ({ filters, setNosqlAnalyzedFlag = true }) => {
+    const start = ({ filters }) => {
       const store = storage.getStore()
       if (!store) return
 
-      if (filters?.length) {
-        filters.forEach(filter => {
-          this.analyze({ filter }, store)
-        })
-      }
+      this._analyzeFilters(filters, store)
 
-      if (setNosqlAnalyzedFlag) {
-        storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
-      }
+      storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
     }
 
     const finish = () => {
@@ -73,6 +65,13 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     this.addSub('datadog:mongoose:model:filter:finish', finish)
     this.addSub('datadog:mquery:filter:finish', finish)
+
+    this.addSub('datadog:mquery:filter:prepare', ({ filters }) => {
+      const store = storage.getStore()
+      if (store) {
+        this._analyzeFilters(filters, store)
+      }
+    })
   }
 
   configureSanitizers () {
@@ -120,6 +119,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.addNotSinkSub('datadog:mongoose:sanitize-filter:finish', ({ sanitizedObject }) => {
       this.sanitizedObjects.add(sanitizedObject)
     })
+  }
+
+  _analyzeFilters (filters, store) {
+    if (filters?.length) {
+      filters.forEach(filter => {
+        this.analyze({ filter }, store)
+      })
+    }
   }
 
   _isVulnerableRange (range) {
