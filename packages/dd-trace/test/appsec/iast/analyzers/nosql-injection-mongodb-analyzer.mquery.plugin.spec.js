@@ -133,7 +133,7 @@ describe('nosql injection detection with mquery', () => {
             })
 
             testThatRequestHasVulnerability({
-              testDescription: 'should have 1 NOSQL_MONGODB_INJECTION vulnerability [await find where exec]',
+              testDescription: 'should have 2 NOSQL_MONGODB_INJECTION vulnerabilities [await find where exec]',
               occurrences: 2,
               fn: async (req, res) => {
                 try {
