@@ -11,7 +11,9 @@ describe('WAFContextWrapper', () => {
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
 
     const payload = {
-      [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+      persistent: {
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+      }
     }
 
     wafContextWrapper.run(payload)
