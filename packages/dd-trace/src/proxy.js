@@ -36,6 +36,10 @@ class Tracer extends NoopProxy {
         setInterval(() => {
           this.dogstatsd.flush()
         }, 10 * 1000).unref()
+
+        process.once('beforeExit', () => {
+          this.dogstatsd.flush()
+        })
       }
 
       if (config.spanLeakDebug > 0) {
