@@ -16,17 +16,13 @@ const methods = ['find', 'findOne', 'findOneAndRemove', 'findOneAndDelete', 'cou
 const methodsOptionalArgs = ['findOneAndUpdate']
 
 function wrapCallback (asyncResource, callback) {
-  if (typeof callback !== 'function') return callback
+  return asyncResource.bind(function () {
+    finishCh.publish()
 
-  return function () {
-    return asyncResource.runInAsyncScope(() => {
-      try {
-        return callback.apply(this, arguments)
-      } finally {
-        finishCh.publish()
-      }
-    })
-  }
+    if (callback) {
+      return callback.apply(this, arguments)
+    }
+  })
 }
 
 function getFilters (args, methodName) {
@@ -49,7 +45,7 @@ addHook({
     if (!(methodName in Query.prototype)) return
 
     shimmer.wrap(Query.prototype, methodName, method => {
-      return function () {
+      return function wrappedMqueryMethod () {
         if (!startCh.hasSubscribers) {
           return method.apply(this, arguments)
         }
@@ -63,7 +59,7 @@ addHook({
 
           if (query.then) {
             const origThen = query.then
-            query.then = asyncResource.bind(function (resolve, reject) {
+            query.then = asyncResource.bind(function wrappedThen (resolve, reject) {
               arguments[0] = wrapCallback(asyncResource, resolve)
               arguments[1] = wrapCallback(asyncResource, reject)
 
@@ -76,7 +72,7 @@ addHook({
 
           if (query.exec) {
             const origExec = query.exec
-            query.exec = asyncResource.bind(function () {
+            query.exec = asyncResource.bind(function wrappedExec () {
               try {
                 // send start with no filters to set the nosqlAnalyzed flag
                 startCh.publish()
