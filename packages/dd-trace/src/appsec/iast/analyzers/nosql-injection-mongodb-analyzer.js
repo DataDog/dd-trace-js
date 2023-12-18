@@ -51,14 +51,14 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     const onStartAndEnterWithStore = (message) => {
       const store = onStart(message)
       if (store) {
-        storage.enterWith({ ...store, nosqlAnalyzed: true, parentStore: store })
+        storage.enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
     }
 
     const onFinish = () => {
       const store = storage.getStore()
-      if (store?.parentStore) {
-        storage.enterWith(store.parentStore)
+      if (store?.nosqlParentStore) {
+        storage.enterWith(store.nosqlParentStore)
       }
     }
 
