@@ -174,7 +174,7 @@ class EventsProfiler {
     }
   }
 
-  profile () {
+  profile (startDate, endDate) {
     if (this.entries.length === 0) {
       // No events in the period; don't produce a profile
       return null
@@ -204,8 +204,6 @@ class EventsProfiler {
     }
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
 
-    let durationFrom = Number.POSITIVE_INFINITY
-    let durationTo = 0
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
     const samples = this.entries.map((item) => {
@@ -217,8 +215,6 @@ class EventsProfiler {
       }
       const { startTime, duration } = item
       const endTime = startTime + duration
-      if (durationFrom > startTime) durationFrom = startTime
-      if (durationTo < endTime) durationTo = endTime
       const sampleInput = {
         value: [Math.round(duration * MS_TO_NS)],
         locationId,
@@ -240,10 +236,10 @@ class EventsProfiler {
 
     return new Profile({
       sampleType: [timeValueType],
-      timeNanos: dateOffset + BigInt(Math.round(durationFrom * MS_TO_NS)),
+      timeNanos: endDate.getTime() * MS_TO_NS,
       periodType: timeValueType,
-      period: this._flushIntervalNanos,
-      durationNanos: Math.max(0, Math.round((durationTo - durationFrom) * MS_TO_NS)),
+      period: 1,
+      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
       sample: samples,
       location: locations,
       function: functions,
