@@ -344,6 +344,25 @@ describe('Plugin', function () {
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
+
+          it('should attach errors by default', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('error', 1)
+
+                expect(spans[1].meta).to.have.property('http.status_code', '500')
+                expect(spans[1].meta).to.have.property('error.message', 'fail')
+                expect(spans[1].meta).to.have.property('error.type', 'Error')
+                expect(spans[1].meta['error.stack']).to.exist
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+          })
         })
 
         describe('for static files', () => {
