@@ -40,6 +40,13 @@ class NextPlugin extends ServerPlugin {
   }
 
   error ({ span, error }) {
+    if (!span) {
+      const store = storage.getStore()
+      if (!store) return
+
+      span = store.span
+    }
+
     this.addError(error, span)
   }
 
@@ -50,10 +57,20 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = span.context()._tags['error']
+    const requestError = req.error || nextRequest.error
 
-    if (!this.config.validateStatus(res.statusCode) && !error) {
-      span.setTag('error', req.error || nextRequest.error || true)
-      web.addError(req, req.error || nextRequest.error || true)
+    if (requestError) {
+      // prioritize user-set errors from API routes
+      span.setTag('error', requestError)
+      web.addError(req, requestError)
+    } else if (error) {
+      // general error handling
+      span.setTag('error', error)
+      web.addError(req, requestError || error)
+    } else if (!this.config.validateStatus(res.statusCode)) {
+      // where there's no error, we still need to validate status
+      span.setTag('error', true)
+      web.addError(req, true)
     }
 
     span.addTags({
@@ -73,14 +90,21 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const req = this._requests.get(span)
 
+    // safeguard against missing req in complicated timeout scenarios
+    if (!req) return
+
+    const errorPages = ['/404', '/500', '/_error', '/_not-found']
+
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    if (current && ['/404', '/500', '/_error', '/_not-found'].includes(page)) {
+    if (current && errorPages.includes(page)) {
       return
     }
 
     // remove ending /route or /page for appDir projects
-    if (isAppPath) page = page.substring(0, page.lastIndexOf('/'))
+    // need to check if not an error page too, as those are marked as app directory
+    // in newer versions
+    if (isAppPath && !errorPages.includes(page)) page = page.substring(0, page.lastIndexOf('/'))
 
     // handle static resource
     if (isStatic) {
