@@ -27,8 +27,8 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
       this,
       ...arguments)
 
-    return Promise.race([graphqlResponseData]).then((value) => {
-      if (abortController.signal.aborted) {
+    const abortPromise = new Promise((resolve, reject) => {
+      abortController.signal.addEventListener('abort', (event) => {
         // This method is expected to return response data
         // with headers, status and body
         const headers = new HeaderMap()
@@ -36,18 +36,18 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
           headers.set(key, abortData.headers[key])
         })
 
-        return {
+        resolve({
           headers: headers,
           status: abortData.statusCode,
           body: {
             kind: 'complete',
             string: abortData.message
           }
-        }
-      }
-
-      return graphqlResponseData
+        })
+      }, { once: true })
     })
+
+    return Promise.race([abortPromise, graphqlResponseData])
   }
 }
 

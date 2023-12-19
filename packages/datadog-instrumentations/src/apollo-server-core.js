@@ -25,14 +25,15 @@ addHook({ name: 'apollo-server-core', file: 'dist/runHttpQuery.js', versions: ['
         this,
         ...arguments)
 
-      return Promise.race([runHttpQueryResult]).then((value) => {
-        if (abortController.signal.aborted) {
+      const abortPromise = new Promise((resolve, reject) => {
+        abortController.signal.addEventListener('abort', (event) => {
           // runHttpQuery callbacks are writing the response on resolve/reject.
           // We should return blocking data in the apollo-server-core HttpQueryError object
-          return Promise.reject(new HttpQueryError(abortData.statusCode, abortData.message, true, abortData.headers))
-        }
-        return value
+          reject(new HttpQueryError(abortData.statusCode, abortData.message, true, abortData.headers))
+        }, { once: true })
       })
+
+      return Promise.race([runHttpQueryResult, abortPromise])
     }
   })
 
