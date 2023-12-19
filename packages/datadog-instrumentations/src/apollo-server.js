@@ -3,49 +3,51 @@
 const { AbortController } = require('node-abort-controller')
 const dc = require('dc-polyfill')
 
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const graphqlMiddlewareChannel = dc.tracingChannel('datadog:apollo:middleware')
 
-const startGraphQLRequest = channel('datadog:apollo:request:start')
-const successGraphqlRequest = channel('datadog:apollo:request:success')
+const requestChannel = dc.tracingChannel('datadog:apollo:request')
 
 let HeaderMap
 
 function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
   return async function executeHTTPGraphQLRequest () {
-    if (!HeaderMap || !startGraphQLRequest.hasSubscribers) {
+    if (!HeaderMap || !requestChannel.start.hasSubscribers) {
       return originalExecuteHTTPGraphQLRequest.apply(this, arguments)
     }
 
-    startGraphQLRequest.publish()
-
-    const graphqlResponseData = await originalExecuteHTTPGraphQLRequest.apply(this, arguments)
-
     const abortController = new AbortController()
     const abortData = {}
-    successGraphqlRequest.publish({ abortController, abortData })
 
-    if (abortController.signal.aborted) {
-      // This method is expected to return response data
-      // with headers, status and body
-      const headers = new HeaderMap()
-      Object.keys(abortData.headers).forEach(key => {
-        headers.set(key, abortData.headers[key])
-      })
+    const graphqlResponseData = requestChannel.tracePromise(
+      originalExecuteHTTPGraphQLRequest,
+      { abortController, abortData },
+      this,
+      ...arguments)
 
-      return {
-        headers: headers,
-        status: abortData.statusCode,
-        body: {
-          kind: 'complete',
-          string: abortData.message
+    return Promise.race([graphqlResponseData]).then((value) => {
+      if (abortController.signal.aborted) {
+        // This method is expected to return response data
+        // with headers, status and body
+        const headers = new HeaderMap()
+        Object.keys(abortData.headers).forEach(key => {
+          headers.set(key, abortData.headers[key])
+        })
+
+        return {
+          headers: headers,
+          status: abortData.statusCode,
+          body: {
+            kind: 'complete',
+            string: abortData.message
+          }
         }
       }
-    }
 
-    return graphqlResponseData
+      return graphqlResponseData
+    })
   }
 }
 
@@ -59,7 +61,7 @@ function apolloExpress4Hook (express4) {
           return originalMiddleware.apply(this, arguments)
         }
 
-        graphqlMiddlewareChannel.traceSync(originalMiddleware, { req }, this, ...arguments)
+        return graphqlMiddlewareChannel.traceSync(originalMiddleware, { req }, this, ...arguments)
       })
     }
   })
