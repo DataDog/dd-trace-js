@@ -66,7 +66,6 @@ class TextMapPropagator {
   }
 
   _injectDatadog (spanContext, carrier) {
-    // TODO: inject into span links
     if (!this._hasPropagationStyle('inject', 'datadog')) return
 
     carrier[traceKey] = spanContext.toTraceId()

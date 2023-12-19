@@ -52,25 +52,6 @@ function truncateSpan (span, shouldTruncateResourceName = true) {
     }
   }
 
-  // ensure span links don't get truncated by agent
-  // reuse MAX_META_VALUE_LENGTH for now
-  // RFC specifies dropping attributes first, then whole link
-  // this needs to be a bit better
-  let links = '['
-  for (const link of span.links) {
-    let serialized = JSON.stringify(link.serialize())
-    if (links.length + serialized.length >= MAX_META_VALUE_LENGTH) {
-      // try and drop attributes first
-      link.flushAttribtutes()
-      serialized = JSON.stringify(link.serialize())
-    }
-    if (links.length + serialized.length < MAX_META_VALUE_LENGTH) {
-      // try to not drop the link
-      links += serialized + ','
-    }
-  }
-  links = links.slice(0, -1) + ']'
-
   return span
 }
 

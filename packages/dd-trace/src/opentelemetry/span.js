@@ -14,7 +14,7 @@ const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
-const SpanLink = require('./span_link')
+const SpanLinkManager = require('./span_link_manager')
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -134,7 +134,7 @@ class Span {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
       }
-    }, _tracer._debug, links)
+    }, _tracer._debug)
 
     if (attributes) {
       this.setAttributes(attributes)
@@ -144,6 +144,13 @@ class Span {
     this._context = context
 
     this._hasStatus = false
+
+    // inject proper data into span links
+    // priorities
+    // properties from tracestate
+    const spanId = this._ddSpan.context().toSpanId()
+    this.links = new SpanLinkManager(spanId, links)
+    // do something with tracestate
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -192,12 +199,12 @@ class Span {
   }
 
   addLink (link) {
-    this._ddSpan.addLink(link)
+    this.links.addLink(link)
   }
 
   // TODO flush out what 'state' means and looks like (tracestate)
-  getLink (state) {
-    return this._ddSpan.getLink(state)
+  getLink (context) {
+    return this.links.getLink(context)
   }
 
   setStatus ({ code, message }) {
