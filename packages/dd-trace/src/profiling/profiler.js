@@ -139,7 +139,7 @@ class Profiler extends EventEmitter {
     try {
       // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
-        const profile = profiler.profile()
+        const profile = profiler.profile(start, end)
         if (!profile) continue
         profiles.push({ profiler, profile })
       }
