@@ -50,7 +50,9 @@ class AgentInfoExporter {
   }
 
   _export (payload, writer = this._writer, timerKey = '_timer') {
-    incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
+    if (this._config.isCiVisibility) {
+      incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
+    }
     writer.append(payload)
 
     const { flushInterval } = this._config

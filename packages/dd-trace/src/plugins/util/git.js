@@ -4,7 +4,6 @@ const path = require('path')
 const fs = require('fs')
 
 const log = require('../../log')
-const { sanitizedExec } = require('./exec')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -29,6 +28,35 @@ const {
 const { filterSensitiveInfoFromRepository } = require('./url')
 
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
+
+function sanitizedExec (
+  cmd,
+  flags,
+  operationMetric,
+  durationMetric,
+  errorMetric
+) {
+  let startTime
+  if (operationMetric) {
+    incrementCountMetric(operationMetric.name, operationMetric.tags)
+  }
+  if (durationMetric) {
+    startTime = Date.now()
+  }
+  try {
+    const result = execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    if (durationMetric) {
+      distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
+    }
+    return result
+  } catch (e) {
+    if (errorMetric) {
+      incrementCountMetric(errorMetric.name, { ...errorMetric.tags, exitCode: e.status })
+    }
+    log.error(e)
+    return ''
+  }
+}
 
 function isDirectory (path) {
   try {
