@@ -61,6 +61,7 @@ class Profiler extends EventEmitter {
     }
 
     try {
+      const start = new Date()
       for (const profiler of config.profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
@@ -70,7 +71,7 @@ class Profiler extends EventEmitter {
         this._logger.debug(`Started ${profiler.type} profiler`)
       }
 
-      this._capture(this._timeoutInterval)
+      this._capture(this._timeoutInterval, start)
       return true
     } catch (e) {
       this._logger.error(e)
@@ -116,9 +117,9 @@ class Profiler extends EventEmitter {
     return this
   }
 
-  _capture (timeout) {
+  _capture (timeout, start) {
     if (!this._enabled) return
-    this._lastStart = new Date()
+    this._lastStart = start
     if (!this._timer || timeout !== this._timeoutInterval) {
       this._timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
       this._timer.unref()
@@ -154,7 +155,7 @@ class Profiler extends EventEmitter {
         })
       }
 
-      this._capture(this._timeoutInterval)
+      this._capture(this._timeoutInterval, end)
       await this._submit(encodedProfiles, start, end, snapshotKind)
       this._logger.debug('Submitted profiles')
     } catch (err) {
@@ -201,7 +202,7 @@ class ServerlessProfiler extends Profiler {
       await super._collect(snapshotKind)
     } else {
       this._profiledIntervals += 1
-      this._capture(this._timeoutInterval)
+      this._capture(this._timeoutInterval, new Date())
       // Don't submit profile until 65 (flushAfterIntervals) intervals have elapsed
     }
   }
