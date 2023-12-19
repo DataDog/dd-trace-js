@@ -205,7 +205,8 @@ class EventsProfiler {
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
 
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
-
+    const lateEntries = []
+    const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
       const decorator = decorators[item.entryType]
       if (!decorator) {
@@ -214,6 +215,14 @@ class EventsProfiler {
         return null
       }
       const { startTime, duration } = item
+      if (startTime >= perfEndDate) {
+        // An event past the current recording end date; save it for the next
+        // profile. Not supposed to happen as long as there's no async activity
+        // between capture of the endDate value in profiler.js _collect() and
+        // here, but better be safe than sorry.
+        lateEntries.push(item)
+        return null
+      }
       const endTime = startTime + duration
       const sampleInput = {
         value: [Math.round(duration * MS_TO_NS)],
@@ -227,7 +236,7 @@ class EventsProfiler {
       return new Sample(sampleInput)
     }).filter(v => v)
 
-    this.entries = []
+    this.entries = lateEntries
 
     const timeValueType = new ValueType({
       type: stringTable.dedup(pprofValueType),
