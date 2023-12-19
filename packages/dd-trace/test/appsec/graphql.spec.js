@@ -7,8 +7,8 @@ const addresses = require('../../src/appsec/addresses')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
-  startExecuteHTTPGraphQLRequest,
-  startGraphqlWrite
+  apolloChannel,
+  apolloServerCoreChannel
 } = require('../../src/appsec/channels')
 
 describe('GraphQL', () => {
@@ -50,16 +50,20 @@ describe('GraphQL', () => {
     it('Should subscribe to all channels', () => {
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
       expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
-      expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
-      expect(startGraphqlWrite.hasSubscribers).to.be.false
+      expect(apolloChannel.start.hasSubscribers).to.be.false
+      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
+      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
+      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
       expect(startGraphqlResolve.hasSubscribers).to.be.false
 
       graphql.enable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
       expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
-      expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
-      expect(startGraphqlWrite.hasSubscribers).to.be.true
+      expect(apolloChannel.start.hasSubscribers).to.be.true
+      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
+      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
+      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
       expect(startGraphqlResolve.hasSubscribers).to.be.true
     })
   })
@@ -70,16 +74,20 @@ describe('GraphQL', () => {
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
       expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.true
-      expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.true
-      expect(startGraphqlWrite.hasSubscribers).to.be.true
+      expect(apolloChannel.start.hasSubscribers).to.be.true
+      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
+      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
+      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
       expect(startGraphqlResolve.hasSubscribers).to.be.true
 
       graphql.disable()
 
       expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
       expect(graphqlMiddlewareChannel.end.hasSubscribers).to.be.false
-      expect(startExecuteHTTPGraphQLRequest.hasSubscribers).to.be.false
-      expect(startGraphqlWrite.hasSubscribers).to.be.false
+      expect(apolloChannel.start.hasSubscribers).to.be.false
+      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
+      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
+      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
       expect(startGraphqlResolve.hasSubscribers).to.be.false
     })
   })
@@ -156,7 +164,7 @@ describe('GraphQL', () => {
 
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })
-      startExecuteHTTPGraphQLRequest.publish()
+      apolloChannel.start.publish()
     })
 
     afterEach(() => {
@@ -190,7 +198,7 @@ describe('GraphQL', () => {
       )
       expect(context.abortController.abort).not.to.have.been.called
 
-      startGraphqlWrite.publish({ abortController })
+      apolloChannel.asyncEnd.publish({ abortController })
 
       expect(blocking.getBlockingData).not.to.have.been.called
     })
@@ -221,7 +229,7 @@ describe('GraphQL', () => {
       )
       expect(context.abortController.abort).to.have.been.called
       const abortData = {}
-      startGraphqlWrite.publish({ abortController, abortData })
+      apolloChannel.asyncEnd.publish({ abortController, abortData })
 
       expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', {})
     })
