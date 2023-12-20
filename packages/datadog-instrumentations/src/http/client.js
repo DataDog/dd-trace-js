@@ -69,28 +69,16 @@ function patch (http, methodName) {
         try {
           const req = request.call(this, options, callback)
           const emit = req.emit
-
-          const requestSetTimeout = req.setTimeout
+          const setTimeout = req.setTimeout
 
           ctx.req = req
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-
           req.setTimeout = function () {
             customRequestTimeout = true
-            return requestSetTimeout.apply(this, arguments)
+            return setTimeout.apply(this, arguments)
           }
-
-          req.on('socket', socket => {
-            if (socket) {
-              const socketSetTimeout = socket.setTimeout
-              socket.setTimeout = function () {
-                customRequestTimeout = true
-                return socketSetTimeout.apply(this, arguments)
-              }
-            }
-          })
 
           req.emit = function (eventName, arg) {
             switch (eventName) {
