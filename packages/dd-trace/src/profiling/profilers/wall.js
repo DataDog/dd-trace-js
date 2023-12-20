@@ -7,13 +7,12 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
+const { END_TIMESTAMP_LABEL, getThreadLabels } = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
-const threadName = `${threadNamePrefix} Event Loop`
 
 const MemoizedWebTags = Symbol('NativeWallProfiler.MemoizedWebTags')
 
@@ -96,12 +95,9 @@ class NativeWallProfiler {
         this._enter = this._enter.bind(this)
         this._spanFinished = this._spanFinished.bind(this)
       }
-      this._generateLabels = this._generateLabels.bind(this)
-    } else {
-      // Explicitly assigning, to express the intent that this is meant to be
-      // undefined when passed to pprof.time.stop() when not using sample contexts.
-      this._generateLabels = undefined
     }
+    this._generateLabels = this._generateLabels.bind(this)
+
     this._logger = options.logger
     this._started = false
   }
@@ -239,12 +235,21 @@ class NativeWallProfiler {
     return profile
   }
 
-  _generateLabels ({ context: { spanId, rootSpanId, webTags, endpoint }, timestamp }) {
-    const labels = this._timelineEnabled ? {
-      [THREAD_NAME]: threadName,
+  _generateLabels (context) {
+    if (context == null) {
+      // generateLabels is also called for samples without context.
+      // In that case just return thread labels.
+      return getThreadLabels()
+    }
+
+    const labels = { ...getThreadLabels() }
+
+    const { context: { spanId, rootSpanId, webTags, endpoint }, timestamp } = context
+
+    if (this._timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
-      [END_TIMESTAMP]: timestamp * 1000n
-    } : {}
+      labels[END_TIMESTAMP_LABEL] = timestamp * 1000n
+    }
 
     if (spanId) {
       labels['span id'] = spanId
