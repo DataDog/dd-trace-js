@@ -40,7 +40,7 @@ describe('Api Security Sampler', () => {
       expect(apiSecuritySampler.sampleRequest()).to.true
     })
 
-    it('should not sample request if enabled and sampling greater than random', () => {
+    it('should not sample request if enabled and sampling less than random', () => {
       config.apiSecurity.requestSampling = 0.1
 
       apiSecuritySampler.configure(config)
