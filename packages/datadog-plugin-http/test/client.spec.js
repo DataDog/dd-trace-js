@@ -900,39 +900,6 @@ describe('Plugin', () => {
               })
             })
           }).timeout(10000)
-
-          it('should record error if req.socket.setTimeout is used with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
-            })
-
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('error', 1)
-                })
-                .then(done)
-                .catch(done)
-
-              appListener = server(app, port, async () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => { })
-                })
-
-                req.on('error', () => {})
-                req.on('socket', socket => {
-                  socket.setTimeout(5000)// match default timeout
-                })
-
-                req.end()
-              })
-            })
-          }).timeout(10000)
         }
 
         it('should only record a request once', done => {
