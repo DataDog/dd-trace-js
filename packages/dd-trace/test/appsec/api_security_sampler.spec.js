@@ -48,6 +48,14 @@ describe('Api Security Sampler', () => {
       expect(apiSecuritySampler.sampleRequest()).to.false
     })
 
+    it('should not sample request if incorrect config value', () => {
+      config.apiSecurity.requestSampling = NaN
+
+      apiSecuritySampler.configure(config)
+
+      expect(apiSecuritySampler.sampleRequest()).to.false
+    })
+
     it('should sample request according to the config', () => {
       config.apiSecurity.requestSampling = 1
 
