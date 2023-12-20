@@ -1,4 +1,4 @@
-const { execFileSync } = require('child_process')
+const cp = require('child_process')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
@@ -44,7 +44,7 @@ function sanitizedExec (
     startTime = Date.now()
   }
   try {
-    const result = execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
     if (durationMetric) {
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
@@ -116,7 +116,7 @@ function unshallowRepository () {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
   const start = Date.now()
   try {
-    execFileSync('git', [
+    cp.execFileSync('git', [
       ...baseGitOptions,
       revParseHead
     ], { stdio: 'pipe' })
@@ -126,7 +126,7 @@ function unshallowRepository () {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'unshallow', exitCode: err.status })
     const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
     try {
-      execFileSync('git', [
+      cp.execFileSync('git', [
         ...baseGitOptions,
         upstreamRemote
       ], { stdio: 'pipe' })
@@ -161,7 +161,7 @@ function getLatestCommits () {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
   const startTime = Date.now()
   try {
-    const result = execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
+    const result = cp.execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
       .toString()
       .split('\n')
       .filter(commit => commit)
@@ -182,7 +182,7 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
   const startTime = Date.now()
   try {
-    result = execFileSync(
+    result = cp.execFileSync(
       'git',
       [
         'rev-list',
@@ -223,7 +223,7 @@ function generatePackFilesForCommits (commitsToUpload) {
   // Generates pack files to upload and
   // returns the ordered list of packfiles' paths
   function execGitPackObjects (targetPath) {
-    return execFileSync(
+    return cp.execFileSync(
       'git',
       [
         'pack-objects',
