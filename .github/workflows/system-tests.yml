@@ -62,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TEST_LIBRARY: nodejs
+      #keep this line until system-tests -> robertomonteromiguel/parametric_use_load_binary_nodejs merged
       NODEJS_DDTRACE_MODULE: datadog/dd-trace-js#${{ github.sha }}
     steps:
       - name: Checkout system tests
@@ -71,6 +72,10 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v3
+        with:
+          path: 'binaries/dd-trace-js'
       - name: Build
         run: ./build.sh -i runner
       - name: Run
