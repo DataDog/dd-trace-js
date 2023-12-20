@@ -1,5 +1,5 @@
 const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
-const { END_TIMESTAMP } = require('./shared')
+const { END_TIMESTAMP_LABEL } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
@@ -202,7 +202,7 @@ class EventsProfiler {
       decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
       decorators[eventType] = decorator
     }
-    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
+    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
 
     let durationFrom = Number.POSITIVE_INFINITY
     let durationTo = 0
