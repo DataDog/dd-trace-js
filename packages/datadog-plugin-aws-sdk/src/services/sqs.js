@@ -134,12 +134,19 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
+    let parsedAttributes = {}
+    if (message.MessageAttributes && message.MessageAttributes._datadog) {
+      const datadogAttribute = message.MessageAttributes._datadog
+      parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
+    }
 
-    const datadogAttribute = message.MessageAttributes._datadog
-
-    const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
-    if (parsedAttributes) return this.tracer.extract('text_map', parsedAttributes)
+    if (message.Attributes && message.Attributes.AWSTraceHeader) {
+      parsedAttributes = {
+        ...parsedAttributes,
+        ...this.parseAWSTraceHeader(message.Attributes.AWSTraceHeader)
+      }
+    }
+    if (Object.keys(parsedAttributes).length !== 0) return this.tracer.extract('text_map', parsedAttributes)
   }
 
   parseDatadogAttributes (attributes) {
@@ -197,6 +204,35 @@ class Sqs extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const operation = request.operation
+    // inject params for receiveMessage to capture any possible context propagation
+    if (operation === 'receiveMessage') {
+      if (!request.params) {
+        request.params = {
+          MessageAttributeNames: ['_datadog'],
+          AttributeNames: ['AWSTraceHeader'] // for compatability with Java producer
+        }
+        return
+      }
+
+      if (!request.params.MessageAttributeNames) {
+        request.params.MessageAttributeNames = ['_datadog']
+      } else if (
+        !request.params.MessageAttributeNames.includes('_datadog') &&
+        !request.params.MessageAttributeNames.includes('All')
+      ) {
+        request.params.MessageAttributeNames.push('_datadog')
+      }
+
+      if (!request.params.AttributeNames) {
+        request.params.AttributeNames = ['AWSTraceHeader']
+      } else if (
+        !request.params.AttributeNames.includes('AWSTraceHeader') &&
+        !request.params.AttributeNames.includes('All')
+      ) {
+        request.params.AttributeNames.push('AWSTraceHeader')
+      }
+      return
+    }
     if (operation === 'sendMessage') {
       if (!request.params) {
         request.params = {}
