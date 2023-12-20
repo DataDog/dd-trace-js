@@ -24,7 +24,6 @@ function parseRequestSampling (requestSampling) {
   if (isNaN(parsed)) {
     log.warn(`Incorrect API Security request sampling value: ${requestSampling}`)
 
-    // NOTE: 0 or 0.1 the default value?
     parsed = 0
   } else {
     parsed = Math.min(1, Math.max(0, parsed))
