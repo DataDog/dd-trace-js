@@ -510,7 +510,7 @@ describe('TextMapPropagator', () => {
 
       expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
       expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
-      expect(spanContext._sampling.samlingPriority).to.equal(sampled)
+      expect(spanContext._sampling.samplingPriority).to.equal(sampled)
     })
 
     describe('with B3 propagation as multiple headers', () => {

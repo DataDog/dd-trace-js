@@ -579,6 +579,7 @@ class TextMapPropagator {
       }
       return spanContext
     }
+    return null
   }
 }
 
