@@ -188,9 +188,11 @@ describe('profiler', () => {
     const rootSpanKey = strings.dedup('local root span id')
     const endpointKey = strings.dedup('trace endpoint')
     const threadNameKey = strings.dedup('thread name')
+    const threadIdKey = strings.dedup('thread id')
+    const osThreadIdKey = strings.dedup('os thread id')
     const threadNameValue = strings.dedup('Main Event Loop')
     for (const sample of prof.sample) {
-      let ts, spanId, rootSpanId, endpoint, threadName
+      let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
       for (const label of sample.label) {
         switch (label.key) {
           case tsKey: ts = label.num; break
@@ -198,11 +200,15 @@ describe('profiler', () => {
           case rootSpanKey: rootSpanId = label.str; break
           case endpointKey: endpoint = label.str; break
           case threadNameKey: threadName = label.str; break
+          case threadIdKey: threadId = label.str; break
+          case osThreadIdKey: osThreadId = label.str; break
           default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
         }
       }
       // Timestamp must be defined and be between process start and end time
       assert.isDefined(ts)
+      assert.isNumber(osThreadId)
+      assert.equal(threadId, strings.dedup('0'))
       assert.isTrue(ts <= procEnd)
       assert.isTrue(ts >= procStart)
       // Thread name must be defined and exactly equal "Main Event Loop"
