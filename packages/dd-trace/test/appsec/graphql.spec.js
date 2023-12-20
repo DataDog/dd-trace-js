@@ -147,12 +147,11 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly(
-        {
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        },
-        {}
-      )
+        }
+      }, {})
     })
   })
 
@@ -190,12 +189,12 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly(
-        {
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        },
-        {}
-      )
+        }
+      }, {})
+
       expect(context.abortController.abort).not.to.have.been.called
 
       apolloChannel.asyncEnd.publish({ abortController })
@@ -221,13 +220,14 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly(
-        {
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        ephemeral: {
           [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        },
-        {}
-      )
+        }
+      }, {})
+
       expect(context.abortController.abort).to.have.been.called
+
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
