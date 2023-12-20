@@ -1,6 +1,6 @@
 'use strict'
 
-// require('../../../../dd-trace/test/setup/tap')
+require('../../../../dd-trace/test/setup/tap')
 
 const cp = require('child_process')
 const fs = require('fs')
@@ -24,7 +24,7 @@ describe('CI Visibility Exporter', () => {
   })
 
   describe('sendGitMetadata', () => {
-    it.only('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
+    it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
       const scope = nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
@@ -318,7 +318,7 @@ describe('CI Visibility Exporter', () => {
       })
     })
     context('if ITR is enabled and the tracer can use CI Vis Protocol', () => {
-      it.only('should add custom configurations', (done) => {
+      it('should add custom configurations', (done) => {
         let customConfig
 
         nock(`http://localhost:${port}`)
@@ -364,7 +364,7 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter.sendGitMetadata()
       })
-      it.only('should request the API after git upload promise is resolved', (done) => {
+      it('should request the API after git upload promise is resolved', (done) => {
         nock(`http://localhost:${port}`)
           .post('/api/v2/git/repository/search_commits')
           .reply(200, JSON.stringify({

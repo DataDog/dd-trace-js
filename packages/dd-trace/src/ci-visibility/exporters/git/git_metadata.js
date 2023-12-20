@@ -244,24 +244,17 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     repositoryUrl = getRepositoryUrl()
   }
 
-  console.log('1', repositoryUrl)
-
   log.debug(`Uploading git history for repository ${repositoryUrl}`)
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  console.log('2')
-
   const latestCommits = getLatestCommits()
   log.debug(`There were ${latestCommits.length} commits since last month.`)
   const [headCommit] = latestCommits
 
-  console.log('3')
-
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
-    console.log('getOnFinishGetCommitsToUpload', err)
     if (err) {
       return callback(err)
     }
@@ -273,10 +266,8 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
-      console.log('is not shallow')
       return generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
     }
-    console.log('unshallowing')
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()

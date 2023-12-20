@@ -178,7 +178,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
         } else {
           log.debug('Successfully uploaded git metadata')
         }
-        console.log('4', err)
         this._resolveGit(err)
       })
     })
