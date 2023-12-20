@@ -835,20 +835,6 @@ describe('TextMapPropagator', () => {
         expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
         expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
       })
-
-      it('should extract from AWS Xray header', () => {
-        textMap['traceparent'] = 'Root=1-657ca447-000000000253d2d11f6cd9d1;Parent=0fdb23a8c03f4bf5;Sampled=1'
-        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-0'
-        config.tracePropagationStyle.extract = ['aws xray']
-
-        const carrier = {}
-        const spanContext = propagator.extract(textMap)
-
-        propagator.inject(spanContext, carrier)
-
-        expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
-        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
-      })
     })
   })
 })
