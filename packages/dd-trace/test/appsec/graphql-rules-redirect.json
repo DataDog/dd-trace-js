@@ -20,6 +20,9 @@
                 },
                 {
                   "address": "graphql.server.resolver"
+                },
+                {
+                  "address": "server.request.headers.no_cookies"
                 }
               ],
               "list": [
@@ -30,7 +33,17 @@
           }
         ],
         "transformers": ["lowercase"],
-        "on_match": []
+        "on_match": ["block"]
       }
-    ]
+    ],
+  "actions": [
+    {
+      "id": "block",
+      "type": "redirect_request",
+      "parameters": {
+        "status_code": 301,
+        "location": "/you-have-been-blocked"
+      }
+    }
+  ]
 }
