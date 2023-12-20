@@ -284,7 +284,7 @@ class Config {
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
-    const defaultPropagationStyle = ['datadog', 'tracecontext']
+    const defaultPropagationStyle = ['datadog', 'tracecontext', 'aws xray']
     if (isTrue(DD_TRACE_B3_ENABLED)) {
       defaultPropagationStyle.push('b3')
       defaultPropagationStyle.push('b3 single header')

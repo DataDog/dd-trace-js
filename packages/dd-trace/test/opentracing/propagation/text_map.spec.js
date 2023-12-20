@@ -6,6 +6,7 @@ const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
+const BaseAwsSdkPlugin = require('../../../../datadog-plugin-aws-sdk/src/base')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -498,6 +499,20 @@ describe('TextMapPropagator', () => {
       expect(spanContext._tracestate).to.be.undefined
     })
 
+    it(`should extract AWSTraceHeader`, () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+      const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
+      const carrier = BaseAwsSdkPlugin.prototype.parseAWSTraceHeader(unparsedHeader)
+
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
+      expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
+      expect(spanContext._sampling.samlingPriority).to.equal(sampled)
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']
@@ -811,6 +826,20 @@ describe('TextMapPropagator', () => {
         textMap['traceparent'] = '01-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
         textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-0'
         config.tracePropagationStyle.extract = ['tracecontext']
+
+        const carrier = {}
+        const spanContext = propagator.extract(textMap)
+
+        propagator.inject(spanContext, carrier)
+
+        expect(carrier['x-datadog-tags']).to.include('_dd.p.dm=-0')
+        expect(spanContext._trace.tags['_dd.p.dm']).to.eql('-0')
+      })
+
+      it('should extract from AWS Xray header', () => {
+        textMap['traceparent'] = 'Root=1-657ca447-000000000253d2d11f6cd9d1;Parent=0fdb23a8c03f4bf5;Sampled=1'
+        textMap['tracestate'] = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-0'
+        config.tracePropagationStyle.extract = ['aws xray']
 
         const carrier = {}
         const spanContext = propagator.extract(textMap)

@@ -223,6 +223,9 @@ class TextMapPropagator {
         case 'b3 single header': // TODO: delete in major after singular "b3"
           spanContext = this._extractB3SingleContext(carrier)
           break
+        case 'aws xray':
+          spanContext = this._extractAwsXrayContext(carrier)
+          break
       }
 
       if (spanContext !== null) {
@@ -535,6 +538,47 @@ class TextMapPropagator {
     }
 
     return spanContext._traceId.toString(16)
+  }
+
+  _extractAwsXrayContext (carrier) {
+    let traceId
+    let spanId
+    let samplingPriority
+    let ddOrigin
+
+    for (const key in carrier) {
+      const value = carrier[key]
+      if (key === 'root') {
+        const awsTraceIdSegments = value.split('-')
+        for (let i = 0; i < awsTraceIdSegments.length; i++) {
+          if (awsTraceIdSegments[i] === '1') {
+            continue
+          } else if (i === 1 && awsTraceIdSegments.length === 3) {
+            continue
+          } else if (i === 2 && awsTraceIdSegments.length === 3) {
+            traceId = awsTraceIdSegments[i].substring(8)
+          }
+        }
+      } else if (key === 'parent') {
+        spanId = value
+      } else if (key === 'sampled') {
+        samplingPriority = parseInt(value)
+      } else if (key === '_dd.origin') {
+        ddOrigin = String(value)
+      }
+    }
+
+    if (traceId && spanId) {
+      const spanContext = new DatadogSpanContext({
+        traceId: id(traceId, 16),
+        spanId: id(spanId, 16),
+        sampling: { samplingPriority }
+      })
+      if (ddOrigin) {
+        spanContext._trace.origin = ddOrigin
+      }
+      return spanContext
+    }
   }
 }
 

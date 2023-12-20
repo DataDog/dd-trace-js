@@ -1,8 +1,7 @@
 'use strict'
 const {
   CONTEXT_PROPAGATION_KEY,
-  getSizeOrZero,
-  getHeadersSize
+  getSizeOrZero
 } = require('../../../dd-trace/src/datastreams/processor')
 const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
