@@ -108,6 +108,7 @@ tracer.init({
     obfuscatorValueRegex: '.*',
     blockedTemplateHtml: './blocked.html',
     blockedTemplateJson: './blocked.json',
+    blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
       mode: 'safe'
     },
