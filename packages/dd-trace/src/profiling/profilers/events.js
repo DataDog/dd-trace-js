@@ -174,7 +174,7 @@ class EventsProfiler {
     }
   }
 
-  profile () {
+  profile (startDate, endDate) {
     if (this.entries.length === 0) {
       // No events in the period; don't produce a profile
       return null
@@ -204,10 +204,9 @@ class EventsProfiler {
     }
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
 
-    let durationFrom = Number.POSITIVE_INFINITY
-    let durationTo = 0
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
-
+    const lateEntries = []
+    const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
       const decorator = decorators[item.entryType]
       if (!decorator) {
@@ -216,9 +215,15 @@ class EventsProfiler {
         return null
       }
       const { startTime, duration } = item
+      if (startTime >= perfEndDate) {
+        // An event past the current recording end date; save it for the next
+        // profile. Not supposed to happen as long as there's no async activity
+        // between capture of the endDate value in profiler.js _collect() and
+        // here, but better be safe than sorry.
+        lateEntries.push(item)
+        return null
+      }
       const endTime = startTime + duration
-      if (durationFrom > startTime) durationFrom = startTime
-      if (durationTo < endTime) durationTo = endTime
       const sampleInput = {
         value: [Math.round(duration * MS_TO_NS)],
         locationId,
@@ -231,7 +236,7 @@ class EventsProfiler {
       return new Sample(sampleInput)
     }).filter(v => v)
 
-    this.entries = []
+    this.entries = lateEntries
 
     const timeValueType = new ValueType({
       type: stringTable.dedup(pprofValueType),
@@ -240,10 +245,10 @@ class EventsProfiler {
 
     return new Profile({
       sampleType: [timeValueType],
-      timeNanos: dateOffset + BigInt(Math.round(durationFrom * MS_TO_NS)),
+      timeNanos: endDate.getTime() * MS_TO_NS,
       periodType: timeValueType,
-      period: this._flushIntervalNanos,
-      durationNanos: Math.max(0, Math.round((durationTo - durationFrom) * MS_TO_NS)),
+      period: 1,
+      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
       sample: samples,
       location: locations,
       function: functions,
