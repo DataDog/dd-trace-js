@@ -286,11 +286,30 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const configuration = changes.map(change => ({
-    name: change.name,
-    value: Array.isArray(change.value) ? change.value.join(',') : change.value,
-    origin: change.origin
-  }))
+  const names = {
+    sampleRate: 'DD_TRACE_SAMPLE_RATE',
+    logInjection: 'DD_LOG_INJECTION',
+    headerTags: 'DD_TRACE_HEADER_TAGS',
+    tags: 'DD_TAGS'
+  }
+
+  const configuration = []
+
+  for (const change of changes) {
+    if (!names.hasOwnProperty(change.name)) continue
+
+    const name = names[change.name]
+    const { origin, value } = change
+    const entry = { name, origin, value }
+
+    if (Array.isArray(value)) {
+      entry.value = value.join(',')
+    } else if (name === 'DD_TAGS') {
+      entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
+    }
+
+    configuration.push(entry)
+  }
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
