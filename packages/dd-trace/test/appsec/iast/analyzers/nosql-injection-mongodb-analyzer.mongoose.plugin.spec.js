@@ -110,33 +110,33 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }
           })
 
-          // if (semver.satisfies(specificMongooseVersion, '>=6')) {
-          //   testThatRequestHasNoVulnerability({
-          //     testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with mongoose.sanitizeFilter',
-          //     fn: async (req, res) => {
-          //       const filter = mongoose.sanitizeFilter({
-          //         name: {
-          //           child: [req.query.key]
-          //         }
-          //       })
-          //       Test.find(filter).then(() => {
-          //         res.end()
-          //       })
-          //     },
-          //     vulnerability: 'NOSQL_MONGODB_INJECTION',
-          //     makeRequest: (done, config) => {
-          //       axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-          //     }
-          //   })
-          // }
+          if (semver.satisfies(specificMongooseVersion, '>=6')) {
+            testThatRequestHasNoVulnerability({
+              testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with mongoose.sanitizeFilter',
+              fn: async (req, res) => {
+                const filter = mongoose.sanitizeFilter({
+                  name: {
+                    child: [req.query.key]
+                  }
+                })
+                Test.find(filter).then(() => {
+                  res.end()
+                })
+              },
+              vulnerability: 'NOSQL_MONGODB_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              }
+            })
+          }
 
-          // testThatRequestHasNoVulnerability(async (req, res) => {
-          //   Test.find({
-          //     name: 'test'
-          //   }).then(() => {
-          //     res.end()
-          //   })
-          // }, 'NOSQL_MONGODB_INJECTION')
+          testThatRequestHasNoVulnerability(async (req, res) => {
+            Test.find({
+              name: 'test'
+            }).then(() => {
+              res.end()
+            })
+          }, 'NOSQL_MONGODB_INJECTION')
         })
     })
   })

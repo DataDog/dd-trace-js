@@ -11,27 +11,25 @@ const prepareCh = channel('datadog:mquery:filter:prepare')
 const startCh = channel('datadog:mquery:filter:start')
 const finishCh = channel('datadog:mquery:filter:finish')
 
-const methods = ['find', 'findOne', 'findOneAndRemove', 'findOneAndDelete', 'count', 'distinct', 'where']
+const methods = [
+  'find',
+  'findOne',
+  'findOneAndRemove',
+  'findOneAndDelete',
+  'count',
+  'distinct',
+  'remove',
+  'where'
+]
 
-const methodsOptionalArgs = ['findOneAndUpdate']
-
-// function wrapCallback (asyncResource, callback) {
-//   return asyncResource.bind(function () {
-//     finishCh.publish()
-
-//     if (callback) {
-//       return callback.apply(this, arguments)
-//     }
-//   })
-// }
+const methodsOptionalArgs = ['findOneAndUpdate', 'update']
 
 function getFilters (args, methodName) {
-  // Should string arguments be excluded?
   const arg0 = args[0]
   const filters = arg0 && typeof arg0 === 'object' ? [args[0]] : []
 
   const arg1 = args[1]
-  if (methodsOptionalArgs.includes(methodName) && arg1 && typeof arg1 === 'object') {
+  if (arg1 && typeof arg1 === 'object' && methodsOptionalArgs.includes(methodName)) {
     filters.push(arg1)
   }
   return filters
@@ -46,14 +44,17 @@ addHook({
 
     shimmer.wrap(Query.prototype, methodName, method => {
       return function wrappedMqueryMethod () {
-        if (!startCh.hasSubscribers) {
+        if (!prepareCh.hasSubscribers) {
           return method.apply(this, arguments)
         }
 
         const asyncResource = new AsyncResource('bound-anonymous-fn')
 
         return asyncResource.runInAsyncScope(() => {
-          prepareCh.publish({ filters: getFilters(arguments, methodName) })
+          const filters = getFilters(arguments, methodName)
+          if (filters?.length) {
+            prepareCh.publish({ filters })
+          }
 
           return method.apply(this, arguments)
         })
@@ -74,11 +75,11 @@ addHook({
 
         const promise = originalExec.apply(this, arguments)
 
-        if (!promise.then) {
-          finish(finishCh)
-        } else {
+        if (promise.then) {
           promise.then(asyncResource.bind(() => finish(finishCh)),
             asyncResource.bind(() => finish(finishCh)))
+        } else {
+          finish(finishCh)
         }
 
         return promise
