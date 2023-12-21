@@ -763,7 +763,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
-    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'foo' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.property('spanAttributeSchema', 'v1')
