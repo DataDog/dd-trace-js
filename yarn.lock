@@ -412,10 +412,10 @@
   resolved "https://registry.npmjs.org/@colors/colors/-/colors-1.5.0.tgz"
   integrity "sha1-u1BFecHK6SPmV2pPXaQ9Jfl729k= sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="
 
-"@datadog/native-appsec@5.0.0":
-  version "5.0.0"
-  resolved "https://registry.npmjs.org/@datadog/native-appsec/-/native-appsec-5.0.0.tgz"
-  integrity "sha1-5C539CBiUyrX3vo6eQkNyLAgwis= sha512-Ks8a4L49N40w+TJjj2e9ncGssUIEjo4wnmUFjPBRvlLGuVj1VJLxCx7ztpd8eTycM5QQlzggCDOP6CMEVmeZbA=="
+"@datadog/native-appsec@6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-6.0.0.tgz#da753f8566ec5180ad9e83014cb44984b4bc878e"
+  integrity sha512-e7vH5usFoqov7FraPcA99fe80t2/qm4Cmno1T3iBhYlhyO6HD01ArDsCZ/sUvNIUR1ujxtbr8Z9WRGJ0qQ/FDA==
   dependencies:
     node-gyp-build "^3.9.0"
 
