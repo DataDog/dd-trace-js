@@ -83,21 +83,21 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   const requestHeaders = Object.assign({}, req.headers)
   delete requestHeaders.cookie
 
-  const payload = {
+  const persistent = {
     [addresses.HTTP_INCOMING_URL]: req.url,
     [addresses.HTTP_INCOMING_HEADERS]: requestHeaders,
     [addresses.HTTP_INCOMING_METHOD]: req.method
   }
 
   if (clientIp) {
-    payload[addresses.HTTP_CLIENT_IP] = clientIp
+    persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
   if (apiSecuritySampler.sampleRequest()) {
-    payload[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
-  const actions = waf.run(payload, req)
+  const actions = waf.run({ persistent }, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
 }
@@ -107,7 +107,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   const responseHeaders = Object.assign({}, res.getHeaders())
   delete responseHeaders['set-cookie']
 
-  const payload = {
+  const persistent = {
     [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + res.statusCode,
     [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
   }
@@ -115,24 +115,24 @@ function incomingHttpEndTranslator ({ req, res }) {
   // we need to keep this to support other body parsers
   // TODO: no need to analyze it if it was already done by the body-parser hook
   if (req.body !== undefined && req.body !== null) {
-    payload[addresses.HTTP_INCOMING_BODY] = req.body
+    persistent[addresses.HTTP_INCOMING_BODY] = req.body
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
   if (req.params && typeof req.params === 'object') {
-    payload[addresses.HTTP_INCOMING_PARAMS] = req.params
+    persistent[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
   // we need to keep this to support other cookie parsers
   if (req.cookies && typeof req.cookies === 'object') {
-    payload[addresses.HTTP_INCOMING_COOKIES] = req.cookies
+    persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
   if (req.query && typeof req.query === 'object') {
-    payload[addresses.HTTP_INCOMING_QUERY] = req.query
+    persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  waf.run(payload, req)
+  waf.run({ persistent }, req)
 
   waf.disposeContext(req)
 
@@ -151,7 +151,9 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (!rootSpan) return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_BODY]: body
+    persistent: {
+      [addresses.HTTP_INCOMING_BODY]: body
+    }
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
@@ -169,7 +171,9 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!rootSpan) return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_QUERY]: query
+    persistent: {
+      [addresses.HTTP_INCOMING_QUERY]: query
+    }
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
@@ -182,7 +186,9 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   if (!rootSpan) return
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_COOKIES]: cookies
+    persistent: {
+      [addresses.HTTP_INCOMING_COOKIES]: cookies
+    }
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
