@@ -67,7 +67,7 @@
 				<h2 id="overview">Overview</h2>
 				<p>The module exported by this library is an instance of the <a href="./interfaces/tracer.html">Tracer</a> class.</p>
 				<h2 id="auto-instrumentation">Automatic Instrumentation</h2>
-				<p>APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.</p>
+				<p>APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.</p>
 				<p>Built-in plugins can be configured individually:</p>
 				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
 
@@ -227,7 +227,7 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 }</code></pre>
 				<p>Errors passed to the callback will automatically be added to the span.</p>
 				<h4 id="promise">Promise</h4>
-				<p>For promises, the span will be finished afer the promise has been either resolved or rejected.</p>
+				<p>For promises, the span will be finished after the promise has been either resolved or rejected.</p>
 				<pre><code class="language-javascript"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">handle</span> (<span class="hljs-params"></span>) </span>{
   <span class="hljs-keyword">return</span> tracer.trace(<span class="hljs-string">&#x27;web.request&#x27;</span>, <span class="hljs-function">() =&gt;</span> {
     <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Promise</span>(<span class="hljs-function">(<span class="hljs-params">resolve, reject</span>) =&gt;</span> {
@@ -267,7 +267,7 @@ tracer.use(<span class="hljs-string">&#x27;pg&#x27;</span>, {
 				<p>This method returns the active span from the current scope.</p>
 				<h4>scope.activate(span, fn)</h4>
 				<p>This method activates the provided span in a new scope available in the
-					provided function. Any asynchronous context created from whithin that function
+					provided function. Any asynchronous context created from within that function
 				will also have the same scope.</p>
 				<pre><code class="language-javascript"><span class="hljs-keyword">const</span> tracer = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;dd-trace&#x27;</span>).init()
 <span class="hljs-keyword">const</span> scope = tracer.scope()
@@ -332,7 +332,7 @@ scope.activate(outerSpan, <span class="hljs-function">() =&gt;</span> {
 <span class="hljs-keyword">const</span> opentracing = <span class="hljs-built_in">require</span>(<span class="hljs-string">&#x27;opentracing&#x27;</span>)
 
 opentracing.initGlobalTracer(tracer)</code></pre>
-				<p>The following tags are available to override Datadog specific options:</p>
+				<p>The following tags are available to override Datadog-specific options:</p>
 				<ul>
 					<li><code>service.name</code>: The service name to be used for this span. The service name from the tracer will be used if this is not provided.</li>
 					<li><code>resource.name</code>: The resource name to be used for this span. The operation name will be used if this is not provided.</li>
@@ -344,7 +344,7 @@ opentracing.initGlobalTracer(tracer)</code></pre>
 
 <span class="hljs-keyword">const</span> tracerProvider = <span class="hljs-keyword">new</span> tracer.TracerProvider()
 tracerProvider.register()</code></pre>
-				<p>The following attributes are available to override Datadog specific options:</p>
+				<p>The following attributes are available to override Datadog-specific options:</p>
 				<ul>
 					<li><code>service.name</code>: The service name to be used for this span. The service name from the tracer will be used if this is not provided.</li>
 					<li><code>resource.name</code>: The resource name to be used for this span. The operation name will be used if this is not provided.</li>
