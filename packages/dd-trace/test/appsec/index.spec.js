@@ -257,10 +257,12 @@ describe('AppSec Index', () => {
         'http.client_ip': '127.0.0.1'
       })
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
   })
@@ -307,8 +309,10 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -348,8 +352,10 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -399,12 +405,14 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': '201',
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' },
-        'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4', e: '5' },
-        'server.request.query': { b: '2' }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+          'server.request.body': { a: '1' },
+          'server.request.path_params': { c: '3' },
+          'server.request.cookies': { d: '4', e: '5' },
+          'server.request.query': { b: '2' }
+        }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -447,10 +455,12 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
 
@@ -480,10 +490,12 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
 
@@ -513,11 +525,13 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpStartTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1',
-        'waf.context.processor': { 'extract-schema': true }
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1',
+          'waf.context.processor': { 'extract-schema': true }
+        }
       }, req)
     })
   })
@@ -582,7 +596,9 @@ describe('AppSec Index', () => {
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -596,7 +612,9 @@ describe('AppSec Index', () => {
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -621,7 +639,9 @@ describe('AppSec Index', () => {
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -634,7 +654,9 @@ describe('AppSec Index', () => {
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -660,7 +682,9 @@ describe('AppSec Index', () => {
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -674,7 +698,9 @@ describe('AppSec Index', () => {
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
