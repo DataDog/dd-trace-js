@@ -31,7 +31,7 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
 
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
-  const actions = waf.run({ [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo }, req)
+  const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
   if (actions?.includes('block')) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
