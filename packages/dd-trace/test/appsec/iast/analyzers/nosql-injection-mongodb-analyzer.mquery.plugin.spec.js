@@ -79,9 +79,9 @@ describe('nosql injection detection with mquery', () => {
             testThatRequestHasVulnerability({
               testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability [find exec]',
               occurrences: 1,
-              fn: (req, res) => {
+              fn: async (req, res) => {
                 try {
-                  collection
+                  await collection
                     .find({
                       name: req.query.key
                     })
@@ -90,6 +90,28 @@ describe('nosql injection detection with mquery', () => {
                   // do nothing
                 }
                 res.end()
+              },
+              vulnerability: 'NOSQL_MONGODB_INJECTION',
+              makeRequest: (done, config) => {
+                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              }
+            })
+
+            testThatRequestHasVulnerability({
+              testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability [find then]',
+              occurrences: 1,
+              fn: (req, res) => {
+                try {
+                  return collection
+                    .find({
+                      name: req.query.key
+                    })
+                    .then(() => {
+                      res.end()
+                    })
+                } catch (e) {
+                  // do nothing
+                }
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
@@ -118,7 +140,7 @@ describe('nosql injection detection with mquery', () => {
               testDescription: 'should have 2 NOSQL_MONGODB_INJECTION vulnerability [find where exec]',
               fn: async (req, res) => {
                 try {
-                  require(tmpFilePath)
+                  await require(tmpFilePath)
                     .vulnerableFindWhereExec(collection, { name: req.query.key }, { where: req.query.key2 })
                 } catch (e) {
                   // do nothing

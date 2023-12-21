@@ -15,15 +15,15 @@ const methods = ['find', 'findOne', 'findOneAndRemove', 'findOneAndDelete', 'cou
 
 const methodsOptionalArgs = ['findOneAndUpdate']
 
-function wrapCallback (asyncResource, callback) {
-  return asyncResource.bind(function () {
-    finishCh.publish()
+// function wrapCallback (asyncResource, callback) {
+//   return asyncResource.bind(function () {
+//     finishCh.publish()
 
-    if (callback) {
-      return callback.apply(this, arguments)
-    }
-  })
-}
+//     if (callback) {
+//       return callback.apply(this, arguments)
+//     }
+//   })
+// }
 
 function getFilters (args, methodName) {
   // Should string arguments be excluded?
@@ -55,39 +55,40 @@ addHook({
         return asyncResource.runInAsyncScope(() => {
           prepareCh.publish({ filters: getFilters(arguments, methodName) })
 
-          const query = method.apply(this, arguments)
-
-          if (query.then) {
-            const origThen = query.then
-            query.then = asyncResource.bind(function wrappedThen (resolve, reject) {
-              arguments[0] = wrapCallback(asyncResource, resolve)
-              arguments[1] = wrapCallback(asyncResource, reject)
-
-              // send start with no filters to set the nosqlAnalyzed flag
-              startCh.publish()
-
-              return origThen.apply(this, arguments)
-            })
-          }
-
-          if (query.exec) {
-            const origExec = query.exec
-            query.exec = asyncResource.bind(function wrappedExec () {
-              try {
-                // send start with no filters to set the nosqlAnalyzed flag
-                startCh.publish()
-
-                return origExec.apply(this, arguments)
-              } finally {
-                finishCh.publish()
-              }
-            })
-          }
-
-          return query
+          return method.apply(this, arguments)
         })
       }
     })
   })
+
+  shimmer.wrap(Query.prototype, 'exec', originalExec => {
+    return function wrappedExec () {
+      if (!startCh.hasSubscribers) {
+        return originalExec.apply(this, arguments)
+      }
+
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+
+      return asyncResource.runInAsyncScope(() => {
+        startCh.publish()
+
+        const promise = originalExec.apply(this, arguments)
+
+        if (!promise.then) {
+          finish(finishCh)
+        } else {
+          promise.then(asyncResource.bind(() => finish(finishCh)),
+            asyncResource.bind(() => finish(finishCh)))
+        }
+
+        return promise
+      })
+    }
+  })
+
   return Query
 })
+
+function finish (finishCh) {
+  finishCh.publish()
+}
