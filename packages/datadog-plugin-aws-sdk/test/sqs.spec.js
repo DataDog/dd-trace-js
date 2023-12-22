@@ -349,115 +349,103 @@ describe('Plugin', () => {
           return agent.close({ ritmReset: false })
         })
 
-        it('Should set a checkpoint on produce', (done) => {
-          if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-            DataStreamsContext.setDataStreamsContext.restore()
-          }
-          const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+        it('Should set pathway hash tag on a span when producing', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
             QueueUrl
           }, (err) => {
             if (err) return done(err)
 
-            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
-            setDataStreamsContextSpy.restore()
-            done()
-          })
-        })
+            let produceSpanMeta = {}
+            agent.use(traces => {
+              const span = traces[0][0]
+      
+              if (span.name === 'aws.response') {
+                produceSpanMeta = span.meta
+              }
 
-        it('Should set a checkpoint on consume', (done) => {
-          if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-            DataStreamsContext.setDataStreamsContext.restore()
-          }
-          const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            sqs.receiveMessage({
-              QueueUrl,
-              MessageAttributeNames: ['.*']
-            }, (err) => {
-              if (err) return done(err)
-
-              expect(
-                setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
-              ).to.equal(expectedConsumerHash)
-              setDataStreamsContextSpy.restore()
-              done()
-            })
-          })
-        })
-
-        it('Should set a message payload size when producing a message', (done) => {
-          if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
-          }
-          const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-          if (sqsPlugin.prototype.requestInject.isSinonProxy) {
-            sqsPlugin.prototype.requestInject.restore()
-          }
-          const injectMessageSpy = sinon.spy(sqsPlugin.prototype, 'requestInject')
-
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            const payloadSize = getHeadersSize({
-              Body: injectMessageSpy.args[0][1].params.MessageBody,
-              MessageAttributes: injectMessageSpy.args[0][1].params.MessageAttributes
-            })
-
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-
-            recordCheckpointSpy.restore()
-            injectMessageSpy.restore()
-
-            done()
-          })
-        })
-
-        it('Should set a message payload size when consuming a message', (done) => {
-          if (sqsPlugin.prototype.responseExtractDSMContext.isSinonProxy) {
-            sqsPlugin.prototype.responseExtractDSMContext.restore()
-          }
-          const extractSpy = sinon.spy(sqsPlugin.prototype, 'responseExtractDSMContext')
-
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-              DataStreamsProcessor.prototype.recordCheckpoint.restore()
-            }
-            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-            sqs.receiveMessage({
-              QueueUrl,
-              MessageAttributeNames: ['.*']
-            }, (err) => {
-              if (err) return done(err)
-
-              const payloadSize = getHeadersSize({
-                Body: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].Body,
-                MessageAttributes: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].MessageAttributes
+              expect(produceSpanMeta).to.include({
+                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
               })
+            }).then(done, done)
+          })
+        })
 
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+        it('Should set pathway hash tag on a span when consuming', (done) => {
+          sqs.sendMessage({
+            MessageBody: 'test DSM',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
 
-              recordCheckpointSpy.restore()
-              extractSpy.restore()
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, (err) => {
+              if (err) return done(err)
 
+              let consumeSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+        
+                if (span.name === 'aws.response') {
+                  consumeSpanMeta = span.meta
+                }
+  
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
+                })
+              }).then(done, done)
+            })
+          })
+        })
+
+        it('Should create a new DSM Stats Bucket when producing a message', (done) => {
+          const dsmProcessor = tracer._tracer._dataStreamsProcessor
+
+          // clear all stats buckets 
+          dsmProcessor.buckets.clear()
+
+          sqs.sendMessage({
+            MessageBody: 'test DSM',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
+
+            const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
+            const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+
+            expect(dsmTimeBuckets.length).to.equal(1)
+            expect(dsmStatsBuckets.length).to.equal(1)
+            expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
+            done()
+          })
+        })
+
+        it('Should create a new DSM Stats Bucket when consuming a message', (done) => {
+          sqs.sendMessage({
+            MessageBody: 'test DSM',
+            QueueUrl
+          }, (err) => {
+            if (err) return done(err)
+
+            const dsmProcessor = tracer._tracer._dataStreamsProcessor
+
+            // clear all stats buckets 
+            dsmProcessor.buckets.clear()
+
+            sqs.receiveMessage({
+              QueueUrl,
+              MessageAttributeNames: ['.*']
+            }, (err) => {
+              if (err) return done(err)
+
+              const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
+              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+  
+              expect(dsmTimeBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedConsumerHash)
               done()
             })
           })
