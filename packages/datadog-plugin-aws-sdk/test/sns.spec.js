@@ -343,7 +343,7 @@ describe('Sns', () => {
               if (err) return done(err)
 
               const dsmTimeBuckets = dsmProcessor._serializeBuckets()
-              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+              const dsmStatsBuckets = dsmTimeBuckets.Stats
 
               expect(dsmTimeBuckets.length).to.equal(1)
               expect(dsmStatsBuckets.length).to.equal(1)
@@ -373,7 +373,7 @@ describe('Sns', () => {
                   if (err) return done(err)
     
                   const dsmTimeBuckets = dsmProcessor._serializeBuckets()
-                  const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+                  const dsmStatsBuckets = dsmTimeBuckets.Stats
     
                   expect(dsmTimeBuckets.length).to.equal(1)
                   expect(dsmStatsBuckets.length).to.equal(1)

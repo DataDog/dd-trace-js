@@ -239,9 +239,7 @@ describe('Kinesis', function () {
           console.log(dsmProcessor.buckets)
           const dsmTimeBuckets = dsmProcessor._serializeBuckets()
           console.log(dsmTimeBuckets)
-          console.log(dsmTimeBuckets[0])
-          console.log(dsmTimeBuckets[1])
-          const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+          const dsmStatsBuckets = dsmTimeBuckets.Stats
 
           expect(dsmTimeBuckets.length).to.equal(1)
           expect(dsmStatsBuckets.length).to.equal(1)
