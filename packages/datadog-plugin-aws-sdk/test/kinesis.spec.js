@@ -236,8 +236,11 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          const dsmTimeBuckets = dsmProcessor._serializeBuckets()
           console.log(dsmProcessor.buckets)
+          const dsmTimeBuckets = dsmProcessor._serializeBuckets()
+          console.log(dsmTimeBuckets)
+          console.log(dsmTimeBuckets[0])
+          console.log(dsmTimeBuckets[1])
           const dsmStatsBuckets = dsmTimeBuckets[0].Stats
 
           expect(dsmTimeBuckets.length).to.equal(1)
