@@ -129,6 +129,10 @@ function onBeforeExit () {
   process.removeListener('beforeExit', onBeforeExit)
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  // we flush before shutting down. Only in CI Visibility
+  if (config.isCiVisibility) {
+    metricsManager.send(config, application, host)
+  }
 }
 
 function createAppObject (config) {
