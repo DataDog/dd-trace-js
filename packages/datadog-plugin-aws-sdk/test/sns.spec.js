@@ -271,54 +271,68 @@ describe('Sns', () => {
         return agent.close({ ritmReset: false })
       })
 
-      it('injects DSM trace context to SNS publish', done => {
-        let producerHashCreated = false
-        let consumerHashCreated = false
-
-        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-          DataStreamsContext.setDataStreamsContext.restore()
-        }
-        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+      it('injects DSM pathway hash to SNS publish span', done => {
 
         sns.subscribe(subParams, (err, data) => {
           if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+
+              let publish_span_meta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+        
+                if (span.resource.startsWith('publish')) {
+                  publish_span_meta = span.meta
+                }
+        
+                expect(publish_span_meta).to.include({
+                  'pathway.hash': expectedProducerHash(TopicArn).readBigUInt64BE(0).toString(),
+                })
+              }).then(done, done)
+          })
+        })
+      })
+
+      it('injects DSM pathway hash to SQS receive span from SNS topic', done => {
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+          })
 
           sqs.receiveMessage(
             receiveParams,
             (err, res) => {
               if (err) return done(err)
 
-              setDataStreamsContextSpy.args.forEach(functionCall => {
-                if (functionCall[0].hash === expectedConsumerHash(TopicArn)) {
-                  consumerHashCreated = true
-                } else if (functionCall[0].hash === expectedProducerHash(TopicArn)) {
-                  producerHashCreated = true
+              let consume_span_meta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+        
+                if (span.name === 'aws.response') {
+                  consume_span_meta = span.meta
                 }
-              })
 
-              expect(consumerHashCreated).to.equal(true)
-              expect(producerHashCreated).to.equal(true)
-              setDataStreamsContextSpy.restore()
-              done()
-            })
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
+                expect(consume_span_meta).to.include({
+                  'pathway.hash': expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString(),
+                })
+              }).then(done, done)
             })
         })
       })
 
-      it('sets a message payload size when DSM is enabled', done => {
-        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-          DataStreamsProcessor.prototype.recordCheckpoint.restore()
-        }
-        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-        if (snsPlugin.prototype._injectMessageAttributes.isSinonProxy) {
-          snsPlugin.prototype._injectMessageAttributes.restore()
-        }
-        const injectMessageSpy = sinon.spy(snsPlugin.prototype, '_injectMessageAttributes')
+      it('creates a new DSM stats bucket if DSM is enabled when publishing a message', done => {
+        const dsmProcessor = tracer._tracer._dataStreamsProcessor
+        
+        // clear all stats buckets 
+        dsmProcessor.buckets.clear()
 
         sns.subscribe(subParams, (err, data) => {
           if (err) return done(err)
@@ -328,21 +342,44 @@ describe('Sns', () => {
             (err) => {
               if (err) return done(err)
 
-              const params = injectMessageSpy.args[0][1]
-              // decode the raw buffer to JSON string
-              params.MessageAttributes._datadog.BinaryValue = JSON.stringify(
-                JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
-              )
-              const payloadSize = getHeadersSize({
-                Message: params.Message,
-                MessageAttributes: params.MessageAttributes
-              })
+              const dsmTimeBuckets = dsmProcessor._serializeBuckets()
+              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
 
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-              injectMessageSpy.restore()
-              recordCheckpointSpy.restore()
+              expect(dsmTimeBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash(TopicArn))
               done()
+            })
+        })
+      })
+
+      it('creates a new DSM stats bucket if DSM is enabled when consuming a message', done => {
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+
+              const dsmProcessor = tracer._tracer._dataStreamsProcessor
+        
+              // clear all stats buckets 
+              dsmProcessor.buckets.clear()
+
+              sqs.receiveMessage(
+                receiveParams,
+                (err, res) => {
+                  if (err) return done(err)
+    
+                  const dsmTimeBuckets = dsmProcessor._serializeBuckets()
+                  const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+    
+                  expect(dsmTimeBuckets.length).to.equal(1)
+                  expect(dsmStatsBuckets.length).to.equal(1)
+                  expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedConsumerHash(TopicArn))
+                  done()
+                })
             })
         })
       })
