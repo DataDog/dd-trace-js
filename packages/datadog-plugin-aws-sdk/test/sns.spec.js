@@ -312,15 +312,15 @@ describe('Sns', () => {
             (err, res) => {
               if (err) return done(err)
 
-              let consume_span_meta = {}
+              let consumeSpanMeta = {}
               agent.use(traces => {
                 const span = traces[0][0]
         
                 if (span.name === 'aws.response') {
-                  consume_span_meta = span.meta
+                  consumeSpanMeta = span.meta
                 }
 
-                expect(consume_span_meta).to.include({
+                expect(consumeSpanMeta).to.include({
                   'pathway.hash': expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString(),
                 })
               }).then(done, done)
