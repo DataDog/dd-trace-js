@@ -35,6 +35,7 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
+
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
