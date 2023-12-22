@@ -229,17 +229,13 @@ describe('Kinesis', function () {
         const dsmProcessor = tracer._tracer._dataStreamsProcessor
         
         // clear all stats buckets
-        console.log(dsmProcessor.buckets)
         dsmProcessor.buckets.clear()
-        console.log(dsmProcessor.buckets)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          console.log(dsmProcessor.buckets)
-          const dsmTimeBuckets = dsmProcessor._serializeBuckets()
-          console.log(dsmTimeBuckets)
-          const dsmStatsBuckets = dsmTimeBuckets.Stats
+          const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
+          const dsmStatsBuckets = dsmTimeBuckets[0].Stats
 
           expect(dsmTimeBuckets.length).to.equal(1)
           expect(dsmStatsBuckets.length).to.equal(1)

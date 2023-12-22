@@ -216,21 +216,15 @@ class DataStreamsProcessor {
    */
   bucketFromTimestamp (timestamp) {
     const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
-    console.log("get_bucket")
-    console.log(this.buckets)
     const bucket = this.buckets.forTime(bucketTime)
-    console.log(bucket)
-    console.log(this.buckets)
     return bucket
   }
 
   recordCheckpoint (checkpoint, span = null) {
     if (!this.enabled) return
-    console.log("adding bucket")
     this.bucketFromTimestamp(checkpoint.currentTimestamp)
       .forCheckpoint(checkpoint)
       .addLatencies(checkpoint)
-    console.log("bucket added")
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
       span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
@@ -295,7 +289,6 @@ class DataStreamsProcessor {
       pathwayLatencyNs: pathwayLatencyNs,
       payloadSize: payloadSize
     }
-    console.log("set checkpoint")
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
   }
