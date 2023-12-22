@@ -2,8 +2,38 @@
 
 const { isMainThread, threadId } = require('node:worker_threads')
 
+const END_TIMESTAMP_LABEL = 'end_timestamp_ns'
+const THREAD_NAME_LABEL = 'thread name'
+const OS_THREAD_ID_LABEL = 'os thread id'
+const THREAD_ID_LABEL = 'thread id'
+const threadNamePrefix = isMainThread ? 'Main' : `Worker #${threadId}`
+const eventLoopThreadName = `${threadNamePrefix} Event Loop`
+
+function getThreadLabels () {
+  const pprof = require('@datadog/pprof')
+  const nativeThreadId = pprof.getNativeThreadId()
+  return {
+    [THREAD_NAME_LABEL]: eventLoopThreadName,
+    [THREAD_ID_LABEL]: `${threadId}`,
+    [OS_THREAD_ID_LABEL]: `${nativeThreadId}`
+  }
+}
+
+function cacheThreadLabels () {
+  let labels
+  return () => {
+    if (!labels) {
+      labels = getThreadLabels()
+    }
+    return labels
+  }
+}
+
 module.exports = {
-  END_TIMESTAMP: 'end_timestamp_ns',
-  THREAD_NAME: 'thread name',
-  threadNamePrefix: isMainThread ? 'Main' : `Worker #${threadId}`
+  END_TIMESTAMP_LABEL,
+  THREAD_NAME_LABEL,
+  THREAD_ID_LABEL,
+  threadNamePrefix,
+  eventLoopThreadName,
+  getThreadLabels: cacheThreadLabels()
 }

@@ -5,6 +5,16 @@ const log = require('../../../log')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS,
+  TELEMETRY_ENDPOINT_PAYLOAD_BYTES,
+  TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
+  TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
+  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
+  getErrorTypeFromStatusCode
+} = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
   constructor ({ url, tags, evpProxyPrefix = '' }) {
@@ -35,8 +45,27 @@ class Writer extends BaseWriter {
 
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
-    request(data, options, (err, res) => {
+    const startRequestTime = Date.now()
+
+    incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, data.length)
+
+    request(data, options, (err, res, statusCode) => {
+      distributionMetric(
+        TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
+        { endpoint: 'test_cycle' },
+        Date.now() - startRequestTime
+      )
       if (err) {
+        const errorType = getErrorTypeFromStatusCode(statusCode)
+        incrementCountMetric(
+          TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
+          { endpoint: 'test_cycle', errorType }
+        )
+        incrementCountMetric(
+          TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
+          { endpoint: 'test_cycle' }
+        )
         log.error(err)
         done()
         return

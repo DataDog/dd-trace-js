@@ -1,6 +1,7 @@
 'use strict'
 
 const { oomExportStrategies } = require('../constants')
+const { getThreadLabels } = require('./shared')
 
 function strategiesToCallbackMode (strategies, callbackMode) {
   return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
@@ -33,7 +34,7 @@ class NativeSpaceProfiler {
   }
 
   profile () {
-    return this._pprof.heap.profile(undefined, this._mapper)
+    return this._pprof.heap.profile(undefined, this._mapper, getThreadLabels)
   }
 
   encode (profile) {

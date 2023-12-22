@@ -121,7 +121,7 @@ class HttpClientPlugin extends ClientPlugin {
     } else {
       // conditions for no error:
       // 1. not using a custom agent instance with custom timeout specified
-      // 2. no invocation of `req.setTimeout` or `socket.setTimeout`
+      // 2. no invocation of `req.setTimeout`
       if (!args.options.agent?.options.timeout && !customRequestTimeout) return
 
       span.setTag('error', 1)

@@ -568,6 +568,11 @@ export declare interface TracerOptions {
     blockedTemplateJson?: string,
 
     /**
+     * Specifies a path to a custom blocking template json file for graphql requests
+     */
+    blockedTemplateGraphql?: string,
+
+    /**
      * Controls the automated user event tracking configuration
      */
     eventTracking?: {
