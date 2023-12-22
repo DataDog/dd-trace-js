@@ -20,6 +20,13 @@ const expectedProducerHash = computePathwayHash(
   ENTRY_PARENT_HASH
 )
 
+const expectedConsumerHash = computePathwayHash(
+  'test',
+  'tester',
+  ['direction:in', 'topic:MyStreamDSM', 'type:kinesis'],
+  expectedProducerHash
+)
+
 describe('Kinesis', function () {
   this.timeout(10000)
   setup()
@@ -199,43 +206,41 @@ describe('Kinesis', function () {
         })
       })
 
-      it('injects DSM trace context to Kinesis putRecord', done => {
-        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-          DataStreamsContext.setDataStreamsContext.restore()
-        }
-        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-
+      it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          expect(
-            setDataStreamsContextSpy.args[0][0].hash
-          ).to.equal(expectedProducerHash)
-
-          setDataStreamsContextSpy.restore()
-          done()
+          let putRecordSpanMeta = {}
+          agent.use(traces => {
+            const span = traces[0][0]
+    
+            if (span.resource.startsWith('putRecord')) {
+              putRecordSpanMeta = span.meta
+            }
+    
+            expect(putRecordSpanMeta).to.include({
+              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+            })
+          }).then(done, done)
         })
       })
 
-      it('Should set a message payload size when producing a message', (done) => {
-        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-          DataStreamsProcessor.prototype.recordCheckpoint.restore()
-        }
-        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
+      it('Should create a new DSM Stats Bucket when producing a message', (done) => {
+        const dsmProcessor = tracer._tracer._dataStreamsProcessor
+        
+        // clear all stats buckets 
+        dsmProcessor.buckets.clear()
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
-          helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
-            if (err) return done(err)
+          const dsmTimeBuckets = dsmProcessor._serializeBuckets()
+          const dsmStatsBuckets = dsmTimeBuckets[0].Stats
 
-            const payloadSize = getSizeOrZero(JSON.stringify(data))
-
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-            recordCheckpointSpy.restore()
-            done()
-          })
+          expect(dsmTimeBuckets.length).to.equal(1)
+          expect(dsmStatsBuckets.length).to.equal(1)
+          expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
+          done()
         })
       })
     })
