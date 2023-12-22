@@ -21,6 +21,10 @@ class FormData extends Readable {
     }
   }
 
+  size () {
+    return this._data.reduce((size, chunk) => size + chunk.length, 0)
+  }
+
   getHeaders () {
     return { 'Content-Type': 'multipart/form-data; boundary=' + this._boundary }
   }
