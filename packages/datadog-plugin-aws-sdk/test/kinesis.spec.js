@@ -228,13 +228,16 @@ describe('Kinesis', function () {
       it('Should create a new DSM Stats Bucket when producing a message', (done) => {
         const dsmProcessor = tracer._tracer._dataStreamsProcessor
         
-        // clear all stats buckets 
+        // clear all stats buckets
+        console.log(dsmProcessor.buckets)
         dsmProcessor.buckets.clear()
+        console.log(dsmProcessor.buckets)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
           const dsmTimeBuckets = dsmProcessor._serializeBuckets()
+          console.log(dsmProcessor.buckets)
           const dsmStatsBuckets = dsmTimeBuckets[0].Stats
 
           expect(dsmTimeBuckets.length).to.equal(1)
