@@ -1,6 +1,15 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SETTINGS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
+  getErrorTypeFromStatusCode
+} = require('../../ci-visibility/telemetry')
 
 function getItrConfiguration ({
   url,
@@ -62,8 +71,14 @@ function getItrConfiguration ({
     }
   })
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
+
+  const startTime = Date.now()
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { errorType })
       done(err)
     } else {
       try {
@@ -90,6 +105,8 @@ function getItrConfiguration ({
           settings.isSuitesSkippingEnabled = true
           log.debug(() => 'Dangerously set test skipping to true')
         }
+
+        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
 
         done(null, settings)
       } catch (err) {
