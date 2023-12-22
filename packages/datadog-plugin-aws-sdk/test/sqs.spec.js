@@ -360,7 +360,7 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
       
-              if (span.name === 'aws.response') {
+              if (span.resource.startsWith('sendMessage'))  {
                 produceSpanMeta = span.meta
               }
 
