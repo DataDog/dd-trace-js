@@ -202,7 +202,7 @@ jobs:
   next:
     strategy:
       matrix:
-        node-version: [18]
+        node-version: [16]
         range: ['>=9.5 <11.1', '>=11.1 <13.2']
         include:
           - node-version: 18
@@ -218,8 +218,8 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - run: yarn install
-      - run: yarn test:appsec:plugins:ci
+      - run: yarn install --ignore-engines
+      - run: yarn test:appsec:plugins:ci --ignore-engines
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
