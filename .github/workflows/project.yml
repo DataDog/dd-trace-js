@@ -69,7 +69,7 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress
+      - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
