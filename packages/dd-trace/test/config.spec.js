@@ -121,6 +121,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
     expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
+    expect(config).to.have.nested.property('installSignature.id', null)
+    expect(config).to.have.nested.property('installSignature.time', null)
+    expect(config).to.have.nested.property('installSignature.type', null)
   })
 
   it('should support logging', () => {
@@ -229,6 +232,9 @@ describe('Config', () => {
     process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
     process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
+    process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
+    process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
+    process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
 
     const config = new Config()
 
@@ -308,6 +314,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.deep.property('installSignature', {
+      id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+      type: 'k8s_single_step',
+      time: '1703188212'
+    })
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
