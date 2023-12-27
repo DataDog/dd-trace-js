@@ -20,6 +20,8 @@ const connectionCh = channel(`apm:net:tcp:connection`)
 const names = ['net', 'node:net']
 
 addHook({ name: names }, (net, version, name) => {
+  // explicitly require dns so that net gets an instrumented instance
+  // so that we don't miss the dns calls
   if (name === 'net') {
     require('dns')
   } else {

@@ -30,7 +30,7 @@ describe('Plugin', () => {
       })
 
       beforeEach(() => {
-        return agent.load('net')
+        return agent.load(['net', 'dns'])
           .then(() => {
             net = require(pluginToBeLoaded)
             tracer = require('../../dd-trace')
@@ -73,6 +73,20 @@ describe('Plugin', () => {
 
         tracer.scope().activate(parent, () => {
           net.connect('/tmp/dd-trace.sock')
+        })
+      })
+
+      it('should instrument dns', done => {
+        const socket = new net.Socket()
+        tracer.scope().activate(parent, () => {
+          socket.connect(port, 'localhost')
+          socket.on('connect', () => {
+            expectSomeSpan(agent, {
+              name: 'dns.lookup',
+              service: 'test',
+              resource: 'localhost'
+            }, 2000).then(done).catch(done)
+          })
         })
       })
 
