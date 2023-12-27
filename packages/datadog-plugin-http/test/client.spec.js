@@ -25,15 +25,21 @@ describe('Plugin', () => {
   let appListener
   let tracer
 
-  ['http', 'https'].forEach(protocol => {
-    describe(protocol, () => {
+  ['http', 'https', 'node:http', 'node:https'].forEach(pluginToBeLoaded => {
+    const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
+    describe(pluginToBeLoaded, () => {
       function server (app, port, listener) {
         let server
-        if (protocol === 'https') {
+        if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
           server = require('https').createServer({ key, cert }, app)
-        } else {
+        } else if (pluginToBeLoaded === 'node:https') {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+          server = require('node:https').createServer({ key, cert }, app)
+        } else if (pluginToBeLoaded === 'http') {
           server = require('http').createServer(app)
+        } else {
+          server = require('node:http').createServer(app)
         }
         server.listen(port, 'localhost', listener)
         return server
@@ -55,7 +61,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http', { server: false })
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -904,8 +910,13 @@ describe('Plugin', () => {
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
-          require('http')
-          require('https')
+          if (pluginToBeLoaded.includes('node:')) {
+            require('node:http')
+            require('node:https')
+          } else {
+            require('http')
+            require('https')
+          }
 
           const app = express()
 
@@ -1072,7 +1083,7 @@ describe('Plugin', () => {
               ch = require('dc-polyfill').channel('apm:http:client:request:start')
               sub = () => {}
               tracer = require('../../dd-trace')
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
             })
         })
 
@@ -1119,7 +1130,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1160,7 +1171,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1209,7 +1220,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1254,7 +1265,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1326,7 +1337,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1439,7 +1450,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1485,7 +1496,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1532,7 +1543,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
