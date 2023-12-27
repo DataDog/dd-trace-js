@@ -910,7 +910,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: yarn install --ignore-engines
       - run: yarn config set ignore-engines true
-      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:ci --ignore-engines
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1140,7 +1140,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/16
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
