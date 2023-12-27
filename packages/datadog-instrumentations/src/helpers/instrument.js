@@ -25,13 +25,12 @@ exports.addHook = function addHook ({ name, versions, file }, hook) {
     name = [name]
   }
 
-  name.forEach(val => {
+  for (const val of name) {
     if (!instrumentations[val]) {
       instrumentations[val] = []
     }
-
     instrumentations[val].push({ name: val, versions, file, hook })
-  })
+  }
 }
 
 // AsyncResource.bind exists and binds `this` properly only from 17.8.0 and up.
