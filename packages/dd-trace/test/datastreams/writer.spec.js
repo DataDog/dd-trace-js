@@ -5,12 +5,11 @@ const stubRequest = sinon.stub()
 const { DataStreamsWriter } = proxyquire(
   '../src/datastreams/writer', {
     '../exporters/common/request': stubRequest
-})
+  })
 
 require('../setup/tap')
 
 describe('DataStreamWriter unix', () => {
-
   let writer
   const unixConfig = {
     hostname: '',
@@ -18,14 +17,14 @@ describe('DataStreamWriter unix', () => {
     port: ''
   }
 
-  it("should construct unix config", () => {
-    writer = new DataStreamsWriter(unixConfig);
-    expect(writer._url).to.equal(unixConfig.url);
+  it('should construct unix config', () => {
+    writer = new DataStreamsWriter(unixConfig)
+    expect(writer._url).to.equal(unixConfig.url)
   })
 
   it("should call 'request' through flush with correct options", () => {
-    writer = new DataStreamsWriter(unixConfig);
-    writer.flush({}):
+    writer = new DataStreamsWriter(unixConfig)
+    writer.flush({})
     expect(stubRequest).to.be.calledWith(
       {},
       {
