@@ -41,7 +41,7 @@ describe('Kinesis', () => {
       }, (err, res) => {
         if (err) return done(err)
 
-        helpers.waitForActiveStream(this, kinesis, done)
+        helpers.waitForActiveStream(kinesis, done)
       })
     })
 
