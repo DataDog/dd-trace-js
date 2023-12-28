@@ -45,17 +45,15 @@ function putTestRecord (kinesis, data, cb) {
   }, cb)
 }
 
-function waitForActiveStream (mocha, kinesis, cb) {
+function waitForActiveStream (kinesis, cb) {
   kinesis.describeStream({
     StreamName: 'MyStream'
   }, (err, data) => {
     if (err) {
-      mocha.timeout(2000)
-      return waitForActiveStream(mocha, kinesis, cb)
+      return waitForActiveStream(kinesis, cb)
     }
     if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
-      mocha.timeout(2000)
-      return waitForActiveStream(mocha, kinesis, cb)
+      return waitForActiveStream(kinesis, cb)
     }
 
     cb()
