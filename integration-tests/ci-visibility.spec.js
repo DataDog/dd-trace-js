@@ -38,7 +38,7 @@ const mochaCommonOptions = {
 
 const jestCommonOptions = {
   name: 'jest',
-  dependencies: ['jest', 'chai', 'jest-jasmine2'],
+  dependencies: ['jest', 'chai@v4', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
     'ci-visibility/test/sum.js',
@@ -51,7 +51,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.js',
-    dependencies: ['mocha', 'chai', 'nyc'],
+    dependencies: ['mocha', 'chai@v4', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -64,7 +64,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.mjs',
-    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+    dependencies: ['mocha', 'chai@v4', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
