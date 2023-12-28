@@ -7,6 +7,7 @@ const iastContextFunctions = require('../iast-context')
 const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
+const { JSON_VALUE } = require('./source-types')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
 
@@ -22,11 +23,12 @@ const TaintTrackingNoop = {
   substr: noop,
   substring: noop,
   trim: noop,
-  trimEnd: noop
+  trimEnd: noop,
+  parse: noop
 }
 
 function getTransactionId (iastContext) {
-  return iastContext && iastContext[iastContextFunctions.IAST_TRANSACTION_ID]
+  return iastContext?.[iastContextFunctions.IAST_TRANSACTION_ID]
 }
 
 function getContextDefault () {
@@ -92,7 +94,7 @@ function csiMethodsDefaults (names, excluded, getContext) {
   return impl
 }
 
-function csiMethodsOverrides (getContext) {
+function csiMethodsOverrides (getContext, taintObject) {
   return {
     plusOperator: function (res, op1, op2) {
       try {
@@ -121,13 +123,25 @@ function csiMethodsOverrides (getContext) {
         mathRandomCallCh.publish({ fn })
       }
       return res
+    },
+
+    parse: function (res, fn, target, json) {
+      if (fn === JSON.parse) {
+        const iastContext = getContext()
+        const transactionId = getTransactionId(iastContext)
+        if (transactionId && TaintedUtils.isTainted(transactionId, json)) {
+          res = taintObject(iastContext, res, JSON_VALUE)
+        }
+      }
+
+      return res
     }
   }
 }
 
-function createImplWith (getContext) {
+function createImplWith (getContext, taintObject) {
   const methodNames = Object.keys(TaintTrackingNoop)
-  const overrides = csiMethodsOverrides(getContext)
+  const overrides = csiMethodsOverrides(getContext, taintObject)
 
   // impls could be cached but at the moment there is only one invocation to getTaintTrackingImpl
   return {
@@ -136,17 +150,17 @@ function createImplWith (getContext) {
   }
 }
 
-function getTaintTrackingImpl (telemetryVerbosity, dummy = false) {
+function getTaintTrackingImpl (telemetryVerbosity, taintObject = noop, dummy = false) {
   if (dummy) return TaintTrackingNoop
 
   // with Verbosity.DEBUG every invocation of a TaintedUtils method increases the EXECUTED_PROPAGATION metric
   return isDebugAllowed(telemetryVerbosity)
-    ? createImplWith(getContextDebug)
-    : createImplWith(getContextDefault)
+    ? createImplWith(getContextDebug, taintObject)
+    : createImplWith(getContextDefault, taintObject)
 }
 
 function getTaintTrackingNoop () {
-  return getTaintTrackingImpl(null, true)
+  return getTaintTrackingImpl(null, noop, true)
 }
 
 module.exports = {

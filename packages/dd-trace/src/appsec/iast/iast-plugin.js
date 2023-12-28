@@ -101,6 +101,14 @@ class IastPlugin extends Plugin {
     }
   }
 
+  enable () {
+    this.configure(true)
+  }
+
+  disable () {
+    this.configure(false)
+  }
+
   onConfigure () {}
 
   configure (config) {

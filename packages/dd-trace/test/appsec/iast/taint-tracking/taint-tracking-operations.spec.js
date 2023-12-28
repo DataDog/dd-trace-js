@@ -29,6 +29,7 @@ describe('IAST TaintTracking Operations', () => {
     removeTransaction: id => id,
     setMaxTransactions: () => {},
     newTaintedString: (id, value) => value,
+    newTaintedObject: (id, value) => value,
     isTainted: id => id,
     getRanges: id => id,
     concat: id => id,
@@ -399,6 +400,7 @@ describe('IAST TaintTracking Operations', () => {
       expect(taintedUtils.newTaintedString).to.be
         .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
     })
+
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedString', () => {
       const iastContext = {}
       taintTrackingOperations.newTaintedString(iastContext)
@@ -416,6 +418,40 @@ describe('IAST TaintTracking Operations', () => {
       const value = 'test'
       const result = taintTrackingOperations.newTaintedString(iastContext, value)
       expect(result).to.be.equal('test')
+    })
+  })
+
+  describe('newTaintedObject', () => {
+    it('Given not null iastContext with defined IAST_TRANSACTION_ID should call TaintedUtils.newTaintedObject', () => {
+      const iastContext = {
+        [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
+      }
+      const value = Buffer.from('value')
+      const param = 'param'
+      const type = 'REQUEST'
+      taintTrackingOperations.newTaintedObject(iastContext, value, param, type)
+      expect(taintedUtils.newTaintedObject).to.be.called
+      expect(taintedUtils.newTaintedObject).to.be
+        .calledWithExactly(iastContext[taintTrackingOperations.IAST_TRANSACTION_ID], value, param, type)
+    })
+
+    it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.newTaintedObject', () => {
+      const iastContext = {}
+      taintTrackingOperations.newTaintedObject(iastContext)
+      expect(taintedUtils.newTaintedObject).not.to.be.called
+    })
+
+    it('Given null iastContext should call not TaintedUtils.newTaintedObject', () => {
+      const iastContext = null
+      taintTrackingOperations.newTaintedObject(iastContext)
+      expect(taintedUtils.newTaintedObject).not.to.be.called
+    })
+
+    it('Given null iastContext should return the string passed as parameter', () => {
+      const iastContext = null
+      const value = Buffer.from('test')
+      const result = taintTrackingOperations.newTaintedObject(iastContext, value)
+      expect(result).to.be.equal(value)
     })
   })
 

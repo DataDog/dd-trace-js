@@ -10,7 +10,8 @@ const csiMethods = [
   { src: 'substring' },
   { src: 'trim' },
   { src: 'trimEnd' },
-  { src: 'trimStart', dst: 'trim' }
+  { src: 'trimStart', dst: 'trim' },
+  { src: 'parse' }
 ]
 
 module.exports = {

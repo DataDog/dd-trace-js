@@ -1,7 +1,11 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+
+const kafkaConsumerStartCh = dc.channel('dd-trace:kafkajs:consumer:start')
+const kafkaConsumerFinishCh = dc.channel('dd-trace:kafkajs:consumer:finish')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
@@ -79,6 +83,18 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       this.tracer
         .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], span, payloadSize)
     }
+
+    if (kafkaConsumerStartCh.hasSubscribers) {
+      kafkaConsumerStartCh.publish({ topic, partition, message, groupId })
+    }
+  }
+
+  finish () {
+    if (kafkaConsumerFinishCh.hasSubscribers) {
+      kafkaConsumerFinishCh.publish()
+    }
+
+    super.finish()
   }
 }
 

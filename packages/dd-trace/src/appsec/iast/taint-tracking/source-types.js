@@ -9,5 +9,8 @@ module.exports = {
   HTTP_REQUEST_PARAMETER: 'http.request.parameter',
   HTTP_REQUEST_PATH: 'http.request.path',
   HTTP_REQUEST_PATH_PARAM: 'http.request.path.parameter',
-  HTTP_REQUEST_URI: 'http.request.uri'
+  HTTP_REQUEST_URI: 'http.request.uri',
+  JSON_VALUE: 'json.value',
+  KAFKA_KEY: 'kafka.key',
+  KAFKA_VALUE: 'kafka.value'
 }

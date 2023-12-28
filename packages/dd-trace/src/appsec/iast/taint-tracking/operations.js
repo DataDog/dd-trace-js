@@ -34,12 +34,23 @@ function removeTransaction (iastContext) {
 }
 
 function newTaintedString (iastContext, string, name, type) {
-  let result = string
+  let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
   if (transactionId) {
     result = TaintedUtils.newTaintedString(transactionId, string, name, type)
   } else {
     result = string
+  }
+  return result
+}
+
+function newTaintedObject (iastContext, obj, name, type) {
+  let result
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
+    result = TaintedUtils.newTaintedObject(transactionId, obj, name, type)
+  } else {
+    result = obj
   }
   return result
 }
@@ -128,7 +139,7 @@ function enableTaintOperations (telemetryVerbosity) {
     onRemoveTransaction = onRemoveTransactionInformationTelemetry
   }
 
-  global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
+  global._ddiast = getTaintTrackingImpl(telemetryVerbosity, taintObject, false)
 }
 
 function disableTaintOperations () {
@@ -148,6 +159,7 @@ module.exports = {
   createTransaction,
   removeTransaction,
   newTaintedString,
+  newTaintedObject,
   taintObject,
   isTainted,
   getRanges,
