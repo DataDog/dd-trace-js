@@ -1,4 +1,4 @@
-const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
+const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
