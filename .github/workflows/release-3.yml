@@ -27,7 +27,7 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "::set-output name=json::$content"
+          echo "json=$content" >> $GITHUB_OUTPUT
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
@@ -47,7 +47,7 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "::set-output name=json::$content"
+          echo "json=$content" >> $GITHUB_OUTPUT
       - name: npm pack for injection image
         run: |
           npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}

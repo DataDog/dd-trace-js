@@ -52,7 +52,7 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "::set-output name=json::$content"
+          echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
           version="${{fromJson(steps.pkg.outputs.json).version}}"
@@ -120,7 +120,7 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "::set-output name=json::$content"
+          echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
           version="${{fromJson(steps.pkg.outputs.json).version}}"
