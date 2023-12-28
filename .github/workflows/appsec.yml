@@ -29,6 +29,8 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@v3

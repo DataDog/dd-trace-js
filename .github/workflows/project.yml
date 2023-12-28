@@ -18,7 +18,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [18, latest]
+        version: [18, 20, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
