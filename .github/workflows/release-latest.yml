@@ -21,7 +21,7 @@ jobs:
     outputs:
       pkgjson: ${{ steps.pkg.outputs.json }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           registry-url: 'https://registry.npmjs.org'
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ['publish']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
       - name: Log in to the Container registry
         uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: ['publish']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
       - id: pkg
         run: |
@@ -74,7 +74,7 @@ jobs:
           yarn
           yarn build
           mv out /tmp/out
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: gh-pages
       - name: Deploy
