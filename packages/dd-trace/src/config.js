@@ -522,6 +522,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       0
     )
 
+    const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_ID,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
+      null
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -670,6 +683,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
+
+    this.installSignature = {
+      id: DD_INSTRUMENTATION_INSTALL_ID,
+      time: DD_INSTRUMENTATION_INSTALL_TIME,
+      type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
 
     this._applyDefaults()
     this._applyEnvironment()
