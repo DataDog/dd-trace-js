@@ -112,10 +112,25 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
   return result
 }
 
+function getInstallSignature (config) {
+  const { installSignature: sig } = config
+  if (sig && (sig.id || sig.time || sig.type)) {
+    return {
+      install_id: sig.id,
+      install_time: sig.time,
+      install_type: sig.type
+    }
+  }
+}
+
 function appStarted (config) {
   const app = {
     products: getProducts(config),
     configuration: flatten(config)
+  }
+  const installSignature = getInstallSignature(config)
+  if (installSignature) {
+    app.install_signature = installSignature
   }
   // TODO: add app.error with correct error codes
   // if (errors.agentError) {
