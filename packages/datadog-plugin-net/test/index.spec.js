@@ -230,8 +230,14 @@ describe('Plugin', () => {
           socket.destroy()
 
           socket.once('close', () => {
-            expect(socket.eventNames()).to.not.include.members(events)
-            done()
+            setImmediate(() => {
+              // Node.js 21.2 broke this function. We'll have to do the more manual way for now.
+              // expect(socket.eventNames()).to.not.include.members(events)
+              for (const event of events) {
+                expect(socket.listeners(event)).to.have.lengthOf(0)
+              }
+              done()
+            })
           })
         })
       })
