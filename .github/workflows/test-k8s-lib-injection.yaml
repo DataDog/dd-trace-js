@@ -26,7 +26,7 @@ jobs:
         id: set_names
         run: |
           echo "Docker image tag: $(echo ${GITHUB_HEAD_REF-${GITHUB_REF#refs/heads/}} | tr / -)"
-          echo "::set-output name=image_name::$(echo ${GITHUB_HEAD_REF-${GITHUB_REF#refs/heads/}} | tr / -)"
+          echo "image_name=$(echo ${GITHUB_HEAD_REF-${GITHUB_REF#refs/heads/}} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Npm pack for injection image
         run: |
