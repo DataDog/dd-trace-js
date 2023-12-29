@@ -16,9 +16,9 @@ jobs:
             aws-runtime-name: "nodejs18.x"
     steps:
       - name: Checkout dd-trace-js
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Checkout datadog-lambda-js
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: DataDog/datadog-lambda-js
           path: datadog-lambda-js
