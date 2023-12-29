@@ -21,7 +21,7 @@ jobs:
         version: [14, 16, 18, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -41,7 +41,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -62,7 +62,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - uses: actions/setup-node@v3
@@ -76,7 +76,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn lint
@@ -84,7 +84,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn type:test
