@@ -91,8 +91,9 @@ jobs:
       - uses: ./.github/actions/node/setup
       - id: extract_pkg
         run: |
-          echo "PACKAGE_JSON=$(jq -c < package.json)" >> $GITHUB_ENV
-          version="${{fromJson(env.PACKAGE_JSON).version}}"
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+          version="${{fromJson(env.GITHUB_OUTPUT).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
@@ -130,8 +131,9 @@ jobs:
       - uses: ./.github/actions/node/setup
       - id: extract_pkg
         run: |
-          echo "PACKAGE_JSON=$(jq -c < package.json)" >> $GITHUB_ENV
-          version="${{fromJson(env.PACKAGE_JSON).version}}"
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+          version="${{fromJson(env.GITHUB_OUTPUT).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
