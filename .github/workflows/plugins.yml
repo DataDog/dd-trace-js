@@ -133,7 +133,7 @@ jobs:
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
-          version="${{fromJson(env.GITHUB_OUTPUT).version}}"
+          version="${{fromJson(steps.extract_pkg.outputs.json).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
