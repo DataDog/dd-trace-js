@@ -51,13 +51,11 @@ jobs:
         with:
           node-version: '14'
       # jq -r is not available on v3
-      - id: pkg
+      - name: Extract tracer version
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - id: extract
-        run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          echo "JSON_OUTPUT=$content" >> $GITHUB_ENV
+          version="${{fromJson(env.JSON_OUTPUT).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
