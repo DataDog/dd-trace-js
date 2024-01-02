@@ -104,7 +104,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
-    "@types/node": ">=16",
+    "@types/node": ">=18",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
     "axios": "^0.21.2",
