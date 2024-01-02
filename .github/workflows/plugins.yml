@@ -131,9 +131,8 @@ jobs:
       - uses: ./.github/actions/node/setup
       - id: extract_pkg
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-          version="${{fromJson(steps.extract_pkg.outputs.json).version}}"
+          content=$(cat ./package.json | tr '\n' ' ')
+          version=$(echo "$content" | jq -r .version)
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
