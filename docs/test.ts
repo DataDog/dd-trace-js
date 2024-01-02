@@ -372,7 +372,7 @@ tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
 tracer.trace('test', { measured: true }, () => {})
 tracer.trace('test', (span: Span) => {})
 tracer.trace('test', (span: Span, fn: () => void) => {})
-tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})
+tracer.trace('test', (span: Span, fn: (err: Error) => void) => {})
 
 promise = tracer.trace('test', () => Promise.resolve())
 

@@ -84,8 +84,8 @@ export declare interface Tracer extends opentracing.Tracer {
    * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span: Span) => T): T;
-  trace<T> (name: string, fn: (span: Span, done: (error?: Error) => string) => T): T;
-  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, fn: (span: Span, done: (error?: Error) => void) => T): T;
+  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => void) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
