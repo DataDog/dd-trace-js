@@ -50,14 +50,14 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '14'
+      # jq -r is not available on v3
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          content=$(cat ./package.json | tr '\n' ' ')
-          version=$(echo "$content" | jq -r .version)
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
