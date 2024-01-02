@@ -218,7 +218,7 @@ esbuild.build({
   outfile: 'out.js',
   plugins: [ddPlugin],
   platform: 'node', // allows built-in modules to be required
-  target: ['node16']
+  target: ['node18']
 }).catch((err) => {
   console.error(err)
   process.exit(1)
