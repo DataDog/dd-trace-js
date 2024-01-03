@@ -14,9 +14,11 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
-const SpanLink = require('../opentelemetry/span_link')
+const SpanLink = require('./span_link')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+const MAX_SPAN_LINKS_LENGTH = 25000
 
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
@@ -82,6 +84,8 @@ class DatadogSpan {
     this._spanContext._trace.started.push(this)
 
     this._startTime = fields.startTime || this._getTime()
+
+    this._links = (fields.links || []).map(link => SpanLink.from(link, this._spanContext))
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -150,6 +154,28 @@ class DatadogSpan {
   }
 
   logEvent () {}
+
+  addLink (link) {
+    this._links.push(SpanLink.from(link, this._spanContext))
+  }
+
+  getLink ({ traceID, spanID }) {
+    this.links.find(link => link.traceId === traceID && link.spanId === spanID)
+  }
+
+  // for encoding purposes
+  get links () {
+    let encoded = '['
+    for (const link of this._links) {
+      if (Buffer.byteLength(encoded) + link.length >= MAX_SPAN_LINKS_LENGTH) {
+        link.flushAttributes()
+      }
+      if (Buffer.byteLength(encoded) + link.length < MAX_SPAN_LINKS_LENGTH) {
+        encoded += link.toString() + ','
+      }
+    }
+    return (encoded.length > 1 ? encoded.slice(0, -1) : encoded) + ']' // remove trailing comma
+  }
 
   finish (finishTime) {
     if (this._duration !== undefined) {

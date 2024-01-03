@@ -14,9 +14,6 @@ const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
 
 const SpanContext = require('./span_context')
-const SpanLink = require('./span_link')
-
-const MAX_SPAN_LINKS_LENGTH = 25000
 
 // The one built into OTel rounds so we lose sub-millisecond precision.
 function hrTimeToMilliseconds (time) {
@@ -135,7 +132,8 @@ class Span {
       tags: {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
-      }
+      },
+      links
     }, _tracer._debug)
 
     if (attributes) {
@@ -147,32 +145,11 @@ class Span {
 
     this._hasStatus = false
 
-    // inject proper data into span links
-    // priorities
-    // properties from tracestate
-    // do something with tracestate
-    const spanId = this._ddSpan.context().toSpanId()
-    this.links = links
-      .forEach(link => new SpanLink({ ...link, spanID: spanId }))
-
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
     this._spanProcessor.onStart(this, context)
-  }
-
-  get linksEncoded () {
-    let encoded = '['
-    for (const link of this.links) {
-      if (encoded.length + link.length >= MAX_SPAN_LINKS_LENGTH) {
-        link.flushAttributes()
-      }
-      if (encoded.length + link.length < MAX_SPAN_LINKS_LENGTH) {
-        encoded += link.encode() + ','
-      }
-    }
-    return encoded.slice(0, -1) + ']' // remove trailing comma
   }
 
   get parentSpanId () {
@@ -215,12 +192,13 @@ class Span {
   }
 
   addLink (link) {
-    this.links.push(new SpanLink(link))
+    this._ddSpan.addLink(link)
+    return this
   }
 
-  // TODO flush out what 'state' means and looks like (tracestate)
+  // context is { traceId, spanId }
   getLink (context) {
-    return this.links.find(link => link.traceID === context.traceId && link.spanID === context.spanId)
+    return this._ddSpan.getLink(context)
   }
 
   setStatus ({ code, message }) {
