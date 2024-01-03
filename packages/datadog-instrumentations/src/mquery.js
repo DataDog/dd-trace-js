@@ -18,11 +18,10 @@ const methods = [
   'findOneAndDelete',
   'count',
   'distinct',
-  'remove',
   'where'
 ]
 
-const methodsOptionalArgs = ['findOneAndUpdate', 'update']
+const methodsOptionalArgs = ['findOneAndUpdate']
 
 function getFilters (args, methodName) {
   const arg0 = args[0]
@@ -44,20 +43,14 @@ addHook({
 
     shimmer.wrap(Query.prototype, methodName, method => {
       return function wrappedMqueryMethod () {
-        if (!prepareCh.hasSubscribers) {
-          return method.apply(this, arguments)
-        }
-
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-        return asyncResource.runInAsyncScope(() => {
+        if (prepareCh.hasSubscribers) {
           const filters = getFilters(arguments, methodName)
           if (filters?.length) {
             prepareCh.publish({ filters })
           }
+        }
 
-          return method.apply(this, arguments)
-        })
+        return method.apply(this, arguments)
       }
     })
   })
@@ -75,14 +68,13 @@ addHook({
 
         const promise = originalExec.apply(this, arguments)
 
-        if (promise.then) {
-          promise.then(asyncResource.bind(() => finish(finishCh)),
-            asyncResource.bind(() => finish(finishCh)))
-        } else {
+        if (!promise || typeof promise.then !== 'function') {
           finish(finishCh)
+          return promise
         }
 
-        return promise
+        return promise.then(asyncResource.bind(() => finish(finishCh)),
+          asyncResource.bind(() => finish(finishCh)))
       })
     }
   })
