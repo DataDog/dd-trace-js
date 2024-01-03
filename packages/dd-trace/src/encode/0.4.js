@@ -114,8 +114,8 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-      this._encodeString(bytes, 'span_links')
-      this._encodeString(bytes, span.links)
+      // this._encodeString(bytes, 'span_links')
+      // this._encodeString(bytes, span.links)
     }
   }
 
