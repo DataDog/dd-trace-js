@@ -89,9 +89,22 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engines
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - id: extract
+        run: |
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - name: Install dependencies and run tests 
+        if: env.MAJOR_VERSION != '5'
+        run: |
+          yarn install --ignore-engines
+          yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -99,8 +112,8 @@ jobs:
   aerospike-5:
     strategy:
       matrix:
-        node-version: [16]
-        range: ['5.5.0 - 5.7.0']
+        node-version: [18]
+        range: ['5.2.0 - 5.7.0']
         include:
           - node-version: 20
             range: '>=5.8.0'
@@ -132,7 +145,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies and run tests 
-        if: env.MAJOR_VERSION != '3'
+        if: env.MAJOR_VERSION == '5'
         run: |
           yarn install --ignore-engines
           yarn test:plugins:ci
@@ -399,8 +412,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/20
@@ -587,8 +598,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/20
@@ -608,8 +617,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/20
@@ -884,8 +891,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/node/20
@@ -916,8 +921,9 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - run: yarn install
-      - run: yarn test:plugins:ci
+      - run: yarn install --ignore-engines
+      - run: yarn config set ignore-engines true
+      - run: yarn test:plugins:ci --ignore-engines
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -992,12 +998,15 @@ jobs:
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
-      # Needs to remain on v3 for now due to GLIBC version
       - uses: actions/checkout@v3
-      - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
+        with:
+          cache: yarn
+          node-version: '16'
       - run: yarn install --ignore-engines
-      - run: yarn services
-      - run: yarn test:plugins
+      - run: yarn config set ignore-engines true
+      - run: yarn services --ignore-engines
+      - run: yarn test:plugins --ignore-engines
       - uses: codecov/codecov-action@v3
 
   paperplane:
@@ -1147,7 +1156,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/16
+      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
