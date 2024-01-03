@@ -24,13 +24,14 @@ const methods = [
 const methodsOptionalArgs = ['findOneAndUpdate']
 
 function getFilters (args, methodName) {
-  const arg0 = args[0]
-  const filters = arg0 && typeof arg0 === 'object' ? [args[0]] : []
+  const [arg0, arg1] = args
 
-  const arg1 = args[1]
+  const filters = arg0 && typeof arg0 === 'object' ? [arg0] : []
+
   if (arg1 && typeof arg1 === 'object' && methodsOptionalArgs.includes(methodName)) {
     filters.push(arg1)
   }
+
   return filters
 }
 
