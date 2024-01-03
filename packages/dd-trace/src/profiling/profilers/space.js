@@ -14,9 +14,12 @@ class NativeSpaceProfiler {
     this._stackDepth = options.stackDepth || 64
     this._pprof = undefined
     this._oomMonitoring = options.oomMonitoring || {}
+    this._started = false
   }
 
   start ({ mapper, nearOOMCallback } = {}) {
+    if (this._started) return
+
     this._mapper = mapper
     this._pprof = require('@datadog/pprof')
     this._pprof.heap.start(this._samplingInterval, this._stackDepth)
@@ -31,10 +34,16 @@ class NativeSpaceProfiler {
         strategiesToCallbackMode(strategies, this._pprof.heap.CallbackMode)
       )
     }
+
+    this._started = true
   }
 
-  profile () {
-    return this._pprof.heap.profile(undefined, this._mapper, getThreadLabels)
+  profile (restart) {
+    const profile = this._pprof.heap.profile(undefined, this._mapper, getThreadLabels)
+    if (!restart) {
+      this.stop()
+    }
+    return profile
   }
 
   encode (profile) {
@@ -42,7 +51,13 @@ class NativeSpaceProfiler {
   }
 
   stop () {
+    if (!this._started) return
     this._pprof.heap.stop()
+    this._started = false
+  }
+
+  isStarted () {
+    return this._started
   }
 }
 

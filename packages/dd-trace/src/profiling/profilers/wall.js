@@ -223,18 +223,32 @@ class NativeWallProfiler {
 
   _stop (restart) {
     if (!this._started) return
+
     if (this._captureSpanData) {
       // update last sample context if needed
       this._enter()
       this._lastSampleCount = 0
     }
     const profile = this._pprof.time.stop(restart, this._generateLabels)
+
     if (restart) {
       const v8BugDetected = this._pprof.time.v8ProfilerStuckEventLoopDetected()
       if (v8BugDetected !== 0) {
         this._reportV8bug(v8BugDetected === 1)
       }
+    } else {
+      if (this._captureSpanData) {
+        beforeCh.unsubscribe(this._enter)
+        enterCh.unsubscribe(this._enter)
+        spanFinishCh.unsubscribe(this._spanFinished)
+        this._profilerState = undefined
+        this._lastSpan = undefined
+        this._lastStartedSpans = undefined
+        this._lastWebTags = undefined
+      }
+      this._started = false
     }
+
     return profile
   }
 
@@ -276,8 +290,8 @@ class NativeWallProfiler {
     return labels
   }
 
-  profile () {
-    return this._stop(true)
+  profile (restart) {
+    return this._stop(restart)
   }
 
   encode (profile) {
@@ -285,21 +299,11 @@ class NativeWallProfiler {
   }
 
   stop () {
-    if (!this._started) return
+    this._stop(false)
+  }
 
-    const profile = this._stop(false)
-    if (this._captureSpanData) {
-      beforeCh.unsubscribe(this._enter)
-      enterCh.unsubscribe(this._enter)
-      spanFinishCh.unsubscribe(this._spanFinished)
-      this._profilerState = undefined
-      this._lastSpan = undefined
-      this._lastStartedSpans = undefined
-      this._lastWebTags = undefined
-    }
-
-    this._started = false
-    return profile
+  isStarted () {
+    return this._started
   }
 }
 
