@@ -19,6 +19,7 @@ class NoopSpan {
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
   addLink (link) { return this }
+  getLink (context) {}
   log () { return this }
   logEvent () {}
   finish (finishTime) {}
