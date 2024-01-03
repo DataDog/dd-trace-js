@@ -83,8 +83,9 @@ export declare interface Tracer extends opentracing.Tracer {
    * unless there is already an active span or `childOf` option. Note that this
    * option is deprecated and has been removed in version 4.0.
    */
-  trace<T> (name: string, fn: (span?: Span, fn?: (error?: Error) => any) => T): T;
-  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, fn: (span: Span) => T): T;
+  trace<T> (name: string, fn: (span: Span, done: (error?: Error) => void) => T): T;
+  trace<T> (name: string, options: TraceOptions & SpanOptions, fn: (span?: Span, done?: (error?: Error) => void) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -883,7 +884,7 @@ interface Analyzable {
   measured?: boolean | { [key: string]: boolean };
 }
 
-declare namespace plugins {
+export declare namespace plugins {
   /** @hidden */
   interface Integration {
     /**
@@ -1380,7 +1381,8 @@ declare namespace plugins {
    */
   interface ioredis extends Instrumentation {
     /**
-     * List of commands that should be instrumented.
+     * List of commands that should be instrumented. Commands must be in
+     * lowercase for example 'xread'.
      *
      * @default /^.*$/
      */
@@ -1396,7 +1398,8 @@ declare namespace plugins {
 
     /**
      * List of commands that should not be instrumented. Takes precedence over
-     * allowlist if a command matches an entry in both.
+     * allowlist if a command matches an entry in both. Commands must be in
+     * lowercase for example 'xread'.
      *
      * @default []
      */
