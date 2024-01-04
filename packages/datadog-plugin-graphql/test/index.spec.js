@@ -11,6 +11,8 @@ const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
 
+const SLOW_FIELD_RESOLVER_DELAY_MS = 100
+
 describe('Plugin', () => {
   let tracer
   let graphql
@@ -80,7 +82,15 @@ describe('Plugin', () => {
           resolve (obj, args) {
             return [{}, {}, {}]
           }
-        }
+        },
+        slowField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            return new Promise((r) => {
+              setTimeout(() => r('slow field'), SLOW_FIELD_RESOLVER_DELAY_MS)
+            })
+          }
+        },
       }
     })
 
@@ -378,6 +388,57 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should instrument each field resolver duration independently', done => {
+          const source = `
+            {
+              human {
+                name
+                slowField
+              }
+            }
+          `
+
+          let foundNameSpan = false
+          let foundSlowFieldSpan = false
+
+          const processTraces = (traces) => {
+            try {
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name !== 'graphql.resolve') {
+                    continue
+                  }
+                  const spanDurationMs = Number(span.duration) / 1000000
+                  if (span.resource === 'slowField:String') {
+                    // 'slowField' resolver span should be at least as long as the delay
+                    expect(spanDurationMs).to.be.gte(SLOW_FIELD_RESOLVER_DELAY_MS)
+                    foundSlowFieldSpan = true
+                  } else if (span.resource === 'name:String') {
+                    // 'name' resolves immediately, while should be much less than the 'slowField' resolver delay
+                    expect(spanDurationMs).to.be.lt(SLOW_FIELD_RESOLVER_DELAY_MS / 2)
+                    foundNameSpan = true
+                  }
+
+                  if (foundNameSpan && foundSlowFieldSpan) {
+                    agent.unsubscribe(processTraces)
+                    done()
+                    return
+                  }
+                }
+              }
+            } catch (e) {
+              agent.unsubscribe(processTraces)
+              done(e)
+            }
+          }
+
+          agent.subscribe(processTraces)
+          graphql.graphql({ schema, source }).catch((e) => {
+            agent.unsubscribe(processTraces)
+            done(e)
+          })
         })
 
         it('should instrument nested field resolvers', done => {
