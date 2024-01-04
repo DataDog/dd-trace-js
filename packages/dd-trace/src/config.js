@@ -863,7 +863,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'site', options.site)
     this._setValue(opts, 'hostname', options.hostname)
     if (options.port) this._setValue(opts, 'port', String(options.port))
-    if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
 
   _applyRemote (options) {
