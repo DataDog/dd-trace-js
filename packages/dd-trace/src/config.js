@@ -779,10 +779,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'dsmEnabled', false)
     this._setBoolean(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'url', undefined)
-    this._setValue(defaults, 'site', 'datadoghq.com')
-    this._setValue(defaults, 'hostname', '127.0.0.1')
-    this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'flushInterval', defaultFlushInterval)
+    // this._setValue(defaults, 'site', 'datadoghq.com')
+    // this._setValue(defaults, 'hostname', '127.0.0.1')
+    // this._setValue(defaults, 'port', '8126')
+    // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
   }
 
   _applyEnvironment (options) {
@@ -833,9 +833,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     } else {
       this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), options))
     }
-    this._setValue(env, 'site', DD_SITE)
-    this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
-    if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
+    // this._setValue(env, 'site', DD_SITE)
+    // this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    // if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
   }
 
   _applyOptions (options) {
@@ -857,10 +857,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url))
-    this._setValue(opts, 'site', options.site)
-    this._setValue(opts, 'hostname', options.hostname)
-    if (options.port) this._setValue(opts, 'port', String(options.port))
-    if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    // this._setValue(opts, 'site', options.site)
+    // this._setValue(opts, 'hostname', options.hostname)
+    // if (options.port) this._setValue(opts, 'port', String(options.port))
+    // if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
 
   _applyRemote (options) {
