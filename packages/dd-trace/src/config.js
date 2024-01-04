@@ -576,7 +576,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     // this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
-    this.hostname = DD_AGENT_HOST || (url && url.hostname)
+    const hostname = DD_AGENT_HOST || (url && url.hostname)
     this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
@@ -586,7 +586,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.plugins = !!coalesce(options.plugins, true)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = {
-      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
+      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
@@ -783,7 +783,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'site', 'datadoghq.com')
-    // this._setValue(defaults, 'hostname', '127.0.0.1')
+    this._setValue(defaults, 'hostname', '127.0.0.1')
     // this._setValue(defaults, 'port', '8126')
     // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
   }
@@ -837,7 +837,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), options))
     }
     this._setValue(env, 'site', DD_SITE)
-    // this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     // if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
   }
 
@@ -861,7 +861,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
     if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url, options))
     this._setValue(opts, 'site', options.site)
-    // this._setValue(opts, 'hostname', options.hostname)
+    this._setValue(opts, 'hostname', options.hostname)
     // if (options.port) this._setValue(opts, 'port', String(options.port))
     // if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
