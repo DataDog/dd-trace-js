@@ -214,10 +214,14 @@ describe('profiler', () => {
       // Thread name must be defined and exactly equal "Main Event Loop"
       assert.equal(threadName, threadNameValue)
       // Either all or none of span-related labels are defined
-      if (spanId || rootSpanId || endpoint) {
+      if (endpoint === undefined) {
+        // It is possible to catch a sample executing in tracer's startSpan so
+        // that endpoint is not yet set. We'll ignore those samples.
+        continue
+      }
+      if (spanId || rootSpanId) {
         assert.isDefined(spanId)
         assert.isDefined(rootSpanId)
-        assert.isDefined(endpoint)
 
         rootSpans.add(rootSpanId)
         const spanData = { rootSpanId, endpoint }
