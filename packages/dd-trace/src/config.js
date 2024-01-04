@@ -570,15 +570,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       })
     }
 
-    const defaultFlushInterval = inAWSLambda ? 0 : 2000
+    defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.apiKey = DD_API_KEY
-    this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+    const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
-    this.hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
-    this.port = String(DD_TRACE_AGENT_PORT || (this.url && this.url.port))
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    const hostname = DD_AGENT_HOST || (url && url.hostname) // TODO: remove
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
@@ -586,7 +583,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.plugins = !!coalesce(options.plugins, true)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = {
-      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
+      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
@@ -696,7 +693,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
 
     this._applyDefaults()
-    this._applyEnvironment()
+    this._applyEnvironment(options)
     this._applyOptions(options)
     this._applyRemote({})
     this._merge()
@@ -781,9 +778,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
     this._setBoolean(defaults, 'dsmEnabled', false)
     this._setBoolean(defaults, 'openAiLogsEnabled', false)
+    this._setValue(defaults, 'url', undefined)
+    this._setValue(defaults, 'site', 'datadoghq.com')
+    this._setValue(defaults, 'hostname', '127.0.0.1')
+    this._setValue(defaults, 'port', '8126')
+    this._setValue(defaults, 'flushInterval', defaultFlushInterval)
   }
 
-  _applyEnvironment () {
+  _applyEnvironment (options) {
     const {
       DD_ENV,
       DD_LOGS_INJECTION,
@@ -798,7 +800,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_TRACING_ENABLED,
       DD_DBM_PROPAGATION_MODE,
       DD_DATA_STREAMS_ENABLED,
-      DD_OPENAI_LOGS_ENABLED
+      DD_OPENAI_LOGS_ENABLED,
+      DD_CIVISIBILITY_AGENTLESS_URL,
+      DD_TRACE_AGENT_URL,
+      DD_TRACE_URL,
+      DD_SITE,
+      DD_AGENT_HOST,
+      DD_TRACE_AGENT_HOSTNAME,
+      DD_TRACE_AGENT_PORT
     } = process.env
 
     const tags = {}
@@ -819,6 +828,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
+    } else {
+      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), options))
+    }
+    this._setValue(env, 'site', DD_SITE)
+    this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
+    if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
   }
 
   _applyOptions (options) {
@@ -839,6 +856,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'dbmPropagationMode', options.dbmPropagationMode)
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
+    if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url))
+    this._setValue(opts, 'site', options.site)
+    this._setValue(opts, 'hostname', options.hostname)
+    if (options.port) this._setValue(opts, 'port', String(options.port))
+    if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
 
   _applyRemote (options) {
