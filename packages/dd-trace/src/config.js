@@ -575,7 +575,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.apiKey = DD_API_KEY
     const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    const hostname = DD_AGENT_HOST || (url && url.hostname) // TODO: remove
+    this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
+    this.hostname = DD_AGENT_HOST || (url && url.hostname)
+    this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
@@ -583,7 +586,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.plugins = !!coalesce(options.plugins, true)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = {
-      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname),
+      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
     this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
