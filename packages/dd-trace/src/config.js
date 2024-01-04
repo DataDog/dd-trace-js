@@ -577,7 +577,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     // this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     const hostname = DD_AGENT_HOST || (url && url.hostname)
-    this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
+    // this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
@@ -784,7 +784,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'site', 'datadoghq.com')
     this._setValue(defaults, 'hostname', '127.0.0.1')
-    // this._setValue(defaults, 'port', '8126')
+    this._setValue(defaults, 'port', '8126')
     // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
   }
 
@@ -838,7 +838,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this._setValue(env, 'site', DD_SITE)
     this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
-    // if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
+    if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
   }
 
   _applyOptions (options) {
@@ -862,7 +862,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url, options))
     this._setValue(opts, 'site', options.site)
     this._setValue(opts, 'hostname', options.hostname)
-    // if (options.port) this._setValue(opts, 'port', String(options.port))
+    if (options.port) this._setValue(opts, 'port', String(options.port))
     // if (options.flushInterval) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
 
