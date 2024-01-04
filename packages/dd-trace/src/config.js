@@ -19,6 +19,17 @@ const fromEntries = Object.fromEntries || (entries =>
 
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
+const defaultObfuscatorKeyRegex = `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?\
+|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization`
+const defaultObfuscatorValueRegex =
+`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
+ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
+\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
+|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
+
+const defaultIastRequestSampling = 30
+
+let defaultFlushInterval
 
 function maybeFile (filepath) {
   if (!filepath) return
@@ -109,10 +120,8 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_TRACING_ENABLED = coalesce(
-      process.env.DD_TRACING_ENABLED,
-      true
-    )
+    this.configWithOrigin = []
+
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
@@ -563,10 +572,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
-    this.tracing = !isFalse(DD_TRACING_ENABLED)
-    this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
-    this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
-    this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
     this.apiKey = DD_API_KEY
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
@@ -772,6 +777,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
     this._setValue(defaults, 'tags', {})
+    this._setBoolean(defaults, 'tracing', true)
+    this._setValue(defaults, 'dbmPropagationMode', 'disabled')
+    this._setBoolean(defaults, 'dsmEnabled', false)
+    this._setBoolean(defaults, 'openAiLogsEnabled', false)
   }
 
   _applyEnvironment () {
@@ -785,7 +794,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_TAGS,
-      DD_VERSION
+      DD_VERSION,
+      DD_TRACING_ENABLED,
+      DD_DBM_PROPAGATION_MODE,
+      DD_DATA_STREAMS_ENABLED,
+      DD_OPENAI_LOGS_ENABLED
     } = process.env
 
     const tags = {}
@@ -802,6 +815,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setTags(env, 'tags', tags)
+    this._setBoolean(env, 'tracing', !isFalse(DD_TRACING_ENABLED))
+    this._setValue(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
+    this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
+    this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
   }
 
   _applyOptions (options) {
@@ -819,6 +836,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setTags(opts, 'tags', tags)
+    this._setValue(opts, 'dbmPropagationMode', options.dbmPropagationMode)
+    this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
+    this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
   }
 
   _applyRemote (options) {
@@ -901,9 +921,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         const origin = origins[i]
 
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (this[name] === container[name] && this.hasOwnProperty(name)) break
+          if (this._getConfigValue(name) === container[name] && this._existsPropertyName(name)) break
 
-          const value = this[name] = container[name]
+          let value = container[name]
+          this._setConfigValue(name, value)
+
+          if (name === 'appsec.rules') value = JSON.stringify(value)
+          if (name === 'peerServiceMapping') value = formatPeerServiceMapping(value)
+          if (value && name === 'url') value = value.href
 
           changes.push({ name, value, origin })
 
@@ -914,9 +939,95 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.sampler.sampleRate = this.sampleRate
 
-    updateConfig(changes, this)
+    if (this.configWithOrigin.length === 0) {
+      const calculated = [
+        'telemetry.enabled',
+        'telemetry.logCollection',
+        'dogstatsd.hostname',
+        'spanComputePeerService',
+        'tracePropagationStyle.extract',
+        'remoteConfig.enabled',
+        'isIntelligentTestRunnerEnabled',
+        'isGitUploadEnabled',
+        'isManualApiEnabled',
+        'stats.enabled',
+        'isGCPFunction',
+        'commitSHA',
+        'repositoryUrl'
+      ]
+      this.configWithOrigin += changes
+      for (const name in calculated) {
+        if (this._existsPropertyName(name)) {
+          this.configWithOrigin.push({
+            name: name,
+            value: this._getConfigValue(name),
+            origin: 'calculated'
+          })
+        }
+      }
+    } else {
+      updateConfig(changes, this)
+    }
+
+    return changes
+  }
+
+  _getConfigValue (name) {
+    const nameArr = name.split('.')
+    let val = this
+    for (const n in nameArr) {
+      if (val === undefined) return val
+      val = val[nameArr[n]]
+    }
+    return val
+  }
+
+  _setConfigValue (name, value) {
+    const nameArr = name.split('.')
+    let property = this
+    let i
+    for (i = 0; i < nameArr.length - 1; i++) {
+      const n = nameArr[i]
+      if (property.hasOwnProperty(n)) {
+        property = property[n]
+      } else {
+        property[n] = {}
+        property = property[n]
+      }
+    }
+    property[nameArr[i]] = value
+  }
+
+  _existsPropertyName (name) {
+    const nameArr = name.split('.')
+    let property = this
+    let i
+    for (i = 0; i < nameArr.length - 1; i++) {
+      const n = nameArr[i]
+      if (property.hasOwnProperty(n)) {
+        property = property[n]
+      } else {
+        return false
+      }
+    }
+    if (property.hasOwnProperty(nameArr[i])) return true
+    return false
   }
 }
+
+// function maybeInt (number) {
+//   if (!isNaN(parseInt(number))) {
+//     return parseInt(number)
+//   }
+//   return undefined
+// }
+
+// function maybeFloat (number) {
+//   if (!isNaN(parseFloat(number))) {
+//     return parseFloat(number)
+//   }
+//   return undefined
+// }
 
 function getAgentUrl (url, options) {
   if (url) return new URL(url)
@@ -933,6 +1044,14 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
+}
+
+function formatPeerServiceMapping (peerServiceMapping) {
+  // format serviceMapping from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return peerServiceMapping
+    ? Object.entries(peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
 }
 
 module.exports = Config
