@@ -578,7 +578,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     const hostname = DD_AGENT_HOST || (url && url.hostname)
     // this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED

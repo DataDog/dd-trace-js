@@ -139,15 +139,15 @@ describe('Config', () => {
       { name: 'tracing', value: true, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dsmEnabled', value: false, origin: 'default' },
-      { name: 'openAiLogsEnabled', value: false, origin: 'default' }
-      // { name: 'url', value: undefined, origin: 'default' },
-      // { name: 'site', value: 'datadoghq.com', origin: 'default' },
-      // { name: 'hostname', value: '127.0.0.1', origin: 'default' },
-      // { name: 'port', value: '8126', origin: 'default' },
-      // { name: 'debug', value: false, origin: 'default' },
-      // { name: 'protocolVersion', value: '0.4', origin: 'default' },
-      // { name: 'dogstatsd.port', value: '8125', origin: 'default' },
-      // { name: 'flushInterval', value: 2000, origin: 'default' },
+      { name: 'openAiLogsEnabled', value: false, origin: 'default' },
+      { name: 'url', value: undefined, origin: 'default' },
+      { name: 'site', value: 'datadoghq.com', origin: 'default' },
+      { name: 'hostname', value: '127.0.0.1', origin: 'default' },
+      { name: 'port', value: '8126', origin: 'default' },
+      { name: 'debug', value: false, origin: 'default' },
+      { name: 'protocolVersion', value: '0.4', origin: 'default' },
+      { name: 'dogstatsd.port', value: '8125', origin: 'default' },
+      { name: 'flushInterval', value: 2000, origin: 'default' }
       // { name: 'flushMinSpans', value: 1000, origin: 'default' },
       // { name: 'clientIpEnabled', value: false, origin: 'default' },
       // { name: 'clientIpHeader', value: null, origin: 'default' },
@@ -400,7 +400,7 @@ describe('Config', () => {
     expect(Config.prototype._merge.calledOnce).to.be.true
 
     expect(config.configWithOrigin).to.deep.include(
-      { name: 'tracing', value: false, origin: 'env_var' }
+      { name: 'tracing', value: false, origin: 'env_var' },
       // { name: 'debug', value: true, origin: 'env_var' },
       // { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       // { name: 'hostname', value: 'agent', origin: 'env_var' },
@@ -412,7 +412,7 @@ describe('Config', () => {
       // { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
       // { name: 'runtimeMetrics', value: true, origin: 'env_var' },
       // { name: 'reportHostname', value: true, origin: 'env_var' },
-      // { name: 'env', value: 'test', origin: 'env_var' },
+      { name: 'env', value: 'test', origin: 'env_var' }
       // { name: 'sampleRate', value: 0.5, origin: 'env_var' },
       // { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       // { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
@@ -647,20 +647,20 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    // expect(config.configWithOrigin).to.deep.include(
+    expect(config.configWithOrigin).to.deep.include(
     // { name: 'protocolVersion', value: '0.5', origin: 'code' },
-    // { name: 'site', value: 'datadoghq.eu', origin: 'code' },
-    // { name: 'hostname', value: 'agent', origin: 'code' },
-    // { name: 'port', value: '6218', origin: 'code' },
-    // { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'calculated' },
-    // { name: 'dogstatsd.port', value: '5218', origin: 'code' },
-    // { name: 'service', value: 'service', origin: 'code' },
-    // { name: 'version', value: '0.1.0', origin: 'code' },
-    // { name: 'env', value: 'test', origin: 'code' },
-    // { name: 'sampleRate', value: 0.5, origin: 'code' },
-    // { name: 'clientIpEnabled', value: true, origin: 'code' },
-    // { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
-    // { name: 'flushInterval', value: 5000, origin: 'code' },
+      { name: 'site', value: 'datadoghq.eu', origin: 'code' },
+      { name: 'hostname', value: 'agent', origin: 'code' },
+      { name: 'port', value: '6218', origin: 'code' },
+      // { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'calculated' },
+      // { name: 'dogstatsd.port', value: '5218', origin: 'code' },
+      { name: 'service', value: 'service', origin: 'code' },
+      // { name: 'version', value: '0.1.0', origin: 'code' },
+      { name: 'env', value: 'test', origin: 'code' },
+      // { name: 'sampleRate', value: 0.5, origin: 'code' },
+      // { name: 'clientIpEnabled', value: true, origin: 'code' },
+      // { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
+      { name: 'flushInterval', value: 5000, origin: 'code' }
     // { name: 'flushMinSpans', value: 500, origin: 'code' },
     // { name: 'runtimeMetrics', value: true, origin: 'code' },
     // { name: 'reportHostname', value: true, origin: 'code' },
@@ -685,7 +685,7 @@ describe('Config', () => {
     // { name: 'iast.redactionEnabled', value: false, origin: 'code' },
     // { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
     // { name: 'sampler.sampleRate', value: 0.5, origin: 'code' }
-    // )
+    )
   })
 
   it('should initialize from the options with url taking precedence', () => {
