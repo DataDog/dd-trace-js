@@ -1,7 +1,9 @@
 const log = require('../log')
 
 const TextMapPropagator = require('./propagation/text_map')
-const traceContext = new TextMapPropagator({ tracePropagationStyle: { inject: 'tracecontext' } })
+const traceContextInjector = new TextMapPropagator({ tracePropagationStyle: { inject: 'tracecontext' } })
+
+const id = require('../id')
 
 class SpanLink {
   constructor (traceId, spanId, attributes, traceFlags, traceState, traceIdHigh) {
@@ -29,17 +31,22 @@ class SpanLink {
     const spanId = link.spanId || spanContext._parentId || spanContext._spanId
     const attributes = link.attributes || {}
 
-    // this still isn't right...
-    const traceFlags = link.flags || spanContext._sampling.priority > 0 ? 1 : 0
+    // _tracestate only set when w3c trace flags are given
+    let maybeTraceFlags
+    if (spanContext._tracestate) {
+      const tracestateFlags = spanContext.toTraceparent().split('-')[3]
+      maybeTraceFlags = parseInt(tracestateFlags, 10)
+    }
+    const traceFlags = link.flags || maybeTraceFlags
 
     const traceIdHigh = link.traceIdHigh || spanContext._trace.tags['_dd.p.tid']
 
     let tracestate = link.tracestate || spanContext._tracestate
     if (!tracestate && spanContext._trace?.origin) {
-      // inject extracted Datadog HTTP headers into tracestate
+      // inject extracted Datadog HTTP headers into local tracestate
       // indicated by _trace.origin
       const extractedTracestate = {}
-      traceContext.inject(spanContext, extractedTracestate)
+      traceContextInjector.inject(spanContext, extractedTracestate)
       tracestate = extractedTracestate.tracestate
     }
 
@@ -126,7 +133,7 @@ class SpanLink {
     // these values are conditionally added
     if (this.tracestate) link.tracestate = this.tracestate.toString()
     if (this.flags) link.flags = this.flags
-    if (this.traceIdHigh) link.trace_id_high = this.traceIdHigh
+    if (this.traceIdHigh) link.trace_id_high = id(this.traceIdHigh).toString(10)
 
     return JSON.stringify(link)
   }

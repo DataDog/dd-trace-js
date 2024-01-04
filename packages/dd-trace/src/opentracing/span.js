@@ -18,8 +18,6 @@ const SpanLink = require('./span_link')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const MAX_SPAN_LINKS_LENGTH = 25000
-
 const {
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING,
   DD_TRACE_EXPERIMENTAL_SPAN_COUNTS
@@ -161,20 +159,6 @@ class DatadogSpan {
 
   getLink ({ traceID, spanID }) {
     this.links.find(link => link.traceId === traceID && link.spanId === spanID)
-  }
-
-  // for encoding purposes
-  get links () {
-    let encoded = '['
-    for (const link of this._links) {
-      if (Buffer.byteLength(encoded) + link.length >= MAX_SPAN_LINKS_LENGTH) {
-        link.flushAttributes()
-      }
-      if (Buffer.byteLength(encoded) + link.length < MAX_SPAN_LINKS_LENGTH) {
-        encoded += link.toString() + ','
-      }
-    }
-    return (encoded.length > 1 ? encoded.slice(0, -1) : encoded) + ']' // remove trailing comma
   }
 
   finish (finishTime) {

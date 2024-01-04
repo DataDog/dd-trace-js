@@ -22,6 +22,7 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
+const MAX_SPAN_LINKS_LENGTH = 25000
 
 const map = {
   'operation.name': 'name',
@@ -36,6 +37,7 @@ function format (span) {
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
+  // extractSpanLinks(formatted, span)
 
   return formatted
 }
@@ -63,6 +65,21 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
+
+// function extractSpanLinks (trace, span) {
+//   let links = '['
+//   for (const link of span._links) {
+//     if (Buffer.byteLength(links) + link.length >= MAX_SPAN_LINKS_LENGTH) {
+//       link.flushAttributes()
+//     }
+//     if (Buffer.byteLength(links) + link.length < MAX_SPAN_LINKS_LENGTH) {
+//       links += link.toString() + ','
+//     }
+//   }
+//   links = (links.length > 1 ? links.slice(0, -1) : links) + ']' // remove trailing comma
+
+//   trace.links = links
+// }
 
 function extractTags (trace, span) {
   const context = span.context()
