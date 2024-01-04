@@ -5,43 +5,47 @@ const traceContextInjector = new TextMapPropagator({ tracePropagationStyle: { in
 
 const id = require('../id')
 
+function enforceId (maybeId) {
+  return typeof maybeId === 'string' ? id(maybeId) : maybeId
+}
+
 class SpanLink {
-  constructor (traceId, spanId, attributes, traceFlags, traceState, traceIdHigh) {
+  constructor ({ traceId, spanId, attributes, traceFlags, tracestate, traceIdHigh }) {
     // mandatory
-    this.traceId = traceId
-    this.spanId = spanId
+    this.traceId = enforceId(traceId)
+    this.spanId = enforceId(spanId)
 
     // optional
     // TODO trace_id_high
     this.flags = traceFlags
-    this.tracestate = traceState
+    this.tracestate = tracestate
     this.traceIdHigh = traceIdHigh
 
     // for efficiency, build up encoded version so we don't have to stringify large object later
-    this._encoded = this._partialEncode() // only call stringify once at first partial encoding
+    // partially encoded information is immutable after this point
+    this._partialEncoded = this._partialToString() // only call stringify once at first partial encoding
     this._attributesString = '{' // include this character in length computations
-    this.attributes = this._sanitize(attributes)
 
     this._droppedAttributesCount = 0
+    this.attributes = this._sanitize(attributes)
   }
 
   static from (link = {}, spanContext) {
-    // prioritize information in links over span context
-    const traceId = link.traceId || spanContext._traceId
-    const spanId = link.spanId || spanContext._parentId || spanContext._spanId
+    const traceId = enforceId(link.traceId || spanContext._traceId)
+    const spanId = enforceId(link.spanId || spanContext._parentId || spanContext._spanId)
     const attributes = link.attributes || {}
 
     // _tracestate only set when w3c trace flags are given
     let maybeTraceFlags
-    if (spanContext._tracestate) {
+    if (spanContext?._tracestate) {
       const tracestateFlags = spanContext.toTraceparent().split('-')[3]
       maybeTraceFlags = parseInt(tracestateFlags, 10)
     }
     const traceFlags = link.flags || maybeTraceFlags
 
-    const traceIdHigh = link.traceIdHigh || spanContext._trace.tags['_dd.p.tid']
+    const traceIdHigh = link.traceIdHigh || spanContext?._trace.tags['_dd.p.tid']
 
-    let tracestate = link.tracestate || spanContext._tracestate
+    let tracestate = link.tracestate || spanContext?._tracestate
     if (!tracestate && spanContext._trace?.origin) {
       // inject extracted Datadog HTTP headers into local tracestate
       // indicated by _trace.origin
@@ -50,14 +54,14 @@ class SpanLink {
       tracestate = extractedTracestate.tracestate
     }
 
-    return new SpanLink(traceId, spanId, attributes, traceFlags, tracestate, traceIdHigh)
+    return new SpanLink({ traceId, spanId, attributes, traceFlags, tracestate, traceIdHigh })
   }
 
   get length () {
     return (
-      Buffer.byteLength(this._encoded) +
-      Buffer.byteLength(this._attributesEncoded()) +
-      Buffer.byteLength(this._droppedAttributesCountEncoded()))
+      Buffer.byteLength(this._partialEncoded) +
+      Buffer.byteLength(this._attributesToString()) +
+      Buffer.byteLength(this._droppedAttributesCountToString()))
   }
 
   _sanitize (attributes = {}) {
@@ -104,26 +108,26 @@ class SpanLink {
   }
 
   flushAttributes () {
-    this._droppedAttributesCount += this.attributesLength
+    this._droppedAttributesCount += this._attributesLength
 
     this.attributes = {}
-    this._attributesEncoded = '{'
+    this._attributesString = '{'
   }
 
   toString () {
-    let encoded = this._encoded.slice(0, -1) + ','
+    let encoded = this._partialEncoded.slice(0, -1) + ','
 
-    if (this.attributesLength) {
-      encoded += this._attributesEncoded()
+    if (this._attributesLength) {
+      encoded += this._attributesToString()
     }
 
     if (this._droppedAttributesCount) {
-      encoded += this._droppedAttributesCountEncoded()
+      encoded += this._droppedAttributesCountToString()
     }
     return encoded.slice(0, -1) + '}' // replace trailing comma
   }
 
-  _partialEncode () {
+  _partialToString () {
     const link = {}
 
     // these values are always added
@@ -132,22 +136,22 @@ class SpanLink {
 
     // these values are conditionally added
     if (this.tracestate) link.tracestate = this.tracestate.toString()
-    if (this.flags) link.flags = this.flags
+    if (!isNaN(Number(this.flags))) link.flags = this.flags // 0 is a valid flag, but undefined is not
     if (this.traceIdHigh) link.trace_id_high = id(this.traceIdHigh).toString(10)
 
     return JSON.stringify(link)
   }
 
-  get attributesLength () {
+  get _attributesLength () {
     return Object.keys(this.attributes).length
   }
 
-  _attributesEncoded () {
-    if (!this.attributesLength) '' // don't include if 0
+  _attributesToString () {
+    if (!this._attributesLength) return '' // don't include if 0
     return `"attributes":${this._attributesString},`
   }
 
-  _droppedAttributesCountEncoded () {
+  _droppedAttributesCountToString () {
     if (!this._droppedAttributesCount) return '' // don't include if 0
     return `"dropped_attributes_count":"${this._droppedAttributesCount}",`
   }

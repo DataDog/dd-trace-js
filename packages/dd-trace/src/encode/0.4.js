@@ -84,12 +84,12 @@ class AgentEncoder {
       bytes.reserve(1)
 
       if (span.type) {
-        bytes.buffer[bytes.length++] = 0x8c
+        bytes.buffer[bytes.length++] = 0x8d
 
         this._encodeString(bytes, 'type')
         this._encodeString(bytes, span.type)
       } else {
-        bytes.buffer[bytes.length++] = 0x8b
+        bytes.buffer[bytes.length++] = 0x8c
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -114,8 +114,8 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-      // this._encodeString(bytes, 'span_links')
-      // this._encodeString(bytes, span.links)
+      this._encodeString(bytes, 'span_links')
+      this._encodeString(bytes, span.links)
     }
   }
 
