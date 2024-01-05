@@ -1,0 +1,8 @@
+rulesets:
+  - javascript-best-practices       # ensure best practices are followed
+  - javascript-code-style           # code-style enforcement for JavaScript
+  - javascript-inclusive            # ensure that we use inclusive wording in our codebase
+  - javascript-common-security      # ensure your JavaScript code is safe and secure
+  - javascript-node-security        # rules specific for Node.js security
+  - javascript-express              # rules specific for express.js security
+  - javascript-aws                  # rules specific for aws sdk security
