@@ -119,6 +119,15 @@ class SpanLink {
     return sanitizedAttributes
   }
 
+  // TODO can be changed to match on other specifiers than (traceID, spanID) tuple,
+  // such as `link.attributes.name`, etc.
+  matches ({ traceId, spanId }) {
+    // strict checking of IDs
+    traceId = enforceId(traceId)
+    spanId = enforceId(spanId)
+    return this.traceId.equals(traceId) && this.spanId.equals(spanId)
+  }
+
   addAttribute (key, value) {
     const attribute = this._sanitize({ [key]: value })
     Object.assign(this.attributes, attribute)

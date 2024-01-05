@@ -157,8 +157,8 @@ class DatadogSpan {
     this._links.push(SpanLink.from(link, this._spanContext))
   }
 
-  getLink ({ traceID, spanID }) {
-    this.links.find(link => link.traceId === traceID && link.spanId === spanID)
+  getLink ({ traceId, spanId }) {
+    return this._links.find(link => link.matches({ traceId, spanId }))
   }
 
   finish (finishTime) {

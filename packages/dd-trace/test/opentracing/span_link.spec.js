@@ -225,4 +225,16 @@ describe('SpanLink', () => {
       expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
     })
   })
+
+  describe('matches()', () => {
+    it('matches a span link with a correct context', () => {
+      const spanLink = new SpanLink({ traceId, spanId })
+      expect(spanLink.matches({ traceId, spanId })).to.equal(true)
+    })
+
+    it('does not match a span link with an incorrect context', () => {
+      const spanLink = new SpanLink({ traceId, spanId })
+      expect(spanLink.matches({ traceId: id(), spanId })).to.equal(false)
+    })
+  })
 })

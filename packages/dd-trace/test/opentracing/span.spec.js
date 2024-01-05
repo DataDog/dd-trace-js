@@ -7,6 +7,7 @@ const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Span', () => {
   let Span
+  let SpanLink
   let span
   let tracer
   let processor
@@ -33,6 +34,19 @@ describe('Span', () => {
 
     tracer = {}
 
+    SpanLink = {
+      // dummy logic spanlink
+      from: ({ traceId, spanId }) => {
+        this.traceId = traceId
+        this.spanId = spanId
+        return {
+          traceId,
+          spanId,
+          matches: ({ traceId, spanId }) => traceId === this.traceId && spanId === this.spanId
+        }
+      }
+    }
+
     processor = {
       process: sinon.stub()
     }
@@ -53,7 +67,8 @@ describe('Span', () => {
       },
       '../id': id,
       '../tagger': tagger,
-      '../metrics': metrics
+      '../metrics': metrics,
+      './span_link': SpanLink
     })
   })
 
@@ -213,6 +228,31 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
+    })
+  })
+
+  // TODO are these tests trivial?
+  describe('links', () => {
+    it('should allow links to be added', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addLink({ traceId: '123', spanId: '456' })
+      expect(span).to.have.property('_links')
+      expect(span._links).to.have.lengthOf(1)
+    })
+
+    it('should allow links to be searched', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const link = { traceId: '123', spanId: '789' }
+      span.addLink(link)
+
+      let maybeLink = span.getLink({ traceId: '123', spanId: '789' })
+      expect(maybeLink.traceId).to.equal(link.traceId)
+      expect(maybeLink.spanId).to.equal(link.spanId)
+
+      maybeLink = span.getLink({ traceId: '123', spanId: '456' })
+      expect(maybeLink).to.equal(undefined)
     })
   })
 
