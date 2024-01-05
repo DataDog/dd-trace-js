@@ -577,27 +577,22 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     const hostname = DD_AGENT_HOST || (url && url.hostname)
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
-    // this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
-    // this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    // this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
-    // this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
-    // this.plugins = !!coalesce(options.plugins, true)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = {
-      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname),
-      port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
+      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname)
+      // port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
     }
-    this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
+    // this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
     this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
-    this.experimental = {
-      runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
-      exporter: DD_TRACE_EXPORTER,
-      enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
-    }
+    // this.experimental = {
+    //   runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
+    //   exporter: DD_TRACE_EXPORTER,
+    //   enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
+    // }
     this.sampler = sampler
     this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
     this.scope = process.env.DD_TRACE_SCOPE
@@ -789,6 +784,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setBoolean(defaults, 'plugins', true)
+    this._setValue(defaults, 'dogstatsd.port', '8125')
+    this._setBoolean(defaults, 'runtimeMetrics', false)
+    this._setBoolean(defaults, 'experimental.runtimeId', false)
+    this._setValue(defaults, 'experimental.exporter', undefined)
+    this._setBoolean(defaults, 'experimental.enableGetRumData', false)
   }
 
   _applyEnvironment (options) {
@@ -821,7 +821,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       AWS_LAMBDA_FUNCTION_NAME,
       FUNCTION_NAME,
       K_SERVICE,
-      WEBSITE_SITE_NAME
+      WEBSITE_SITE_NAME,
+      DD_DOGSTATSD_PORT,
+      DD_RUNTIME_METRICS_ENABLED,
+      DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      DD_TRACE_EXPERIMENTAL_EXPORTER,
+      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
     } = process.env
 
     const tags = {}
@@ -860,6 +865,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setValue(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    if (DD_DOGSTATSD_PORT) this._setValue(env, 'dogstatsd.port', String(DD_DOGSTATSD_PORT))
+    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
+    this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
+    this._setValue(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
+    this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
   }
 
   _applyOptions (options) {
@@ -890,6 +900,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setValue(opts, 'clientIpHeader', options.clientIpHeader)
     this._setBoolean(opts, 'plugins', options.plugins)
+    if (options.dogstatsd) this._setValue(opts, 'dogstatsd.port', String(options.dogstatsd.port))
+    this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
+    this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
+    this._setValue(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
+    this._setBoolean(opts, 'experimental.enableGetRumData',
+      options.experimental && options.experimental.enableGetRumData)
   }
 
   _applyRemote (options) {
