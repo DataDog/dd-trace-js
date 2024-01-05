@@ -611,7 +611,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
-      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
+      enabled: isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       debug: isTrue(DD_TELEMETRY_DEBUG),
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
