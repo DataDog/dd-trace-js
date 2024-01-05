@@ -77,14 +77,13 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   }
 
   const options = {
+    url,
+    hostname,
+    port,
     method: 'POST',
     path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType)
   }
-
-  options.url = url
-  options.hostname = hostname
-  options.port = port
 
   const data = JSON.stringify({
     api_version: 'v2',
