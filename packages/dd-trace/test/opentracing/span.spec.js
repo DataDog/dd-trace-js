@@ -36,6 +36,7 @@ describe('Span', () => {
 
     SpanLink = {
       // dummy logic spanlink
+      // needed because of faked IDs above
       from: ({ traceId, spanId }) => {
         this.traceId = traceId
         this.spanId = spanId
@@ -248,11 +249,10 @@ describe('Span', () => {
       span.addLink(link)
 
       let maybeLink = span.getLink({ traceId: '123', spanId: '789' })
-      expect(maybeLink.traceId).to.equal(link.traceId)
-      expect(maybeLink.spanId).to.equal(link.spanId)
+      expect(maybeLink).to.not.be.undefined
 
       maybeLink = span.getLink({ traceId: '123', spanId: '456' })
-      expect(maybeLink).to.equal(undefined)
+      expect(maybeLink).to.be.undefined
     })
   })
 

@@ -287,6 +287,29 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property('baz', 'buz')
   })
 
+  it('should set span links', () => {
+    const span = makeSpan('name')
+
+    const { _links } = span._ddSpan
+
+    span.addLink({ traceId: '123', spanId: '456' })
+    expect(_links).to.have.lengthOf(1)
+
+    span.addLink({ traceId: '789', spanId: '012' })
+    expect(_links).to.have.lengthOf(2)
+  })
+
+  it('should get the link from a context tuple', () => {
+    const span = makeSpan('name')
+    const { _links } = span._ddSpan
+
+    span.addLink({ traceId: '123', spanId: '456' })
+    span.addLink({ traceId: '789', spanId: '012' })
+
+    const link = span.getLink({ traceId: '123', spanId: '456' })
+    expect(link).to.equal(_links[0])
+  })
+
   it('should set status', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
