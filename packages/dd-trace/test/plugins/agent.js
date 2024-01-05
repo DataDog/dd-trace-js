@@ -118,8 +118,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           body += chunk
         })
         testAgentRes.on('end', () => {
-          // eslint-disable-next-line no-console
-          console.log('body is', body)
           res.status(400).send(body)
         })
       }
