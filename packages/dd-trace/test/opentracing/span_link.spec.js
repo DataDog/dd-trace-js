@@ -27,7 +27,7 @@ describe('SpanLink', () => {
       traceId,
       spanId,
       attributes: { foo: 'bar' },
-      traceFlags: 1,
+      flags: 1,
       tracestate: ts,
       traceIdHigh: '789',
       droppedAttributesCount: 1
@@ -51,23 +51,24 @@ describe('SpanLink', () => {
       attributes: {
         foo: 'bar'
       },
-      flags: 1
+      flags: 0
     }
 
     const spanLink = SpanLink.from(link)
     expect(spanLink).to.have.property('traceId', traceId)
     expect(spanLink).to.have.property('spanId', spanId)
-    expect(spanLink).to.have.property('flags', 1)
+    expect(spanLink).to.have.property('flags', 0)
     expect(spanLink).to.have.property('tracestate', ts)
     expect(spanLink).to.have.property('traceIdHigh', undefined)
     expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
   })
 
-  it('creates a span link from a span context', () => {
+  it('uses the span context to default to parent span and current trace', () => {
     const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
     const spanContext = new SpanContext({
       traceId,
-      spanId,
+      spanId: id(), // not used
+      parentId: spanId,
       tracestate: ts,
       trace: {
         origin: 'synthetics',
@@ -86,29 +87,20 @@ describe('SpanLink', () => {
     expect(spanLink.attributes).to.deep.equal({})
   })
 
-  // TODO flush this out a bit
-  it('merges link object and span context', () => {
-    const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
-    const link = { attributes: { foo: 'bar' } }
+  it('will not use the span context if the link object specifies a different trace', () => {
+    const link = { traceId, spanId }
     const spanContext = new SpanContext({
-      traceId,
-      spanId,
-      tracestate: ts,
-      trace: {
-        origin: 'synthetics',
-        tags: {
-          '_dd.p.tid': '789'
-        }
-      }
+      traceId: id(), // not used
+      spanId: id() // not used
     })
 
     const spanLink = SpanLink.from(link, spanContext)
     expect(spanLink).to.have.property('traceId', traceId)
     expect(spanLink).to.have.property('spanId', spanId)
-    expect(spanLink).to.have.property('flags', 0)
-    expect(spanLink).to.have.property('tracestate', ts)
-    expect(spanLink).to.have.property('traceIdHigh', '789')
-    expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
+    expect(spanLink).to.have.property('flags', undefined)
+    expect(spanLink).to.have.property('tracestate', undefined)
+    expect(spanLink).to.have.property('traceIdHigh', undefined)
+    expect(spanLink.attributes).to.deep.equal({})
   })
 
   describe('sanitizing', () => {
@@ -159,7 +151,7 @@ describe('SpanLink', () => {
   describe('toString()', () => {
     it('stringifies a simple span link', () => {
       const spanLink = new SpanLink({ traceId, spanId })
-      const encoded = `{"trace_id":"123","span_id":"456"}`
+      const encoded = `{"trace_id":"${traceId.toString()}","span_id":"${spanId.toString()}"}`
 
       expect(spanLink.toString()).to.equal(encoded)
       expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
@@ -174,11 +166,12 @@ describe('SpanLink', () => {
         attributes: {
           foo: 'bar'
         },
-        traceFlags: 0
+        flags: 0
       })
 
       const encoded =
-        `{"trace_id":"123","span_id":"456","tracestate":"${ts.toString()}","flags":0,"attributes":{"foo":"bar"}}`
+        `{"trace_id":"${traceId.toString()}","span_id":"${spanId.toString()}",` +
+        `"tracestate":"${ts.toString()}","flags":0,"attributes":{"foo":"bar"}}`
 
       expect(spanLink.toString()).to.equal(encoded)
       expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
@@ -188,7 +181,7 @@ describe('SpanLink', () => {
       const spanLink = new SpanLink({ traceId, spanId })
       spanLink.addAttribute('foo', 'bar')
 
-      const encoded = `{"trace_id":"123","span_id":"456","attributes":{"foo":"bar"}}`
+      const encoded = `{"trace_id":"${traceId.toString()}","span_id":"${spanId.toString()}","attributes":{"foo":"bar"}}`
 
       expect(spanLink.toString()).to.equal(encoded)
       expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
@@ -199,7 +192,9 @@ describe('SpanLink', () => {
       spanLink.addAttribute('foo', 'bar')
       spanLink.addAttribute('baz', {}) // bad
 
-      const encoded = `{"trace_id":"123","span_id":"456","attributes":{"foo":"bar"},"dropped_attributes_count":"1"}`
+      const encoded =
+      `{"trace_id":"${traceId.toString()}","span_id":"${spanId.toString()}",` +
+      `"attributes":{"foo":"bar"},"dropped_attributes_count":"1"}`
 
       expect(spanLink.toString()).to.equal(encoded)
       expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
@@ -221,7 +216,8 @@ describe('SpanLink', () => {
       spanLink.addAttribute('foo', 'bar')
       spanLink.flushAttributes()
 
-      const encoded = `{"trace_id":"123","span_id":"456","dropped_attributes_count":"1"}`
+      const encoded =
+      `{"trace_id":"${traceId.toString()}","span_id":"${spanId.toString()}","dropped_attributes_count":"1"}`
 
       expect(spanLink.attributes).to.deep.equal({})
       expect(spanLink).to.have.property('_droppedAttributesCount', 1)

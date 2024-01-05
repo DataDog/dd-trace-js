@@ -145,6 +145,8 @@ class Span {
 
     this._hasStatus = false
 
+    this.links = links // store links here from OTel span
+
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime

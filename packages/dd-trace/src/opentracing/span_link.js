@@ -5,19 +5,19 @@ const traceContextInjector = new TextMapPropagator({ tracePropagationStyle: { in
 
 const id = require('../id')
 
+// assumed the string ID passed is hexadecimal
 function enforceId (maybeId) {
   return typeof maybeId === 'string' ? id(maybeId) : maybeId
 }
 
 class SpanLink {
-  constructor ({ traceId, spanId, attributes, traceFlags, tracestate, traceIdHigh }) {
-    // mandatory
+  constructor ({ traceId, spanId, attributes, flags, tracestate, traceIdHigh }) {
+    // mandatory, enforcing IDs in the case they were not formatted in `from`
     this.traceId = enforceId(traceId)
     this.spanId = enforceId(spanId)
 
     // optional
-    // TODO trace_id_high
-    this.flags = traceFlags
+    this.flags = flags
     this.tracestate = tracestate
     this.traceIdHigh = traceIdHigh
 
@@ -30,23 +30,40 @@ class SpanLink {
     this.attributes = this._sanitize(attributes)
   }
 
+  /**
+   * Will create a span link from the provided information. If only a link object is provided,
+   * it must include the (spanId, traceId) tuple, and any other relevant information manually set.
+   * If a spanContext is also provided, and the traceId matches, it will be used to fill in
+   * any other information (flags, tracestate, high 64 bits of traceId). If the traceId does not match,
+   * it is assumed the traceId given in the link object is correct, and the spanContext is ignored.
+   *
+   * Additionally, only a spanId can be provided in the link object. In this case, it is assumed
+   * to be a part of the same trace as provided in the spanContext. If no spanID is provided in the link object,
+   * the spanContext's parent spanId is used.
+   *
+   * @param {*} link Lightweight representation of a span
+   * @param {*} spanContext Fallback information for the link
+   * @returns Span link based on the given information
+   */
   static from (link = {}, spanContext) {
     const traceId = enforceId(link.traceId || spanContext._traceId)
-    const spanId = enforceId(link.spanId || spanContext._parentId || spanContext._spanId)
+    const spanId = enforceId(link.spanId || spanContext._parentId)
     const attributes = link.attributes || {}
+
+    const sameTrace = spanContext && traceId.equals(spanContext._traceId)
+    if (!sameTrace) return new SpanLink({ ...link, traceId, spanId, attributes })
 
     // _tracestate only set when w3c trace flags are given
     let maybeTraceFlags
     if (spanContext?._tracestate) {
-      const tracestateFlags = spanContext.toTraceparent().split('-')[3]
-      maybeTraceFlags = parseInt(tracestateFlags, 10)
+      maybeTraceFlags = spanContext._sampling.priority > 0 ? 1 : 0
     }
-    const traceFlags = link.flags || maybeTraceFlags
+    const flags = link.flags ?? maybeTraceFlags
 
     const traceIdHigh = link.traceIdHigh || spanContext?._trace.tags['_dd.p.tid']
 
     let tracestate = link.tracestate || spanContext?._tracestate
-    if (!tracestate && spanContext._trace?.origin) {
+    if (!tracestate && spanContext?._trace?.origin) {
       // inject extracted Datadog HTTP headers into local tracestate
       // indicated by _trace.origin
       const extractedTracestate = {}
@@ -54,14 +71,17 @@ class SpanLink {
       tracestate = extractedTracestate.tracestate
     }
 
-    return new SpanLink({ traceId, spanId, attributes, traceFlags, tracestate, traceIdHigh })
+    return new SpanLink({ traceId, spanId, attributes, flags, tracestate, traceIdHigh })
   }
 
+  // TODO is there really a performance benefit from stringifying everything as it's built?
+  // or can it just be stringified objects here...
   get length () {
     return (
       Buffer.byteLength(this._partialEncoded) +
       Buffer.byteLength(this._attributesToString()) +
-      Buffer.byteLength(this._droppedAttributesCountToString()))
+      Buffer.byteLength(this._droppedAttributesCountToString())
+    )
   }
 
   _sanitize (attributes = {}) {
@@ -83,10 +103,7 @@ class SpanLink {
             this._attributesString = this._attributesString.slice(0, -1) + `,"${key}":"${maybeScalar}"}`
           }
         } else {
-          log.warn(
-            `Cannot sanitize type ${typeof maybeScalar} with key ${key}.
-            \rSupported types are string, number, or boolean. Dropping attribute.`
-          )
+          log.warn(`Dropping span link attribute.`)
           this._droppedAttributesCount++
         }
       }
@@ -131,13 +148,17 @@ class SpanLink {
     const link = {}
 
     // these values are always added
-    link.trace_id = this.traceId.toString(10)
-    link.span_id = this.spanId.toString(10)
+    if (this.traceIdHigh) {
+      link.trace_id = this.traceIdHigh + this.traceId.toString()
+      link.trace_id_high = this.traceIdHigh
+    } else {
+      link.trace_id = this.traceId.toString()
+    }
+    link.span_id = this.spanId.toString()
 
     // these values are conditionally added
     if (this.tracestate) link.tracestate = this.tracestate.toString()
     if (!isNaN(Number(this.flags))) link.flags = this.flags // 0 is a valid flag, but undefined is not
-    if (this.traceIdHigh) link.trace_id_high = id(this.traceIdHigh).toString(10)
 
     return JSON.stringify(link)
   }
