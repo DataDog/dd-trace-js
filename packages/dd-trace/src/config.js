@@ -575,15 +575,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.apiKey = DD_API_KEY
     const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    // this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     const hostname = DD_AGENT_HOST || (url && url.hostname)
-    // this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
-    this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
-    this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
-    this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
-    this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
-    this.plugins = !!coalesce(options.plugins, true)
+    // this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    // this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    // this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
+    // this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
+    // this.plugins = !!coalesce(options.plugins, true)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname),
@@ -786,6 +784,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'port', '8126')
     // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
+    this._setValue(defaults, 'flushMinSpans', 1000)
+    this._setValue(defaults, 'queryStringObfuscation', qsRegex)
+    this._setBoolean(defaults, 'clientIpEnabled', false)
+    this._setValue(defaults, 'clientIpHeader', null)
+    this._setBoolean(defaults, 'plugins', true)
   }
 
   _applyEnvironment (options) {
@@ -810,7 +813,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_SITE,
       DD_AGENT_HOST,
       DD_TRACE_AGENT_HOSTNAME,
-      DD_TRACE_AGENT_PORT
+      DD_TRACE_AGENT_PORT,
+      DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
+      DD_TRACE_CLIENT_IP_ENABLED,
+      DD_TRACE_CLIENT_IP_HEADER,
+      AWS_LAMBDA_FUNCTION_NAME,
+      FUNCTION_NAME,
+      K_SERVICE,
+      WEBSITE_SITE_NAME
     } = process.env
 
     const tags = {}
@@ -839,6 +850,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(env, 'site', DD_SITE)
     this._setValue(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
+    this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
+    this._setValue(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
+    this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
+    this._setValue(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
+    this._setValue(env, 'service',
+      DD_SERVICE || DD_SERVICE_NAME || AWS_LAMBDA_FUNCTION_NAME || FUNCTION_NAME || K_SERVICE || WEBSITE_SITE_NAME)
+    this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
+    this._setValue(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
+    this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
+    this._setValue(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
   }
 
   _applyOptions (options) {
@@ -863,7 +884,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'site', options.site)
     this._setValue(opts, 'hostname', options.hostname)
     if (options.port) this._setValue(opts, 'port', String(options.port))
-    // if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    // if (parseInt(options.flushInterval, 10))
+    // this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
+    this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
+    this._setValue(opts, 'clientIpHeader', options.clientIpHeader)
+    this._setBoolean(opts, 'plugins', options.plugins)
   }
 
   _applyRemote (options) {
@@ -1040,19 +1066,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
   }
 }
 
-// function maybeInt (number) {
-//   if (!isNaN(parseInt(number))) {
-//     return parseInt(number)
-//   }
-//   return undefined
-// }
+function maybeInt (number) {
+  if (!isNaN(parseInt(number))) {
+    return parseInt(number)
+  }
+  return undefined
+}
 
-// function maybeFloat (number) {
-//   if (!isNaN(parseFloat(number))) {
-//     return parseFloat(number)
-//   }
-//   return undefined
-// }
+function maybeFloat (number) {
+  if (!isNaN(parseFloat(number))) {
+    return parseFloat(number)
+  }
+  return undefined
+}
 
 function getAgentUrl (url, options) {
   if (url) return new URL(url)
