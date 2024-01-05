@@ -202,27 +202,15 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   next:
-    strategy:
-      matrix:
-        node-version: [16]
-        range: ['>=9.5 <11.1', '>=11.1 <13.2']
-        include:
-          - node-version: 18
-            range: '>=13.2'
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
-      RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-      - run: yarn install --ignore-engines
-      - run: yarn config set ignore-engines true
-      - run: yarn test:appsec:plugins:ci --ignore-engines
-      - if: always()
-        uses: ./.github/actions/testagent/logs
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
