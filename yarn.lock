@@ -442,10 +442,10 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/pprof@4.1.0":
-  version "4.1.0"
-  resolved "https://registry.npmjs.org/@datadog/pprof/-/pprof-4.1.0.tgz"
-  integrity "sha1-24anIPHf7LyriDi8HxSOsKQCr1U= sha512-g7EWI185nwSuFwlmnAGDPxbPsqe+ipOoDB2oP841WMNRaJBPRdg5J90c+6ucmyltuC9VpTrmzzqcachkOTzZEQ=="
+"@datadog/pprof@5.0.0":
+  version "5.0.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.0.0.tgz#0c0aaf06def6d2bc4b2d353ec7b264dadbfbefab"
+  integrity sha512-vhNan4SBuNWLpexunDJQ+hNbRAgWdk2qy5Iyh7Nn94uSSHXigAJMAvu4jwMKKQKFfchtobOkWT8GQUWW3tgpFg==
   dependencies:
     delay "^5.0.0"
     node-gyp-build "<4.0"
