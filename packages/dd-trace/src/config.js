@@ -366,42 +366,42 @@ class Config {
       false
     )
 
-    let appsec = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
+    this.appsecOpt = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
-    if (typeof appsec === 'boolean') {
-      appsec = {
-        enabled: appsec
+    if (typeof this.appsecOpt === 'boolean') {
+      this.appsecOpt = {
+        enabled: this.appsecOpt
       }
-    } else if (appsec == null) {
-      appsec = {}
+    } else if (this.appsecOpt == null) {
+      this.appsecOpt = {}
     }
 
     const DD_APPSEC_ENABLED = coalesce(
-      appsec.enabled,
+      this.appsecOpt.enabled,
       process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
     const DD_APPSEC_RULES = coalesce(
-      appsec.rules,
+      this.appsecOpt.rules,
       process.env.DD_APPSEC_RULES
     )
     const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
-      parseInt(appsec.rateLimit),
+      parseInt(this.appsecOpt.rateLimit),
       parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
       100
     )
     const DD_APPSEC_WAF_TIMEOUT = coalesce(
-      parseInt(appsec.wafTimeout),
+      parseInt(this.appsecOpt.wafTimeout),
       parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
       5e3 // µs
     )
     const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
-      appsec.obfuscatorKeyRegex,
+      this.appsecOpt.obfuscatorKeyRegex,
       process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|se\
 cret)|sign(?:ed|ature)|bearer|authorization`
     )
     const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
-      appsec.obfuscatorValueRegex,
+      this.appsecOpt.obfuscatorValueRegex,
       process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
 ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
@@ -409,29 +409,29 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybeFile(appsec.blockedTemplateHtml),
+      maybeFile(this.appsecOpt.blockedTemplateHtml),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
     )
     const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(appsec.blockedTemplateJson),
+      maybeFile(this.appsecOpt.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
     const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(appsec.blockedTemplateGraphql),
+      maybeFile(this.appsecOpt.blockedTemplateGraphql),
       maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     )
     const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
-      appsec.eventTracking && appsec.eventTracking.mode,
+      this.appsecOpt.eventTracking && this.appsecOpt.eventTracking.mode,
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
     const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
-      appsec?.apiSecurity?.enabled,
+      this.appsecOpt?.apiSecurity?.enabled,
       isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       false
     )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
-      appsec?.apiSecurity?.requestSampling,
+      this.appsecOpt?.apiSecurity?.requestSampling,
       parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
       0.1
     )
@@ -781,15 +781,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'tagsHeaderMaxLength', 512)
-    // this._setBoolean(defaults, 'appsec.enabled', undefined)
-    // this._setValue(defaults, 'appsec.rules', undefined)
-    // this._setValue(defaults, 'appsec.customRulesProvided', false)
-    // this._setValue(defaults, 'appsec.rateLimit', 100)
-    // this._setValue(defaults, 'appsec.wafTimeout', 5e3)
-    // this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultObfuscatorKeyRegex)
-    // this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultObfuscatorValueRegex)
-    // this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
-    // this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
+    this._setBoolean(defaults, 'appsec.enabled', undefined)
+    this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.customRulesProvided', false)
+    this._setValue(defaults, 'appsec.rateLimit', 100)
+    this._setValue(defaults, 'appsec.wafTimeout', 5e3)
+    this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultObfuscatorKeyRegex)
+    this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultObfuscatorValueRegex)
+    this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
+    this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
   }
 
   _applyEnvironment (options) {
@@ -918,15 +918,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setValue(env, 'tagsHeaderMaxLength', DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
-    // this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED && isTrue(DD_APPSEC_ENABLED))
-    // this._setValue(env, 'appsec.rules', DD_APPSEC_RULES)
-    // if (DD_APPSEC_RULES) this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
-    // this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
-    // this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
-    // this._setValue(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
-    // this._setValue(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
-    // this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
-    // this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
+    this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED && isTrue(DD_APPSEC_ENABLED))
+    this._setValue(env, 'appsec.rules', DD_APPSEC_RULES)
+    if (DD_APPSEC_RULES) this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
+    this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
+    this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
+    this._setValue(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
+    this._setValue(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
+    this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
   }
 
   _applyOptions (options) {
@@ -975,15 +975,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setValue(opts, 'protocolVersion', options.protocolVersion)
-    // this._setBoolean(opts, 'appsec.enabled', this.appsecOpt.enabled)
-    // this._setValue(opts, 'appsec.rules', this.appsecOpt.rules)
-    // if (this.appsecOpt.rules) this._setBoolean(opts, 'appsec.customRulesProvided', !!this.appsecOpt.rules)
-    // this._setValue(opts, 'appsec.rateLimit', maybeInt(this.appsecOpt.rateLimit))
-    // this._setValue(opts, 'appsec.wafTimeout', maybeInt(this.appsecOpt.wafTimeout))
-    // this._setValue(opts, 'appsec.obfuscatorKeyRegex', this.appsecOpt.obfuscatorKeyRegex)
-    // this._setValue(opts, 'appsec.obfuscatorValueRegex', this.appsecOpt.obfuscatorValueRegex)
-    // this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(this.appsecOpt.blockedTemplateHtml))
-    // this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(this.appsecOpt.blockedTemplateJson))
+    this._setBoolean(opts, 'appsec.enabled', this.appsecOpt.enabled)
+    this._setValue(opts, 'appsec.rules', this.appsecOpt.rules)
+    if (this.appsecOpt.rules) this._setBoolean(opts, 'appsec.customRulesProvided', !!this.appsecOpt.rules)
+    this._setValue(opts, 'appsec.rateLimit', maybeInt(this.appsecOpt.rateLimit))
+    this._setValue(opts, 'appsec.wafTimeout', maybeInt(this.appsecOpt.wafTimeout))
+    this._setValue(opts, 'appsec.obfuscatorKeyRegex', this.appsecOpt.obfuscatorKeyRegex)
+    this._setValue(opts, 'appsec.obfuscatorValueRegex', this.appsecOpt.obfuscatorValueRegex)
+    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(this.appsecOpt.blockedTemplateHtml))
+    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(this.appsecOpt.blockedTemplateJson))
   }
 
   _applyRemote (options) {
