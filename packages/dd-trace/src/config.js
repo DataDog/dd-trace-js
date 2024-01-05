@@ -547,7 +547,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
-      rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
+      // rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
       rules: coalesce(
         options.samplingRules,
         safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
@@ -578,32 +578,23 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const hostname = DD_AGENT_HOST || (url && url.hostname)
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.dogstatsd = {
-      hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname)
-      // port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
-    }
-    // this.runtimeMetrics = isTrue(DD_RUNTIME_METRICS_ENABLED)
+    this.dogstatsd = { hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname) }
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
     this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
-    // this.experimental = {
-    //   runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
-    //   exporter: DD_TRACE_EXPORTER,
-    //   enableGetRumData: isTrue(DD_TRACE_GET_RUM_DATA_ENABLED)
-    // }
     this.sampler = sampler
-    this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
-    this.scope = process.env.DD_TRACE_SCOPE
-    this.profiling = {
-      enabled: isTrue(DD_PROFILING_ENABLED),
-      sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
-      exporters: DD_PROFILING_EXPORTERS
-    }
-    this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+    // this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
+    // this.scope = process.env.DD_TRACE_SCOPE
+    // this.profiling = {
+    //   enabled: isTrue(DD_PROFILING_ENABLED),
+    //   sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
+    //   exporters: DD_PROFILING_EXPORTERS
+    // }
+    // this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
-    this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+    // this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
@@ -789,6 +780,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
     this._setBoolean(defaults, 'experimental.enableGetRumData', false)
+    //
+    this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setBoolean(defaults, 'reportHostname', false)
+    this._setValue(defaults, 'scope', undefined)
+    this._setBoolean(defaults, 'profiling.enabled', false)
+    this._setBoolean(defaults, 'profiling.sourceMap', true)
+    this._setValue(defaults, 'profiling.exporters', 'agent')
+    this._setValue(defaults, 'spanAttributeSchema', 'v0')
+    this._setValue(defaults, 'spanRemoveIntegrationFromService', false)
   }
 
   _applyEnvironment (options) {
@@ -826,7 +826,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_RUNTIME_METRICS_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
-      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
+      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
+      DD_TRACE_RATE_LIMIT,
+      DD_TRACE_REPORT_HOSTNAME,
+      DD_TRACE_SCOPE,
+      DD_EXPERIMENTAL_PROFILING_ENABLED,
+      DD_PROFILING_ENABLED,
+      DD_PROFILING_SOURCE_MAP,
+      DD_PROFILING_EXPORTERS,
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
     } = process.env
 
     const tags = {}
@@ -870,6 +879,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     this._setValue(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
+    this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
+    this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
+    this._setValue(env, 'scope', DD_TRACE_SCOPE)
+    this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
+    this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
+    this._setValue(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
+    if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
+      this._setValue(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
+    }
+    this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
   }
 
   _applyOptions (options) {
@@ -906,6 +925,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.enableGetRumData',
       options.experimental && options.experimental.enableGetRumData)
+    const ingestion = options.ingestion || {}
+    this._setValue(opts, 'sampler.rateLimit', coalesce(options.rateLimit, ingestion.rateLimit))
+    this._setBoolean(opts, 'reportHostname', options.reportHostname)
+    this._setBoolean(opts, 'profiling.enabled', options.profiling)
+    if (options.spanAttributeSchema) {
+      this._setValue(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
+    }
+    this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
   }
 
   _applyRemote (options) {
