@@ -182,6 +182,54 @@ describe('format', () => {
       )
     })
 
+    it('should format span links', () => {
+      span._links = [
+        {
+          length: 0,
+          toString: () => 'link1'
+        },
+        {
+          length: 0,
+          toString: () => 'link2'
+        }
+      ]
+
+      trace = format(span)
+
+      expect(trace.links).to.equal('[link1,link2]')
+    })
+
+    it('should drop span link attributes if they exceed the maximum length', () => {
+      const link = {
+        length: 25000,
+        flushAttributes: () => { link.length = 0 },
+        toString: () => link.length > 0 ? 'wrong' : 'link'
+      }
+      span._links = [link]
+
+      trace = format(span)
+
+      expect(trace.links).to.equal('[link]')
+    })
+
+    it('should drop entire span link if it exceeds the maximum length', () => {
+      const link = {
+        length: 25000,
+        flushAttributes: () => { link.length = 0 },
+        toString: () => link.length > 0 ? 'wrong' : 'link'
+      }
+      const linkToDrop = {
+        length: 25000,
+        flushAttributes: () => {},
+        toString: () => 'wrong'
+      }
+      span._links = [link, linkToDrop]
+
+      trace = format(span)
+
+      expect(trace.links).to.equal('[link]')
+    })
+
     it('should extract trace chunk tags', () => {
       spanContext._trace.tags = {
         chunk: 'test',

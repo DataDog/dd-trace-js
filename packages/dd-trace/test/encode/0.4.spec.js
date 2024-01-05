@@ -44,7 +44,8 @@ describe('encode', () => {
         example: 1
       },
       start: 123,
-      duration: 456
+      duration: 456,
+      links: '[]'
     }]
   })
 

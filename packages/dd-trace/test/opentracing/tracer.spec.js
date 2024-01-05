@@ -120,7 +120,8 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
       }, true)
 
       expect(span.addTags).to.have.been.calledWith({
@@ -178,7 +179,8 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
       })
 
       expect(testSpan).to.equal(span)
@@ -249,7 +251,29 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
+      })
+
+      expect(testSpan).to.equal(span)
+    })
+
+    it('should start a span with span links attached', () => {
+      fields.links = [{ traceId: '123', spanId: '456' }]
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'service.name': 'service'
+        },
+        startTime: fields.startTime,
+        hostname: undefined,
+        traceId128BitGenerationEnabled: undefined,
+        integrationName: undefined,
+        links: [{ traceId: '123', spanId: '456' }]
       })
 
       expect(testSpan).to.equal(span)
