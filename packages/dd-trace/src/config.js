@@ -578,7 +578,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
     const hostname = DD_AGENT_HOST || (url && url.hostname)
     // this.port = String(DD_TRACE_AGENT_PORT || (url && url.port))
-    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
     this.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
@@ -785,7 +785,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'site', 'datadoghq.com')
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'flushInterval', defaultFlushInterval)
+    // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
   }
 
   _applyEnvironment (options) {
@@ -863,7 +863,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'site', options.site)
     this._setValue(opts, 'hostname', options.hostname)
     if (options.port) this._setValue(opts, 'port', String(options.port))
-    if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    // if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
   }
 
   _applyRemote (options) {
