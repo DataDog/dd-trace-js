@@ -547,7 +547,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
-      // rateLimit: coalesce(options.rateLimit, process.env.DD_TRACE_RATE_LIMIT, ingestion.rateLimit),
       rules: coalesce(
         options.samplingRules,
         safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
@@ -585,27 +584,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this.sampler = sampler
-    // this.reportHostname = isTrue(coalesce(options.reportHostname, process.env.DD_TRACE_REPORT_HOSTNAME, false))
-    // this.scope = process.env.DD_TRACE_SCOPE
-    // this.profiling = {
-    //   enabled: isTrue(DD_PROFILING_ENABLED),
-    //   sourceMap: !isFalse(DD_PROFILING_SOURCE_MAP),
-    //   exporters: DD_PROFILING_EXPORTERS
-    // }
-    // this.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
-    // this.spanRemoveIntegrationFromService = DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
-    this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
-    this.lookup = options.lookup
-    this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
+    // this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
+    // this.lookup = options.lookup
+    // this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
-      heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
-      debug: isTrue(DD_TELEMETRY_DEBUG),
-      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
-      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
-      dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
+      // heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
+      // debug: isTrue(DD_TELEMETRY_DEBUG),
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED)
+      // metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
+      // dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
@@ -789,6 +779,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'spanAttributeSchema', 'v0')
     this._setValue(defaults, 'spanRemoveIntegrationFromService', false)
+    this._setValue(defaults, 'peerServiceMapping', {})
+    this._setValue(defaults, 'lookup', undefined)
+    this._setBoolean(defaults, 'startupLogs', false)
+    this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
+    this._setBoolean(defaults, 'telemetry.debug', false)
+    this._setBoolean(defaults, 'telemetry.metrics', true)
+    this._setBoolean(defaults, 'telemetry.dependencyCollection', true)
   }
 
   _applyEnvironment (options) {
@@ -835,7 +832,13 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_PROFILING_SOURCE_MAP,
       DD_PROFILING_EXPORTERS,
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
-      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+      DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
+      DD_TRACE_PEER_SERVICE_MAPPING,
+      DD_TRACE_STARTUP_LOGS,
+      DD_TELEMETRY_HEARTBEAT_INTERVAL,
+      DD_TELEMETRY_DEBUG,
+      DD_TELEMETRY_METRICS_ENABLED,
+      DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     } = process.env
 
     const tags = {}
@@ -889,6 +892,16 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       this._setValue(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
     }
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
+    if (DD_TRACE_PEER_SERVICE_MAPPING) {
+      this._setValue(env, 'peerServiceMapping', fromEntries(
+        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ))
+    }
+    this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
+    this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
+    this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
+    this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
   }
 
   _applyOptions (options) {
@@ -933,6 +946,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       this._setValue(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
     }
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
+    this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
+    this._setValue(opts, 'lookup', options.lookup)
+    this._setBoolean(opts, 'startupLogs', options.startupLogs)
   }
 
   _applyRemote (options) {
