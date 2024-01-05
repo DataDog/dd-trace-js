@@ -62,12 +62,18 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     isCiVisibility
   } = config
 
-  let url
+  let url = config.url
 
   const isCiVisibilityAgentlessMode = isCiVisibility && experimental?.exporter === 'datadog'
 
   if (isCiVisibilityAgentlessMode) {
-    url = config.url || new URL(getAgentlessTelemetryEndpoint(config.site))
+    try {
+      url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
+    } catch (err) {
+      log.error(err)
+      // No point to do the request if the URL is invalid
+      return cb(err, { payload, reqType })
+    }
   }
 
   const options = {
@@ -76,12 +82,9 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     headers: getHeaders(config, application, reqType)
   }
 
-  if (url) {
-    options.url = url
-  } else {
-    options.hostname = hostname
-    options.port = port
-  }
+  options.url = url
+  options.hostname = hostname
+  options.port = port
 
   const data = JSON.stringify({
     api_version: 'v2',
