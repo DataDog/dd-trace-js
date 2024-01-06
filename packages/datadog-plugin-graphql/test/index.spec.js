@@ -86,11 +86,11 @@ describe('Plugin', () => {
         slowField: {
           type: graphql.GraphQLString,
           resolve (obj, args) {
-            return new Promise((r) => {
-              setTimeout(() => r('slow field'), SLOW_FIELD_RESOLVER_DELAY_MS)
+            return new Promise((resolve) => {
+              setTimeout(() => resolve('slow field'), SLOW_FIELD_RESOLVER_DELAY_MS)
             })
           }
-        },
+        }
       }
     })
 

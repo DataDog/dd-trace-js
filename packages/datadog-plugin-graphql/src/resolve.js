@@ -83,7 +83,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
   finish (finishTime) {
     this.activeSpan.finish(finishTime)
-    super.finish()
   }
 }
 
