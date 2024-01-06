@@ -11,13 +11,19 @@ const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
 
-const SLOW_FIELD_RESOLVER_DELAY_MS = 100
-
 describe('Plugin', () => {
   let tracer
   let graphql
   let schema
   let sort
+  let clock
+
+  afterEach(() => {
+    if (clock) {
+      clock.restore()
+      clock = undefined
+    }
+  })
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -83,12 +89,27 @@ describe('Plugin', () => {
             return [{}, {}, {}]
           }
         },
-        slowField: {
+        fastAsyncField: {
           type: graphql.GraphQLString,
           resolve (obj, args) {
             return new Promise((resolve) => {
-              setTimeout(() => resolve('slow field'), SLOW_FIELD_RESOLVER_DELAY_MS)
+              setTimeout(() => resolve('fast field'), 100)
             })
+          }
+        },
+        slowAsyncField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            return new Promise((resolve) => {
+              setTimeout(() => resolve('slow field'), 1234)
+            })
+          }
+        },
+        syncField: {
+          type: graphql.GraphQLString,
+          resolve (obj, args) {
+            clock.tick(7)
+            return 'sync field'
           }
         }
       }
@@ -391,17 +412,20 @@ describe('Plugin', () => {
         })
 
         it('should instrument each field resolver duration independently', done => {
+          clock = sinon.useFakeTimers()
           const source = `
             {
               human {
-                name
-                slowField
+                fastAsyncField
+                slowAsyncField
+                syncField
               }
             }
           `
 
-          let foundNameSpan = false
+          let foundFastFieldSpan = false
           let foundSlowFieldSpan = false
+          let foundSyncFieldSpan = false
 
           const processTraces = (traces) => {
             try {
@@ -411,17 +435,18 @@ describe('Plugin', () => {
                     continue
                   }
                   const spanDurationMs = Number(span.duration) / 1000000
-                  if (span.resource === 'slowField:String') {
-                    // 'slowField' resolver span should be at least as long as the delay
-                    expect(spanDurationMs).to.be.gte(SLOW_FIELD_RESOLVER_DELAY_MS)
+                  if (span.resource === 'fastAsyncField:String') {
+                    expect(spanDurationMs).to.equal(100)
+                    foundFastFieldSpan = true
+                  } else if (span.resource === 'slowAsyncField:String') {
+                    expect(spanDurationMs).to.equal(1234)
                     foundSlowFieldSpan = true
-                  } else if (span.resource === 'name:String') {
-                    // 'name' resolves immediately, while should be much less than the 'slowField' resolver delay
-                    expect(spanDurationMs).to.be.lt(SLOW_FIELD_RESOLVER_DELAY_MS / 2)
-                    foundNameSpan = true
+                  } else if (span.resource === 'syncField:String') {
+                    expect(spanDurationMs).to.equal(7)
+                    foundSyncFieldSpan = true
                   }
 
-                  if (foundNameSpan && foundSlowFieldSpan) {
+                  if (foundFastFieldSpan && foundSlowFieldSpan && foundSyncFieldSpan) {
                     agent.unsubscribe(processTraces)
                     done()
                     return
@@ -439,6 +464,9 @@ describe('Plugin', () => {
             agent.unsubscribe(processTraces)
             done(e)
           })
+
+          // Asyncronously tick forward to release the pending graphql resolver timeouts
+          clock.tickAsync(2000)
         })
 
         it('should instrument nested field resolvers', done => {
