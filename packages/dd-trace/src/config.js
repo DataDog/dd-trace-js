@@ -447,10 +447,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       5 // seconds
     )
 
-    const iastOptions = options?.experimental?.iast
+    this.iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
-      iastOptions &&
-      (iastOptions === true || iastOptions.enabled === true),
+      this.iastOptions &&
+      (this.iastOptions === true || this.iastOptions.enabled === true),
       process.env.DD_IAST_ENABLED,
       false
     )
@@ -466,7 +466,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
-      parseInt(iastOptions?.requestSampling),
+      parseInt(this.iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
@@ -474,43 +474,43 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(iastOptions?.maxConcurrentRequests),
+      parseInt(this.iastOptions?.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
     const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(iastOptions?.maxContextOperations),
+      parseInt(this.iastOptions?.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      iastOptions?.deduplicationEnabled,
+      this.iastOptions?.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
-      iastOptions?.redactionEnabled,
+      this.iastOptions?.redactionEnabled,
       !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
-      iastOptions?.redactionNamePattern,
+      this.iastOptions?.redactionNamePattern,
       process.env.DD_IAST_REDACTION_NAME_PATTERN,
       null
     )
 
     const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
-      iastOptions?.redactionValuePattern,
+      this.iastOptions?.redactionValuePattern,
       process.env.DD_IAST_REDACTION_VALUE_PATTERN,
       null
     )
 
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      iastOptions?.telemetryVerbosity,
+      this.iastOptions?.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
       'INFORMATION'
     )
@@ -593,15 +593,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     // this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
-      enabled: DD_APPSEC_ENABLED,
-      rules: DD_APPSEC_RULES,
-      customRulesProvided: !!DD_APPSEC_RULES,
-      rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
-      wafTimeout: DD_APPSEC_WAF_TIMEOUT,
-      obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
-      obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
-      blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      // enabled: DD_APPSEC_ENABLED,
+      // rules: DD_APPSEC_RULES,
+      // customRulesProvided: !!DD_APPSEC_RULES,
+      // rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
+      // wafTimeout: DD_APPSEC_WAF_TIMEOUT,
+      // obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
+      // obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+      // blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
+      // blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
       blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
         enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
@@ -763,7 +763,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'experimental.runtimeId', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
     this._setBoolean(defaults, 'experimental.enableGetRumData', false)
-    //
     this._setValue(defaults, 'sampler.rateLimit', undefined)
     this._setBoolean(defaults, 'reportHostname', false)
     this._setValue(defaults, 'scope', undefined)
@@ -790,6 +789,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
+    this._setValue(defaults, 'remoteConfig.pollInterval', 5)
+    this._setBoolean(defaults, 'iast.enabled', false)
+    this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
+    this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
+    this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
+    this._setValue(defaults, 'iast.maxContextOperations', 2)
+    this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
+    this._setBoolean(defaults, 'iast.redactionEnabled', true)
+    this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
   }
 
   _applyEnvironment (options) {
@@ -852,7 +860,15 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
+      DD_IAST_ENABLED,
+      DD_IAST_REQUEST_SAMPLING,
+      DD_IAST_MAX_CONCURRENT_REQUESTS,
+      DD_IAST_MAX_CONTEXT_OPERATIONS,
+      DD_IAST_DEDUPLICATION_ENABLED,
+      DD_IAST_REDACTION_ENABLED,
+      DD_IAST_TELEMETRY_VERBOSITY
     } = process.env
 
     const tags = {}
@@ -927,6 +943,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
+    this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
+    this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
+    const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
+    if (iastRequestSampling > 0 && iastRequestSampling < 100) {
+      this._setValue(env, 'iast.requestSampling', iastRequestSampling)
+    }
+    this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
+    this._setValue(env, 'iast.maxContextOperations', maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS))
+    this._setBoolean(env, 'iast.deduplicationEnabled',
+      DD_IAST_DEDUPLICATION_ENABLED && isTrue(DD_IAST_DEDUPLICATION_ENABLED))
+    this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
+    this._setValue(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
   }
 
   _applyOptions (options) {
@@ -984,6 +1012,22 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'appsec.obfuscatorValueRegex', this.appsecOpt.obfuscatorValueRegex)
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(this.appsecOpt.blockedTemplateHtml))
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(this.appsecOpt.blockedTemplateJson))
+    if (options.remoteConfig) {
+      this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
+    }
+    this._setBoolean(opts, 'iast.enabled',
+      this.iastOptions && (this.iastOptions === true || this.iastOptions.enabled === true))
+    const iastRequestSampling = maybeInt(this.iastOptions && this.iastOptions.requestSampling)
+    if (iastRequestSampling > 0 && iastRequestSampling < 100) {
+      this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
+    }
+    this._setValue(opts, 'iast.maxConcurrentRequests',
+      maybeInt(this.iastOptions && this.iastOptions.maxConcurrentRequests))
+    this._setValue(opts, 'iast.maxContextOperations',
+      maybeInt(this.iastOptions && this.iastOptions.maxContextOperations))
+    this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
+    this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
+    this._setValue(opts, 'iast.telemetryVerbosity', this.iastOptions && this.iastOptions.telemetryVerbosity)
   }
 
   _applyRemote (options) {

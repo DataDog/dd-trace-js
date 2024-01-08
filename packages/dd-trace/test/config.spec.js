@@ -146,17 +146,16 @@ describe('Config', () => {
       { name: 'port', value: '8126', origin: 'default' },
       { name: 'debug', value: false, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
-      { name: 'dogstatsd.port', value: '8125', origin: 'default' }
+      { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       // { name: 'flushInterval', value: 2000, origin: 'default' }
-      // { name: 'flushMinSpans', value: 1000, origin: 'default' },
-      // { name: 'clientIpEnabled', value: false, origin: 'default' },
-      // { name: 'clientIpHeader', value: null, origin: 'default' },
-      // { name: 'sampleRate', value: undefined, origin: 'default' },
-      // { name: 'runtimeMetrics', value: false, origin: 'default' },
-      // { name: 'plugins', value: true, origin: 'default' },
-      // { name: 'env', value: undefined, origin: 'default' },
-      // { name: 'reportHostname', value: false, origin: 'default' },
-      // { name: 'scope', value: undefined, origin: 'default' },
+      { name: 'flushMinSpans', value: 1000, origin: 'default' },
+      { name: 'clientIpEnabled', value: false, origin: 'default' },
+      { name: 'clientIpHeader', value: null, origin: 'default' },
+      { name: 'sampleRate', value: undefined, origin: 'default' },
+      { name: 'runtimeMetrics', value: false, origin: 'default' },
+      { name: 'plugins', value: true, origin: 'default' },
+      { name: 'reportHostname', value: false, origin: 'default' },
+      { name: 'scope', value: undefined, origin: 'default' }
       // { name: 'logLevel', value: 'debug', origin: 'default' },
       // { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
       // { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
@@ -1325,7 +1324,7 @@ describe('Config', () => {
       }
     })
 
-    expect(log.error).to.be.callCount(3)
+    expect(log.error).to.be.callCount(5)
     expect(log.error.firstCall).to.have.been.calledWithExactly(error)
     expect(log.error.secondCall).to.have.been.calledWithExactly(error)
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
