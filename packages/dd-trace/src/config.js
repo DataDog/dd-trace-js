@@ -464,7 +464,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       true
     )
 
-    const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
       parseInt(this.iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
@@ -792,7 +791,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5)
     this._setBoolean(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
-    this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
     // this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
     // this._setValue(defaults, 'iast.maxContextOperations', 2)
     // this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
@@ -946,7 +944,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
-    if (iastRequestSampling > 0 && iastRequestSampling < 100) {
+    if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(env, 'iast.requestSampling', iastRequestSampling)
     }
     // this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
@@ -1017,8 +1015,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
     this._setBoolean(opts, 'iast.enabled',
       this.iastOptions && (this.iastOptions === true || this.iastOptions.enabled === true))
-    const iastRequestSampling = maybeInt(this.iastOptions && this.iastOptions.requestSampling)
-    if (iastRequestSampling > 0 && iastRequestSampling < 100) {
+    const iastRequestSampling = maybeInt(this.iastOptions?.requestSampling)
+    if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
     }
     // this._setValue(opts, 'iast.maxConcurrentRequests',
