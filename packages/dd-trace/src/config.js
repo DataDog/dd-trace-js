@@ -589,18 +589,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     }
-    // this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
-    // this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
-      // enabled: DD_APPSEC_ENABLED,
-      // rules: DD_APPSEC_RULES,
-      // customRulesProvided: !!DD_APPSEC_RULES,
-      // rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
-      // wafTimeout: DD_APPSEC_WAF_TIMEOUT,
-      // obfuscatorKeyRegex: DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
-      // obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
-      // blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
-      // blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
       blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
         enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
@@ -615,30 +604,22 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED
-      // pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
     this.iast = {
-      // enabled: isTrue(DD_IAST_ENABLED),
-      // requestSampling: DD_IAST_REQUEST_SAMPLING,
-      // maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
-      // maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      // deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      // redactionEnabled: DD_IAST_REDACTION_ENABLED,
       redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
       redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
-      // telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
-    this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
+    // this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
     this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = this.isCiVisibility &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
-    this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
+    // this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
     this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
 
-    this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
+    // this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
@@ -647,8 +628,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
 
-    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    // this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    // this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
@@ -796,6 +777,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
     this._setBoolean(defaults, 'iast.redactionEnabled', true)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setBoolean(defaults, 'isCiVisibility', false)
+    this._setBoolean(defaults, 'gitMetadataEnabled', true)
+    this._setValue(defaults, 'openaiSpanCharLimit', 128)
+    this._setBoolean(defaults, 'traceId128BitGenerationEnabled', true)
+    this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
   }
 
   _applyEnvironment (options) {
@@ -866,7 +852,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_IAST_MAX_CONTEXT_OPERATIONS,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_REDACTION_ENABLED,
-      DD_IAST_TELEMETRY_VERBOSITY
+      DD_IAST_TELEMETRY_VERBOSITY,
+      DD_TRACE_GIT_METADATA_ENABLED,
+      DD_OPENAI_SPAN_CHAR_LIMIT,
+      DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
+      DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED
     } = process.env
 
     const tags = {}
@@ -953,6 +943,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_IAST_DEDUPLICATION_ENABLED && isTrue(DD_IAST_DEDUPLICATION_ENABLED))
     this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setValue(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
+    this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
   }
 
   _applyOptions (options) {
@@ -1026,6 +1020,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
     this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
     this._setValue(opts, 'iast.telemetryVerbosity', this.iastOptions && this.iastOptions.telemetryVerbosity)
+    this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
+    this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
   }
 
   _applyRemote (options) {
