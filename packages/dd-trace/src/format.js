@@ -68,18 +68,19 @@ function setSingleSpanIngestionTags (span, options) {
 }
 
 function extractSpanLinks (trace, span) {
-  let links = '['
+  // let links = '['
+  const links = []
   if (span._links) {
     for (const link of span._links) {
       if (Buffer.byteLength(links) + link.length >= MAX_SPAN_LINKS_LENGTH) {
         link.flushAttributes()
       }
       if (Buffer.byteLength(links) + link.length < MAX_SPAN_LINKS_LENGTH) {
-        links += link.toString() + ','
+        links.push(link.toString())
       }
     }
   }
-  links = (links.length > 1 ? links.slice(0, -1) : links) + ']' // remove trailing comma
+  // links = (links.length > 1 ? links.slice(0, -1) : links) + ']' // remove trailing comma
 
   trace.links = links
 }
