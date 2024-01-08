@@ -98,7 +98,7 @@ class Config {
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, true))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
 
     this.pprofPrefix = pprofPrefix
@@ -148,7 +148,7 @@ class Config {
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, true))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
