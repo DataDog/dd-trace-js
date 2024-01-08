@@ -888,7 +888,7 @@ declare namespace tracer {
     measured?: boolean | { [key: string]: boolean };
   }
 
-  namespace plugins {
+  export namespace plugins {
     /** @hidden */
     interface Integration {
       /**
