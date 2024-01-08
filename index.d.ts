@@ -4,7 +4,128 @@ import * as opentracing from "opentracing";
 import { SpanOptions } from "opentracing/lib/tracer";
 import * as otel from "@opentelemetry/api";
 
-declare namespace Tracer {
+/**
+ * Tracer is the entry-point of the Datadog tracing implementation.
+ */
+interface Tracer extends opentracing.Tracer {
+  default: Tracer;
+  /**
+   * Starts and returns a new Span representing a logical unit of work.
+   * @param {string} name The name of the operation.
+   * @param {SpanOptions} [options] Options for the newly created span.
+   * @returns {Span} A new Span object.
+   */
+  startSpan (name: string, options?: SpanOptions): tracer.Span;
+
+  /**
+   * Injects the given SpanContext instance for cross-process propagation
+   * within `carrier`
+   * @param  {SpanContext} spanContext The SpanContext to inject into the
+   *         carrier object. As a convenience, a Span instance may be passed
+   *         in instead (in which case its .context() is used for the
+   *         inject()).
+   * @param  {string} format The format of the carrier.
+   * @param  {any} carrier The carrier object.
+   */
+  inject (spanContext: tracer.SpanContext | tracer.Span, format: string, carrier: any): void;
+
+  /**
+   * Returns a SpanContext instance extracted from `carrier` in the given
+   * `format`.
+   * @param  {string} format The format of the carrier.
+   * @param  {any} carrier The carrier object.
+   * @return {SpanContext}
+   *         The extracted SpanContext, or null if no such SpanContext could
+   *         be found in `carrier`
+   */
+  extract (format: string, carrier: any): tracer.SpanContext | null;
+
+  /**
+   * Initializes the tracer. This should be called before importing other libraries.
+   */
+  init (options?: tracer.TracerOptions): this;
+
+  /**
+   * Sets the URL for the trace agent. This should only be called _after_
+   * init() is called, only in cases where the URL needs to be set after
+   * initialization.
+   */
+  setUrl (url: string): this;
+
+  /**
+   * Enable and optionally configure a plugin.
+   * @param plugin The name of a built-in plugin.
+   * @param config Configuration options. Can also be `false` to disable the plugin.
+   */
+  use<P extends keyof tracer.Plugins> (plugin: P, config?: tracer.Plugins[P] | boolean): this;
+
+  /**
+   * Returns a reference to the current scope.
+   */
+  scope (): tracer.Scope;
+
+  /**
+   * Instruments a function by automatically creating a span activated on its
+   * scope.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its second parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   *
+   * If the `orphanable` option is set to false, the function will not be traced
+   * unless there is already an active span or `childOf` option. Note that this
+   * option is deprecated and has been removed in version 4.0.
+   */
+  trace<T> (name: string, fn: (span?: tracer.Span, fn?: (error?: Error) => any) => T): T;
+  trace<T> (name: string, options: tracer.TraceOptions & SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, options: tracer.TraceOptions & SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
+
+  /**
+   * Wrap a function to automatically create a span activated on its
+   * scope when it's called.
+   *
+   * The span will automatically be finished when one of these conditions is
+   * met:
+   *
+   * * The function returns a promise, in which case the span will finish when
+   * the promise is resolved or rejected.
+   * * The function takes a callback as its last parameter, in which case the
+   * span will finish when that callback is called.
+   * * The function doesn't accept a callback and doesn't return a promise, in
+   * which case the span will finish at the end of the function execution.
+   */
+  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: tracer.TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & SpanOptions, fn: T): T;
+
+  /**
+   * Create and return a string that can be included in the <head> of a
+   * document to enable RUM tracing to include it. The resulting string
+   * should not be cached.
+   */
+  getRumData (): string;
+
+  /**
+   * Links an authenticated user to the current trace.
+   * @param {User} user Properties of the authenticated user. Accepts custom fields.
+   * @returns {Tracer} The Tracer instance for chaining.
+   */
+  setUser (user: tracer.User): Tracer;
+
+  appsec: tracer.Appsec;
+
+  TracerProvider: tracer.opentelemetry.TracerProvider;
+
+  dogstatsd: tracer.DogStatsD;
+}
+
+declare namespace tracer {
   export { SpanOptions, Tracer };
 
   export interface TraceOptions extends Analyzable {
@@ -336,6 +457,14 @@ declare namespace Tracer {
          * @default true
          */
         redactionEnabled?: boolean
+        /**
+         * Specifies a regex that will redact sensitive source names in vulnerability reports.
+         */
+        redactionNamePattern?: string,
+        /**
+         * Specifies a regex that will redact sensitive source values in vulnerability reports.
+         */
+        redactionValuePattern?: string
       }
     };
 
@@ -442,6 +571,11 @@ declare namespace Tracer {
       blockedTemplateJson?: string,
 
       /**
+       * Specifies a path to a custom blocking template json file for graphql requests
+       */
+      blockedTemplateGraphql?: string,
+
+      /**
        * Controls the automated user event tracking configuration
        */
       eventTracking?: {
@@ -452,6 +586,21 @@ declare namespace Tracer {
          * @default 'safe'
          */
         mode?: 'safe' | 'extended' | 'disabled'
+      }
+      /**
+       * Configuration for Api Security sampling
+       */
+      apiSecurity?: {
+        /** Whether to enable Api Security.
+         * @default false
+         */
+        enabled?: boolean,
+
+        /** Controls the request sampling rate (between 0 and 1) in which Api Security is triggered.
+         * The value will be coerced back if it's outside of the 0-1 range.
+         * @default 0.1
+         */
+        requestSampling?: number
       }
     };
 
@@ -801,6 +950,14 @@ declare namespace Tracer {
        * @default code => code < 500
        */
       validateStatus?: (code: number) => boolean;
+
+      /**
+       * Enable injection of tracing headers into requests signed with AWS IAM headers.
+       * Disable this if you get AWS signature errors (HTTP 403).
+       *
+       * @default false
+       */
+      enablePropagationWithAmazonHeaders?: boolean;
     }
 
     /** @hidden */
@@ -1226,6 +1383,7 @@ declare namespace Tracer {
     interface ioredis extends Instrumentation {
       /**
        * List of commands that should be instrumented.
+       * lowercase for example 'xread'.
        *
        * @default /^.*$/
        */
@@ -1241,7 +1399,8 @@ declare namespace Tracer {
 
       /**
        * List of commands that should not be instrumented. Takes precedence over
-       * allowlist if a command matches an entry in both.
+       * allowlist if a command matches an entry in both. Commands must be in
+       * lowercase for example 'xread'.
        *
        * @default []
        */
@@ -1812,134 +1971,13 @@ declare namespace Tracer {
     export type TimeInput = otel.TimeInput;
     export type TraceState = otel.TraceState;
   }
-
-  /**
-   * Singleton returned by the module. It has to be initialized before it will
-   * start tracing. If not initialized, or initialized and disabled, it will use
-   * a no-op implementation.
-   */
-  export const tracer: Tracer;
-
-  export { tracer as default };
 }
 
 /**
- * Tracer is the entry-point of the Datadog tracing implementation.
+ * Singleton returned by the module. It has to be initialized before it will
+ * start tracing. If not initialized, or initialized and disabled, it will use
+ * a no-op implementation.
  */
-declare interface Tracer extends opentracing.Tracer {
-  /**
-   * Starts and returns a new Span representing a logical unit of work.
-   * @param {string} name The name of the operation.
-   * @param {SpanOptions} [options] Options for the newly created span.
-   * @returns {Span} A new Span object.
-   */
-  startSpan (name: string, options?: SpanOptions): Tracer.Span;
+declare const tracer: Tracer;
 
-  /**
-   * Injects the given SpanContext instance for cross-process propagation
-   * within `carrier`
-   * @param  {SpanContext} spanContext The SpanContext to inject into the
-   *         carrier object. As a convenience, a Span instance may be passed
-   *         in instead (in which case its .context() is used for the
-   *         inject()).
-   * @param  {string} format The format of the carrier.
-   * @param  {any} carrier The carrier object.
-   */
-  inject (spanContext: Tracer.SpanContext | Tracer.Span, format: string, carrier: any): void;
-
-  /**
-   * Returns a SpanContext instance extracted from `carrier` in the given
-   * `format`.
-   * @param  {string} format The format of the carrier.
-   * @param  {any} carrier The carrier object.
-   * @return {SpanContext}
-   *         The extracted SpanContext, or null if no such SpanContext could
-   *         be found in `carrier`
-   */
-  extract (format: string, carrier: any): Tracer.SpanContext | null;
-
-  /**
-   * Initializes the tracer. This should be called before importing other libraries.
-   */
-  init (options?: Tracer.TracerOptions): this;
-
-  /**
-   * Sets the URL for the trace agent. This should only be called _after_
-   * init() is called, only in cases where the URL needs to be set after
-   * initialization.
-   */
-  setUrl (url: string): this;
-
-  /**
-   * Enable and optionally configure a plugin.
-   * @param plugin The name of a built-in plugin.
-   * @param config Configuration options. Can also be `false` to disable the plugin.
-   */
-  use<P extends keyof Tracer.Plugins> (plugin: P, config?: Tracer.Plugins[P] | boolean): this;
-
-  /**
-   * Returns a reference to the current scope.
-   */
-  scope (): Tracer.Scope;
-
-  /**
-   * Instruments a function by automatically creating a span activated on its
-   * scope.
-   *
-   * The span will automatically be finished when one of these conditions is
-   * met:
-   *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its second parameter, in which case the
-   * span will finish when that callback is called.
-   * * The function doesn't accept a callback and doesn't return a promise, in
-   * which case the span will finish at the end of the function execution.
-   *
-   * If the `orphanable` option is set to false, the function will not be traced
-   * unless there is already an active span or `childOf` option. Note that this
-   * option is deprecated and has been removed in version 4.0.
-   */
-  trace<T> (name: string, fn: (span?: Tracer.Span, fn?: (error?: Error) => any) => T): T;
-  trace<T> (name: string, options: Tracer.TraceOptions & SpanOptions, fn: (span?: Tracer.Span, done?: (error?: Error) => string) => T): T;
-
-  /**
-   * Wrap a function to automatically create a span activated on its
-   * scope when it's called.
-   *
-   * The span will automatically be finished when one of these conditions is
-   * met:
-   *
-   * * The function returns a promise, in which case the span will finish when
-   * the promise is resolved or rejected.
-   * * The function takes a callback as its last parameter, in which case the
-   * span will finish when that callback is called.
-   * * The function doesn't accept a callback and doesn't return a promise, in
-   * which case the span will finish at the end of the function execution.
-   */
-  wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: Tracer.TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => Tracer.TraceOptions & SpanOptions, fn: T): T;
-
-  /**
-   * Create and return a string that can be included in the <head> of a
-   * document to enable RUM tracing to include it. The resulting string
-   * should not be cached.
-   */
-  getRumData (): string;
-
-  /**
-   * Links an authenticated user to the current trace.
-   * @param {User} user Properties of the authenticated user. Accepts custom fields.
-   * @returns {Tracer} The Tracer instance for chaining.
-   */
-  setUser (user: Tracer.User): Tracer;
-
-  appsec: Tracer.Appsec;
-
-  TracerProvider: Tracer.opentelemetry.TracerProvider;
-
-  dogstatsd: Tracer.DogStatsD;
-}
-
-export = Tracer;
+export = tracer;
