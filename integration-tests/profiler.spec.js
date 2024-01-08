@@ -191,6 +191,8 @@ describe('profiler', () => {
     const threadIdKey = strings.dedup('thread id')
     const osThreadIdKey = strings.dedup('os thread id')
     const threadNameValue = strings.dedup('Main Event Loop')
+    const nonJSThreadNameValue = strings.dedup('Non-JS threads')
+
     for (const sample of profile.sample) {
       let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
       for (const label of sample.label) {
@@ -205,14 +207,18 @@ describe('profiler', () => {
           default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
         }
       }
-      // Timestamp must be defined and be between process start and end time
-      assert.isDefined(ts, encoded)
-      assert.isNumber(osThreadId, encoded)
-      assert.equal(threadId, strings.dedup('0'), encoded)
-      assert.isTrue(ts <= procEnd, encoded)
-      assert.isTrue(ts >= procStart, encoded)
-      // Thread name must be defined and exactly equal "Main Event Loop"
-      assert.equal(threadName, threadNameValue, encoded)
+      if (threadName !== nonJSThreadNameValue) {
+        // Timestamp must be defined and be between process start and end time
+        assert.isDefined(ts, encoded)
+        assert.isNumber(osThreadId, encoded)
+        assert.equal(threadId, strings.dedup('0'), encoded)
+        assert.isTrue(ts <= procEnd, encoded)
+        assert.isTrue(ts >= procStart, encoded)
+        // Thread name must be defined and exactly equal "Main Event Loop"
+        assert.equal(threadName, threadNameValue, encoded)
+      } else {
+        assert.equal(threadId, strings.dedup('NA'), encoded)
+      }
       // Either all or none of span-related labels are defined
       if (endpoint === undefined) {
         // It is possible to catch a sample executing in tracer's startSpan so
