@@ -15,11 +15,12 @@ const REDACTED = '?'
 
 function extractVarNames (expression) {
   const varNames = new Set()
-  let match = VARNAMES_REGEX.exec(expression)
-  while (match) {
+  let match
+
+  while ((match = VARNAMES_REGEX.exec(expression))) {
     varNames.add(match[1])
-    match = VARNAMES_REGEX.exec(expression)
   }
+
   const varNamesObject = {}
   for (const varName of varNames.keys()) {
     varNamesObject[varName] = `$${varName}`
