@@ -615,19 +615,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     }
 
     this.remoteConfig = {
-      enabled: DD_REMOTE_CONFIGURATION_ENABLED,
-      pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+      enabled: DD_REMOTE_CONFIGURATION_ENABLED
+      // pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
     this.iast = {
-      enabled: isTrue(DD_IAST_ENABLED),
-      requestSampling: DD_IAST_REQUEST_SAMPLING,
-      maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
-      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      // enabled: isTrue(DD_IAST_ENABLED),
+      // requestSampling: DD_IAST_REQUEST_SAMPLING,
+      // maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
+      // maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
+      // deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      // redactionEnabled: DD_IAST_REDACTION_ENABLED,
       redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
-      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN,
-      telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
+      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
+      // telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
     this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
