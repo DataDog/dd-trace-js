@@ -1,15 +1,8 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
-let agentTelemetry = true
 
-const DATA_CENTERS = [
-  'datadoghq.com',
-  'us3.datadoghq.com',
-  'us5.datadoghq.com',
-  'ap1.datadoghq.com',
-  'eu1.datadoghq.com'
-]
+let agentTelemetry = true
 
 function getHeaders (config, application, reqType) {
   const headers = {
@@ -36,7 +29,6 @@ function getAgentlessTelemetryEndpoint (site) {
   if (site === 'datadoghq.eu') {
     return 'https://instrumentation-telemetry-intake.eu1.datadoghq.com'
   }
-  
   return `https://instrumentation-telemetry-intake.${site}`
 }
 
