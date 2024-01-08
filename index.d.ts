@@ -1,7 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
-import { SpanOptions } from "opentracing/lib/tracer";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -12,10 +11,10 @@ interface Tracer extends opentracing.Tracer {
   /**
    * Starts and returns a new Span representing a logical unit of work.
    * @param {string} name The name of the operation.
-   * @param {SpanOptions} [options] Options for the newly created span.
+   * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
    */
-  startSpan (name: string, options?: SpanOptions): tracer.Span;
+  startSpan (name: string, options?: tracer.SpanOptions): tracer.Span;
 
   /**
    * Injects the given SpanContext instance for cross-process propagation
@@ -83,8 +82,8 @@ interface Tracer extends opentracing.Tracer {
    * option is deprecated and has been removed in version 4.0.
    */
   trace<T> (name: string, fn: (span?: tracer.Span, fn?: (error?: Error) => any) => T): T;
-  trace<T> (name: string, options: tracer.TraceOptions & SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => string) => T): T;
-  trace<T> (name: string, options: tracer.TraceOptions & SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
+  trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => string) => T): T;
+  trace<T> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: (span?: tracer.Span, done?: (error?: Error) => void) => T): T;
 
   /**
    * Wrap a function to automatically create a span activated on its
@@ -101,8 +100,8 @@ interface Tracer extends opentracing.Tracer {
    * which case the span will finish at the end of the function execution.
    */
   wrap<T = (...args: any[]) => any> (name: string, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: tracer.TraceOptions & SpanOptions, fn: T): T;
-  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
+  wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
 
   /**
    * Create and return a string that can be included in the <head> of a
@@ -126,7 +125,8 @@ interface Tracer extends opentracing.Tracer {
 }
 
 declare namespace tracer {
-  export { SpanOptions, Tracer };
+  export type SpanOptions = opentracing.SpanOptions;
+  export { Tracer };
 
   export interface TraceOptions extends Analyzable {
     /**
