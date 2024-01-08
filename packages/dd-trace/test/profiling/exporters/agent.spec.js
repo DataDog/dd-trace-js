@@ -46,8 +46,7 @@ async function createProfile (periodType) {
 
   await wait(50)
 
-  const profile = profiler.profile()
-  profiler.stop()
+  const profile = profiler.profile(false)
   return profiler.encode(profile)
 }
 

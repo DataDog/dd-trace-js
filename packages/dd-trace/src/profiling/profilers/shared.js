@@ -29,11 +29,17 @@ function cacheThreadLabels () {
   }
 }
 
+function getNonJSThreadsLabels () {
+  return { [THREAD_NAME_LABEL]: 'Non-JS threads', [THREAD_ID_LABEL]: 'NA', [OS_THREAD_ID_LABEL]: 'NA' }
+}
+
 module.exports = {
   END_TIMESTAMP_LABEL,
   THREAD_NAME_LABEL,
   THREAD_ID_LABEL,
+  OS_THREAD_ID_LABEL,
   threadNamePrefix,
   eventLoopThreadName,
+  getNonJSThreadsLabels,
   getThreadLabels: cacheThreadLabels()
 }

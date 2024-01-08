@@ -3,6 +3,7 @@
 const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
+const { threadNamePrefix } = require('./profilers/shared')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -68,7 +69,7 @@ class Profiler extends EventEmitter {
           mapper,
           nearOOMCallback: this._nearOOMExport.bind(this)
         })
-        this._logger.debug(`Started ${profiler.type} profiler`)
+        this._logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
 
       this._capture(this._timeoutInterval, start)
@@ -97,7 +98,7 @@ class Profiler extends EventEmitter {
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
-    this._collect(snapshotKinds.ON_SHUTDOWN)
+    this._collect(snapshotKinds.ON_SHUTDOWN, false)
     this._stop()
   }
 
@@ -108,13 +109,11 @@ class Profiler extends EventEmitter {
 
     for (const profiler of this._config.profilers) {
       profiler.stop()
-      this._logger.debug(`Stopped ${profiler.type} profiler`)
+      this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
     }
 
     clearTimeout(this._timer)
     this._timer = undefined
-
-    return this
   }
 
   _capture (timeout, start) {
@@ -128,18 +127,21 @@ class Profiler extends EventEmitter {
     }
   }
 
-  async _collect (snapshotKind) {
+  async _collect (snapshotKind, restart = true) {
     if (!this._enabled) return
 
-    const start = this._lastStart
-    const end = new Date()
+    const startDate = this._lastStart
+    const endDate = new Date()
     const profiles = []
     const encodedProfiles = {}
 
     try {
       // collect profiles synchronously so that profilers can be safely stopped asynchronously
       for (const profiler of this._config.profilers) {
-        const profile = profiler.profile(start, end)
+        const profile = profiler.profile(restart, startDate, endDate)
+        if (!restart) {
+          this._logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+        }
         if (!profile) continue
         profiles.push({ profiler, profile })
       }
@@ -155,8 +157,10 @@ class Profiler extends EventEmitter {
         })
       }
 
-      this._capture(this._timeoutInterval, end)
-      await this._submit(encodedProfiles, start, end, snapshotKind)
+      if (restart) {
+        this._capture(this._timeoutInterval, endDate)
+      }
+      await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
       this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)
@@ -196,10 +200,10 @@ class ServerlessProfiler extends Profiler {
     this._flushAfterIntervals = this._config.flushInterval / 1000
   }
 
-  async _collect (snapshotKind) {
-    if (this._profiledIntervals >= this._flushAfterIntervals) {
+  async _collect (snapshotKind, restart = true) {
+    if (this._profiledIntervals >= this._flushAfterIntervals || !restart) {
       this._profiledIntervals = 0
-      await super._collect(snapshotKind)
+      await super._collect(snapshotKind, restart)
     } else {
       this._profiledIntervals += 1
       this._capture(this._timeoutInterval, new Date())
