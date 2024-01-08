@@ -347,8 +347,7 @@ testFrameworks.forEach(({
           })
 
           receiver.gatherPayloads(({ url }) => url === '/v0.4/traces', 5000).then(tracesRequests => {
-            const testSpans = tracesRequests.flatMap(trace => trace.payload)
-              .flatMap(request => request).filter(span => span.type !== 'system')
+            const testSpans = tracesRequests.flatMap(trace => trace.payload).flatMap(request => request)
             assert.equal(testSpans.length, 2)
             const spanTypes = testSpans.map(span => span.type)
             assert.includeMembers(spanTypes, ['test'])
@@ -425,7 +424,7 @@ testFrameworks.forEach(({
       receiver.setInfoResponse({ endpoints: [] })
       receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
         // TODO confirm this change with @juan
-        const testSpans = payload.flatMap(trace => trace).filter(span => span.type !== 'system')
+        const testSpans = payload.flatMap(trace => trace)
         const resourceNames = testSpans.map(span => span.resource)
 
         assert.includeMembers(resourceNames,

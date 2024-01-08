@@ -55,9 +55,7 @@ versions.forEach((version) => {
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
           receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
-            const events = payloads
-              .flatMap(({ payload }) => payload.events)
-              .filter(event => event.content.type !== 'system')
+            const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end')
             const testModuleEvent = events.find(event => event.type === 'test_module_end')

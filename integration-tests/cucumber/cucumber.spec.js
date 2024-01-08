@@ -142,9 +142,7 @@ versions.forEach(version => {
           })
           it('can run and report tests', (done) => {
             receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-              const events = payloads
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.content.type !== 'system')
+              const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSessionEvent = events.find(event => event.type === 'test_session_end')
               const testModuleEvent = events.find(event => event.type === 'test_module_end')
