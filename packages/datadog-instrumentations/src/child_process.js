@@ -34,6 +34,23 @@ names.forEach(name => {
   })
 })
 
+function normalizeArgs (args) {
+  const childProcessInfo = {
+    command: args[0]
+  }
+
+  if (Array.isArray(args[1])) {
+    childProcessInfo.command = childProcessInfo.command + ' ' + args[1].join(' ')
+    if (args[2] != null && typeof args[2] === 'object') {
+      childProcessInfo.options = args[2]
+    }
+  } else if (args[1] != null && typeof args[1] === 'object') {
+    childProcessInfo.options = args[1]
+  }
+
+  return childProcessInfo
+}
+
 function wrapChildProcessSyncMethod (shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
@@ -41,27 +58,15 @@ function wrapChildProcessSyncMethod (shell = false) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = {
-        command: arguments[0],
-        args: arguments[1],
-        options: arguments[2]
-      }
+      const childProcessInfo = normalizeArgs(arguments)
 
-      if (Array.isArray(childProcessInfo.args)) {
-        childProcessInfo.command = childProcessInfo.command + ' ' + childProcessInfo.args.join(' ')
-      } else if (childProcessInfo.args == null) {
-        childProcessInfo.args = []
-      } else {
-        childProcessInfo.options = arguments[1]
-      }
-
-      if (shell ||
-        childProcessInfo?.options?.shell === true ||
-        typeof childProcessInfo?.options?.shell === 'string') {
+      if (shell || childProcessInfo.options?.shell === true || typeof childProcessInfo?.options?.shell === 'string') {
         childProcessInfo.shell = true
+      } else {
+        childProcessInfo.shell = false
       }
 
-      childProcessChannelStart.publish(childProcessInfo)
+      childProcessChannelStart.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
 
       let error
       let result
@@ -106,34 +111,24 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod) {
   }
 }
 
-function wrapChildProcessAsyncMethod () {
+function wrapChildProcessAsyncMethod (shell = false) {
   return function wrapMethod (childProcessMethod) {
     function wrappedChildProcessMethod () {
       if (!childProcessChannelStart.hasSubscribers) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = {
-        command: arguments[0],
-        args: arguments[1],
-        options: arguments[2]
-      }
+      const childProcessInfo = normalizeArgs(arguments)
 
-      if (Array.isArray(childProcessInfo.args)) {
-        childProcessInfo.command = childProcessInfo.command + ' ' + childProcessInfo.args.join(' ')
-      } else if (childProcessInfo.args == null) {
-        childProcessInfo.args = []
-      } else {
-        childProcessInfo.options = arguments[1]
-      }
-
-      if (childProcessInfo?.options?.shell === true || typeof childProcessInfo?.options?.shell === 'string') {
+      if (shell || childProcessInfo.options?.shell === true || typeof childProcessInfo.options?.shell === 'string') {
         childProcessInfo.shell = true
+      } else {
+        childProcessInfo.shell = false
       }
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        childProcessChannelStart.publish(childProcessInfo)
+        childProcessChannelStart.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
 
         const childProcess = childProcessMethod.apply(this, arguments)
         if (childProcess) {
