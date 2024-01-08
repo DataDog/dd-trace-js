@@ -7,6 +7,9 @@ import * as otel from "@opentelemetry/api";
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
 interface Tracer extends opentracing.Tracer {
+  /**
+   * For compatibility with NodeNext + esModuleInterop: false
+   */
   default: Tracer;
   /**
    * Starts and returns a new Span representing a logical unit of work.
