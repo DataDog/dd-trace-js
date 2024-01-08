@@ -620,10 +620,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.iast = {
       // enabled: isTrue(DD_IAST_ENABLED),
       // requestSampling: DD_IAST_REQUEST_SAMPLING,
-      maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
-      maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
-      deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
-      redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      // maxConcurrentRequests: DD_IAST_MAX_CONCURRENT_REQUESTS,
+      // maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
+      // deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
+      // redactionEnabled: DD_IAST_REDACTION_ENABLED,
       redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
       redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
       // telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
@@ -791,10 +791,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5)
     this._setBoolean(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
-    // this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
-    // this._setValue(defaults, 'iast.maxContextOperations', 2)
-    // this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
-    // this._setBoolean(defaults, 'iast.redactionEnabled', true)
+    this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
+    this._setValue(defaults, 'iast.maxContextOperations', 2)
+    this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
+    this._setBoolean(defaults, 'iast.redactionEnabled', true)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
   }
 
@@ -947,11 +947,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(env, 'iast.requestSampling', iastRequestSampling)
     }
-    // this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
-    // this._setValue(env, 'iast.maxContextOperations', maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS))
-    // this._setBoolean(env, 'iast.deduplicationEnabled',
-    //   DD_IAST_DEDUPLICATION_ENABLED && isTrue(DD_IAST_DEDUPLICATION_ENABLED))
-    // this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
+    this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
+    this._setValue(env, 'iast.maxContextOperations', maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS))
+    this._setBoolean(env, 'iast.deduplicationEnabled',
+      DD_IAST_DEDUPLICATION_ENABLED && isTrue(DD_IAST_DEDUPLICATION_ENABLED))
+    this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setValue(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
   }
 
@@ -1019,12 +1019,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
     }
-    // this._setValue(opts, 'iast.maxConcurrentRequests',
-    //   maybeInt(this.iastOptions && this.iastOptions.maxConcurrentRequests))
-    // this._setValue(opts, 'iast.maxContextOperations',
-    //   maybeInt(this.iastOptions && this.iastOptions.maxContextOperations))
-    // this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
-    // this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
+    this._setValue(opts, 'iast.maxConcurrentRequests',
+      maybeInt(this.iastOptions && this.iastOptions.maxConcurrentRequests))
+    this._setValue(opts, 'iast.maxContextOperations',
+      maybeInt(this.iastOptions && this.iastOptions.maxContextOperations))
+    this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
+    this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
     this._setValue(opts, 'iast.telemetryVerbosity', this.iastOptions && this.iastOptions.telemetryVerbosity)
   }
 
