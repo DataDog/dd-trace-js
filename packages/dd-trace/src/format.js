@@ -68,20 +68,19 @@ function setSingleSpanIngestionTags (span, options) {
 }
 
 function extractSpanLinks (trace, span) {
-  // let links = '['
   const links = []
   if (span._links) {
     for (const link of span._links) {
-      if (Buffer.byteLength(links) + link.length >= MAX_SPAN_LINKS_LENGTH) {
+      let linksString = links.join() // Convert array elements to a string
+      if (Buffer.byteLength(linksString) + link.length >= MAX_SPAN_LINKS_LENGTH) {
         link.flushAttributes()
       }
-      if (Buffer.byteLength(links) + link.length < MAX_SPAN_LINKS_LENGTH) {
+      linksString = links.join() // Update the string after possible flushing
+      if (Buffer.byteLength(linksString) + link.length < MAX_SPAN_LINKS_LENGTH) {
         links.push(link.toString())
       }
     }
   }
-  // links = (links.length > 1 ? links.slice(0, -1) : links) + ']' // remove trailing comma
-
   trace.links = links
 }
 

@@ -119,7 +119,7 @@ class AgentEncoder {
     }
   }
 
-  _encodeArray (bytes, value) {
+  _encodeArray (bytes, value = []) {
     this._encodeArrayPrefix(bytes, value.length)
 
     for (const item of value) {

@@ -196,7 +196,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.links).to.equal('[link1,link2]')
+      expect(trace.links).to.deep.equal([ 'link1', 'link2' ])
     })
 
     it('should drop span link attributes if they exceed the maximum length', () => {
@@ -209,7 +209,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.links).to.equal('[link]')
+      expect(trace.links).to.deep.equal(['link'])
     })
 
     it('should drop entire span link if it exceeds the maximum length', () => {
@@ -227,7 +227,7 @@ describe('format', () => {
 
       trace = format(span)
 
-      expect(trace.links).to.equal('[link]')
+      expect(trace.links).to.deep.equal(['link'])
     })
 
     it('should extract trace chunk tags', () => {
