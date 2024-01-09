@@ -1276,7 +1276,6 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledTwice).to.be.true
     expect(Config.prototype._merge.returnValues[1]).to.deep.equal([])
-    console.log(Config.prototype._merge.returnValues[1])
   })
 
   it('should ignore invalid iast.requestSampling', () => {
