@@ -6,7 +6,7 @@ const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync } = require('fs')
+const { writeFileSync, readdirSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
@@ -59,7 +59,7 @@ describe('Plugin', function () {
 
             // additionally, next.js sets timeouts in 10.x when displaying extra logs
             // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/server/next.ts#L132-L133
-            setTimeout(done, 100) // relatively high timeout chosen to be safe
+            setTimeout(done, 700) // relatively high timeout chosen to be safe
           })
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
@@ -101,7 +101,7 @@ describe('Plugin', function () {
           cwd,
           env: {
             ...process.env,
-            version
+            VERSION: realVersion
           },
           stdio: ['pipe', 'ignore', 'pipe']
         })
@@ -344,10 +344,29 @@ describe('Plugin', function () {
               .get(`http://127.0.0.1:${port}/hello/world`)
               .catch(done)
           })
+
+          it('should attach errors by default', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('error', 1)
+
+                expect(spans[1].meta).to.have.property('http.status_code', '500')
+                expect(spans[1].meta).to.have.property('error.message', 'fail')
+                expect(spans[1].meta).to.have.property('error.type', 'Error')
+                expect(spans[1].meta['error.stack']).to.exist
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://127.0.0.1:${port}/error/get_server_side_props`)
+          })
         })
 
         describe('for static files', () => {
-          it('should do automatic instrumentation', done => {
+          it('should do automatic instrumentation for assets', done => {
             agent
               .use(traces => {
                 const spans = traces[0]
@@ -355,7 +374,7 @@ describe('Plugin', function () {
                 expect(spans[1]).to.have.property('name', 'next.request')
                 expect(spans[1]).to.have.property('service', 'test')
                 expect(spans[1]).to.have.property('type', 'web')
-                expect(spans[1]).to.have.property('resource', 'GET /test.txt')
+                expect(spans[1]).to.have.property('resource', 'GET /public/*')
                 expect(spans[1].meta).to.have.property('span.kind', 'server')
                 expect(spans[1].meta).to.have.property('http.method', 'GET')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
@@ -369,13 +388,35 @@ describe('Plugin', function () {
               .catch(done)
           })
 
+          it('should do automatic instrumentation for static chunks', done => {
+            // get first static chunk file programatically
+            const file = readdirSync(`${__dirname}/.next/static/chunks`)[0]
+
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('resource', 'GET /_next/static/*')
+                expect(spans[1].meta).to.have.property('http.method', 'GET')
+                expect(spans[1].meta).to.have.property('http.status_code', '200')
+                expect(spans[1].meta).to.have.property('component', 'next')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/_next/static/chunks/${file}`)
+              .catch(done)
+          })
+
           it('should pass resource path to parent span', done => {
             agent
               .use(traces => {
                 const spans = traces[0]
 
                 expect(spans[0]).to.have.property('name', 'web.request')
-                expect(spans[0]).to.have.property('resource', 'GET /test.txt')
+                expect(spans[0]).to.have.property('resource', 'GET /public/*')
               })
               .then(done)
               .catch(done)
@@ -467,6 +508,30 @@ describe('Plugin', function () {
             .get(`http://127.0.0.1:${port}/api/hello/world`)
             .catch(done)
         })
+
+        if (satisfies(pkg.version, '>=13.3.0')) {
+          it('should attach the error to the span from a NextRequest', done => {
+            agent
+              .use(traces => {
+                const spans = traces[0]
+
+                expect(spans[1]).to.have.property('name', 'next.request')
+                expect(spans[1]).to.have.property('error', 1)
+
+                expect(spans[1].meta).to.have.property('error.message', 'error in app dir api route')
+                expect(spans[1].meta).to.have.property('error.type', 'Error')
+                expect(spans[1].meta['error.stack']).to.exist
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/error`)
+              .catch(err => {
+                if (err.response.status !== 500) done(err)
+              })
+          })
+        }
       })
 
       // Issue with 13.4.13 - 13.4.18 causes process.env not to work properly in standalone mode
@@ -481,7 +546,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', 'GET /test.txt']
+            ['static files', '/test.txt', 'GET /public/*']
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {

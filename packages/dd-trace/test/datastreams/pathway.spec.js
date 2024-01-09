@@ -1,5 +1,7 @@
 'use strict'
 
+require('../setup/tap')
+
 const { expect } = require('chai')
 const { computePathwayHash, encodePathwayContext, decodePathwayContext } = require('../../src/datastreams/pathway')
 

@@ -37,6 +37,11 @@ const redisConfig = {
 
 const storage = {
   client: {
+    aerospike: {
+      opName: () => 'aerospike.command',
+      serviceName: ({ tracerService, pluginConfig }) =>
+        pluginConfig.service || `${tracerService}-aerospike`
+    },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
       serviceName: ({ tracerService, pluginConfig, system }) =>

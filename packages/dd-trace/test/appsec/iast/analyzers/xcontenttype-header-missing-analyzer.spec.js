@@ -45,6 +45,15 @@ describe('xcontenttype header missing analyzer', () => {
         expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
       })
 
+      testThatRequestHasVulnerability((req, res) => {
+        res.setHeader('content-type', ['text/html'])
+        res.setHeader('X-Content-Type-Options', 'whatever')
+        res.end('<html><body><h1>Test</h1></body></html>')
+      }, XCONTENTTYPE_HEADER_MISSING, 1, function (vulnerabilities) {
+        expect(vulnerabilities[0].evidence.value).to.be.equal('whatever')
+        expect(vulnerabilities[0].hash).to.be.equals(analyzer._createHash('XCONTENTTYPE_HEADER_MISSING:mocha'))
+      })
+
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('content-type', 'application/json')
         res.end('{"key": "test}')
@@ -52,6 +61,12 @@ describe('xcontenttype header missing analyzer', () => {
 
       testThatRequestHasNoVulnerability((req, res) => {
         res.setHeader('content-type', 'text/html')
+        res.setHeader('X-Content-Type-Options', 'nosniff')
+        res.end('{"key": "test}')
+      }, XCONTENTTYPE_HEADER_MISSING)
+
+      testThatRequestHasNoVulnerability((req, res) => {
+        res.setHeader('content-type', ['text/html'])
         res.setHeader('X-Content-Type-Options', 'nosniff')
         res.end('{"key": "test}')
       }, XCONTENTTYPE_HEADER_MISSING)

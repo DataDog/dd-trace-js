@@ -3,7 +3,7 @@ const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
-const dc = require('../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
 const {
   enableTaintTracking,

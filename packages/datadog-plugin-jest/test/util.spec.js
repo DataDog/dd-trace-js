@@ -118,4 +118,53 @@ describe('getJestSuitesToRun', () => {
       'fixtures/test-to-skip.js'
     ])
   })
+
+  it('returns hasUnskippableSuites if there is a unskippable suite', () => {
+    const skippableSuites = []
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: { config: { testEnvironmentOptions: {} } }
+      }
+    ]
+    const rootDir = __dirname
+
+    const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(hasUnskippableSuites).to.equal(true)
+    expect(hasForcedToRunSuites).to.equal(false)
+  })
+
+  it('returns hasForcedToRunSuites if there is a forced to run suite', () => {
+    const skippableSuites = ['fixtures/test-unskippable.js']
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: { config: { testEnvironmentOptions: {} } }
+      }
+    ]
+    const rootDir = __dirname
+
+    const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(hasUnskippableSuites).to.equal(true)
+    expect(hasForcedToRunSuites).to.equal(true)
+  })
+
+  it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
+    const skippableSuites = ['fixtures/test-unskippable.js']
+    const testContext = { config: { testEnvironmentOptions: {} } }
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js') },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: testContext
+      }
+    ]
+    const rootDir = __dirname
+
+    getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(testContext.config.testEnvironmentOptions['_ddUnskippable']).to.equal(true)
+    expect(testContext.config.testEnvironmentOptions['_ddForcedToRun']).to.equal(true)
+  })
 })

@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 
 const iastLog = require('../../../../src/appsec/iast/iast-log')
-const dc = require('../../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'

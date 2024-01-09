@@ -10,7 +10,7 @@ const semver = require('semver')
 const rimraf = require('rimraf')
 const util = require('util')
 const plugins = require('../../dd-trace/src/plugins')
-const { channel } = require('../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 
 const hasWritev = semver.satisfies(process.versions.node, '>=12.9.0')
 const hasOSymlink = realFS.constants.O_SYMLINK

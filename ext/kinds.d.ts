@@ -3,6 +3,7 @@ declare const kinds: {
   CLIENT: 'client'
   PRODUCER: 'producer'
   CONSUMER: 'consumer'
+  INTERNAL: 'internal'
 }
 
 export = kinds

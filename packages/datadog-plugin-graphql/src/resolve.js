@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const dc = require('dc-polyfill')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 
@@ -13,8 +14,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     if (!shouldInstrument(this.config, path)) return
     const computedPathString = path.join('.')
-
-    addResolver(context, info, args)
 
     if (this.config.collapse) {
       if (!context[collapsedPathSym]) {
@@ -55,6 +54,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
           span.setTag(`graphql.variables.${name}`, variables[name])
         })
     }
+
+    if (this.resolverStartCh.hasSubscribers) {
+      this.resolverStartCh.publish({ context, resolverInfo: getResolverInfo(info, args) })
+    }
   }
 
   constructor (...args) {
@@ -69,6 +72,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
       field.finishTime = span._getTime ? span._getTime() : 0
       field.error = field.error || err
     })
+
+    this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
   }
 
   configure (config) {
@@ -109,28 +114,31 @@ function withCollapse (responsePathAsArray) {
   }
 }
 
-function addResolver (context, info, args) {
-  if (info.rootValue && !info.rootValue[info.fieldName]) {
-    return
+function getResolverInfo (info, args) {
+  let resolverInfo = null
+  const resolverVars = {}
+
+  if (args && Object.keys(args).length) {
+    Object.assign(resolverVars, args)
   }
 
-  if (!context.resolvers) {
-    context.resolvers = {}
-  }
-
-  const resolvers = context.resolvers
-
-  if (!resolvers[info.fieldName]) {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName] = [args]
-    } else {
-      resolvers[info.fieldName] = []
+  const directives = info.fieldNodes[0].directives
+  for (const directive of directives) {
+    const argList = {}
+    for (const argument of directive['arguments']) {
+      argList[argument.name.value] = argument.value.value
     }
-  } else {
-    if (args && Object.keys(args).length) {
-      resolvers[info.fieldName].push(args)
+
+    if (Object.keys(argList).length) {
+      resolverVars[directive.name.value] = argList
     }
   }
+
+  if (Object.keys(resolverVars).length) {
+    resolverInfo = { [info.fieldName]: resolverVars }
+  }
+
+  return resolverInfo
 }
 
 module.exports = GraphQLResolvePlugin

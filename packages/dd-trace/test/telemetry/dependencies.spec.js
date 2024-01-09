@@ -4,7 +4,7 @@ require('../setup/tap')
 
 const proxyquire = require('proxyquire')
 const path = require('path')
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate
 describe('dependencies', () => {
@@ -13,8 +13,9 @@ describe('dependencies', () => {
       const subscribe = sinon.stub()
       const dc = { channel () { return { subscribe } } }
       const dependencies = proxyquire('../../src/telemetry/dependencies', {
-        '../../../diagnostics_channel': dc
+        'dc-polyfill': dc
       })
+
       dependencies.start()
       expect(subscribe).to.have.been.calledOnce
     })
@@ -29,17 +30,22 @@ describe('dependencies', () => {
     let dependencies
     let sendData
     let requirePackageJson
+    let getRetryData
+    let updateRetryData
 
     beforeEach(() => {
       requirePackageJson = sinon.stub()
       sendData = sinon.stub()
+      getRetryData = sinon.stub()
+      updateRetryData = sinon.stub()
       dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './index': { getRetryData, updateRetryData },
         './send-data': { sendData },
         '../require-package-json': requirePackageJson
       })
       global.setImmediate = function (callback) { callback() }
 
-      dependencies.start(config, application, host)
+      dependencies.start(config, application, host, getRetryData, updateRetryData)
 
       // force first publish to load cached requires
       moduleLoadStartChannel.publish({})
@@ -48,6 +54,8 @@ describe('dependencies', () => {
     afterEach(() => {
       dependencies.stop()
       sendData.reset()
+      getRetryData.reset()
+      updateRetryData.reset()
       global.setImmediate = originalSetImmediate
     })
 
@@ -265,7 +273,7 @@ describe('dependencies', () => {
       expect(sendData).to.have.been.calledOnce
     })
 
-    it('should call sendData twice with more than 1000 dependencies', (done) => {
+    it('should call sendData twice with more than 2000 dependencies', (done) => {
       const requestPrefix = 'custom-module'
       requirePackageJson.returns({ version: '1.0.0' })
       const timeouts = []
@@ -280,7 +288,7 @@ describe('dependencies', () => {
         timeouts.push(timeout)
         return timeout
       }
-      for (let i = 0; i < 1200; i++) {
+      for (let i = 0; i < 2200; i++) {
         const request = requestPrefix + i
         const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
         moduleLoadStartChannel.publish({ request, filename })
@@ -292,6 +300,152 @@ describe('dependencies', () => {
           done()
         }
       })
+    })
+  })
+
+  describe('with configuration', () => {
+    const config = {
+      telemetry: {
+        dependencyCollection: false
+      }
+    }
+    const application = 'test'
+    const host = 'host'
+    const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
+
+    let dependencies
+    let sendData
+    let requirePackageJson
+    let getRetryData
+    let updateRetryData
+
+    beforeEach(() => {
+      requirePackageJson = sinon.stub()
+      sendData = sinon.stub()
+      getRetryData = sinon.stub()
+      updateRetryData = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './index': { getRetryData, updateRetryData },
+        './send-data': { sendData },
+        '../require-package-json': requirePackageJson
+      })
+      global.setImmediate = function (callback) { callback() }
+
+      dependencies.start(config, application, host, getRetryData, updateRetryData)
+
+      // force first publish to load cached requires
+      moduleLoadStartChannel.publish({}) // called once here
+      const request = 'custom-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename }) // called again here
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      sendData.reset()
+      getRetryData.reset()
+      updateRetryData.reset()
+      global.setImmediate = originalSetImmediate
+    })
+
+    it('should not call sendData for modules not captured in the initial load', done => {
+      setTimeout(() => {
+        // using sendData.callCount wasn't working properly
+        const timesCalledBeforeLazyLoad = sendData.getCalls().length
+
+        const request = 'custom-module2'
+        const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+        moduleLoadStartChannel.publish({ request, filename }) // should not be called here
+
+        expect(sendData.getCalls().length).to.equal(timesCalledBeforeLazyLoad)
+        done()
+      }, 5) // simulate lazy-loaded dependency, small ms delay to be safe
+    })
+  })
+
+  describe('on failed request', () => {
+    const config = {}
+    const application = 'test'
+    const host = 'host'
+    const basepathWithoutNodeModules = process.cwd().replace(/node_modules/g, 'nop')
+    let dependencies
+    let sendData
+    let requirePackageJson
+    let capturedRequestType
+    let getRetryData
+    let updateRetryData
+
+    beforeEach(() => {
+      requirePackageJson = sinon.stub()
+      sendData = (config, application, host, reqType, payload, cb = () => {}) => {
+        capturedRequestType = reqType
+        // Simulate an HTTP error by calling the callback with an error
+        cb(new Error('HTTP request error'), {
+          payload: payload,
+          reqType: 'app-integrations-change'
+        })
+      }
+      getRetryData = sinon.stub()
+      updateRetryData = sinon.stub()
+      dependencies = proxyquire('../../src/telemetry/dependencies', {
+        './send-data': { sendData },
+        '../require-package-json': requirePackageJson
+      })
+      global.setImmediate = function (callback) { callback() }
+
+      dependencies.start(config, application, host, getRetryData, updateRetryData)
+
+      // force first publish to load cached requires
+      moduleLoadStartChannel.publish({})
+    })
+
+    afterEach(() => {
+      dependencies.stop()
+      getRetryData.reset()
+      updateRetryData.reset()
+      global.setImmediate = originalSetImmediate
+    })
+
+    it('should update retry data', () => {
+      const request = 'custom-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      const filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename })
+      // expect(getRetryData).to.have.been.calledOnce
+      expect(capturedRequestType).to.equals('app-dependencies-loaded')
+      // expect(sendData).to.have.been.calledOnce
+      // expect(updateRetryData).to.have.been.calledOnce
+    })
+
+    it('should create batch request', () => {
+      let request = 'custom-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      let filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename })
+      expect(getRetryData).to.have.been.calledOnce
+      expect(capturedRequestType).to.equals('app-dependencies-loaded')
+      expect(updateRetryData).to.have.been.calledOnce
+
+      getRetryData.returns({
+        request_type: 'app-integrations-change',
+        payload: {
+          'integrations': [{
+            name: 'zoo1',
+            enabled: true,
+            auto_enabled: true
+          }]
+        }
+
+      })
+
+      request = 'even-more-custom-module'
+      requirePackageJson.returns({ version: '1.0.0' })
+      filename = path.join(basepathWithoutNodeModules, 'node_modules', request, 'index.js')
+      moduleLoadStartChannel.publish({ request, filename })
+      expect(getRetryData).to.have.been.calledTwice
+      expect(capturedRequestType).to.equals('message-batch')
+      expect(updateRetryData).to.have.been.calledTwice
     })
   })
 })

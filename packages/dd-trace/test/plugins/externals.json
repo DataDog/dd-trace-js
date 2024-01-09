@@ -44,7 +44,7 @@
   "express-mongo-sanitize": [
     {
       "name": "mongodb",
-      "versions": [">=3.3"]
+      "versions": [">=3.3 <5", "5", ">=6"]
     },
     {
       "name": "mongodb-core",
@@ -97,6 +97,42 @@
     {
       "name": "graphql",
       "versions": ["^15.2.0"]
+    }
+  ],
+  "apollo-server-core": [
+    {
+      "name": "fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "apollo-server-fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "apollo-server-express",
+      "versions": [">=3"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^15.2.0"]
+    }
+  ],
+  "apollo-server": [
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "@apollo/server",
+      "versions": [">=4"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^16.6.0"]
     }
   ],
   "grpc": [

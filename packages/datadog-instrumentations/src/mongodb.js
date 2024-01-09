@@ -29,7 +29,7 @@ const collectionMethodsWithTwoFilters = [
 
 const startCh = channel('datadog:mongodb:collection:filter:start')
 
-addHook({ name: 'mongodb', versions: ['>=3.3'] }, mongodb => {
+addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
   [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
     if (!(methodName in mongodb.Collection.prototype)) return
 

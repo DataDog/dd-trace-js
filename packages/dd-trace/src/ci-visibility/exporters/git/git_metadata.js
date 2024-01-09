@@ -10,10 +10,24 @@ const {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload,
+  getCommitsRevList,
   isShallowRepository,
   unshallowRepository
 } = require('../../../plugins/util/git')
+
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
+  getErrorTypeFromStatusCode
+} = require('../../../ci-visibility/telemetry')
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
@@ -46,11 +60,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
-  const latestCommits = getLatestCommits()
-
-  log.debug(`There were ${latestCommits.length} commits since last month.`)
-
+function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -78,18 +88,34 @@ function getCommitsToExclude ({ url, isEvpProxy, repositoryUrl }, callback) {
     }))
   })
 
-  request(localCommitData, options, (err, response) => {
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
+  const startTime = Date.now()
+  request(localCommitData, options, (err, response, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType })
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
-    let commitsToExclude
+    let alreadySeenCommits
     try {
-      commitsToExclude = validateCommits(JSON.parse(response).data)
+      alreadySeenCommits = validateCommits(JSON.parse(response).data)
     } catch (e) {
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    callback(null, commitsToExclude, latestCommits)
+    log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
+    const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
+    log.debug(`There are ${commitsToInclude.length} commits to include.`)
+
+    if (!commitsToInclude.length) {
+      return callback(null, [])
+    }
+
+    const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
+
+    callback(null, commitsToUpload)
   })
 }
 
@@ -141,13 +167,72 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
     delete options.headers['dd-api-key']
   }
 
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES)
+
+  const uploadSize = form.size()
+
+  const startTime = Date.now()
   request(form, options, (err, _, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { errorType })
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
-      return callback(error)
+      return callback(error, uploadSize)
     }
-    callback(null)
+    callback(null, uploadSize)
   })
+}
+
+function generateAndUploadPackFiles ({
+  url,
+  isEvpProxy,
+  commitsToUpload,
+  repositoryUrl,
+  headCommit
+}, callback) {
+  log.debug(`There are ${commitsToUpload.length} commits to upload`)
+
+  const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
+
+  log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
+
+  if (!packFilesToUpload.length) {
+    return callback(new Error('Failed to generate packfiles'))
+  }
+
+  distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM, {}, packFilesToUpload.length)
+  let packFileIndex = 0
+  let totalUploadedBytes = 0
+  // This uploads packfiles sequentially
+  const uploadPackFileCallback = (err, byteLength) => {
+    totalUploadedBytes += byteLength
+    if (err || packFileIndex === packFilesToUpload.length) {
+      distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES, {}, totalUploadedBytes)
+      return callback(err)
+    }
+    return uploadPackFile(
+      {
+        packFileToUpload: packFilesToUpload[packFileIndex++],
+        url,
+        isEvpProxy,
+        repositoryUrl,
+        headCommit
+      },
+      uploadPackFileCallback
+    )
+  }
+
+  uploadPackFile(
+    {
+      packFileToUpload: packFilesToUpload[packFileIndex++],
+      url,
+      isEvpProxy,
+      repositoryUrl,
+      headCommit
+    },
+    uploadPackFileCallback
+  )
 }
 
 /**
@@ -165,65 +250,31 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  if (isShallowRepository()) {
-    log.debug('It is shallow clone, unshallowing...')
-    unshallowRepository()
-  }
+  const latestCommits = getLatestCommits()
+  log.debug(`There were ${latestCommits.length} commits since last month.`)
+  const [headCommit] = latestCommits
 
-  getCommitsToExclude({ url, repositoryUrl, isEvpProxy }, (err, commitsToExclude, latestCommits) => {
+  const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
     if (err) {
       return callback(err)
     }
-    log.debug(`There are ${commitsToExclude.length} commits to exclude.`)
-    const [headCommit] = latestCommits
-    const commitsToInclude = latestCommits.filter((commit) => !commitsToExclude.includes(commit))
-    log.debug(`There are ${commitsToInclude.length} commits to include.`)
-
-    const commitsToUpload = getCommitsToUpload(commitsToExclude, commitsToInclude)
 
     if (!commitsToUpload.length) {
       log.debug('No commits to upload')
       return callback(null)
     }
-    log.debug(`There are ${commitsToUpload.length} commits to upload`)
 
-    const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
-
-    log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
-
-    if (!packFilesToUpload.length) {
-      return callback(new Error('Failed to generate packfiles'))
+    // If it has already unshallowed or the clone is not shallow, we move on
+    if (hasCheckedShallow || !isShallowRepository()) {
+      return generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
     }
+    // Otherwise we unshallow and get commits to upload again
+    log.debug('It is shallow clone, unshallowing...')
+    unshallowRepository()
+    getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(true))
+  }
 
-    let packFileIndex = 0
-    // This uploads packfiles sequentially
-    const uploadPackFileCallback = (err) => {
-      if (err || packFileIndex === packFilesToUpload.length) {
-        return callback(err)
-      }
-      return uploadPackFile(
-        {
-          packFileToUpload: packFilesToUpload[packFileIndex++],
-          url,
-          isEvpProxy,
-          repositoryUrl,
-          headCommit
-        },
-        uploadPackFileCallback
-      )
-    }
-
-    uploadPackFile(
-      {
-        packFileToUpload: packFilesToUpload[packFileIndex++],
-        url,
-        isEvpProxy,
-        repositoryUrl,
-        headCommit
-      },
-      uploadPackFileCallback
-    )
-  })
+  getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(false))
 }
 
 module.exports = {

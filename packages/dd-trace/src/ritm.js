@@ -3,7 +3,7 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 const origRequire = Module.prototype.require
 

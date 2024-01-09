@@ -308,11 +308,8 @@ describe('IAST TaintTracking Operations', () => {
         [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id'
       }
       iastTelemetry.configure({
-        telemetry: { enabled: true, metrics: true },
-        iast: {
-          telemetryVerbosity: 'INFORMATION'
-        }
-      })
+        telemetry: { enabled: true, metrics: true }
+      }, 'INFORMATION')
 
       const requestTaintedAdd = sinon.stub(REQUEST_TAINTED, 'add')
 

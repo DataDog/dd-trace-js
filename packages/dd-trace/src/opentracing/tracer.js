@@ -22,10 +22,10 @@ class DatadogTracer {
   constructor (config) {
     const Exporter = getExporter(config.experimental.exporter)
 
+    this._config = config
     this._service = config.service
     this._version = config.version
     this._env = config.env
-    this._tags = config.tags
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = new PrioritySampler(config.env, config.sampler)
@@ -64,7 +64,7 @@ class DatadogTracer {
       integrationName: options.integrationName
     }, this._debug)
 
-    span.addTags(this._tags)
+    span.addTags(this._config.tags)
     span.addTags(options.tags)
 
     return span

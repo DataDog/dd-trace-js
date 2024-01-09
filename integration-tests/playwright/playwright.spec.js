@@ -86,6 +86,7 @@ versions.forEach((version) => {
               'landing-page-test.js.should work with passing tests',
               'landing-page-test.js.should work with skipped tests',
               'landing-page-test.js.should work with fixme',
+              'landing-page-test.js.should work with annotated tests',
               'todo-list-page-test.js.should work with failing tests',
               'todo-list-page-test.js.should work with fixme root'
             ])
@@ -104,6 +105,13 @@ versions.forEach((version) => {
               assert.equal(stepEvent.content.name, 'playwright.step')
               assert.property(stepEvent.content.meta, 'playwright.step')
             })
+            const annotatedTest = testEvents.find(test =>
+              test.content.resource === 'landing-page-test.js.should work with annotated tests'
+            )
+
+            assert.propertyVal(annotatedTest.content.meta, 'test.memory.usage', 'low')
+            assert.propertyVal(annotatedTest.content.metrics, 'test.memory.allocations', 16)
+            assert.notProperty(annotatedTest.content.meta, 'test.invalid')
           }).then(() => done()).catch(done)
 
           childProcess = exec(

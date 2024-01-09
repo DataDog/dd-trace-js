@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHook, executionAsyncResource } = require('async_hooks')
-const { channel } = require('../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 
 const beforeCh = channel('dd-trace:storage:before')
 const afterCh = channel('dd-trace:storage:after')

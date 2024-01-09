@@ -15,7 +15,6 @@ describe('Telemetry', () => {
     let defaultConfig
     let telemetryMetrics
     let iastTelemetry
-    let telemetryLogs
     let initRequestNamespace
     let finalizeRequestNamespace
 
@@ -25,12 +24,6 @@ describe('Telemetry', () => {
           enabled: true,
           metrics: true
         }
-      }
-
-      telemetryLogs = {
-        registerProvider: () => telemetryLogs,
-        start: sinon.spy(),
-        stop: sinon.spy()
       }
 
       telemetryMetrics = {
@@ -44,7 +37,6 @@ describe('Telemetry', () => {
       finalizeRequestNamespace = sinon.spy()
 
       iastTelemetry = proxyquire('../../../../src/appsec/iast/telemetry', {
-        './log': telemetryLogs,
         '../../../telemetry/metrics': telemetryMetrics,
         './namespaces': {
           initRequestNamespace,
@@ -63,12 +55,10 @@ describe('Telemetry', () => {
 
         expect(iastTelemetry.enabled).to.be.true
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
-        expect(telemetryLogs.start).to.be.calledOnce
       })
 
-      it('should NOT enable telemetry if verbosity is OFF', () => {
+      it('should not enable telemetry if verbosity is OFF', () => {
         const iastTelemetry = proxyquire('../../../../src/appsec/iast/telemetry', {
-          './log': telemetryLogs,
           '../../../telemetry/metrics': telemetryMetrics
         })
 
@@ -80,15 +70,10 @@ describe('Telemetry', () => {
         expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
         expect(telemetryMetrics.manager.set).to.not.be.called
-        expect(telemetryLogs.start).to.be.calledOnce
       })
 
-      it('should enable telemetry if metrics not enabled but DD_TELEMETRY_METRICS_ENABLED is undefined', () => {
-        const origTelemetryMetricsEnabled = process.env.DD_TELEMETRY_METRICS_ENABLED
-
-        delete process.env.DD_TELEMETRY_METRICS_ENABLED
-
-        const telemetryConfig = { enabled: true, metrics: false }
+      it('should enable telemetry if telemetry.metrics is true', () => {
+        const telemetryConfig = { enabled: true, metrics: true }
         iastTelemetry.configure({
           telemetry: telemetryConfig
         })
@@ -96,16 +81,9 @@ describe('Telemetry', () => {
         expect(iastTelemetry.enabled).to.be.true
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
         expect(telemetryMetrics.manager.set).to.be.calledOnce
-        expect(telemetryLogs.start).to.be.calledOnce
-
-        process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabled
       })
 
-      it('should not enable telemetry if metrics not enabled but DD_TELEMETRY_METRICS_ENABLED is defined', () => {
-        const origTelemetryMetricsEnabled = process.env.DD_TELEMETRY_METRICS_ENABLED
-
-        process.env.DD_TELEMETRY_METRICS_ENABLED = 'false'
-
+      it('should not enable telemetry if telemetry.metrics is false', () => {
         const telemetryConfig = { enabled: true, metrics: false }
         iastTelemetry.configure({
           telemetry: telemetryConfig
@@ -114,9 +92,6 @@ describe('Telemetry', () => {
         expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
         expect(telemetryMetrics.manager.set).to.not.be.called
-        expect(telemetryLogs.start).to.be.calledOnce
-
-        process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabled
       })
     })
 
@@ -127,7 +102,6 @@ describe('Telemetry', () => {
         iastTelemetry.stop()
         expect(iastTelemetry.enabled).to.be.false
         expect(telemetryMetrics.manager.delete).to.be.calledOnce
-        expect(telemetryLogs.stop).to.be.calledOnce
       })
     })
 
@@ -144,7 +118,6 @@ describe('Telemetry', () => {
       it('should not call init if enabled and verbosity is Off', () => {
         const iastTelemetry = proxyquire('../../../../src/appsec/iast/telemetry', {
           '../../../telemetry/metrics': telemetryMetrics,
-          './log': telemetryLogs,
           './verbosity': {
             getVerbosity: () => Verbosity.OFF
           }
@@ -173,7 +146,6 @@ describe('Telemetry', () => {
       it('should not call finalizeRequestNamespace if enabled and verbosity is Off', () => {
         const iastTelemetry = proxyquire('../../../../src/appsec/iast/telemetry', {
           '../../../telemetry/metrics': telemetryMetrics,
-          './log': telemetryLogs,
           './verbosity': {
             getVerbosity: () => Verbosity.OFF
           }

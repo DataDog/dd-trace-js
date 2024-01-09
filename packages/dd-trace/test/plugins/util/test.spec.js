@@ -13,7 +13,8 @@ const {
   getCoveredFilenamesFromCoverage,
   mergeCoverage,
   resetCoverage,
-  removeInvalidMetadata
+  removeInvalidMetadata,
+  parseAnnotations
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -176,7 +177,7 @@ describe('metadata validation', () => {
       [GIT_COMMIT_SHA]: 'abc123'
     }
     const invalidMetadata2 = {
-      [GIT_REPOSITORY_URL]: 'https://datadog.com/repo',
+      [GIT_REPOSITORY_URL]: 'htps://datadog.com/repo',
       [CI_PIPELINE_URL]: 'datadog.com',
       [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123'
     }
@@ -193,7 +194,9 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(JSON.stringify(removeInvalidMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
+      expect(
+        JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
+      ).to.equal(JSON.stringify({}))
     })
   })
   it('should keep valid metadata', () => {
@@ -216,5 +219,34 @@ describe('metadata validation', () => {
     validMetadatas.forEach((validMetadata) => {
       expect(JSON.stringify(removeInvalidMetadata(validMetadata))).to.be.equal(JSON.stringify(validMetadata))
     })
+  })
+})
+
+describe('parseAnnotations', () => {
+  it('parses correctly shaped annotations', () => {
+    const tags = parseAnnotations([
+      {
+        type: 'DD_TAGS[test.requirement]',
+        description: 'high'
+      },
+      {
+        type: 'DD_TAGS[test.responsible_team]',
+        description: 'sales'
+      }
+    ])
+    expect(tags).to.eql({
+      'test.requirement': 'high',
+      'test.responsible_team': 'sales'
+    })
+  })
+  it('does not crash with invalid arguments', () => {
+    const tags = parseAnnotations([
+      {},
+      'invalid',
+      { type: 'DD_TAGS', description: 'yeah' },
+      { type: 'DD_TAGS[v', description: 'invalid' },
+      { type: 'test.requirement', description: 'sure' }
+    ])
+    expect(tags).to.eql({})
   })
 })

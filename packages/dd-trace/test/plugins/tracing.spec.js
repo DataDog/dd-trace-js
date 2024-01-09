@@ -5,7 +5,7 @@ require('../setup/tap')
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
-const { channel } = require('../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {

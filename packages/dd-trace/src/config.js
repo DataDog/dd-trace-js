@@ -10,7 +10,7 @@ const coalesce = require('koalas')
 const tagger = require('./tagger')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
-const { getGitMetadataFromGitProperties } = require('./git_properties')
+const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 
@@ -109,13 +109,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    this.tags = {}
-
-    tagger.add(this.tags, process.env.DD_TAGS)
-    tagger.add(this.tags, process.env.DD_TRACE_TAGS)
-    tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
-    tagger.add(this.tags, options.tags)
-
     const DD_TRACING_ENABLED = coalesce(
       process.env.DD_TRACING_ENABLED,
       true
@@ -184,32 +177,11 @@ class Config {
       false
     )
 
-    const DD_SERVICE = options.service ||
-      process.env.DD_SERVICE ||
-      process.env.DD_SERVICE_NAME ||
-      this.tags.service ||
-      process.env.AWS_LAMBDA_FUNCTION_NAME ||
-      process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
-      process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
-      process.env.WEBSITE_SITE_NAME || // set by Azure Functions
-      pkg.name ||
-      'node'
     const DD_SERVICE_MAPPING = coalesce(
       options.serviceMapping,
       process.env.DD_SERVICE_MAPPING ? fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
-    )
-    const DD_ENV = coalesce(
-      options.env,
-      process.env.DD_ENV,
-      this.tags.env
-    )
-    const DD_VERSION = coalesce(
-      options.version,
-      process.env.DD_VERSION,
-      this.tags.version,
-      pkg.version
     )
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
@@ -235,8 +207,9 @@ class Config {
 
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
-    const DD_TRACE_TELEMETRY_ENABLED = coalesce(
-      process.env.DD_TRACE_TELEMETRY_ENABLED,
+    const DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !inServerlessEnvironment
     )
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
@@ -251,7 +224,7 @@ class Config {
     )
     const DD_TELEMETRY_METRICS_ENABLED = coalesce(
       process.env.DD_TELEMETRY_METRICS_ENABLED,
-      false
+      true
     )
     const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
       options.protocolVersion,
@@ -307,6 +280,10 @@ class Config {
       'extract',
       options.tracePropagationStyle,
       defaultPropagationStyle
+    )
+    const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
+      process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
+      false
     )
     const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
       options.experimental && options.experimental.runtimeId,
@@ -367,10 +344,11 @@ class Config {
       isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
+    // the tracer generates 128 bit IDs by default as of v5
     const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
       options.traceId128BitGenerationEnabled,
       process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
-      false
+      true
     )
 
     const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
@@ -393,7 +371,6 @@ class Config {
       appsec.enabled,
       process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
     )
-
     const DD_APPSEC_RULES = coalesce(
       appsec.rules,
       process.env.DD_APPSEC_RULES
@@ -430,11 +407,25 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
+      maybeFile(appsec.blockedTemplateGraphql),
+      maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
+    )
     const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
       appsec.eventTracking && appsec.eventTracking.mode,
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
+    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+      appsec?.apiSecurity?.enabled,
+      isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
+      false
+    )
+    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
+      appsec?.apiSecurity?.requestSampling,
+      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
+      0.1
+    )
 
     const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
@@ -447,7 +438,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       5 // seconds
     )
 
-    const iastOptions = options.experimental && options.experimental.iast
+    const iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
       (iastOptions === true || iastOptions.enabled === true),
@@ -459,9 +450,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_IAST_ENABLED
     )
 
+    const DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = coalesce(
+      process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
+      true
+    )
+
     const defaultIastRequestSampling = 30
     const iastRequestSampling = coalesce(
-      parseInt(iastOptions && iastOptions.requestSampling),
+      parseInt(iastOptions?.requestSampling),
       parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
       defaultIastRequestSampling
     )
@@ -469,31 +465,43 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
 
     const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(iastOptions && iastOptions.maxConcurrentRequests),
+      parseInt(iastOptions?.maxConcurrentRequests),
       parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
       2
     )
 
     const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(iastOptions && iastOptions.maxContextOperations),
+      parseInt(iastOptions?.maxContextOperations),
       parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
       2
     )
 
     const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      iastOptions && iastOptions.deduplicationEnabled,
+      iastOptions?.deduplicationEnabled,
       process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
       true
     )
 
     const DD_IAST_REDACTION_ENABLED = coalesce(
-      iastOptions && iastOptions.redactionEnabled,
+      iastOptions?.redactionEnabled,
       !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
       true
     )
 
+    const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
+      iastOptions?.redactionNamePattern,
+      process.env.DD_IAST_REDACTION_NAME_PATTERN,
+      null
+    )
+
+    const DD_IAST_REDACTION_VALUE_PATTERN = coalesce(
+      iastOptions?.redactionValuePattern,
+      process.env.DD_IAST_REDACTION_VALUE_PATTERN,
+      null
+    )
+
     const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      iastOptions && iastOptions.telemetryVerbosity,
+      iastOptions?.telemetryVerbosity,
       process.env.DD_IAST_TELEMETRY_VERBOSITY,
       'INFORMATION'
     )
@@ -506,6 +514,25 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
       process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
+    )
+
+    // 0: disabled, 1: logging, 2: garbage collection + logging
+    const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
+      process.env.DD_TRACE_SPAN_LEAK_DEBUG,
+      0
+    )
+
+    const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_ID,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
+      null
     )
 
     const ingestion = options.ingestion || {}
@@ -541,7 +568,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
     this.apiKey = DD_API_KEY
-    this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
@@ -553,9 +579,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
-    this.service = DD_SERVICE
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.version = DD_VERSION
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
@@ -565,6 +589,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
+    this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this.experimental = {
       runtimeId: isTrue(DD_TRACE_RUNTIME_ID_ENABLED),
       exporter: DD_TRACE_EXPORTER,
@@ -586,17 +611,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
-      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_TRACE_TELEMETRY_ENABLED),
+      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
-      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
       debug: isTrue(DD_TELEMETRY_DEBUG),
-      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED)
+      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
+      metrics: isTrue(DD_TELEMETRY_METRICS_ENABLED),
+      dependencyCollection: DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
     }
     this.protocolVersion = DD_TRACE_AGENT_PROTOCOL_VERSION
     this.tagsHeaderMaxLength = parseInt(DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
     this.appsec = {
       enabled: DD_APPSEC_ENABLED,
-      rules: DD_APPSEC_RULES ? safeJsonParse(maybeFile(DD_APPSEC_RULES)) : require('./appsec/recommended.json'),
+      rules: DD_APPSEC_RULES,
       customRulesProvided: !!DD_APPSEC_RULES,
       rateLimit: DD_APPSEC_TRACE_RATE_LIMIT,
       wafTimeout: DD_APPSEC_WAF_TIMEOUT,
@@ -604,11 +630,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
         enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+      },
+      apiSecurity: {
+        enabled: DD_EXPERIMENTAL_API_SECURITY_ENABLED,
+        // Coerce value between 0 and 1
+        requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
     }
+
     this.remoteConfig = {
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
       pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
@@ -620,6 +653,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maxContextOperations: DD_IAST_MAX_CONTEXT_OPERATIONS,
       deduplicationEnabled: DD_IAST_DEDUPLICATION_ENABLED,
       redactionEnabled: DD_IAST_REDACTION_ENABLED,
+      redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
+      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN,
       telemetryVerbosity: DD_IAST_TELEMETRY_VERBOSITY
     }
 
@@ -637,10 +672,43 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
+    this.stats = {
+      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
+    }
+
+    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+
+    this.isGCPFunction = isGCPFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
+
+    this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
+
+    this.installSignature = {
+      id: DD_INSTRUMENTATION_INSTALL_ID,
+      time: DD_INSTRUMENTATION_INSTALL_TIME,
+      type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this._applyDefaults()
+    this._applyEnvironment()
+    this._applyOptions(options)
+    this._applyRemote({})
+    this._merge()
+
+    tagger.add(this.tags, {
+      service: this.service,
+      env: this.env,
+      version: this.version,
+      'runtime-id': uuid()
+    })
+
     if (this.gitMetadataEnabled) {
-      this.repositoryUrl = coalesce(
-        process.env.DD_GIT_REPOSITORY_URL,
-        this.tags[GIT_REPOSITORY_URL]
+      this.repositoryUrl = removeUserSensitiveInfo(
+        coalesce(
+          process.env.DD_GIT_REPOSITORY_URL,
+          this.tags[GIT_REPOSITORY_URL]
+        )
       )
       this.commitSHA = coalesce(
         process.env.DD_GIT_COMMIT_SHA,
@@ -667,29 +735,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         }
       }
     }
-
-    this.stats = {
-      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
-    }
-
-    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
-
-    this.isGCPFunction = isGCPFunction
-    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
-
-    tagger.add(this.tags, {
-      service: this.service,
-      env: this.env,
-      version: this.version,
-      'runtime-id': uuid()
-    })
-
-    this._applyDefaults()
-    this._applyEnvironment()
-    this._applyOptions(options)
-    this._applyRemote({})
-    this._merge()
   }
 
   // Supports only a subset of options for now.
@@ -704,48 +749,93 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
   }
 
   _applyDefaults () {
+    const {
+      AWS_LAMBDA_FUNCTION_NAME,
+      FUNCTION_NAME,
+      K_SERVICE,
+      WEBSITE_SITE_NAME
+    } = process.env
+
+    const service = AWS_LAMBDA_FUNCTION_NAME ||
+      FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
+      K_SERVICE || // Google Cloud Function Name set by newer runtimes
+      WEBSITE_SITE_NAME || // set by Azure Functions
+      pkg.name ||
+      'node'
+
     const defaults = this._defaults = {}
 
+    this._setValue(defaults, 'service', service)
+    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'version', pkg.version)
     this._setUnit(defaults, 'sampleRate', undefined)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
+    this._setValue(defaults, 'tags', {})
   }
 
   _applyEnvironment () {
     const {
-      DD_TRACE_SAMPLE_RATE,
+      DD_ENV,
       DD_LOGS_INJECTION,
-      DD_TRACE_HEADER_TAGS
+      DD_SERVICE,
+      DD_SERVICE_NAME,
+      DD_TAGS,
+      DD_TRACE_GLOBAL_TAGS,
+      DD_TRACE_HEADER_TAGS,
+      DD_TRACE_SAMPLE_RATE,
+      DD_TRACE_TAGS,
+      DD_VERSION
     } = process.env
 
+    const tags = {}
     const env = this._env = {}
 
+    tagger.add(tags, DD_TAGS)
+    tagger.add(tags, DD_TRACE_TAGS)
+    tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+
+    this._setValue(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
+    this._setValue(env, 'env', DD_ENV || tags.env)
+    this._setValue(env, 'version', DD_VERSION || tags.version)
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    this._setTags(env, 'tags', tags)
   }
 
   _applyOptions (options) {
     const opts = this._options = this._options || {}
+    const tags = {}
 
     options = Object.assign({ ingestion: {} }, options, opts)
 
+    tagger.add(tags, options.tags)
+
+    this._setValue(opts, 'service', options.service || tags.service)
+    this._setValue(opts, 'env', options.env || tags.env)
+    this._setValue(opts, 'version', options.version || tags.version)
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setArray(opts, 'headerTags', options.headerTags)
+    this._setTags(opts, 'tags', tags)
   }
 
   _applyRemote (options) {
     const opts = this._remote = this._remote || {}
+    const tags = {}
     const headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
         return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
       })
       : undefined
 
+    tagger.add(tags, options.tracing_tags)
+
     this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
+    this._setTags(opts, 'tags', tags)
   }
 
   _setBoolean (obj, name, value) {
@@ -783,6 +873,14 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+  }
+
+  _setTags (obj, name, value) {
+    if (!value || Object.keys(value).length === 0) {
+      return this._setValue(obj, name, null)
+    }
+
+    this._setValue(obj, name, value)
   }
 
   _setValue (obj, name, value) {

@@ -1,7 +1,6 @@
 'use strict'
 
-// eslint-disable-next-line n/no-restricted-require
-const dc = require('diagnostics_channel')
+const dc = require('dc-polyfill')
 
 const {
   filename,

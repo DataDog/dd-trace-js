@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const { promisify } = require('util')
+const { threadId } = require('worker_threads')
 const writeFile = promisify(fs.writeFile)
 
 function formatDateTime (t) {
@@ -19,7 +20,7 @@ class FileExporter {
     const types = Object.keys(profiles)
     const dateStr = formatDateTime(end)
     const tasks = types.map(type => {
-      return writeFile(`${this._pprofPrefix}${type}_${dateStr}.pprof`, profiles[type])
+      return writeFile(`${this._pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
     })
 
     return Promise.all(tasks)

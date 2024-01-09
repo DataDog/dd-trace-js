@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const axios = require('axios')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 withVersions('passport-http', 'passport-http', version => {
   describe('passport-http instrumentation', () => {

@@ -2,7 +2,7 @@
 
 // TODO: move anything related to tracing to TracingPlugin instead
 
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const { storage } = require('../../../datadog-core')
 
 class Subscription {

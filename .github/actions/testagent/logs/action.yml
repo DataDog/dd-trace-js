@@ -15,3 +15,26 @@ runs:
           docker-compose logs testagent
         fi
       shell: bash
+    - name: Get Tested Integrations from Test Agent
+      run: |
+        # make temporary files to save response data to
+        response=$(mktemp) && headers=$(mktemp)
+
+        # create artifacts directory if it doesn't exist
+        mkdir -p "./artifacts"
+
+        # get tested integrations
+        curl -o "$response" -D "$headers" http://127.0.0.1:9126/test/integrations/tested_versions
+
+        # get filename representing the name of the tested integration from headers
+        filename=$(awk -F': ' '/file-name/{print $2}' "$headers" | tr -d '\r\n')
+
+        # copy data to final file and remove temp files
+        mv "$response" "artifacts/${filename}_supported_versions.csv"
+        rm "$headers"
+      shell: bash
+    - name: Archive Test Agent Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: supported-integrations
+        path: ./artifacts

@@ -18,6 +18,8 @@ global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 
+const testedPlugins = agent.testedPlugins
+
 const packageVersionFailures = Object.create({})
 
 function loadInst (plugin) {
@@ -190,7 +192,9 @@ function withVersions (plugin, modules, range, cb) {
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        instrumentation.versions
+        const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+          : instrumentation.versions
+        versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
             const min = semver.coerce(version).version
@@ -216,6 +220,13 @@ function withVersions (plugin, modules, range, cb) {
           let nodePath
 
           before(() => {
+            // set plugin name and version to later report to test agent regarding tested integrations and
+            // their tested range of versions
+            const lastPlugin = testedPlugins[testedPlugins.length - 1]
+            if (!lastPlugin || lastPlugin.pluginName !== plugin || lastPlugin.pluginVersion !== v.version) {
+              testedPlugins.push({ pluginName: plugin, pluginVersion: v.version })
+            }
+
             nodePath = process.env.NODE_PATH
             process.env.NODE_PATH = [process.env.NODE_PATH, versionPath]
               .filter(x => x && x !== 'undefined')

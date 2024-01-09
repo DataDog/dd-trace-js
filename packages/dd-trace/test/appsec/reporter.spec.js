@@ -2,6 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
+const zlib = require('zlib')
 
 describe('reporter', () => {
   let Reporter
@@ -54,12 +55,12 @@ describe('reporter', () => {
         'user-agent': 42,
         secret: 'password',
         'x-forwarded-for': '10'
-      }, [
+      }, Reporter.mapHeaderAndTags([
         'host',
         'user-agent',
         'x-forwarded-for',
         'x-client-ip'
-      ], 'prefix.')
+      ], 'prefix.'))
 
       expect(result).to.deep.equal({
         'prefix.host': 'localhost',
@@ -277,6 +278,42 @@ describe('reporter', () => {
       Reporter.reportWafUpdate('0.0.1', '0.0.2')
 
       expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2')
+    })
+  })
+
+  describe('reportSchemas', () => {
+    it('should not call addTags if parameter is undefined', () => {
+      Reporter.reportSchemas(undefined)
+      expect(span.addTags).not.to.be.called
+    })
+
+    it('should call addTags with an empty array', () => {
+      Reporter.reportSchemas([])
+      expect(span.addTags).to.be.calledOnceWithExactly({})
+    })
+
+    it('should call addTags', () => {
+      const schemaValue = [{ 'key': [8] }]
+      const derivatives = {
+        '_dd.appsec.s.req.headers': schemaValue,
+        '_dd.appsec.s.req.query': schemaValue,
+        '_dd.appsec.s.req.params': schemaValue,
+        '_dd.appsec.s.req.cookies': schemaValue,
+        '_dd.appsec.s.req.body': schemaValue,
+        'custom.processor.output': schemaValue
+      }
+
+      Reporter.reportSchemas(derivatives)
+
+      const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
+      expect(span.addTags).to.be.calledOnceWithExactly({
+        '_dd.appsec.s.req.headers': schemaEncoded,
+        '_dd.appsec.s.req.query': schemaEncoded,
+        '_dd.appsec.s.req.params': schemaEncoded,
+        '_dd.appsec.s.req.cookies': schemaEncoded,
+        '_dd.appsec.s.req.body': schemaEncoded,
+        'custom.processor.output': schemaEncoded
+      })
     })
   })
 

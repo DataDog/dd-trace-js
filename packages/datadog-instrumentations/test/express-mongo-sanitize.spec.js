@@ -2,7 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
-const { channel } = require('../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const axios = require('axios')
 describe('express-mongo-sanitize', () => {
   withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {

@@ -5,8 +5,6 @@
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 
-warnIfUnsupported()
-
 for (const hook of Object.values(hooks)) {
   hook()
 }
@@ -144,7 +142,7 @@ module.exports.setup = function (build) {
         ${fileCode}
       })(...arguments);
       {
-        const dc = require('diagnostics_channel');
+        const dc = require('dc-polyfill');
         const ch = dc.channel('${CHANNEL}');
         const mod = module.exports
         const payload = {
@@ -165,23 +163,6 @@ module.exports.setup = function (build) {
       resolveDir: path.dirname(args.path)
     }
   })
-}
-
-// Currently esbuild support requires Node.js >=v16.17 or >=v18.7
-// Better yet it would support Node >=v14.17 or >=v16
-// Of course, the most ideal would be to support all versions of Node that dd-trace supports.
-// Version constraints based on Node's diagnostics_channel support
-function warnIfUnsupported () {
-  const [major, minor] = process.versions.node.split('.').map(Number)
-  if (
-    major < 16 ||
-    (major === 16 && minor < 17) ||
-    (major === 18 && minor < 7)) {
-    console.error('WARNING: Esbuild support isn\'t available for older versions of Node.js.')
-    console.error(`Expected: Node.js >=v16.17 or >=v18.7. Actual: Node.js = ${process.version}.`)
-    console.error('This application may build properly with this version of Node.js, but unless a')
-    console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
-  }
 }
 
 // @see https://github.com/nodejs/node/issues/47000

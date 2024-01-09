@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
 const blocking = require('./blocking')
@@ -13,13 +14,15 @@ let appliedExclusions = new Map()
 let appliedCustomRules = new Map()
 let appliedActions = new Map()
 
-function applyRules (rules, config) {
-  defaultRules = rules
+function loadRules (config) {
+  defaultRules = config.rules
+    ? JSON.parse(fs.readFileSync(config.rules))
+    : require('./recommended.json')
 
-  waf.init(rules, config)
+  waf.init(defaultRules, config)
 
-  if (rules.actions) {
-    blocking.updateBlockingConfiguration(rules.actions.find(action => action.id === 'block'))
+  if (defaultRules.actions) {
+    blocking.updateBlockingConfiguration(defaultRules.actions.find(action => action.id === 'block'))
   }
 }
 
@@ -252,7 +255,7 @@ function clearAllRules () {
 }
 
 module.exports = {
-  applyRules,
+  loadRules,
   updateWafFromRC,
   clearAllRules
 }

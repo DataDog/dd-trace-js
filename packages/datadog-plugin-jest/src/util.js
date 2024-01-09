@@ -85,8 +85,10 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
       acc.suitesToRun.push(test)
       if (test?.context?.config?.testEnvironmentOptions) {
         test.context.config.testEnvironmentOptions['_ddUnskippable'] = true
+        acc.hasUnskippableSuites = true
         if (shouldBeSkipped) {
           test.context.config.testEnvironmentOptions['_ddForcedToRun'] = true
+          acc.hasForcedToRunSuites = true
         }
       }
       return acc
@@ -98,7 +100,7 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
       acc.suitesToRun.push(test)
     }
     return acc
-  }, { skippedSuites: [], suitesToRun: [] })
+  }, { skippedSuites: [], suitesToRun: [], hasUnskippableSuites: false, hasForcedToRunSuites: false })
 }
 
-module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun }
+module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun, isMarkedAsUnskippable }

@@ -1,3 +1,6 @@
+/**
+ * @datadog {"unskippable": true}
+ */
 /* eslint-disable */
 describe('context', () => {
   it('passes', () => {

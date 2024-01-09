@@ -11,8 +11,9 @@ const cryptoCipherCh = channel('datadog:crypto:cipher:start')
 
 const hashMethods = ['createHash', 'createHmac', 'createSign', 'createVerify', 'sign', 'verify']
 const cipherMethods = ['createCipheriv', 'createDecipheriv']
+const names = ['crypto', 'node:crypto']
 
-addHook({ name: 'crypto' }, crypto => {
+addHook({ name: names }, crypto => {
   shimmer.massWrap(crypto, hashMethods, wrapCryptoMethod(cryptoHashCh))
   shimmer.massWrap(crypto, cipherMethods, wrapCryptoMethod(cryptoCipherCh))
   return crypto

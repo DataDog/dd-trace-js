@@ -7,8 +7,8 @@ const options = {
   projects: [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
-  testRegex: process.env.TEST_REGEX ? new RegExp(process.env.TEST_REGEX) : /test\/ci-visibility-test/,
-  coverage: true,
+  testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
+  coverage: !process.env.DISABLE_CODE_COVERAGE,
   runInBand: true,
   shard: process.env.TEST_SHARD || undefined
 }

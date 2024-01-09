@@ -14,7 +14,7 @@ const SPAN_SAMPLING_MECHANISM = constants.SPAN_SAMPLING_MECHANISM
 const SPAN_SAMPLING_RULE_RATE = constants.SPAN_SAMPLING_RULE_RATE
 const SPAN_SAMPLING_MAX_PER_SECOND = constants.SPAN_SAMPLING_MAX_PER_SECOND
 const SAMPLING_MECHANISM_SPAN = constants.SAMPLING_MECHANISM_SPAN
-const { MEASURED, BASE_SERVICE } = tags
+const { MEASURED, BASE_SERVICE, ANALYTICS } = tags
 const ORIGIN_KEY = constants.ORIGIN_KEY
 const HOSTNAME_KEY = constants.HOSTNAME_KEY
 const TOP_LEVEL_KEY = constants.TOP_LEVEL_KEY
@@ -24,6 +24,7 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 
 const map = {
+  'operation.name': 'name',
   'service.name': 'service',
   'span.type': 'type',
   'resource.name': 'resource'
@@ -83,6 +84,7 @@ function extractTags (trace, span) {
 
   for (const tag in tags) {
     switch (tag) {
+      case 'operation.name':
       case 'service.name':
       case 'span.type':
       case 'resource.name':
@@ -91,6 +93,9 @@ function extractTags (trace, span) {
       // HACK: remove when Datadog supports numeric status code
       case 'http.status_code':
         addTag(trace.meta, {}, tag, tags[tag] && String(tags[tag]))
+        break
+      case 'analytics.event':
+        addTag({}, trace.metrics, ANALYTICS, tags[tag] === undefined || tags[tag] ? 1 : 0)
         break
       case HOSTNAME_KEY:
       case MEASURED:

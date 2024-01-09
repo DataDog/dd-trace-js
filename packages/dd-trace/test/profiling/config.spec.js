@@ -48,9 +48,10 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].codeHotspotsEnabled()).true
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
+    expect(config.cpuProfilingEnabled).false
   })
 
   it('should support configuration options', () => {
@@ -62,7 +63,7 @@ describe('config', () => {
       exporters: 'agent,file',
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
-      codeHotspotsEnabled: true
+      codeHotspotsEnabled: false
     }
 
     const config = new Config(options)
@@ -85,7 +86,7 @@ describe('config', () => {
     expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).true
+    expect(config.profilers[1].codeHotspotsEnabled()).false
   })
 
   it('should filter out invalid profilers', () => {
@@ -129,8 +130,8 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
     }
     const options = {
       logger: nullLogger
@@ -143,6 +144,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).true
     expect(config.v8ProfilerBugWorkaroundEnabled).false
+    expect(config.cpuProfilingEnabled).true
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -181,7 +183,6 @@ describe('config', () => {
   it('should prioritize options over env variables', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
     }
     const options = {
@@ -237,67 +238,6 @@ describe('config', () => {
     expect(config.profilers[0].endpointCollectionEnabled()).false
   })
 
-  it('should implicitly turn on code hotspots for endpoint profiling when they are not explicitly disabled', () => {
-    process.env = {
-      DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
-    }
-    const infos = []
-    const options = {
-      logger: {
-        debug () {},
-        info (info) {
-          infos.push(info)
-        },
-        warn () {},
-        error () {}
-      }
-    }
-
-    const config = new Config(options)
-
-    expect(infos.length).to.equal(1)
-    expect(infos[0]).to.equal('Code Hotspots are implicitly enabled by endpoint collection.')
-
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
-    expect(config.profilers[0].endpointCollectionEnabled()).true
-  })
-
-  it('should warn about code hotspots being explicitly disabled with endpoint profiling', () => {
-    process.env = {
-      DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
-      DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
-    }
-    const warnings = []
-    const options = {
-      logger: {
-        debug () {},
-        info () {},
-        warn (warning) {
-          warnings.push(warning)
-        },
-        error () {}
-      }
-    }
-
-    const config = new Config(options)
-
-    expect(warnings.length).to.equal(1)
-    expect(warnings[0]).to.equal(
-      'Endpoint collection is enabled, but Code Hotspots are disabled. ' +
-      'Enable Code Hotspots too for endpoint collection to work.')
-
-    expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
-    expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
-    expect(config.profilers[0].endpointCollectionEnabled()).false
-  })
-
   it('should support tags', () => {
     const tags = {
       env: 'dev'
@@ -321,6 +261,18 @@ describe('config', () => {
     const config = new Config({ env, service, version, tags })
 
     expect(config.tags).to.include({ env, service, version })
+  })
+
+  it('should add source code integration tags if git metadata is available', () => {
+    const DUMMY_GIT_SHA = '13851f2b092e97acebab1b73f6c0e7818e795b50'
+    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
+
+    const config = new Config({
+      repositoryUrl: DUMMY_REPOSITORY_URL,
+      commitSHA: DUMMY_GIT_SHA
+    })
+
+    expect(config.tags).to.include({ 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
   })
 
   it('should support IPv6 hostname', () => {

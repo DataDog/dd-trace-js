@@ -9,7 +9,9 @@ const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
+const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { tagger } = require('./tagger')
 const { isFalse, isTrue } = require('../util')
 
@@ -33,10 +35,12 @@ class Config {
       DD_PROFILING_HEAP_ENABLED,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
@@ -70,6 +74,13 @@ class Config {
       tagger.parse(options.tags),
       tagger.parse({ env, host, service, version, functionname })
     )
+
+    // Add source code integration tags if available
+    if (options.repositoryUrl && options.commitSHA) {
+      this.tags[GIT_REPOSITORY_URL] = options.repositoryUrl
+      this.tags[GIT_COMMIT_SHA] = options.commitSHA
+    }
+
     this.logger = ensureLogger(options.logger)
     const logger = this.logger
     function logExperimentalVarDeprecation (shortVarName) {
@@ -87,7 +98,7 @@ class Config {
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, true))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
 
     this.pprofPrefix = pprofPrefix
@@ -126,26 +137,22 @@ class Config {
 
     const profilers = options.profilers
       ? options.profilers
-      : getProfilers({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS })
+      : getProfilers({
+        DD_PROFILING_HEAP_ENABLED,
+        DD_PROFILING_WALLTIME_ENABLED,
+        DD_PROFILING_PROFILERS
+      })
 
-    function getCodeHotspotsOptionsOr (defvalue) {
-      return coalesce(options.codeHotspotsEnabled,
-        DD_PROFILING_CODEHOTSPOTS_ENABLED,
-        DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, defvalue)
-    }
-    this.codeHotspotsEnabled = isTrue(getCodeHotspotsOptionsOr(false))
+    this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+
+    this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
+      DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, true))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
-    if (this.endpointCollectionEnabled && !this.codeHotspotsEnabled) {
-      if (getCodeHotspotsOptionsOr(undefined) !== undefined) {
-        this.logger.warn(
-          'Endpoint collection is enabled, but Code Hotspots are disabled. ' +
-          'Enable Code Hotspots too for endpoint collection to work.')
-        this.endpointCollectionEnabled = false
-      } else {
-        this.logger.info('Code Hotspots are implicitly enabled by endpoint collection.')
-        this.codeHotspotsEnabled = true
-      }
-    }
+
+    this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)
   }
@@ -153,7 +160,9 @@ class Config {
 
 module.exports = { Config }
 
-function getProfilers ({ DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS }) {
+function getProfilers ({
+  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS
+}) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to wall + space
   // Use a Set to avoid duplicates
   const profilers = new Set(coalesce(DD_PROFILING_PROFILERS, 'wall,space').split(','))
@@ -252,6 +261,11 @@ function ensureProfilers (profilers, options) {
     if (typeof profiler === 'string') {
       profilers[i] = getProfiler(profiler, options)
     }
+  }
+
+  // Events profiler is a profiler for timeline events
+  if (options.timelineEnabled) {
+    profilers.push(new EventsProfiler(options))
   }
 
   // Filter out any invalid profilers

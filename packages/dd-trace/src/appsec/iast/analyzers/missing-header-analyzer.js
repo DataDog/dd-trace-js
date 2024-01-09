@@ -28,6 +28,15 @@ class MissingHeaderAnalyzer extends Analyzer {
     }, (data) => this.analyze(data))
   }
 
+  _getHeaderValues (res, headerName) {
+    const headerValue = res.getHeader(headerName)
+    if (Array.isArray(headerValue)) {
+      return headerValue
+    } else {
+      return headerValue ? [headerValue.toString()] : []
+    }
+  }
+
   _getLocation () {
     return undefined
   }
@@ -41,7 +50,14 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _getEvidence ({ res }) {
-    return { value: res.getHeader(this.headerName) }
+    const headerValues = this._getHeaderValues(res, this.headerName)
+    let value
+    if (headerValues.length === 1) {
+      value = headerValues[0]
+    } else if (headerValues.length > 0) {
+      value = JSON.stringify(headerValues)
+    }
+    return { value }
   }
 
   _isVulnerable ({ req, res }, context) {
@@ -56,9 +72,11 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _isResponseHtml (res) {
-    const contentType = res.getHeader('content-type')
-    return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
-      return htmlContentType === contentType || contentType.startsWith(htmlContentType + ';')
+    const contentTypes = this._getHeaderValues(res, 'content-type')
+    return contentTypes.some(contentType => {
+      return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
+        return htmlContentType === contentType || contentType.startsWith(htmlContentType + ';')
+      })
     })
   }
 }

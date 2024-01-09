@@ -118,7 +118,8 @@ module.exports = {
   fromCoverageMapToCoverage,
   getTestLineStart,
   getCallSites,
-  removeInvalidMetadata
+  removeInvalidMetadata,
+  parseAnnotations
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -370,7 +371,9 @@ function addIntelligentTestRunnerSpanTags (
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
     skippingCount,
-    skippingType = 'suite'
+    skippingType = 'suite',
+    hasUnskippableSuites,
+    hasForcedToRunSuites
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -385,8 +388,18 @@ function addIntelligentTestRunnerSpanTags (
   testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
-  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
-  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+  if (hasUnskippableSuites) {
+    testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+    testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+  }
+  if (hasForcedToRunSuites) {
+    testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+    testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+  }
+
+  // This will not be reported unless the user has manually added code coverage.
+  // This is always the case for Mocha and Cucumber, but not for Jest.
+  if (testCodeCoverageLinesTotal !== undefined) {
     testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
     testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }
@@ -480,4 +493,31 @@ function getCallSites () {
   Error.stackTraceLimit = oldLimit
 
   return v8StackTrace
+}
+
+/**
+ * Gets an object of test tags from an Playwright annotations array.
+ * @param {Object[]} annotations - Annotations from a Playwright test.
+ * @param {string} annotations[].type - Type of annotation. A string of the shape DD_TAGS[$tag_name].
+ * @param {string} annotations[].description - Value of the tag.
+ */
+function parseAnnotations (annotations) {
+  return annotations.reduce((tags, annotation) => {
+    if (!annotation?.type) {
+      return tags
+    }
+    const { type, description } = annotation
+    if (type.startsWith('DD_TAGS')) {
+      const regex = /\[(.*?)\]/
+      const match = regex.exec(type)
+      let tagValue = ''
+      if (match) {
+        tagValue = match[1]
+      }
+      if (tagValue) {
+        tags[tagValue] = description
+      }
+    }
+    return tags
+  }, {})
 }

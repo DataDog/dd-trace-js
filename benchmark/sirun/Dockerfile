@@ -30,10 +30,20 @@ RUN wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1
 RUN mkdir -p /usr/local/nvm \
 	&& wget -q -O - https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash \
 	&& . $NVM_DIR/nvm.sh \
-	&& nvm install --no-progress 12.22.12 \
 	&& nvm install --no-progress 14.21.3 \
 	&& nvm install --no-progress 16.20.1 \
 	&& nvm install --no-progress 18.16.1 \
 	&& nvm install --no-progress 20.4.0 \
 	&& nvm alias default 18 \
 	&& nvm use 18
+
+RUN mkdir /opt/insecure-bank-js
+RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecure-bank-js
+
+WORKDIR /opt/insecure-bank-js
+RUN git checkout 2003d9085a6e9a679e31fd88719e4de030d6855f
+RUN . $NVM_DIR/nvm.sh \
+    && npm ci \
+    && npm cache clean --force
+
+WORKDIR /app

@@ -6,13 +6,14 @@ const { calculateDDBasePath } = require('../../util')
 const pathLine = {
   getFirstNonDDPathAndLine,
   getNodeModulesPaths,
+  getRelativePath,
   getFirstNonDDPathAndLineFromCallsites, // Exported only for test purposes
   calculateDDBasePath, // Exported only for test purposes
   ddBasePath: calculateDDBasePath(__dirname) // Only for test purposes
 }
 
 const EXCLUDED_PATHS = [
-  path.join(path.sep, 'node_modules', 'diagnostics_channel')
+  path.join(path.sep, 'node_modules', 'dc-polyfill')
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
@@ -45,7 +46,7 @@ function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPat
       const filepath = callsite.getFileName()
       if (!isExcluded(callsite, externallyExcludedPaths) && filepath.indexOf(pathLine.ddBasePath) === -1) {
         return {
-          path: path.relative(process.cwd(), filepath),
+          path: getRelativePath(filepath),
           line: callsite.getLineNumber(),
           column: callsite.getColumnNumber(),
           isInternal: !path.isAbsolute(filepath)
@@ -54,6 +55,10 @@ function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPat
     }
   }
   return null
+}
+
+function getRelativePath (filepath) {
+  return path.relative(process.cwd(), filepath)
 }
 
 function isExcluded (callsite, externallyExcludedPaths) {

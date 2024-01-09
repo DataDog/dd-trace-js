@@ -7,10 +7,14 @@ const semver = require('semver')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
+const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('express', 'express', '>4.18.0', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
+      const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
+      if (NODE_MAJOR === 14 && semver.satisfies(specificMongooseVersion, '>=8')) return
+
       const vulnerableMethodFilename = 'mongoose-vulnerable-method.js'
       let mongoose, Test, tmpFilePath
 
@@ -106,7 +110,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             }
           })
 
-          if (semver.satisfies(mongooseVersion, '>=6')) {
+          if (semver.satisfies(specificMongooseVersion, '>=6')) {
             testThatRequestHasNoVulnerability({
               testDescription: 'should not have NOSQL_MONGODB_INJECTION vulnerability with mongoose.sanitizeFilter',
               fn: async (req, res) => {

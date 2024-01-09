@@ -1,5 +1,9 @@
 version: "2"
 services:
+  aerospike:
+    image: aerospike:ce-6.4.0.3
+    ports: 
+      - "127.0.0.1:3000-3002:3000-3002"
   couchbase:
     image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
@@ -83,11 +87,26 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
   localstack:
-    # TODO: Figure out why SNS doesn't work in >=1.2
-    # https://github.com/localstack/localstack/issues/7479
-    image: localstack/localstack:1.1.0
+    image: localstack/localstack:3.0.2
     ports:
       - "127.0.0.1:4566:4566" # Edge
+    environment:
+      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda
+      - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
+      - AWS_DEFAULT_REGION=us-east-1
+      - FORCE_NONINTERACTIVE=true
+      - START_WEB=0
+      - DEBUG=${DEBUG-}
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+  localstack-legacy:
+    # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
+    # To-Do: Debug localstack / lambda and localstack / S3
+    image: localstack/localstack:1.1.0
+    ports:
+      - "127.0.0.1:4567:4567" # Edge
     environment:
       - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
       - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
@@ -95,9 +114,13 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - FORCE_NONINTERACTIVE=true
       - START_WEB=0
+      - GATEWAY_LISTEN=127.0.0.1:4567
+      - EDGE_PORT=4567
+      - EDGE_PORT_HTTP=4567
       - LAMBDA_EXECUTOR=local
   kafka:
-    image: debezium/kafka:1.7
+    platform: linux/arm64
+    image: wurstmeister/kafka:2.13-2.8.1
     ports:
       - "127.0.0.1:9092:9092"
       - "127.0.0.1:9093:9093"
@@ -105,9 +128,17 @@ services:
       - CLUSTER_ID=5Yr1SIgYQz-b-dgRabWx4g
       - NODE_ID=1
       - CREATE_TOPICS="test-topic:1:1"
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
       - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092
       - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
       - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+    depends_on:
+      - zookeeper
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - "2181:2181"
   opensearch:
     image: opensearchproject/opensearch:2
     environment:
@@ -128,11 +159,11 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:latest
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.16.0
     ports:
         - "127.0.0.1:9126:9126"
     environment:
         - LOG_LEVEL=DEBUG
         - TRACE_LANGUAGE=javascript
-        - DISABLED_CHECKS=trace_content_length
+        - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
         - PORT=9126

@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')

@@ -8,12 +8,30 @@ const {
 const shimmer = require('../../datadog-shimmer')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
+const producerCommitCh = channel('apm:kafkajs:produce:commit')
 const producerFinishCh = channel('apm:kafkajs:produce:finish')
 const producerErrorCh = channel('apm:kafkajs:produce:error')
 
 const consumerStartCh = channel('apm:kafkajs:consume:start')
+const consumerCommitCh = channel('apm:kafkajs:consume:commit')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
+
+function commitsFromEvent (event) {
+  const { payload: { groupId, topics } } = event
+  const commitList = []
+  for (const { topic, partitions } of topics) {
+    for (const { partition, offset } of partitions) {
+      commitList.push({
+        groupId,
+        partition,
+        offset,
+        topic
+      })
+    }
+  }
+  consumerCommitCh.publish(commitList)
+}
 
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {
@@ -58,6 +76,12 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             })
           )
 
+          result.then(res => {
+            if (producerCommitCh.hasSubscribers) {
+              producerCommitCh.publish(res)
+            }
+          })
+
           return result
         } catch (e) {
           producerErrorCh.publish(e)
@@ -75,6 +99,9 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
 
     const consumer = createConsumer.apply(this, arguments)
+
+    consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
+
     const run = consumer.run
 
     const groupId = arguments[0].groupId

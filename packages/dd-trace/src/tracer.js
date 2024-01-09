@@ -31,8 +31,10 @@ class DatadogTracer extends Tracer {
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
-  setCheckpoint (edgeTags) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(edgeTags, DataStreamsContext.getDataStreamsContext())
+  setCheckpoint (edgeTags, span, payloadSize = 0) {
+    const ctx = this._dataStreamsProcessor.setCheckpoint(
+      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
+    )
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
   }
@@ -42,6 +44,10 @@ class DatadogTracer extends Tracer {
     // we erase the previous context everytime we decode a new one
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
+  }
+
+  setOffset (offsetData) {
+    return this._dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {
