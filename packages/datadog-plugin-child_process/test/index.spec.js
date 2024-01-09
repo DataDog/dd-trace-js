@@ -111,7 +111,7 @@ describe('Child process plugin', () => {
       const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
       const option = '-l'.padEnd(4000 * 8, 't')
       const path = '/home'
-      const command = 'ls' + ' ' + option + ' ' + path + ' -t'
+      const command = `ls ${option} ${path} -t`
 
       shellPlugin.start({ command, shell: true })
 
