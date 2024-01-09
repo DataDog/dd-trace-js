@@ -571,10 +571,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.apiKey = DD_API_KEY
-    const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+    this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    const hostname = DD_AGENT_HOST || (url && url.hostname)
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
+    const hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
+    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = { hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname) }
     this.tracePropagationStyle = {
@@ -610,16 +610,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
     }
 
-    // this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
-
     this.isIntelligentTestRunnerEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
     this.isGitUploadEnabled = isTrue(DD_IS_CIVISIBILITY) &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
-    // this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
     this.isManualApiEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
-
-    // this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
@@ -627,9 +622,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.stats = {
       enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
     }
-
-    // this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    // this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
 
     this.isGCPFunction = isGCPFunction
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
@@ -1109,6 +1101,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
           let value = container[name]
           this._setConfigValue(name, value)
 
+          if (name === 'url') value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
           if (name === 'peerServiceMapping') value = formatPeerServiceMapping(value)
           if (value && name === 'url') value = value.href
