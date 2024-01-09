@@ -574,7 +574,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     const hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
-    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = { hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname) }
     this.tracePropagationStyle = {
@@ -724,7 +724,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(defaults, 'site', 'datadoghq.com')
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'flushInterval', defaultFlushInterval)
+    // this._setValue(defaults, 'flushInterval', defaultFlushInterval)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setBoolean(defaults, 'clientIpEnabled', false)
@@ -963,7 +963,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setValue(opts, 'site', options.site)
     this._setValue(opts, 'hostname', options.hostname)
     if (options.port) this._setValue(opts, 'port', String(options.port))
-    if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    // if (parseInt(options.flushInterval, 10))
+    // this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setValue(opts, 'clientIpHeader', options.clientIpHeader)
@@ -1141,9 +1142,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
           })
         }
       }
-    } else {
-      updateConfig(changes, this)
     }
+    updateConfig(changes, this)
 
     return changes
   }
