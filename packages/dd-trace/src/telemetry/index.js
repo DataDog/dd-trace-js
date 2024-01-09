@@ -126,7 +126,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: config.configWithOrigin ? config.configWithOrigin : flatten(config)
+    configuration: config.configWithOrigin || flatten(config)
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
