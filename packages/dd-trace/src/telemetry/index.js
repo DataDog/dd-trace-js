@@ -106,7 +106,7 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
       flatten(value, result, [...prefix, key], traversedObjects)
     } else {
       // TODO: add correct origin value
-      result.push({ name: [...prefix, key].join('.'), value, origin: 'unknown' })
+      result.push({ name: [...prefix, key].join('.'), value, origin: 'code' })
     }
   }
   return result
@@ -126,7 +126,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: flatten(config)
+    configuration: config.configWithOrigin ? config.configWithOrigin : flatten(config)
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
