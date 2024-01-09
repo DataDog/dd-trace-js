@@ -51,7 +51,7 @@ describe('Plugin', () => {
             .then(_port => {
               port = _port
               server = Hapi.server({
-                address: '127.0.0.1',
+                address: 'localhost',
                 port
               })
               return server.start()
@@ -69,9 +69,9 @@ describe('Plugin', () => {
 
               if (Hapi.Server.prototype.connection) {
                 server = new Hapi.Server()
-                server.connection({ address: '127.0.0.1', port })
+                server.connection({ address: 'localhost', port })
               } else {
-                server = new Hapi.Server('127.0.0.1', port)
+                server = new Hapi.Server('localhost', port)
               }
 
               server.start(done)
