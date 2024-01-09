@@ -63,7 +63,9 @@ describe('test-api-manual', () => {
       )
       assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
 
-      const customSpan = events.find(event => event.type === 'span')
+      const customSpan = events
+        .filter(event => event.content.type !== 'system' && event.content.name !== 'command_execution')
+        .find(event => event.type === 'span')
       assert.propertyVal(customSpan.content, 'resource', 'custom.span')
     }).catch(done)
 
