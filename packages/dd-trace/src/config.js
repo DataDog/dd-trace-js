@@ -894,7 +894,7 @@ class Config {
           if (name === 'url') value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
           if (name === 'peerServiceMapping') value = formatPeerServiceMapping(value)
-          if (value && name === 'url') value = value.href
+          if (name === 'headerTags') value = value.toString()
 
           changes.push({ name, value, origin })
 
