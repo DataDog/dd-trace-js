@@ -92,14 +92,24 @@ class Config {
         logger.warn(`${deprecatedEnvVarName} is deprecated. Use DD_PROFILING_${shortVarName} instead.`)
       }
     }
+    // Profiler sampling contexts are not available on Windows, so features
+    // depending on those (code hotspots and endpoint collection) need to default
+    // to false on Windows.
+    const samplingContextsAvailable = process.platform !== 'win32'
+    function checkOptionAllowed (option, description) {
+      if (option && !samplingContextsAvailable) {
+        throw new Error(`${description} not supported on ${process.platform}.`)
+      }
+    }
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, true))
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
+    checkOptionAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
 
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
@@ -148,8 +158,9 @@ class Config {
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, true))
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
+    checkOptionAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
