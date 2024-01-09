@@ -84,23 +84,25 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it(`should conform to the naming schema`, done => {
-          agent
-            .use(traces => {
-              const span = selectSpan(traces)
-              const expectedOpName = typeof opName === 'function'
-                ? opName()
-                : opName
-              const expectedServiceName = typeof serviceName === 'function'
-                ? serviceName()
-                : serviceName
+        it(`should conform to the naming schema`, () => {
+          return new Promise((resolve, reject) => {
+            agent
+              .use(traces => {
+                const span = selectSpan(traces)
+                const expectedOpName = typeof opName === 'function'
+                  ? opName()
+                  : opName
+                const expectedServiceName = typeof serviceName === 'function'
+                  ? serviceName()
+                  : serviceName
 
-              expect(span).to.have.property('name', expectedOpName)
-              expect(span).to.have.property('service', expectedServiceName)
-            })
-            .then(done)
-            .catch(done)
-          spanProducerFn(done)
+                expect(span).to.have.property('name', expectedOpName)
+                expect(span).to.have.property('service', expectedServiceName)
+              })
+              .then(resolve)
+              .catch(reject)
+            spanProducerFn(reject)
+          })
         })
       })
     })
