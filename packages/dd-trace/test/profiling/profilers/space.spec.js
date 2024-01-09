@@ -47,8 +47,11 @@ describe('profilers/native/space', () => {
   it('should stop the internal space profiler', () => {
     const profiler = new NativeSpaceProfiler()
 
+    expect(profiler.isStarted()).to.be.false
     profiler.start()
+    expect(profiler.isStarted()).to.be.true
     profiler.stop()
+    expect(profiler.isStarted()).to.be.false
 
     sinon.assert.calledOnce(pprof.heap.stop)
   })
@@ -60,7 +63,21 @@ describe('profilers/native/space', () => {
 
     pprof.heap.profile.returns('profile')
 
-    const profile = profiler.profile()
+    const profile = profiler.profile(true)
+    expect(profiler.isStarted()).to.be.true
+
+    expect(profile).to.equal('profile')
+  })
+
+  it('should collect profiles from the pprof space profiler and stop profiler if not restarted', () => {
+    const profiler = new NativeSpaceProfiler()
+
+    profiler.start()
+
+    pprof.heap.profile.returns('profile')
+
+    const profile = profiler.profile(false)
+    expect(profiler.isStarted()).to.be.false
 
     expect(profile).to.equal('profile')
   })
@@ -69,7 +86,7 @@ describe('profilers/native/space', () => {
     const profiler = new NativeSpaceProfiler()
 
     profiler.start()
-    const profile = profiler.profile()
+    const profile = profiler.profile(true)
     profiler.encode(profile)
 
     sinon.assert.calledOnce(pprof.encode)
@@ -81,7 +98,7 @@ describe('profilers/native/space', () => {
     const mapper = {}
 
     profiler.start({ mapper })
-    profiler.profile()
+    profiler.profile(true)
 
     sinon.assert.calledWith(pprof.heap.profile, undefined, mapper)
   })

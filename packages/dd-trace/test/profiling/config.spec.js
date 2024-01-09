@@ -48,9 +48,10 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].codeHotspotsEnabled()).true
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
+    expect(config.cpuProfilingEnabled).false
   })
 
   it('should support configuration options', () => {
@@ -62,7 +63,7 @@ describe('config', () => {
       exporters: 'agent,file',
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
-      codeHotspotsEnabled: true
+      codeHotspotsEnabled: false
     }
 
     const config = new Config(options)
@@ -85,7 +86,7 @@ describe('config', () => {
     expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).true
+    expect(config.profilers[1].codeHotspotsEnabled()).false
   })
 
   it('should filter out invalid profilers', () => {
@@ -129,8 +130,8 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
     }
     const options = {
       logger: nullLogger
@@ -143,6 +144,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).true
     expect(config.v8ProfilerBugWorkaroundEnabled).false
+    expect(config.cpuProfilingEnabled).true
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -181,7 +183,6 @@ describe('config', () => {
   it('should prioritize options over env variables', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
     }
     const options = {

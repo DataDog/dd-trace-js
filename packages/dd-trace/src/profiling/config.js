@@ -35,6 +35,7 @@ class Config {
       DD_PROFILING_HEAP_ENABLED,
       DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
       DD_PROFILING_WALLTIME_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
@@ -97,7 +98,7 @@ class Config {
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, true))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
 
     this.pprofPrefix = pprofPrefix
@@ -147,8 +148,11 @@ class Config {
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, true))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
+
+    this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
 
     this.profilers = ensureProfilers(profilers, this)
   }
