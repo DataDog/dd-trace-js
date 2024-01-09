@@ -612,12 +612,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     // this.isCiVisibility = isTrue(DD_IS_CIVISIBILITY)
 
-    this.isIntelligentTestRunnerEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
-    this.isGitUploadEnabled = this.isCiVisibility &&
+    this.isIntelligentTestRunnerEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
+    this.isGitUploadEnabled = isTrue(DD_IS_CIVISIBILITY) &&
       (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
 
     // this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
-    this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
+    this.isManualApiEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
 
     // this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
