@@ -122,42 +122,11 @@ class Config {
 
     this.configWithOrigin = []
 
-    const DD_PROFILING_ENABLED = coalesce(
-      options.profiling, // TODO: remove when enabled by default
-      process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
-      process.env.DD_PROFILING_ENABLED,
-      false
-    )
-    const DD_PROFILING_EXPORTERS = coalesce(
-      process.env.DD_PROFILING_EXPORTERS,
-      'agent'
-    )
-    const DD_PROFILING_SOURCE_MAP = process.env.DD_PROFILING_SOURCE_MAP
-    const DD_RUNTIME_METRICS_ENABLED = coalesce(
-      options.runtimeMetrics, // TODO: remove when enabled by default
-      process.env.DD_RUNTIME_METRICS_ENABLED,
-      false
-    )
-    const DD_DBM_PROPAGATION_MODE = coalesce(
-      options.dbmPropagationMode,
-      process.env.DD_DBM_PROPAGATION_MODE,
-      'disabled'
-    )
-    const DD_DATA_STREAMS_ENABLED = coalesce(
-      options.dsmEnabled,
-      process.env.DD_DATA_STREAMS_ENABLED,
-      false
-    )
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
       process.env.DD_TRACE_AGENT_HOSTNAME,
       '127.0.0.1'
-    )
-    const DD_TRACE_AGENT_PORT = coalesce(
-      options.port,
-      process.env.DD_TRACE_AGENT_PORT,
-      '8126'
     )
     const DD_TRACE_AGENT_URL = coalesce(
       options.url,
@@ -192,17 +161,6 @@ class Config {
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
     )
-    const DD_TRACE_STARTUP_LOGS = coalesce(
-      options.startupLogs,
-      process.env.DD_TRACE_STARTUP_LOGS,
-      false
-    )
-
-    const DD_OPENAI_LOGS_ENABLED = coalesce(
-      options.openAiLogsEnabled,
-      process.env.DD_OPENAI_LOGS_ENABLED,
-      false
-    )
 
     const DD_API_KEY = coalesce(
       process.env.DATADOG_API_KEY,
@@ -221,44 +179,7 @@ class Config {
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !inServerlessEnvironment
     )
-    const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
-      ? Math.floor(parseFloat(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000)
-      : 60000
-    const DD_OPENAI_SPAN_CHAR_LIMIT = process.env.DD_OPENAI_SPAN_CHAR_LIMIT
-      ? parseInt(process.env.DD_OPENAI_SPAN_CHAR_LIMIT)
-      : 128
-    const DD_TELEMETRY_DEBUG = coalesce(
-      process.env.DD_TELEMETRY_DEBUG,
-      false
-    )
-    const DD_TELEMETRY_METRICS_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_METRICS_ENABLED,
-      true
-    )
-    const DD_TRACE_AGENT_PROTOCOL_VERSION = coalesce(
-      options.protocolVersion,
-      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION,
-      '0.4'
-    )
-    const DD_TRACE_PARTIAL_FLUSH_MIN_SPANS = coalesce(
-      parseInt(options.flushMinSpans),
-      parseInt(process.env.DD_TRACE_PARTIAL_FLUSH_MIN_SPANS),
-      1000
-    )
-    const DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = coalesce(
-      process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
-      qsRegex
-    )
-    const DD_TRACE_CLIENT_IP_ENABLED = coalesce(
-      options.clientIpEnabled,
-      process.env.DD_TRACE_CLIENT_IP_ENABLED && isTrue(process.env.DD_TRACE_CLIENT_IP_ENABLED),
-      false
-    )
-    const DD_TRACE_CLIENT_IP_HEADER = coalesce(
-      options.clientIpHeader,
-      process.env.DD_TRACE_CLIENT_IP_HEADER,
-      null
-    )
+
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
@@ -294,31 +215,15 @@ class Config {
       process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       false
     )
-    const DD_TRACE_RUNTIME_ID_ENABLED = coalesce(
-      options.experimental && options.experimental.runtimeId,
-      process.env.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
-      false
-    )
     const DD_TRACE_EXPORTER = coalesce(
       options.experimental && options.experimental.exporter,
       process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
-    )
-    const DD_TRACE_GET_RUM_DATA_ENABLED = coalesce(
-      options.experimental && options.experimental.enableGetRumData,
-      process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
-      false
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
         process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
       )
-    )
-    const DD_TRACE_PEER_SERVICE_MAPPING = coalesce(
-      options.peerServiceMapping,
-      process.env.DD_TRACE_PEER_SERVICE_MAPPING ? fromEntries(
-        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
-      ) : {}
     )
 
     const peerServiceSet = (
@@ -338,32 +243,10 @@ class Config {
         : (peerServiceSet ? !isFalse(peerServiceValue) : true)
     )
 
-    const DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = coalesce(
-      options.spanRemoveIntegrationFromService,
-      isTrue(process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
-    )
-    const DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = coalesce(
-      process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
-      '512'
-    )
-
     const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       isGCPFunction || isAzureFunctionConsumptionPlan
-    )
-
-    // the tracer generates 128 bit IDs by default as of v5
-    const DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = coalesce(
-      options.traceId128BitGenerationEnabled,
-      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
-      true
-    )
-
-    const DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = coalesce(
-      options.traceId128BitLoggingEnabled,
-      process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
-      false
     )
 
     this.appsecOpt = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
@@ -376,46 +259,6 @@ class Config {
       this.appsecOpt = {}
     }
 
-    const DD_APPSEC_ENABLED = coalesce(
-      this.appsecOpt.enabled,
-      process.env.DD_APPSEC_ENABLED && isTrue(process.env.DD_APPSEC_ENABLED)
-    )
-    const DD_APPSEC_RULES = coalesce(
-      this.appsecOpt.rules,
-      process.env.DD_APPSEC_RULES
-    )
-    const DD_APPSEC_TRACE_RATE_LIMIT = coalesce(
-      parseInt(this.appsecOpt.rateLimit),
-      parseInt(process.env.DD_APPSEC_TRACE_RATE_LIMIT),
-      100
-    )
-    const DD_APPSEC_WAF_TIMEOUT = coalesce(
-      parseInt(this.appsecOpt.wafTimeout),
-      parseInt(process.env.DD_APPSEC_WAF_TIMEOUT),
-      5e3 // µs
-    )
-    const DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = coalesce(
-      this.appsecOpt.obfuscatorKeyRegex,
-      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
-      `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|se\
-cret)|sign(?:ed|ature)|bearer|authorization`
-    )
-    const DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = coalesce(
-      this.appsecOpt.obfuscatorValueRegex,
-      process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
-      `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
-ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
-\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
-|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
-    )
-    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = coalesce(
-      maybeFile(this.appsecOpt.blockedTemplateHtml),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML)
-    )
-    const DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(this.appsecOpt.blockedTemplateJson),
-      maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
-    )
     const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
       maybeFile(this.appsecOpt.blockedTemplateGraphql),
       maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
@@ -436,15 +279,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       0.1
     )
 
-    const remoteConfigOptions = options.remoteConfig || {}
     const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
       !inServerlessEnvironment
-    )
-    const DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = coalesce(
-      parseFloat(remoteConfigOptions.pollInterval),
-      parseFloat(process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS),
-      5 // seconds
     )
 
     this.iastOptions = options?.experimental?.iast
@@ -459,43 +296,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_IAST_ENABLED
     )
 
-    const DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
-      true
-    )
-
-    const iastRequestSampling = coalesce(
-      parseInt(this.iastOptions?.requestSampling),
-      parseInt(process.env.DD_IAST_REQUEST_SAMPLING),
-      defaultIastRequestSampling
-    )
-    const DD_IAST_REQUEST_SAMPLING = iastRequestSampling < 0 ||
-      iastRequestSampling > 100 ? defaultIastRequestSampling : iastRequestSampling
-
-    const DD_IAST_MAX_CONCURRENT_REQUESTS = coalesce(
-      parseInt(this.iastOptions?.maxConcurrentRequests),
-      parseInt(process.env.DD_IAST_MAX_CONCURRENT_REQUESTS),
-      2
-    )
-
-    const DD_IAST_MAX_CONTEXT_OPERATIONS = coalesce(
-      parseInt(this.iastOptions?.maxContextOperations),
-      parseInt(process.env.DD_IAST_MAX_CONTEXT_OPERATIONS),
-      2
-    )
-
-    const DD_IAST_DEDUPLICATION_ENABLED = coalesce(
-      this.iastOptions?.deduplicationEnabled,
-      process.env.DD_IAST_DEDUPLICATION_ENABLED && isTrue(process.env.DD_IAST_DEDUPLICATION_ENABLED),
-      true
-    )
-
-    const DD_IAST_REDACTION_ENABLED = coalesce(
-      this.iastOptions?.redactionEnabled,
-      !isFalse(process.env.DD_IAST_REDACTION_ENABLED),
-      true
-    )
-
     const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
       this.iastOptions?.redactionNamePattern,
       process.env.DD_IAST_REDACTION_NAME_PATTERN,
@@ -508,19 +308,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       null
     )
 
-    const DD_IAST_TELEMETRY_VERBOSITY = coalesce(
-      this.iastOptions?.telemetryVerbosity,
-      process.env.DD_IAST_TELEMETRY_VERBOSITY,
-      'INFORMATION'
-    )
-
     const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
-      true
-    )
-
-    const DD_TRACE_GIT_METADATA_ENABLED = coalesce(
-      process.env.DD_TRACE_GIT_METADATA_ENABLED,
       true
     )
 
@@ -543,7 +332,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       null
     )
 
-    const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
       rules: coalesce(
@@ -574,7 +362,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     const hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval) // TODO: broke tracing
+    // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.dogstatsd = { hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname) }
     this.tracePropagationStyle = {
