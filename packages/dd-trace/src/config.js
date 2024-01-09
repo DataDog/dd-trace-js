@@ -921,7 +921,7 @@ class Config {
         'commitSHA',
         'repositoryUrl'
       ]
-      this.configWithOrigin += changes
+      this.configWithOrigin = this.configWithOrigin.concat(changes)
       for (const name in calculated) {
         if (this._existsPropertyName(name)) {
           this.configWithOrigin.push({
