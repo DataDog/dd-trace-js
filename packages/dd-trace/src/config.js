@@ -893,7 +893,7 @@ class Config {
 
           if (name === 'url') value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
-          if (name === 'peerServiceMapping') value = formatPeerServiceMapping(value)
+          if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
           if (name === 'headerTags') value = value.toString()
 
           changes.push({ name, value, origin })
@@ -1011,11 +1011,11 @@ function getAgentUrl (url, options) {
   }
 }
 
-function formatPeerServiceMapping (peerServiceMapping) {
-  // format serviceMapping from an object to a string map in order for
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
   // telemetry intake to accept the configuration
-  return peerServiceMapping
-    ? Object.entries(peerServiceMapping).map(([key, value]) => `${key}:${value}`).join(',')
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
     : ''
 }
 
