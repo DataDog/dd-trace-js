@@ -2851,10 +2851,10 @@ import-fresh@^3.0.0, import-fresh@^3.2.1:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@^1.4.2:
-  version "1.4.2"
-  resolved "https://registry.npmjs.org/import-in-the-middle/-/import-in-the-middle-1.4.2.tgz"
-  integrity "sha1-KiZmduNJXnLAS7ql7BR1a6FoORs= sha512-9WOz1Yh/cvO/p69sxRmhyQwrIGGSp7EIdcb+fFNVi7CzQGQB8U1/1XrKVSbEd/GNOAeM0peJtmi7+qphe7NvAw=="
+import-in-the-middle@^1.7.1:
+  version "1.7.2"
+  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-1.7.2.tgz#31c44088271b50ecb9cacbdfb1e5732c802e0658"
+  integrity sha512-coz7AjRnPyKW36J6JX5Bjz1mcX7MX1H2XsEGseVcnXMdzsAbbAu0HBZhiAem+3SAmuZdi+p8OwoB2qUpTRgjOQ==
   dependencies:
     acorn "^8.8.2"
     acorn-import-assertions "^1.9.0"
@@ -3418,9 +3418,9 @@ lie@~3.3.0:
   dependencies:
     immediate "~3.0.5"
 
-limiter@^1.1.4:
+limiter@1.1.5:
   version "1.1.5"
-  resolved "https://registry.npmjs.org/limiter/-/limiter-1.1.5.tgz"
+  resolved "https://registry.yarnpkg.com/limiter/-/limiter-1.1.5.tgz#8f92a25b3b16c6131293a0cc834b4a838a2aa7c2"
   integrity sha512-FWWMIEOxz3GwUI4Ts/IvgVy6LPvoMPgjMdQ185nN6psJyBJ4yOpzqm695/h5umdLJg2vW3GR5iG11MAkR2AzJA==
 
 locate-path@^5.0.0:
