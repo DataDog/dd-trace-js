@@ -152,174 +152,176 @@ describe('profiler', () => {
     await sandbox.remove()
   })
 
-  it('code hotspots and endpoint tracing works', async () => {
-    const procStart = BigInt(Date.now() * 1000000)
-    const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
-      cwd,
-      env: {
-        DD_PROFILING_PROFILERS: 'wall',
-        DD_PROFILING_EXPORTERS: 'file',
-        DD_PROFILING_ENABLED: 1,
-        DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
-        DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1,
-        DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
-      }
-    })
-
-    await processExitPromise(proc, 5000)
-    const procEnd = BigInt(Date.now() * 1000000)
-
-    const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
-
-    // We check the profile for following invariants:
-    // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
-    //   epoch) between process start and end.
-    // - it needs to have samples with 9 total different 'span id's, and 3 different
-    //   'local root span id's
-    // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
-    //   'endpoint-1', or 'endpoint-2'
-    // - every occurrence of a span must have the same root span and endpoint
-    const rootSpans = new Set()
-    const endpoints = new Set()
-    const spans = new Map()
-    const strings = profile.stringTable
-    const tsKey = strings.dedup('end_timestamp_ns')
-    const spanKey = strings.dedup('span id')
-    const rootSpanKey = strings.dedup('local root span id')
-    const endpointKey = strings.dedup('trace endpoint')
-    const threadNameKey = strings.dedup('thread name')
-    const threadIdKey = strings.dedup('thread id')
-    const osThreadIdKey = strings.dedup('os thread id')
-    const threadNameValue = strings.dedup('Main Event Loop')
-    const nonJSThreadNameValue = strings.dedup('Non-JS threads')
-
-    for (const sample of profile.sample) {
-      let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
-      for (const label of sample.label) {
-        switch (label.key) {
-          case tsKey: ts = label.num; break
-          case spanKey: spanId = label.str; break
-          case rootSpanKey: rootSpanId = label.str; break
-          case endpointKey: endpoint = label.str; break
-          case threadNameKey: threadName = label.str; break
-          case threadIdKey: threadId = label.str; break
-          case osThreadIdKey: osThreadId = label.str; break
-          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
+  if (process.platform !== 'win32') {
+    it('code hotspots and endpoint tracing works', async () => {
+      const procStart = BigInt(Date.now() * 1000000)
+      const proc = fork(path.join(cwd, 'profiler/codehotspots.js'), {
+        cwd,
+        env: {
+          DD_PROFILING_PROFILERS: 'wall',
+          DD_PROFILING_EXPORTERS: 'file',
+          DD_PROFILING_ENABLED: 1,
+          DD_PROFILING_CODEHOTSPOTS_ENABLED: 1,
+          DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: 1,
+          DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: 1
         }
-      }
-      if (threadName !== nonJSThreadNameValue) {
-        // Timestamp must be defined and be between process start and end time
-        assert.isDefined(ts, encoded)
-        assert.isNumber(osThreadId, encoded)
-        assert.equal(threadId, strings.dedup('0'), encoded)
-        assert.isTrue(ts <= procEnd, encoded)
-        assert.isTrue(ts >= procStart, encoded)
-        // Thread name must be defined and exactly equal "Main Event Loop"
-        assert.equal(threadName, threadNameValue, encoded)
-      } else {
-        assert.equal(threadId, strings.dedup('NA'), encoded)
-      }
-      // Either all or none of span-related labels are defined
-      if (endpoint === undefined) {
-        // It is possible to catch a sample executing in tracer's startSpan so
-        // that endpoint is not yet set. We'll ignore those samples.
-        continue
-      }
-      if (spanId || rootSpanId) {
-        assert.isDefined(spanId, encoded)
-        assert.isDefined(rootSpanId, encoded)
+      })
 
-        rootSpans.add(rootSpanId)
-        if (spanId === rootSpanId) {
-          // It is possible to catch a sample executing in the root span before
-          // it entered the nested span; we ignore these too, although we'll
-          // still record the root span ID as we want to assert there'll only be
-          // 3 of them.
+      await processExitPromise(proc, 5000)
+      const procEnd = BigInt(Date.now() * 1000000)
+
+      const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
+
+      // We check the profile for following invariants:
+      // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
+      //   epoch) between process start and end.
+      // - it needs to have samples with 9 total different 'span id's, and 3 different
+      //   'local root span id's
+      // - samples with spans also must have a 'trace endpoint' label with values 'endpoint-0',
+      //   'endpoint-1', or 'endpoint-2'
+      // - every occurrence of a span must have the same root span and endpoint
+      const rootSpans = new Set()
+      const endpoints = new Set()
+      const spans = new Map()
+      const strings = profile.stringTable
+      const tsKey = strings.dedup('end_timestamp_ns')
+      const spanKey = strings.dedup('span id')
+      const rootSpanKey = strings.dedup('local root span id')
+      const endpointKey = strings.dedup('trace endpoint')
+      const threadNameKey = strings.dedup('thread name')
+      const threadIdKey = strings.dedup('thread id')
+      const osThreadIdKey = strings.dedup('os thread id')
+      const threadNameValue = strings.dedup('Main Event Loop')
+      const nonJSThreadNameValue = strings.dedup('Non-JS threads')
+
+      for (const sample of profile.sample) {
+        let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
+        for (const label of sample.label) {
+          switch (label.key) {
+            case tsKey: ts = label.num; break
+            case spanKey: spanId = label.str; break
+            case rootSpanKey: rootSpanId = label.str; break
+            case endpointKey: endpoint = label.str; break
+            case threadNameKey: threadName = label.str; break
+            case threadIdKey: threadId = label.str; break
+            case osThreadIdKey: osThreadId = label.str; break
+            default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
+          }
+        }
+        if (threadName !== nonJSThreadNameValue) {
+          // Timestamp must be defined and be between process start and end time
+          assert.isDefined(ts, encoded)
+          assert.isNumber(osThreadId, encoded)
+          assert.equal(threadId, strings.dedup('0'), encoded)
+          assert.isTrue(ts <= procEnd, encoded)
+          assert.isTrue(ts >= procStart, encoded)
+          // Thread name must be defined and exactly equal "Main Event Loop"
+          assert.equal(threadName, threadNameValue, encoded)
+        } else {
+          assert.equal(threadId, strings.dedup('NA'), encoded)
+        }
+        // Either all or none of span-related labels are defined
+        if (endpoint === undefined) {
+          // It is possible to catch a sample executing in tracer's startSpan so
+          // that endpoint is not yet set. We'll ignore those samples.
           continue
         }
-        const spanData = { rootSpanId, endpoint }
-        const existingSpanData = spans.get(spanId)
-        if (existingSpanData) {
-          // Span's root span and endpoint must be consistent across samples
-          assert.deepEqual(spanData, existingSpanData, encoded)
-        } else {
-          // New span id, store span data
-          spans.set(spanId, spanData)
-          // Verify endpoint value
-          const endpointVal = strings.strings[endpoint]
-          switch (endpointVal) {
-            case 'endpoint-0':
-            case 'endpoint-1':
-            case 'endpoint-2':
-              endpoints.add(endpoint)
-              break
-            default:
-              assert.fail(`Unexpected endpoint value ${endpointVal} ${encoded}`)
+        if (spanId || rootSpanId) {
+          assert.isDefined(spanId, encoded)
+          assert.isDefined(rootSpanId, encoded)
+
+          rootSpans.add(rootSpanId)
+          if (spanId === rootSpanId) {
+            // It is possible to catch a sample executing in the root span before
+            // it entered the nested span; we ignore these too, although we'll
+            // still record the root span ID as we want to assert there'll only be
+            // 3 of them.
+            continue
+          }
+          const spanData = { rootSpanId, endpoint }
+          const existingSpanData = spans.get(spanId)
+          if (existingSpanData) {
+            // Span's root span and endpoint must be consistent across samples
+            assert.deepEqual(spanData, existingSpanData, encoded)
+          } else {
+            // New span id, store span data
+            spans.set(spanId, spanData)
+            // Verify endpoint value
+            const endpointVal = strings.strings[endpoint]
+            switch (endpointVal) {
+              case 'endpoint-0':
+              case 'endpoint-1':
+              case 'endpoint-2':
+                endpoints.add(endpoint)
+                break
+              default:
+                assert.fail(`Unexpected endpoint value ${endpointVal} ${encoded}`)
+            }
           }
         }
       }
-    }
-    // Need to have a total of 9 different spans, with 3 different root spans
-    // and 3 different endpoints.
-    assert.equal(spans.size, 9, encoded)
-    assert.equal(rootSpans.size, 3, encoded)
-    assert.equal(endpoints.size, 3, encoded)
-  })
-
-  if (semver.gte(process.version, '16.0.0')) {
-    it('dns timeline events work', async () => {
-      const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
-      assert.sameDeepMembers(dnsEvents, [
-        { name: 'lookup', host: 'example.org' },
-        { name: 'lookup', host: 'example.com' },
-        { name: 'lookup', host: 'datadoghq.com' },
-        { name: 'queryA', host: 'datadoghq.com' },
-        { name: 'lookupService', address: '13.224.103.60', port: 80 }
-      ])
+      // Need to have a total of 9 different spans, with 3 different root spans
+      // and 3 different endpoints.
+      assert.equal(spans.size, 9, encoded)
+      assert.equal(rootSpans.size, 3, encoded)
+      assert.equal(endpoints.size, 3, encoded)
     })
 
-    it('net timeline events work', async () => {
-      // Simple server that writes a constant message to the socket.
-      const msg = 'cya later!\n'
-      function createServer () {
-        const server = net.createServer((socket) => {
-          socket.end(msg, 'utf8')
-        }).on('error', (err) => {
-          throw err
-        })
-        return server
-      }
-      // Create two instances of the server
-      const server1 = createServer()
-      try {
-        const server2 = createServer()
+    if (semver.gte(process.version, '16.0.0')) {
+      it('dns timeline events work', async () => {
+        const dnsEvents = await gatherNetworkTimelineEvents(cwd, 'profiler/dnstest.js', 'dns')
+        assert.sameDeepMembers(dnsEvents, [
+          { name: 'lookup', host: 'example.org' },
+          { name: 'lookup', host: 'example.com' },
+          { name: 'lookup', host: 'datadoghq.com' },
+          { name: 'queryA', host: 'datadoghq.com' },
+          { name: 'lookupService', address: '13.224.103.60', port: 80 }
+        ])
+      })
+
+      it('net timeline events work', async () => {
+        // Simple server that writes a constant message to the socket.
+        const msg = 'cya later!\n'
+        function createServer () {
+          const server = net.createServer((socket) => {
+            socket.end(msg, 'utf8')
+          }).on('error', (err) => {
+            throw err
+          })
+          return server
+        }
+        // Create two instances of the server
+        const server1 = createServer()
         try {
-          // Have the servers listen on ephemeral ports
-          const p = new Promise(resolve => {
-            server1.listen(0, () => {
-              server2.listen(0, async () => {
-                resolve([server1.address().port, server2.address().port])
+          const server2 = createServer()
+          try {
+            // Have the servers listen on ephemeral ports
+            const p = new Promise(resolve => {
+              server1.listen(0, () => {
+                server2.listen(0, async () => {
+                  resolve([server1.address().port, server2.address().port])
+                })
               })
             })
-          })
-          const [ port1, port2 ] = await p
-          const args = [String(port1), String(port2), msg]
-          // Invoke the profiled program, passing it the ports of the servers and
-          // the expected message.
-          const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
-          // The profiled program should have two TCP connection events to the two
-          // servers.
-          assert.sameDeepMembers(events, [
-            { name: 'connect', host: '127.0.0.1', port: port1 },
-            { name: 'connect', host: '127.0.0.1', port: port2 }
-          ])
+            const [ port1, port2 ] = await p
+            const args = [String(port1), String(port2), msg]
+            // Invoke the profiled program, passing it the ports of the servers and
+            // the expected message.
+            const events = await gatherNetworkTimelineEvents(cwd, 'profiler/nettest.js', 'net', args)
+            // The profiled program should have two TCP connection events to the two
+            // servers.
+            assert.sameDeepMembers(events, [
+              { name: 'connect', host: '127.0.0.1', port: port1 },
+              { name: 'connect', host: '127.0.0.1', port: port2 }
+            ])
+          } finally {
+            server2.close()
+          }
         } finally {
-          server2.close()
+          server1.close()
         }
-      } finally {
-        server1.close()
-      }
-    })
+      })
+    }
   }
 
   context('shutdown', () => {
