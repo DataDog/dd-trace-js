@@ -11,6 +11,8 @@ const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
+const samplingContextsAvailable = process.platform !== 'win32'
+
 describe('config', () => {
   let Config
   let env
@@ -48,7 +50,7 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
     expect(config.cpuProfilingEnabled).false
@@ -142,7 +144,7 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
     expect(config.cpuProfilingEnabled).true
   })
@@ -181,6 +183,10 @@ describe('config', () => {
   })
 
   it('should prioritize options over env variables', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
@@ -202,6 +208,10 @@ describe('config', () => {
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
@@ -236,6 +246,30 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[0].endpointCollectionEnabled()).false
+  })
+
+  it('should prevent accidentally enabling code hotspots', () => {
+    if (samplingContextsAvailable) {
+      return
+    }
+
+    const options = {
+      codeHotspotsEnabled: true
+    }
+    // eslint-disable-next-line no-new
+    expect(() => { new Config(options) }).to.throw('Code hotspots not supported on ')
+  })
+
+  it('should prevent accidentally enabling endpoint collection', () => {
+    if (samplingContextsAvailable) {
+      return
+    }
+
+    const options = {
+      endpointCollection: true
+    }
+    // eslint-disable-next-line no-new
+    expect(() => { new Config(options) }).to.throw('Endpoint collection not supported on ')
   })
 
   it('should support tags', () => {
