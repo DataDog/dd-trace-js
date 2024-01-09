@@ -496,7 +496,6 @@ testFrameworks.forEach(({
     it('can run tests and report spans', (done) => {
       receiver.setInfoResponse({ endpoints: [] })
       receiver.payloadReceived(({ url }) => url === '/v0.4/traces').then(({ payload }) => {
-        // TODO confirm this change with @juan
         const testSpans = payload.flatMap(trace => trace)
         const resourceNames = testSpans.map(span => span.resource)
 
