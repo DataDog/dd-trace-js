@@ -97,7 +97,7 @@ describe('Plugin', function () {
         execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
-        execSync('yarn exec next build', {
+        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
           cwd,
           env: {
             ...process.env,
