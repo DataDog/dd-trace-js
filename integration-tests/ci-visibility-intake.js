@@ -10,7 +10,8 @@ const { FakeAgent } = require('./helpers')
 
 const DEFAULT_SETTINGS = {
   code_coverage: true,
-  tests_skipping: true
+  tests_skipping: true,
+  itr_enabled: true
 }
 
 const DEFAULT_SUITES_TO_SKIP = []

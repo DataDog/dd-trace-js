@@ -17,6 +17,9 @@
               "inputs": [
                 {
                   "address": "graphql.server.all_resolvers"
+                },
+                {
+                  "address": "graphql.server.resolver"
                 }
               ],
               "list": [
@@ -27,7 +30,7 @@
           }
         ],
         "transformers": ["lowercase"],
-        "on_match": ["block"]
+        "on_match": []
       }
     ]
 }

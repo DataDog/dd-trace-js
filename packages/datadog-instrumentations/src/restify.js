@@ -55,7 +55,7 @@ function wrapFn (fn) {
         return result.then(function () {
           nextChannel.publish({ req })
           finishChannel.publish({ req })
-          return arguments
+          return arguments[0]
         }).catch(function (error) {
           errorChannel.publish({ req, error })
           nextChannel.publish({ req })

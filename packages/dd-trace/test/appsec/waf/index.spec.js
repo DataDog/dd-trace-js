@@ -214,15 +214,19 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
 
         wafContextWrapper.run({
-          'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl',
-          'processor.address': { 'extract-schema': true }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' },
+            'server.request.uri.raw': 'https://testurl',
+            'processor.address': { 'extract-schema': true }
+          }
         })
 
         expect(ddwafContext.run).to.be.calledOnceWithExactly({
-          'server.request.headers.no_cookies': { 'header': 'value' },
-          'server.request.uri.raw': 'https://testurl',
-          'processor.address': { 'extract-schema': true }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' },
+            'server.request.uri.raw': 'https://testurl',
+            'processor.address': { 'extract-schema': true }
+          }
         }, config.appsec.wafTimeout)
       })
 
@@ -235,7 +239,9 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -252,7 +258,9 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -266,7 +274,9 @@ describe('WAF Manager', () => {
       it('should not report attack when ddwafContext does not return events', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -277,7 +287,9 @@ describe('WAF Manager', () => {
       it('should not report attack when ddwafContext returns empty data', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [] })
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' }
+          }
         }
 
         wafContextWrapper.run(params)
@@ -290,7 +302,9 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions: actions })
 
         const params = {
-          'server.request.headers.no_cookies': { 'header': 'value' }
+          persistent: {
+            'server.request.headers.no_cookies': { 'header': 'value' }
+          }
         }
 
         const result = wafContextWrapper.run(params)
@@ -305,9 +319,11 @@ describe('WAF Manager', () => {
           derivatives: [{ '_dd.appsec.s.req.body': [8] }]
         }
         const params = {
-          'server.request.body': 'value',
-          'waf.context.processor': {
-            'extract-schema': true
+          persistent: {
+            'server.request.body': 'value',
+            'waf.context.processor': {
+              'extract-schema': true
+            }
           }
         }
 

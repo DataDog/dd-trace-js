@@ -5,7 +5,10 @@ const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta n
 
 const json = `{"errors":[{"title":"You've been blocked","detail":"Sorry, you cannot access this page. Please contact the customer service team. Security provided by Datadog."}]}`
 
+const graphqlJson = `{"errors":[{"message":"You've been blocked","extensions":{"detail":"Sorry, you cannot perform this operation. Please contact the customer service team. Security provided by Datadog."}}]}`
+
 module.exports = {
   html,
-  json
+  json,
+  graphqlJson
 }

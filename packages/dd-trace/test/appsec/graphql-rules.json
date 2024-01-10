@@ -17,6 +17,12 @@
               "inputs": [
                 {
                   "address": "graphql.server.all_resolvers"
+                },
+                {
+                  "address": "graphql.server.resolver"
+                },
+                {
+                  "address": "server.request.headers.no_cookies"
                 }
               ],
               "list": [

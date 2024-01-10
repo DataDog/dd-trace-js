@@ -49,7 +49,9 @@ function waitForActiveStream (kinesis, cb) {
   kinesis.describeStream({
     StreamName: 'MyStream'
   }, (err, data) => {
-    if (err) return waitForActiveStream(kinesis, cb)
+    if (err) {
+      return waitForActiveStream(kinesis, cb)
+    }
     if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
       return waitForActiveStream(kinesis, cb)
     }

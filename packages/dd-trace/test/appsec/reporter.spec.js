@@ -292,7 +292,7 @@ describe('reporter', () => {
       expect(span.addTags).to.be.calledOnceWithExactly({})
     })
 
-    it('should call addTags with matched tags', () => {
+    it('should call addTags', () => {
       const schemaValue = [{ 'key': [8] }]
       const derivatives = {
         '_dd.appsec.s.req.headers': schemaValue,
@@ -311,7 +311,8 @@ describe('reporter', () => {
         '_dd.appsec.s.req.query': schemaEncoded,
         '_dd.appsec.s.req.params': schemaEncoded,
         '_dd.appsec.s.req.cookies': schemaEncoded,
-        '_dd.appsec.s.req.body': schemaEncoded
+        '_dd.appsec.s.req.body': schemaEncoded,
+        'custom.processor.output': schemaEncoded
       })
     })
   })

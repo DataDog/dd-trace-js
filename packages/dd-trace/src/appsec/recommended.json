@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.9.0"
+    "rules_version": "1.10.0"
   },
   "rules": [
     {
@@ -118,6 +118,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -346,6 +349,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -1839,6 +1845,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^(?i:file|ftps?)://.*?\\?+$",
@@ -1881,6 +1890,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -2391,6 +2403,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^\\(\\s*\\)\\s+{",
@@ -2547,6 +2562,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -2608,6 +2626,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:HTTP_(?:ACCEPT(?:_(?:ENCODING|LANGUAGE|CHARSET))?|(?:X_FORWARDED_FO|REFERE)R|(?:USER_AGEN|HOS)T|CONNECTION|KEEP_ALIVE)|PATH_(?:TRANSLATED|INFO)|ORIG_PATH_INFO|QUERY_STRING|REQUEST_URI|AUTH_TYPE)",
@@ -2650,6 +2671,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "php://(?:std(?:in|out|err)|(?:in|out)put|fd|memory|temp|filter)",
@@ -2691,6 +2715,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -2775,6 +2802,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:s(?:e(?:t(?:_(?:e(?:xception|rror)_handler|magic_quotes_runtime|include_path)|defaultstub)|ssion_s(?:et_save_handler|tart))|qlite_(?:(?:(?:unbuffered|single|array)_)?query|create_(?:aggregate|function)|p?open|exec)|tr(?:eam_(?:context_create|socket_client)|ipc?slashes|rev)|implexml_load_(?:string|file)|ocket_c(?:onnect|reate)|h(?:ow_sourc|a1_fil)e|pl_autoload_register|ystem)|p(?:r(?:eg_(?:replace(?:_callback(?:_array)?)?|match(?:_all)?|split)|oc_(?:(?:terminat|clos|nic)e|get_status|open)|int_r)|o(?:six_(?:get(?:(?:e[gu]|g)id|login|pwnam)|mk(?:fifo|nod)|ttyname|kill)|pen)|hp(?:_(?:strip_whitespac|unam)e|version|info)|g_(?:(?:execut|prepar)e|connect|query)|a(?:rse_(?:ini_file|str)|ssthru)|utenv)|r(?:unkit_(?:function_(?:re(?:defin|nam)e|copy|add)|method_(?:re(?:defin|nam)e|copy|add)|constant_(?:redefine|add))|e(?:(?:gister_(?:shutdown|tick)|name)_function|ad(?:(?:gz)?file|_exif_data|dir))|awurl(?:de|en)code)|i(?:mage(?:createfrom(?:(?:jpe|pn)g|x[bp]m|wbmp|gif)|(?:jpe|pn)g|g(?:d2?|if)|2?wbmp|xbm)|s_(?:(?:(?:execut|write?|read)ab|fi)le|dir)|ni_(?:get(?:_all)?|set)|terator_apply|ptcembed)|g(?:et(?:_(?:c(?:urrent_use|fg_va)r|meta_tags)|my(?:[gpu]id|inode)|(?:lastmo|cw)d|imagesize|env)|z(?:(?:(?:defla|wri)t|encod|fil)e|compress|open|read)|lob)|a(?:rray_(?:u(?:intersect(?:_u?assoc)?|diff(?:_u?assoc)?)|intersect_u(?:assoc|key)|diff_u(?:assoc|key)|filter|reduce|map)|ssert(?:_options)?|tob)|h(?:tml(?:specialchars(?:_decode)?|_entity_decode|entities)|(?:ash(?:_(?:update|hmac))?|ighlight)_file|e(?:ader_register_callback|x2bin))|f(?:i(?:le(?:(?:[acm]tim|inod)e|(?:_exist|perm)s|group)?|nfo_open)|tp_(?:nb_(?:ge|pu)|connec|ge|pu)t|(?:unction_exis|pu)ts|write|open)|o(?:b_(?:get_(?:c(?:ontents|lean)|flush)|end_(?:clean|flush)|clean|flush|start)|dbc_(?:result(?:_all)?|exec(?:ute)?|connect)|pendir)|m(?:b_(?:ereg(?:_(?:replace(?:_callback)?|match)|i(?:_replace)?)?|parse_str)|(?:ove_uploaded|d5)_file|ethod_exists|ysql_query|kdir)|e(?:x(?:if_(?:t(?:humbnail|agname)|imagetype|read_data)|ec)|scapeshell(?:arg|cmd)|rror_reporting|val)|c(?:url_(?:file_create|exec|init)|onvert_uuencode|reate_function|hr)|u(?:n(?:serialize|pack)|rl(?:de|en)code|[ak]?sort)|b(?:(?:son_(?:de|en)|ase64_en)code|zopen|toa)|(?:json_(?:de|en)cod|debug_backtrac|tmpfil)e|var_dump)(?:\\s|/\\*.*\\*/|//.*|#.*|\\\"|')*\\((?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?\"(?:[^\"]|\\\\\"|\"\"|\"\\+\")*\\\\?\"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?,)*(?:(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:\\$\\w+|[A-Z\\d]\\w*|\\w+\\(.*\\)|\\\\?\"(?:[^\"]|\\\\\"|\"\"|\"\\+\")*\\\\?\"|\\\\?'(?:[^']|''|'\\+')*\\\\?')(?:\\s|/\\*.*\\*/|//.*|#.*)*(?:(?:::|\\.|->)(?:\\s|/\\*.*\\*/|//.*|#.*)*\\w+(?:\\(.*\\))?)?)?\\)",
@@ -2820,6 +2850,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "[oOcC]:\\d+:\\\".+?\\\":\\d+:{[\\W\\w]*}",
@@ -2861,6 +2894,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:(?:bzip|ssh)2|z(?:lib|ip)|(?:ph|r)ar|expect|glob|ogg)://",
@@ -2904,6 +2940,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:(?:l(?:(?:utimes|chmod)(?:Sync)?|(?:stat|ink)Sync)|w(?:rite(?:(?:File|v)(?:Sync)?|Sync)|atchFile)|u(?:n(?:watchFile|linkSync)|times(?:Sync)?)|s(?:(?:ymlink|tat)Sync|pawn(?:File|Sync))|ex(?:ec(?:File(?:Sync)?|Sync)|istsSync)|a(?:ppendFile|ccess)(?:Sync)?|(?:Caveat|Inode)s|open(?:dir)?Sync|new\\s+Function|Availability|\\beval)\\s*\\(|m(?:ain(?:Module\\s*(?:\\W*\\s*(?:constructor|require)|\\[)|\\s*(?:\\W*\\s*(?:constructor|require)|\\[))|kd(?:temp(?:Sync)?|irSync)\\s*\\(|odule\\.exports\\s*=)|c(?:(?:(?:h(?:mod|own)|lose)Sync|reate(?:Write|Read)Stream|p(?:Sync)?)\\s*\\(|o(?:nstructor\\s*(?:\\W*\\s*_load|\\[)|pyFile(?:Sync)?\\s*\\())|f(?:(?:(?:s(?:(?:yncS)?|tatS)|datas(?:yncS)?)ync|ch(?:mod|own)(?:Sync)?)\\s*\\(|u(?:nction\\s*\\(\\s*\\)\\s*{|times(?:Sync)?\\s*\\())|r(?:e(?:(?:ad(?:(?:File|link|dir)?Sync|v(?:Sync)?)|nameSync)\\s*\\(|quire\\s*(?:\\W*\\s*main|\\[))|m(?:Sync)?\\s*\\()|process\\s*(?:\\W*\\s*(?:mainModule|binding)|\\[)|t(?:his\\.constructor|runcateSync\\s*\\()|_(?:\\$\\$ND_FUNC\\$\\$_|_js_function)|global\\s*(?:\\W*\\s*process|\\[)|String\\s*\\.\\s*fromCharCode|binding\\s*\\[)",
@@ -2946,6 +2985,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:w(?:atch|rite)|(?:spaw|ope)n|exists|close|fork|read)\\s*\\(",
@@ -3000,6 +3042,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<script[^>]*>[\\s\\S]*?",
@@ -3057,6 +3102,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bon(?:d(?:r(?:ag(?:en(?:ter|d)|leave|start|over)?|op)|urationchange|blclick)|s(?:e(?:ek(?:ing|ed)|arch|lect)|u(?:spend|bmit)|talled|croll|how)|m(?:ouse(?:(?:lea|mo)ve|o(?:ver|ut)|enter|down|up)|essage)|p(?:a(?:ge(?:hide|show)|(?:st|us)e)|lay(?:ing)?|rogress|aste|ointer(?:cancel|down|enter|leave|move|out|over|rawupdate|up))|c(?:anplay(?:through)?|o(?:ntextmenu|py)|hange|lick|ut)|a(?:nimation(?:iteration|start|end)|(?:fterprin|bor)t|uxclick|fterscriptexecute)|t(?:o(?:uch(?:cancel|start|move|end)|ggle)|imeupdate)|f(?:ullscreen(?:change|error)|ocus(?:out|in)?|inish)|(?:(?:volume|hash)chang|o(?:ff|n)lin)e|b(?:efore(?:unload|print)|lur)|load(?:ed(?:meta)?data|start|end)?|r(?:es(?:ize|et)|atechange)|key(?:press|down|up)|w(?:aiting|heel)|in(?:valid|put)|e(?:nded|rror)|unload)[\\s\\x0B\\x09\\x0C\\x3B\\x2C\\x28\\x3B]*?=[^=]",
@@ -3113,6 +3161,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "[a-z]+=(?:[^:=]+:.+;)*?[^:=]+:url\\(javascript",
@@ -3169,6 +3220,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:\\W|^)(?:javascript:(?:[\\s\\S]+[=\\x5c\\(\\[\\.<]|[\\s\\S]*?(?:\\bname\\b|\\x5c[ux]\\d)))|@\\W*?i\\W*?m\\W*?p\\W*?o\\W*?r\\W*?t\\W*?(?:/\\*[\\s\\S]*?)?(?:[\\\"']|\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\()|[^-]*?-\\W*?m\\W*?o\\W*?z\\W*?-\\W*?b\\W*?i\\W*?n\\W*?d\\W*?i\\W*?n\\W*?g[^:]*?:\\W*?u\\W*?r\\W*?l[\\s\\S]*?\\(",
@@ -3212,6 +3266,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -3260,6 +3317,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:<.*[:]?vmlframe.*?[\\s/+]*?src[\\s/+]*=)",
@@ -3304,6 +3364,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:(?:j|&#x?0*(?:74|4A|106|6A);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:a|&#x?0*(?:65|41|97|61);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|\\n|\\r|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",
@@ -3348,6 +3411,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:(?:v|&#x?0*(?:86|56|118|76);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:b|&#x?0*(?:66|42|98|62);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:s|&#x?0*(?:83|53|115|73);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:c|&#x?0*(?:67|43|99|63);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:r|&#x?0*(?:82|52|114|72);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:i|&#x?0*(?:73|49|105|69);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:p|&#x?0*(?:80|50|112|70);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?:t|&#x?0*(?:84|54|116|74);?)(?:\\t|&(?:#x?0*(?:9|13|10|A|D);?|tab;|newline;))*(?::|&(?:#x?0*(?:58|3A);?|colon;)).)",
@@ -3392,6 +3458,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<EMBED[\\s/+].*?(?:src|type).*?=",
@@ -3435,6 +3504,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<[?]?import[\\s/+\\S]*?implementation[\\s/+]*?=",
@@ -3479,6 +3551,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<LINK[\\s/+].*?href[\\s/+]*=",
@@ -3522,6 +3597,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<BASE[\\s/+].*?href[\\s/+]*=",
@@ -3565,6 +3643,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<APPLET[\\s/+>]",
@@ -3608,6 +3689,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<OBJECT[\\s/+].*?(?:type|codetype|classid|code|data)[\\s/+]*=",
@@ -3651,6 +3735,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\+ADw-.*(?:\\+AD4-|>)|<.*\\+AD4-",
@@ -3692,6 +3779,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "![!+ ]\\[\\]",
@@ -3734,6 +3824,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?i:eval|settimeout|setinterval|new\\s+Function|alert|prompt)[\\s+]*\\([^\\)]",
@@ -3775,6 +3868,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ]
           },
@@ -3814,6 +3910,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:sleep\\(\\s*?\\d*?\\s*?\\)|benchmark\\(.*?\\,.*?\\))",
@@ -3856,6 +3955,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:[\\\"'`](?:;*?\\s*?waitfor\\s+(?:delay|time)\\s+[\\\"'`]|;.*?:\\s*?goto)|alter\\s*?\\w+.*?cha(?:racte)?r\\s+set\\s+\\w+)",
@@ -3896,6 +3998,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:merge.*?using\\s*?\\(|execute\\s*?immediate\\s*?[\\\"'`]|match\\s*?[\\w(?:),+-]+\\s*?against\\s*?\\()",
@@ -3937,6 +4042,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "union.*?select.*?from",
@@ -3978,6 +4086,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:;\\s*?shutdown\\s*?(?:[#;{]|\\/\\*|--)|waitfor\\s*?delay\\s?[\\\"'`]+\\s?\\d|select\\s*?pg_sleep)",
@@ -4018,6 +4129,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:(?:\\[?\\$(?:(?:s(?:lic|iz)|wher)e|e(?:lemMatch|xists|q)|n(?:o[rt]|in?|e)|l(?:ike|te?)|t(?:ext|ype)|a(?:ll|nd)|jsonSchema|between|regex|x?or|div|mod)\\]?)\\b)",
@@ -4061,6 +4175,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:^[\\W\\d]+\\s*?(?:alter\\s*(?:a(?:(?:pplication\\s*rol|ggregat)e|s(?:ymmetric\\s*ke|sembl)y|u(?:thorization|dit)|vailability\\s*group)|c(?:r(?:yptographic\\s*provider|edential)|o(?:l(?:latio|um)|nversio)n|ertificate|luster)|s(?:e(?:rv(?:ice|er)|curity|quence|ssion|arch)|y(?:mmetric\\s*key|nonym)|togroup|chema)|m(?:a(?:s(?:ter\\s*key|k)|terialized)|e(?:ssage\\s*type|thod)|odule)|l(?:o(?:g(?:file\\s*group|in)|ckdown)|a(?:ngua|r)ge|ibrary)|t(?:(?:abl(?:espac)?|yp)e|r(?:igger|usted)|hreshold|ext)|p(?:a(?:rtition|ckage)|ro(?:cedur|fil)e|ermission)|d(?:i(?:mension|skgroup)|atabase|efault|omain)|r(?:o(?:l(?:lback|e)|ute)|e(?:sourc|mot)e)|f(?:u(?:lltext|nction)|lashback|oreign)|e(?:xte(?:nsion|rnal)|(?:ndpoi|ve)nt)|in(?:dex(?:type)?|memory|stance)|b(?:roker\\s*priority|ufferpool)|x(?:ml\\s*schema|srobject)|w(?:ork(?:load)?|rapper)|hi(?:erarchy|stogram)|o(?:perator|utline)|(?:nicknam|queu)e|us(?:age|er)|group|java|view)|union\\s*(?:(?:distin|sele)ct|all))\\b|\\b(?:(?:(?:trunc|cre|upd)at|renam)e|(?:inser|selec)t|de(?:lete|sc)|alter|load)\\s+(?:group_concat|load_file|char)\\b\\s*\\(?|[\\s(]load_file\\s*?\\(|[\\\"'`]\\s+regexp\\W)",
@@ -4101,6 +4218,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:/\\*[!+](?:[\\w\\s=_\\-(?:)]+)?\\*/)",
@@ -4143,6 +4263,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i:\\.cookie\\b.*?;\\W*?(?:expires|domain)\\W*?=|\\bhttp-equiv\\W+set-cookie\\b)",
@@ -4188,6 +4311,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "java\\.lang\\.(?:runtime|processbuilder)",
@@ -4233,6 +4359,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:unmarshaller|base64data|java\\.).*(?:runtime|processbuilder)",
@@ -4277,6 +4406,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "list": [
@@ -4312,6 +4444,7 @@
               "java.lang.object",
               "java.lang.process",
               "java.lang.reflect",
+              "java.lang.runtime",
               "java.lang.string",
               "java.lang.stringbuilder",
               "java.lang.system",
@@ -4362,6 +4495,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:class\\.module\\.classLoader\\.resources\\.context\\.parent\\.pipeline|springframework\\.context\\.support\\.FileSystemXmlApplicationContext)",
@@ -4402,6 +4538,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               },
               {
                 "address": "server.request.headers.no_cookies"
@@ -4449,6 +4588,9 @@
                 "address": "graphql.server.all_resolvers"
               },
               {
+                "address": "graphql.server.resolver"
+              },
+              {
                 "address": "server.request.headers.no_cookies"
               }
             ],
@@ -4493,6 +4635,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "[@#]ognl",
@@ -4639,6 +4784,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "#(?:set|foreach|macro|parse|if)\\(.*\\)|<#assign.*>"
@@ -4680,6 +4828,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:burpcollaborator\\.net|oastify\\.com)\\b"
@@ -4721,6 +4872,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bqualysperiscope\\.com\\b|\\.oscomm\\."
@@ -4762,6 +4916,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bprbly\\.win\\b"
@@ -4802,6 +4959,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:webhook\\.site|\\.canarytokens\\.com|vii\\.one|act1on3\\.ru|gdsburp\\.com|arcticwolf\\.net|oob\\.li|htbiw\\.com|h4\\.vc|mochan\\.cloud|imshopping\\.com|bootstrapnodejs\\.com|mooo-ng\\.com|securitytrails\\.com|canyouhackit\\.io|7bae\\.xyz)\\b"
@@ -4842,6 +5002,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:\\.ngrok\\.io|requestbin\\.com|requestbin\\.net)\\b"
@@ -4883,6 +5046,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bappspidered\\.rapid7\\."
@@ -4924,6 +5090,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:interact\\.sh|oast\\.(?:pro|live|site|online|fun|me)|indusfacefinder\\.in|where\\.land|syhunt\\.net|tssrt\\.de|boardofcyber\\.io|assetnote-callback\\.com|praetorianlabs\\.dev|netspi\\.sh)\\b"
@@ -4965,6 +5134,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)?r87(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)(?:me|com)\\b",
@@ -5010,6 +5182,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bwhsec(?:\\.|(?:\\\\|&#)(?:0*46|x0*2e);)us\\b",
@@ -5055,6 +5230,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\b\\.nessus\\.org\\b",
@@ -5100,6 +5278,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bwatchtowr\\.com\\b",
@@ -5145,6 +5326,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\bptst\\.io\\b",
@@ -5186,6 +5370,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^(?i:file|ftps?|https?).*/rfiinc\\.txt\\?+$",
@@ -5230,6 +5417,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:(?:['\"\\x60({|;&]|(?:^|['\"\\x60({|;&])(?:cmd(?:\\.exe)?\\s+(?:/\\w(?::\\w+)?\\s+)*))(?:ping|curl|wget|telnet)|\\bnslookup)[\\s,]",
@@ -5265,6 +5455,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?:<\\?xml[^>]*>.*)<!ENTITY[^>]+SYSTEM\\s+[^>]+>",
@@ -5318,6 +5511,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "<(?:iframe|esi:include)(?:(?:\\s|/)*\\w+=[\"'\\w]+)*(?:\\s|/)*src(?:doc)?=[\"']?(?:data:|javascript:|http:|dns:|//)[^\\s'\"]+['\"]?",
@@ -5364,6 +5560,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "https?:\\/\\/(?:.*\\.)?(?:bxss\\.(?:in|me)|xss\\.ht|js\\.rip)",
@@ -5950,6 +6149,48 @@
       "transformers": []
     },
     {
+      "id": "nfd-000-010",
+      "name": "Detect failed attempts to find API documentation",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt",
+        "cwe": "200",
+        "capec": "1000/118/169",
+        "confidence": "0"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^404$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "regex": "(?:/swagger\\b|/api[-/]docs?\\b)",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        }
+      ],
+      "transformers": []
+    },
+    {
       "id": "sqr-000-001",
       "name": "SSRF: Try to access the credential manager of the main cloud services",
       "tags": {
@@ -5977,6 +6218,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i)^\\W*((http|ftp)s?://)?\\W*((::f{4}:)?(169|(0x)?0*a9|0+251)\\.?(254|(0x)?0*fe|0+376)[0-9a-fx\\.:]+|metadata\\.google\\.internal|metadata\\.goog)\\W*/",
@@ -6018,6 +6262,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "require\\(['\"][\\w\\.]+['\"]\\)|process\\.\\w+\\([\\w\\.]*\\)|\\.toString\\(\\)",
@@ -6063,6 +6310,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i)[&|]\\s*type\\s+%\\w+%\\\\+\\w+\\.ini\\s*[&|]"
@@ -6103,6 +6353,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i)[&|]\\s*cat\\s*\\/etc\\/[\\w\\.\\/]*passwd\\s*[&|]"
@@ -6145,6 +6398,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(?i)[&|]\\s*timeout\\s+/t\\s+\\d+\\s*[&|]"
@@ -6182,6 +6438,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "http(s?):\\/\\/([A-Za-z0-9\\.\\-\\_]+|\\[[A-Fa-f0-9\\:]+\\]|):5986\\/wsman",
@@ -6222,6 +6481,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^(jar:)?(http|https):\\/\\/([0-9oq]{1,5}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|[0-9]{1,10})(:[0-9]{1,5})?(\\/[^:@]*)?$"
@@ -6261,6 +6523,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^(jar:)?(http|https):\\/\\/((\\[)?[:0-9a-f\\.x]{2,}(\\])?)(:[0-9]{1,5})?(\\/[^:@]*)?$"
@@ -6303,6 +6568,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "(http|https):\\/\\/(?:.*\\.)?(?:burpcollaborator\\.net|localtest\\.me|mail\\.ebc\\.apple\\.com|bugbounty\\.dod\\.network|.*\\.[nx]ip\\.io|oastify\\.com|oast\\.(?:pro|live|site|online|fun|me)|sslip\\.io|requestbin\\.com|requestbin\\.net|hookbin\\.com|webhook\\.site|canarytokens\\.com|interact\\.sh|ngrok\\.io|bugbounty\\.click|prbly\\.win|qualysperiscope\\.com|vii\\.one|act1on3\\.ru)"
@@ -6343,6 +6611,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "^(jar:)?((file|netdoc):\\/\\/[\\\\\\/]+|(dict|gopher|ldap|sftp|tftp):\\/\\/.*:[0-9]{1,5})"
@@ -6388,6 +6659,9 @@
               },
               {
                 "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
               }
             ],
             "regex": "\\${[^j]*j[^n]*n[^d]*d[^i]*i[^:]*:[^}]*}"
@@ -7922,6 +8196,1125 @@
         }
       ],
       "transformers": []
+    }
+  ],
+  "processors": [
+    {
+      "id": "extract-content",
+      "generator": "extract_schema",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.processor",
+                "key_path": [
+                  "extract-schema"
+                ]
+              }
+            ],
+            "type": "boolean",
+            "value": true
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "output": "_dd.appsec.s.req.body"
+          },
+          {
+            "inputs": [
+              {
+                "address": "server.request.cookies"
+              }
+            ],
+            "output": "_dd.appsec.s.req.cookies"
+          },
+          {
+            "inputs": [
+              {
+                "address": "server.request.query"
+              }
+            ],
+            "output": "_dd.appsec.s.req.query"
+          },
+          {
+            "inputs": [
+              {
+                "address": "server.request.path_params"
+              }
+            ],
+            "output": "_dd.appsec.s.req.params"
+          },
+          {
+            "inputs": [
+              {
+                "address": "server.response.body"
+              }
+            ],
+            "output": "_dd.appsec.s.res.body"
+          },
+          {
+            "inputs": [
+              {
+                "address": "graphql.server.all_resolvers"
+              }
+            ],
+            "output": "_dd.appsec.s.graphql.all_resolvers"
+          },
+          {
+            "inputs": [
+              {
+                "address": "graphql.server.resolver"
+              }
+            ],
+            "output": "_dd.appsec.s.graphql.resolver"
+          }
+        ],
+        "scanners": [
+          {
+            "tags": {
+              "category": "payment"
+            }
+          },
+          {
+            "tags": {
+              "category": "pii"
+            }
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "extract-headers",
+      "generator": "extract_schema",
+      "conditions": [
+        {
+          "operator": "equals",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.processor",
+                "key_path": [
+                  "extract-schema"
+                ]
+              }
+            ],
+            "type": "boolean",
+            "value": true
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "inputs": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.s.req.headers"
+          },
+          {
+            "inputs": [
+              {
+                "address": "server.response.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.s.res.headers"
+          }
+        ],
+        "scanners": [
+          {
+            "tags": {
+              "category": "credentials"
+            }
+          },
+          {
+            "tags": {
+              "category": "pii"
+            }
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    }
+  ],
+  "scanners": [
+    {
+      "id": "JU1sRk3mSzqSUJn6GrVn7g",
+      "name": "American Express Card Scanner (4+4+4+3 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b3[47]\\d{2}(?:(?:\\s\\d{4}\\s\\d{4}\\s\\d{3})|(?:\\,\\d{4}\\,\\d{4}\\,\\d{3})|(?:-\\d{4}-\\d{4}-\\d{3})|(?:\\.\\d{4}\\.\\d{4}\\.\\d{3}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "amex",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "edmH513UTQWcRiQ9UnzHlw-mod",
+      "name": "American Express Card Scanner (4+6|5+5|6 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b3[47]\\d{2}(?:(?:\\s\\d{5,6}\\s\\d{5,6})|(?:\\.\\d{5,6}\\.\\d{5,6})|(?:-\\d{5,6}-\\d{5,6})|(?:,\\d{5,6},\\d{5,6}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 17
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "amex",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "e6K4h_7qTLaMiAbaNXoSZA",
+      "name": "American Express Card Scanner (8+7 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b3[47]\\d{6}(?:(?:\\s\\d{7})|(?:\\,\\d{7})|(?:-\\d{7})|(?:\\.\\d{7}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "amex",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "K2rZflWzRhGM9HiTc6whyQ",
+      "name": "American Express Card Scanner (1x15 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b3[47]\\d{13}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 15
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "amex",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "9d7756e343cefa22a5c098e1092590f806eb5446",
+      "name": "Basic Authentication Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bauthorization\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 13
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "^basic\\s+[A-Za-z0-9+/=]+",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 7
+          }
+        }
+      },
+      "tags": {
+        "type": "basic_auth",
+        "category": "credentials"
+      }
+    },
+    {
+      "id": "mZy8XjZLReC9smpERXWnnw",
+      "name": "Bearer Authentication Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bauthorization\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 13
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "^bearer\\s+[-a-z0-9._~+/]{4,}",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 11
+          }
+        }
+      },
+      "tags": {
+        "type": "bearer_token",
+        "category": "credentials"
+      }
+    },
+    {
+      "id": "450239afc250a19799b6c03dc0e16fd6a4b2a1af",
+      "name": "Canadian Social Insurance Number Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:social[\\s_]?(?:insurance(?:\\s+number)?)?|SIN|Canadian[\\s_]?(?:social[\\s_]?(?:insurance)?|insurance[\\s_]?number)?)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b\\d{3}-\\d{3}-\\d{3}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 11
+          }
+        }
+      },
+      "tags": {
+        "type": "canadian_sin",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "87a879ff33693b46c8a614d8211f5a2c289beca0",
+      "name": "Digest Authentication Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bauthorization\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 13
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "^digest\\s+",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 7
+          }
+        }
+      },
+      "tags": {
+        "type": "digest_auth",
+        "category": "credentials"
+      }
+    },
+    {
+      "id": "qWumeP1GQUa_E4ffAnT-Yg",
+      "name": "American Express Card Scanner (1x14 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "(?:30[0-59]\\d|3[689]\\d{2})(?:\\d{10})",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 14
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "diners",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "NlTWWM5LS6W0GSqBLuvtRw",
+      "name": "Diners Card Scanner (4+4+4+2 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:30[0-59]\\d|3[689]\\d{2})(?:(?:\\s\\d{4}\\s\\d{4}\\s\\d{2})|(?:\\,\\d{4}\\,\\d{4}\\,\\d{2})|(?:-\\d{4}-\\d{4}-\\d{2})|(?:\\.\\d{4}\\.\\d{4}\\.\\d{2}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 17
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "diners",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "Xr5VdbQSTXitYGGiTfxBpw",
+      "name": "Diners Card Scanner (4+6+4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:30[0-59]\\d|3[689]\\d{2})(?:(?:\\s\\d{6}\\s\\d{4})|(?:\\.\\d{6}\\.\\d{4})|(?:-\\d{6}-\\d{4})|(?:,\\d{6},\\d{4}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "diners",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "gAbunN_WQNytxu54DjcbAA-mod",
+      "name": "Diners Card Scanner (8+6 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:30[0-59]\\d{5}|3[689]\\d{6})\\s?(?:(?:\\s\\d{6})|(?:\\,\\d{6})|(?:-\\d{6})|(?:\\.\\d{6}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 14
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "diners",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "9cs4qCfEQBeX17U7AepOvQ",
+      "name": "MasterCard Scanner (2x8 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:6221(?:2[6-9]|[3-9][0-9])\\d{2}(?:,\\d{8}|\\s\\d{8}|-\\d{8}|\\.\\d{8})|6229(?:[01][0-9]|2[0-5])\\d{2}(?:,\\d{8}|\\s\\d{8}|-\\d{8}|\\.\\d{8})|(?:6011|65\\d{2}|64[4-9]\\d|622[2-8])\\d{4}(?:,\\d{8}|\\s\\d{8}|-\\d{8}|\\.\\d{8}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "discover",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "YBIDWJIvQWW_TFOyU0CGJg",
+      "name": "Discover Card Scanner (4x4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:(?:(?:6221(?:2[6-9]|[3-9][0-9])\\d{2}(?:,\\d{4}){2})|(?:6221\\s(?:2[6-9]|[3-9][0-9])\\d{2}(?:\\s\\d{4}){2})|(?:6221\\.(?:2[6-9]|[3-9][0-9])\\d{2}(?:\\.\\d{4}){2})|(?:6221-(?:2[6-9]|[3-9][0-9])\\d{2}(?:-\\d{4}){2}))|(?:(?:6229(?:[01][0-9]|2[0-5])\\d{2}(?:,\\d{4}){2})|(?:6229\\s(?:[01][0-9]|2[0-5])\\d{2}(?:\\s\\d{4}){2})|(?:6229\\.(?:[01][0-9]|2[0-5])\\d{2}(?:\\.\\d{4}){2})|(?:6229-(?:[01][0-9]|2[0-5])\\d{2}(?:-\\d{4}){2}))|(?:(?:6011|65\\d{2}|64[4-9]\\d|622[2-8])(?:(?:\\s\\d{4}){3}|(?:\\.\\d{4}){3}|(?:-\\d{4}){3}|(?:,\\d{4}){3})))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "discover",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "12cpbjtVTMaMutFhh9sojQ",
+      "name": "Discover Card Scanner (1x16 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:6221(?:2[6-9]|[3-9][0-9])\\d{10}|6229(?:[01][0-9]|2[0-5])\\d{10}|(?:6011|65\\d{2}|64[4-9]\\d|622[2-8])\\d{12})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "discover",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "PuXiVTCkTHOtj0Yad1ppsw",
+      "name": "Standard E-mail Address",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:(?:e[-\\s]?)?mail|address|sender|\\bto\\b|from|recipient)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 2
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b[\\w!#$%&'*+/=?`{|}~^-]+(?:\\.[\\w!#$%&'*+/=?`{|}~^-]+)*(%40|@)(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 5
+          }
+        }
+      },
+      "tags": {
+        "type": "email",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "8VS2RKxzR8a_95L5fuwaXQ",
+      "name": "IBAN",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:iban|account|sender|receiver)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:NO\\d{2}(?:[ \\-]?\\d{4}){2}[ \\-]?\\d{3}|BE\\d{2}(?:[ \\-]?\\d{4}){3}|(?:DK|FO|FI|GL|SD)\\d{2}(?:[ \\-]?\\d{4}){3}[ \\-]?\\d{2}|NL\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?\\d{4}){2}[ \\-]?\\d{2}|MK\\d{2}[ \\-]?\\d{3}[A-Z0-9](?:[ \\-]?[A-Z0-9]{4}){2}[ \\-]?[A-Z0-9]\\d{2}|SI\\d{17}|(?:AT|BA|EE|LT|XK)\\d{18}|(?:LU|KZ|EE|LT)\\d{5}[A-Z0-9]{13}|LV\\d{2}[A-Z]{4}[A-Z0-9]{13}|(?:LI|CH)\\d{2}[ \\-]?\\d{4}[ \\-]?\\d[A-Z0-9]{3}(?:[ \\-]?[A-Z0-9]{4}){2}[ \\-]?[A-Z0-9]|HR\\d{2}(?:[ \\-]?\\d{4}){4}[ \\-]?\\d|GE\\d{2}[ \\-]?[A-Z0-9]{2}\\d{2}\\d{14}|VA\\d{20}|BG\\d{2}[A-Z]{4}\\d{6}[A-Z0-9]{8}|BH\\d{2}[A-Z]{4}[A-Z0-9]{14}|GB\\d{2}[A-Z]{4}(?:[ \\-]?\\d{4}){3}[ \\-]?\\d{2}|IE\\d{2}[ \\-]?[A-Z0-9]{4}(?:[ \\-]?\\d{4}){3}[ \\-]?\\d{2}|(?:CR|DE|ME|RS)\\d{2}(?:[ \\-]?\\d{4}){4}[ \\-]?\\d{2}|(?:AE|TL|IL)\\d{2}(?:[ \\-]?\\d{4}){4}[ \\-]?\\d{3}|GI\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?[A-Z0-9]{4}){3}[ \\-]?[A-Z0-9]{3}|IQ\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?\\d{4}){3}[ \\-]?\\d{3}|MD\\d{2}(?:[ \\-]?[A-Z0-9]{4}){5}|SA\\d{2}[ \\-]?\\d{2}[A-Z0-9]{2}(?:[ \\-]?[A-Z0-9]{4}){4}|RO\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?[A-Z0-9]{4}){4}|(?:PK|VG)\\d{2}[ \\-]?[A-Z0-9]{4}(?:[ \\-]?\\d{4}){4}|AD\\d{2}(?:[ \\-]?\\d{4}){2}(?:[ \\-]?[A-Z0-9]{4}){3}|(?:CZ|SK|ES|SE|TN)\\d{2}(?:[ \\-]?\\d{4}){5}|(?:LY|PT|ST)\\d{2}(?:[ \\-]?\\d{4}){5}[ \\-]?\\d|TR\\d{2}[ \\-]?\\d{4}[ \\-]?\\d[A-Z0-9]{3}(?:[ \\-]?[A-Z0-9]{4}){3}[ \\-]?[A-Z0-9]{2}|IS\\d{2}(?:[ \\-]?\\d{4}){5}[ \\-]?\\d{2}|(?:IT|SM)\\d{2}[ \\-]?[A-Z]\\d{3}[ \\-]?\\d{4}[ \\-]?\\d{3}[A-Z0-9](?:[ \\-]?[A-Z0-9]{4}){2}[ \\-]?[A-Z0-9]{3}|GR\\d{2}[ \\-]?\\d{4}[ \\-]?\\d{3}[A-Z0-9](?:[ \\-]?[A-Z0-9]{4}){3}[A-Z0-9]{3}|(?:FR|MC)\\d{2}(?:[ \\-]?\\d{4}){2}[ \\-]?\\d{2}[A-Z0-9]{2}(?:[ \\-]?[A-Z0-9]{4}){2}[ \\-]?[A-Z0-9]\\d{2}|MR\\d{2}(?:[ \\-]?\\d{4}){5}[ \\-]?\\d{3}|(?:SV|DO)\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?\\d{4}){5}|BY\\d{2}[ \\-]?[A-Z]{4}[ \\-]?\\d{4}(?:[ \\-]?[A-Z0-9]{4}){4}|GT\\d{2}(?:[ \\-]?[A-Z0-9]{4}){6}|AZ\\d{2}[ \\-]?[A-Z0-9]{4}(?:[ \\-]?\\d{5}){4}|LB\\d{2}[ \\-]?\\d{4}(?:[ \\-]?[A-Z0-9]{5}){4}|(?:AL|CY)\\d{2}(?:[ \\-]?\\d{4}){2}(?:[ \\-]?[A-Z0-9]{4}){4}|(?:HU|PL)\\d{2}(?:[ \\-]?\\d{4}){6}|QA\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?[A-Z0-9]{4}){5}[ \\-]?[A-Z0-9]|PS\\d{2}[ \\-]?[A-Z0-9]{4}(?:[ \\-]?\\d{4}){5}[ \\-]?\\d|UA\\d{2}[ \\-]?\\d{4}[ \\-]?\\d{2}[A-Z0-9]{2}(?:[ \\-]?[A-Z0-9]{4}){4}[ \\-]?[A-Z0-9]|BR\\d{2}(?:[ \\-]?\\d{4}){5}[ \\-]?\\d{3}[A-Z0-9][ \\-]?[A-Z0-9]|EG\\d{2}(?:[ \\-]?\\d{4}){6}\\d|MU\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?\\d{4}){4}\\d{3}[A-Z][ \\-]?[A-Z]{2}|(?:KW|JO)\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?[A-Z0-9]{4}){5}[ \\-]?[A-Z0-9]{2}|MT\\d{2}[ \\-]?[A-Z]{4}[ \\-]?\\d{4}[ \\-]?\\d[A-Z0-9]{3}(?:[ \\-]?[A-Z0-9]{3}){4}[ \\-]?[A-Z0-9]{3}|SC\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?\\d{4}){5}[ \\-]?[A-Z]{3}|LC\\d{2}[ \\-]?[A-Z]{4}(?:[ \\-]?[A-Z0-9]{4}){6})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 15
+          }
+        }
+      },
+      "tags": {
+        "type": "iban",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "h6WJcecQTwqvN9KeEtwDvg",
+      "name": "JCB Card Scanner (1x16 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b35(?:2[89]|[3-9][0-9])(?:\\d{12})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "jcb",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "gcEaMu_VSJ2-bGCEkgyC0w",
+      "name": "JCB Card Scanner (2x8 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b35(?:2[89]|[3-9][0-9])\\d{4}(?:(?:,\\d{8})|(?:-\\d{8})|(?:\\s\\d{8})|(?:\\.\\d{8}))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 17
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "jcb",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "imTliuhXT5GAeRNhqChXQQ",
+      "name": "JCB Card Scanner (4x4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b35(?:2[89]|[3-9][0-9])(?:(?:\\s\\d{4}){3}|(?:\\.\\d{4}){3}|(?:-\\d{4}){3}|(?:,\\d{4}){3})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "jcb",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "9osY3xc9Q7ONAV0zw9Uz4A",
+      "name": "JSON Web Token",
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(\\.[\\w.+\\/=-]+)?\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 20
+          }
+        }
+      },
+      "tags": {
+        "type": "json_web_token",
+        "category": "credentials"
+      }
+    },
+    {
+      "id": "d1Q9D3YMRxuVKf6CZInJPw",
+      "name": "Maestro Card Scanner (1x16 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:5[06-9]\\d{2}|6\\d{3})(?:\\d{12})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "maestro",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "M3YIQKKjRVmoeQuM3pjzrw",
+      "name": "Maestro Card Scanner (2x8 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:5[06-9]\\d{6}|6\\d{7})(?:\\s\\d{8}|\\.\\d{8}|-\\d{8}|,\\d{8})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 17
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "maestro",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "hRxiQBlSSVKcjh5U7LZYLA",
+      "name": "Maestro Card Scanner (4x4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:5[06-9]\\d{2}|6\\d{3})(?:(?:\\s\\d{4}){3}|(?:\\.\\d{4}){3}|(?:-\\d{4}){3}|(?:,\\d{4}){3})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "maestro",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "NwhIYNS4STqZys37WlaIKA",
+      "name": "MasterCard Scanner (2x8 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:(?:5[1-5]\\d{2})|(?:222[1-9])|(?:22[3-9]\\d)|(?:2[3-6]\\d{2})|(?:27[0-1]\\d)|(?:2720))(?:(?:\\d{4}(?:(?:,\\d{8})|(?:-\\d{8})|(?:\\s\\d{8})|(?:\\.\\d{8}))))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "mastercard",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "axxJkyjhRTOuhjwlsA35Vw",
+      "name": "MasterCard Scanner (4x4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:(?:5[1-5]\\d{2})|(?:222[1-9])|(?:22[3-9]\\d)|(?:2[3-6]\\d{2})|(?:27[0-1]\\d)|(?:2720))(?:(?:\\s\\d{4}){3}|(?:\\.\\d{4}){3}|(?:-\\d{4}){3}|(?:,\\d{4}){3})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "mastercard",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "76EhmoK3TPqJcpM-fK0pLw",
+      "name": "MasterCard Scanner (1x16 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:(?:5[1-5]\\d{2})|(?:222[1-9])|(?:22[3-9]\\d)|(?:2[3-6]\\d{2})|(?:27[0-1]\\d)|(?:2720))(?:\\d{12})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "mastercard",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "de0899e0cbaaa812bb624cf04c912071012f616d-mod",
+      "name": "UK National Insurance Number Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "^nin$|\\binsurance\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b[A-Z]{2}[\\s-]?\\d{6}[\\s-]?[A-Z]?\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 8
+          }
+        }
+      },
+      "tags": {
+        "type": "uk_nin",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "d962f7ddb3f55041e39195a60ff79d4814a7c331",
+      "name": "US Passport Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\bpassport\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 8
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b[0-9A-Z]{9}\\b|\\b[0-9]{6}[A-Z][0-9]{2}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 8
+          }
+        }
+      },
+      "tags": {
+        "type": "passport_number",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "7771fc3b-b205-4b93-bcef-28608c5c1b54",
+      "name": "United States Social Security Number Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:SSN|(?:(?:social)?[\\s_]?(?:security)?[\\s_]?(?:number)?)?)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b\\d{3}[-\\s\\.]{1}\\d{2}[-\\s\\.]{1}\\d{4}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 11
+          }
+        }
+      },
+      "tags": {
+        "type": "us_ssn",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "ac6d683cbac77f6e399a14990793dd8fd0fca333",
+      "name": "US Vehicle Identification Number Scanner",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:vehicle[_\\s-]*identification[_\\s-]*number|vin)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b[A-HJ-NPR-Z0-9]{17}\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 17
+          }
+        }
+      },
+      "tags": {
+        "type": "vin",
+        "category": "pii"
+      }
+    },
+    {
+      "id": "wJIgOygRQhKkR69b_9XbRQ",
+      "name": "Visa Card Scanner (2x8 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b4\\d{3}(?:(?:\\d{4}(?:(?:,\\d{8})|(?:-\\d{8})|(?:\\s\\d{8})|(?:\\.\\d{8}))))\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "visa",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "0o71SJxXQNK7Q6gMbBesFQ",
+      "name": "Visa Card Scanner (4x4 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b4\\d{3}(?:(?:,\\d{4}){3}|(?:\\s\\d{4}){3}|(?:\\.\\d{4}){3}|(?:-\\d{4}){3})\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 16
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "visa",
+        "category": "payment"
+      }
+    },
+    {
+      "id": "QrHD6AfgQm6z-j0wStxTvA",
+      "name": "Visa Card Scanner (1x15 & 1x16 & 1x19 digits)",
+      "key": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "\\b(?:card|cc|credit|debit|payment|amex|visa|mastercard|maestro|discover|jcb|diner)\\b",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 3
+          }
+        }
+      },
+      "value": {
+        "operator": "match_regex",
+        "parameters": {
+          "regex": "4[0-9]{12}(?:[0-9]{3})?",
+          "options": {
+            "case_sensitive": false,
+            "min_length": 13
+          }
+        }
+      },
+      "tags": {
+        "type": "card",
+        "card_type": "visa",
+        "category": "payment"
+      }
     }
   ]
 }

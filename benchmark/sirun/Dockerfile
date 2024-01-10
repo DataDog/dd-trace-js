@@ -30,7 +30,6 @@ RUN wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1
 RUN mkdir -p /usr/local/nvm \
 	&& wget -q -O - https://raw.githubusercontent.com/nvm-sh/nvm/v0.35.3/install.sh | bash \
 	&& . $NVM_DIR/nvm.sh \
-	&& nvm install --no-progress 12.22.12 \
 	&& nvm install --no-progress 14.21.3 \
 	&& nvm install --no-progress 16.20.1 \
 	&& nvm install --no-progress 18.16.1 \

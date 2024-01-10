@@ -19,7 +19,8 @@ describe('Kinesis', () => {
       return agent.load('aws-sdk')
     })
 
-    before(done => {
+    before(function (done) {
+      this.timeout(0)
       AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
 
       const params = {

@@ -151,10 +151,8 @@ function reportSchemas (derivatives) {
 
   const tags = {}
   for (const [address, value] of Object.entries(derivatives)) {
-    if (address.startsWith('_dd.appsec.s.req')) {
-      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-      tags[address] = gzippedValue.toString('base64')
-    }
+    const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+    tags[address] = gzippedValue.toString('base64')
   }
 
   rootSpan.addTags(tags)

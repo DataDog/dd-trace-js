@@ -13,6 +13,7 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
+const spanleak = require('../spanleak')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -90,6 +91,7 @@ class DatadogSpan {
 
       unfinishedRegistry.register(this, operationName, this)
     }
+    spanleak.addSpan(this, operationName)
   }
 
   toString () {

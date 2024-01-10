@@ -1,10 +1,8 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { NODE_MAJOR } = require('../../../version')
 
 describe('Plugin', () => {
   let aerospike
@@ -29,8 +27,9 @@ describe('Plugin', () => {
         userKey = 'key'
 
         config = {
-          hosts: '127.0.0.1:3000',
-          port: '3000'
+          hosts: [
+            { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 }
+          ]
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
@@ -45,13 +44,17 @@ describe('Plugin', () => {
           return agent.load('aerospike')
         })
 
+        after(() => {
+          aerospike.releaseEventLoop()
+        })
+
         describe('client', () => {
           withPeerService(
             () => tracer,
             'aerospike',
             () => aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             }),
             'test',
             'aerospike.namespace'
@@ -76,7 +79,9 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => {
+                  client.close(false)
+                })
             })
           })
 
@@ -94,7 +99,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            aerospike.connect(config).then(client => { client.close() })
+            aerospike.connect(config).then(client => { client.close(false) })
           })
 
           it('should instrument get', done => {
@@ -117,7 +122,7 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               return client.get(key)
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
@@ -148,7 +153,7 @@ describe('Plugin', () => {
                   ]
                   return client.operate(key, ops)
                 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
@@ -180,63 +185,56 @@ describe('Plugin', () => {
                 datatype: aerospike.indexDataType.STRING
               }
               return client.createIndex(index)
-                .then(() => client.close())
+                .then(() => client.close(false))
             })
           })
 
-          // skip query tests for node 16 and aerospike 4 because of an aerospike error that occurs when using query:
-          // AerospikeError: Sometimes our doc, or our customers' wishes, get ahead of us.
-          // We may have processed something that the server is not ready for (unsupported feature).
-          // this test works on node 14, so it is not a problem with the test but most likely a problem with the package
-          // version and aerospike server version mismatch which is really hard to pin down, since aerospike doesn't
-          // provide info on package version's compatibility with each server version
-          if (!(NODE_MAJOR === 16 && semver.intersects(version, '^4'))) {
-            it('should instrument query', done => {
-              agent
-                .use(traces => {
-                  const span = traces[0][0]
-                  expect(span).to.have.property('name', expectedSchema.command.opName)
-                  expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                  expect(span).to.have.property('resource', `Query`)
-                  expect(span).to.have.property('type', 'aerospike')
-                  expect(span.meta).to.have.property('span.kind', 'client')
-                  expect(span.meta).to.have.property('aerospike.namespace', ns)
-                  expect(span.meta).to.have.property('aerospike.setname', set)
-                  expect(span.meta).to.have.property('component', 'aerospike')
-                })
-                .then(done)
-                .catch(done)
+          it('should instrument query', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', expectedSchema.command.opName)
+                expect(span).to.have.property('service', expectedSchema.command.serviceName)
+                expect(span).to.have.property('resource', `Query`)
+                expect(span).to.have.property('type', 'aerospike')
+                expect(span.meta).to.have.property('span.kind', 'client')
+                expect(span.meta).to.have.property('aerospike.namespace', ns)
+                expect(span.meta).to.have.property('aerospike.setname', set)
+                expect(span.meta).to.have.property('component', 'aerospike')
+              })
+              .then(done)
+              .catch(done)
 
-              aerospike.connect(config).then(client => {
-                const index = {
-                  ns: ns,
-                  set: 'demo',
-                  bin: 'tags',
-                  index: 'tags_idx',
-                  datatype: aerospike.indexDataType.STRING
-                }
-                client.createIndex(index, (error, job) => {
-                  job.waitUntilDone((waitError) => {
-                    const query = client.query(ns, 'demo')
-                    const queryPolicy = {
-                      totalTimeout: 10000
-                    }
-                    query.select('id', 'tags')
-                    query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-                    const stream = query.foreach(queryPolicy)
-                    stream.on('end', () => { client.close() })
-                  })
+            aerospike.connect(config).then(client => {
+              const index = {
+                ns: ns,
+                set: 'demo',
+                bin: 'tags',
+                index: 'tags_idx',
+                datatype: aerospike.indexDataType.STRING
+              }
+              client.createIndex(index, (error, job) => {
+                job.waitUntilDone((waitError) => {
+                  const query = client.query(ns, 'demo')
+                  const queryPolicy = {
+                    totalTimeout: 10000
+                  }
+                  query.select('id', 'tags')
+                  query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
+                  const stream = query.foreach(queryPolicy)
+                  stream.on('end', () => { client.close(false) })
                 })
               })
             })
-          }
+          })
+
           it('should run the callback in the parent context', done => {
             const obj = {}
             aerospike.connect(config).then(client => {
               tracer.scope().activate(obj, () => {
                 client.put(key, { i: 123 }, () => {
                   expect(tracer.scope().active()).to.equal(obj)
-                  client.close()
+                  client.close(false)
                   done()
                 })
               })
@@ -267,7 +265,7 @@ describe('Plugin', () => {
 
                     return client.operate(key, ops)
                   })
-                  .then(() => client.close())
+                  .then(() => client.close(false))
               })
               .catch(err => {
                 error = err
@@ -276,7 +274,7 @@ describe('Plugin', () => {
           withNamingSchema(
             () => aerospike.connect(config).then(client => {
               return client.put(key, { i: 123 })
-                .then(() => client.close())
+                .then(() => client.close(false))
             }),
             rawExpectedSchema.command
           )
@@ -286,6 +284,10 @@ describe('Plugin', () => {
       describe('with configuration', () => {
         before(() => {
           return agent.load('aerospike', { service: 'custom' })
+        })
+
+        after(() => {
+          aerospike.releaseEventLoop()
         })
 
         it('should be configured with the correct values', done => {
@@ -299,14 +301,14 @@ describe('Plugin', () => {
 
           aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
-              .then(() => client.close())
+              .then(() => client.close(false))
           })
         })
 
         withNamingSchema(
           () => aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
-              .then(() => client.close())
+              .then(() => client.close(false))
           }),
           {
             v0: {

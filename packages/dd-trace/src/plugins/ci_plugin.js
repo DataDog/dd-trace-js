@@ -20,6 +20,14 @@ const {
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_ITR_SKIPPED
+} = require('../ci-visibility/telemetry')
+const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH } = require('./util/tags')
+const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -71,6 +79,7 @@ module.exports = class CiPlugin extends Plugin {
           ...testSessionSpanMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
       this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
         tags: {
@@ -79,6 +88,7 @@ module.exports = class CiPlugin extends Plugin {
           ...testModuleSpanMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
@@ -97,7 +107,28 @@ module.exports = class CiPlugin extends Plugin {
           }
         }).finish()
       })
+      this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
+  }
+
+  get telemetry () {
+    const testFramework = this.constructor.id
+    return {
+      ciVisEvent: function (name, testLevel, tags = {}) {
+        incrementCountMetric(name, {
+          testLevel,
+          testFramework,
+          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          ...tags
+        })
+      },
+      count: function (name, tags, value = 1) {
+        incrementCountMetric(name, tags, value)
+      },
+      distribution: function (name, tags, measure) {
+        distributionMetric(name, tags, measure)
+      }
+    }
   }
 
   configure (config) {
@@ -106,15 +137,18 @@ module.exports = class CiPlugin extends Plugin {
     this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': branch
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_COMMIT_SHA]: sha,
+      [OS_VERSION]: osVersion,
+      [OS_PLATFORM]: osPlatform,
+      [OS_ARCHITECTURE]: osArchitecture,
+      [RUNTIME_NAME]: runtimeName,
+      [RUNTIME_VERSION]: runtimeVersion,
+      [GIT_BRANCH]: branch,
+      [CI_PROVIDER_NAME]: ciProviderName
     } = this.testEnvironmentMetadata
+
+    this.isUnsupportedCIProvider = !ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -124,7 +158,8 @@ module.exports = class CiPlugin extends Plugin {
       osArchitecture,
       runtimeName,
       runtimeVersion,
-      branch
+      branch,
+      testLevel: 'suite'
     }
   }
 
@@ -168,6 +203,8 @@ module.exports = class CiPlugin extends Plugin {
         ...suiteTags
       }
     }
+
+    this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
     const testSpan = this.tracer
       .startSpan(`${this.constructor.id}.test`, {
