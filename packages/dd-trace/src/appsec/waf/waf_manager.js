@@ -37,7 +37,6 @@ class WAFManager {
     if (!wafContext) {
       wafContext = new WAFContextWrapper(
         this.ddwaf.createContext(),
-        this.ddwaf.requiredAddresses,
         this.wafTimeout,
         this.ddwafVersion,
         this.rulesVersion

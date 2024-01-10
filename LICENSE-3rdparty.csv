@@ -28,7 +28,9 @@ require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
 require,node-abort-controller,MIT,Copyright (c) 2019 Steve Faulkner
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
+require,pprof-format,MIT,Copyright 2022 Stephen Belanger
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
+require,tlhunter-sorted-set,MIT,Copyright (c) 2023 Datadog Inc.
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,@types/node,MIT,Copyright Authors
@@ -62,7 +64,6 @@ dev,mocha,MIT,Copyright 2011-2018 JS Foundation and contributors https://js.foun
 dev,multer,MIT,Copyright 2014 Hage Yaapa
 dev,nock,MIT,Copyright 2017 Pedro Teixeira and other contributors
 dev,nyc,ISC,Copyright 2015 Contributors
-dev,pprof-format,MIT,Copyright 2022 Stephen Belanger
 dev,proxyquire,MIT,Copyright 2013 Thorsten Lorenz
 dev,rimraf,ISC,Copyright Isaac Z. Schlueter and Contributors
 dev,sinon,BSD-3-Clause,Copyright 2010-2017 Christian Johansen

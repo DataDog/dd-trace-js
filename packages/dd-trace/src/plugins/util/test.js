@@ -397,8 +397,9 @@ function addIntelligentTestRunnerSpanTags (
     testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
   }
 
-  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
-  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+  // This will not be reported unless the user has manually added code coverage.
+  // This is always the case for Mocha and Cucumber, but not for Jest.
+  if (testCodeCoverageLinesTotal !== undefined) {
     testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
     testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }

@@ -8,6 +8,7 @@ const { encodePathwayContext } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
+const { PATHWAY_HASH } = require('../../../../ext/tags')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -44,14 +45,73 @@ class StatsPoint {
   }
 }
 
-class StatsBucket extends Map {
+class Backlog {
+  constructor ({ offset, ...tags }) {
+    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this._hash = this._tags.join(',')
+    this._offset = offset
+  }
+
+  get hash () { return this._hash }
+
+  get offset () { return this._offset }
+
+  get tags () { return this._tags }
+
+  encode () {
+    return {
+      Tags: this.tags,
+      Value: this.offset
+    }
+  }
+}
+
+class StatsBucket {
+  constructor () {
+    this._checkpoints = new Map()
+    this._backlogs = new Map()
+  }
+
+  get checkpoints () {
+    return this._checkpoints
+  }
+
+  get backlogs () {
+    return this._backlogs
+  }
+
   forCheckpoint (checkpoint) {
     const key = checkpoint.hash
-    if (!this.has(key)) {
-      this.set(key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)) // StatsPoint
+    if (!this._checkpoints.has(key)) {
+      this._checkpoints.set(
+        key, new StatsPoint(checkpoint.hash, checkpoint.parentHash, checkpoint.edgeTags)
+      )
     }
 
-    return this.get(key)
+    return this._checkpoints.get(key)
+  }
+
+  /**
+   * Conditionally add a backlog to the bucket. If there is currently an offset
+   * matching the backlog's tags, overwrite the offset IFF the backlog's offset
+   * is greater than the recorded offset.
+   *
+   * @typedef {{[key: string]: string}} BacklogData
+   * @property {number} offset
+   *
+   * @param {BacklogData} backlogData
+   * @returns {Backlog}
+   */
+  forBacklog (backlogData) {
+    const backlog = new Backlog(backlogData)
+    const existingBacklog = this._backlogs.get(backlog.hash)
+    if (existingBacklog !== undefined) {
+      if (existingBacklog.offset > backlog.offset) {
+        return existingBacklog
+      }
+    }
+    this._backlogs.set(backlog.hash, backlog)
+    return backlog
   }
 }
 
@@ -121,12 +181,12 @@ class DataStreamsProcessor {
   }
 
   onInterval () {
-    const serialized = this._serializeBuckets()
-    if (!serialized) return
+    const { Stats } = this._serializeBuckets()
+    if (Stats.length === 0) return
     const payload = {
       Env: this.env,
       Service: this.service,
-      Stats: serialized,
+      Stats,
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript'
@@ -134,15 +194,28 @@ class DataStreamsProcessor {
     this.writer.flush(payload)
   }
 
-  recordCheckpoint (checkpoint) {
-    if (!this.enabled) return
-    const bucketTime = Math.round(checkpoint.currentTimestamp - (checkpoint.currentTimestamp % this.bucketSizeNs))
-    this.buckets.forTime(bucketTime)
-      .forCheckpoint(checkpoint)
-      .addLatencies(checkpoint)
+  /**
+   * Given a timestamp in nanoseconds, compute and return the closest TimeBucket
+   * @param {number} timestamp
+   * @returns {StatsBucket}
+   */
+  bucketFromTimestamp (timestamp) {
+    const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
+    return this.buckets.forTime(bucketTime)
   }
 
-  setCheckpoint (edgeTags, ctx = null, payloadSize = 0) {
+  recordCheckpoint (checkpoint, span = null) {
+    if (!this.enabled) return
+    this.bucketFromTimestamp(checkpoint.currentTimestamp)
+      .forCheckpoint(checkpoint)
+      .addLatencies(checkpoint)
+    // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
+    if (span) {
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+    }
+  }
+
+  setCheckpoint (edgeTags, span, ctx = null, payloadSize = 0) {
     if (!this.enabled) return null
     const nowNs = Date.now() * 1e6
     const direction = edgeTags.find(t => t.startsWith('direction:'))
@@ -198,30 +271,56 @@ class DataStreamsProcessor {
       pathwayLatencyNs: pathwayLatencyNs,
       payloadSize: payloadSize
     }
-    this.recordCheckpoint(checkpoint)
+    this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
   }
 
+  recordOffset ({ timestamp, ...backlogData }) {
+    if (!this.enabled) return
+    return this.bucketFromTimestamp(timestamp)
+      .forBacklog(backlogData)
+  }
+
+  setOffset (offsetObj) {
+    if (!this.enabled) return
+    const nowNs = Date.now() * 1e6
+    const backlogData = {
+      ...offsetObj,
+      timestamp: nowNs
+    }
+    this.recordOffset(backlogData)
+  }
+
   _serializeBuckets () {
+    // TimeBuckets
     const serializedBuckets = []
 
     for (const [ timeNs, bucket ] of this.buckets.entries()) {
       const points = []
 
-      for (const stats of bucket.values()) {
+      // bucket: StatsBucket
+      // stats: StatsPoint
+      for (const stats of bucket._checkpoints.values()) {
         points.push(stats.encode())
       }
 
+      const backlogs = []
+      for (const backlog of bucket._backlogs.values()) {
+        backlogs.push(backlog.encode())
+      }
       serializedBuckets.push({
         Start: new Uint64(timeNs),
         Duration: new Uint64(this.bucketSizeNs),
-        Stats: points
+        Stats: points,
+        Backlogs: backlogs
       })
     }
 
     this.buckets.clear()
 
-    return serializedBuckets
+    return {
+      Stats: serializedBuckets
+    }
   }
 }
 
@@ -229,6 +328,7 @@ module.exports = {
   DataStreamsProcessor: DataStreamsProcessor,
   StatsPoint: StatsPoint,
   StatsBucket: StatsBucket,
+  Backlog,
   TimeBuckets,
   getMessageSize,
   getHeadersSize,

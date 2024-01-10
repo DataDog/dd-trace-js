@@ -11,6 +11,8 @@ const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
+const samplingContextsAvailable = process.platform !== 'win32'
+
 describe('config', () => {
   let Config
   let env
@@ -48,9 +50,10 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).false
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
+    expect(config.cpuProfilingEnabled).false
   })
 
   it('should support configuration options', () => {
@@ -62,7 +65,7 @@ describe('config', () => {
       exporters: 'agent,file',
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
-      codeHotspotsEnabled: true
+      codeHotspotsEnabled: false
     }
 
     const config = new Config(options)
@@ -85,7 +88,7 @@ describe('config', () => {
     expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1].codeHotspotsEnabled()).true
+    expect(config.profilers[1].codeHotspotsEnabled()).false
   })
 
   it('should filter out invalid profilers', () => {
@@ -129,8 +132,8 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
     }
     const options = {
       logger: nullLogger
@@ -141,8 +144,9 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
+    expect(config.cpuProfilingEnabled).true
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -179,9 +183,12 @@ describe('config', () => {
   })
 
   it('should prioritize options over env variables', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_CODEHOTSPOTS_ENABLED: '1',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
     }
     const options = {
@@ -201,6 +208,10 @@ describe('config', () => {
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
@@ -237,6 +248,30 @@ describe('config', () => {
     expect(config.profilers[0].endpointCollectionEnabled()).false
   })
 
+  it('should prevent accidentally enabling code hotspots', () => {
+    if (samplingContextsAvailable) {
+      return
+    }
+
+    const options = {
+      codeHotspotsEnabled: true
+    }
+    // eslint-disable-next-line no-new
+    expect(() => { new Config(options) }).to.throw('Code hotspots not supported on ')
+  })
+
+  it('should prevent accidentally enabling endpoint collection', () => {
+    if (samplingContextsAvailable) {
+      return
+    }
+
+    const options = {
+      endpointCollection: true
+    }
+    // eslint-disable-next-line no-new
+    expect(() => { new Config(options) }).to.throw('Endpoint collection not supported on ')
+  })
+
   it('should support tags', () => {
     const tags = {
       env: 'dev'
@@ -260,6 +295,18 @@ describe('config', () => {
     const config = new Config({ env, service, version, tags })
 
     expect(config.tags).to.include({ env, service, version })
+  })
+
+  it('should add source code integration tags if git metadata is available', () => {
+    const DUMMY_GIT_SHA = '13851f2b092e97acebab1b73f6c0e7818e795b50'
+    const DUMMY_REPOSITORY_URL = 'git@github.com:DataDog/sci_git_example.git'
+
+    const config = new Config({
+      repositoryUrl: DUMMY_REPOSITORY_URL,
+      commitSHA: DUMMY_GIT_SHA
+    })
+
+    expect(config.tags).to.include({ 'git.repository_url': DUMMY_REPOSITORY_URL, 'git.commit.sha': DUMMY_GIT_SHA })
   })
 
   it('should support IPv6 hostname', () => {

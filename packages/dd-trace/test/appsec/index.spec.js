@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('fs')
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
@@ -7,7 +8,6 @@ const appsec = require('../../src/appsec')
 const {
   bodyParser,
   cookieParser,
-  graphqlFinishExecute,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   queryParser,
@@ -20,7 +20,6 @@ const axios = require('axios')
 const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
-const addresses = require('../../src/appsec/addresses')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 
 describe('AppSec Index', () => {
@@ -31,6 +30,7 @@ describe('AppSec Index', () => {
   let passport
   let log
   let appsecTelemetry
+  let graphql
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -38,7 +38,7 @@ describe('AppSec Index', () => {
     config = {
       appsec: {
         enabled: true,
-        rules: RULES,
+        rules: './path/rules.json',
         rateLimit: 42,
         wafTimeout: 42,
         obfuscatorKeyRegex: '.*',
@@ -48,6 +48,10 @@ describe('AppSec Index', () => {
         eventTracking: {
           enabled: true,
           mode: 'safe'
+        },
+        apiSecurity: {
+          enabled: false,
+          requestSampling: 0
         }
       }
     }
@@ -75,16 +79,23 @@ describe('AppSec Index', () => {
       disable: sinon.stub()
     }
 
+    graphql = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
       './passport': passport,
-      './telemetry': appsecTelemetry
+      './telemetry': appsecTelemetry,
+      './graphql': graphql
     })
 
+    sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
-    sinon.stub(RuleManager, 'applyRules')
+    sinon.stub(RuleManager, 'loadRules')
     sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
@@ -101,18 +112,19 @@ describe('AppSec Index', () => {
       AppSec.enable(config)
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
-      expect(RuleManager.applyRules).to.have.been.calledOnceWithExactly(RULES, config.appsec)
+      expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(graphql.enable).to.have.been.calledOnceWithExactly()
     })
 
     it('should log when enable fails', () => {
-      RuleManager.applyRules.restore()
+      RuleManager.loadRules.restore()
 
       const err = new Error('Invalid Rules')
-      sinon.stub(RuleManager, 'applyRules').throws(err)
+      sinon.stub(RuleManager, 'loadRules').throws(err)
 
       AppSec.enable(config)
 
@@ -128,13 +140,11 @@ describe('AppSec Index', () => {
       expect(cookieParser.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
-      expect(graphqlFinishExecute.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
       expect(bodyParser.hasSubscribers).to.be.true
       expect(cookieParser.hasSubscribers).to.be.true
-      expect(graphqlFinishExecute.hasSubscribers).to.be.true
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
     })
@@ -177,6 +187,7 @@ describe('AppSec Index', () => {
       expect(incomingHttpRequestStart.unsubscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+      expect(graphql.disable).to.have.been.calledOnceWithExactly()
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -196,7 +207,6 @@ describe('AppSec Index', () => {
 
       expect(bodyParser.hasSubscribers).to.be.false
       expect(cookieParser.hasSubscribers).to.be.false
-      expect(graphqlFinishExecute.hasSubscribers).to.be.false
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
     })
@@ -247,10 +257,12 @@ describe('AppSec Index', () => {
         'http.client_ip': '127.0.0.1'
       })
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.request.uri.raw': '/path',
-        'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-        'server.request.method': 'POST',
-        'http.client_ip': '127.0.0.1'
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
       }, req)
     })
   })
@@ -264,6 +276,7 @@ describe('AppSec Index', () => {
       const rootSpan = {
         addTags: sinon.stub()
       }
+
       web.root.returns(rootSpan)
     })
 
@@ -296,8 +309,10 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -337,8 +352,10 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
+        }
       }, req)
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
@@ -388,14 +405,134 @@ describe('AppSec Index', () => {
       AppSec.incomingHttpEndTranslator({ req, res })
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
-        'server.response.status': 201,
-        'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
-        'server.request.body': { a: '1' },
-        'server.request.path_params': { c: '3' },
-        'server.request.cookies': { d: '4', e: '5' },
-        'server.request.query': { b: '2' }
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
+          'server.request.body': { a: '1' },
+          'server.request.path_params': { c: '3' },
+          'server.request.cookies': { d: '4', e: '5' },
+          'server.request.query': { b: '2' }
+        }
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
+    })
+  })
+
+  describe('Api Security', () => {
+    beforeEach(() => {
+      sinon.stub(waf, 'run')
+
+      const rootSpan = {
+        addTags: sinon.stub()
+      }
+
+      web.root.returns(rootSpan)
+    })
+
+    it('should not trigger schema extraction with sampling disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 0
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
+      }, req)
+    })
+
+    it('should not trigger schema extraction with feature disabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: false,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1'
+        }
+      }, req)
+    })
+
+    it('should trigger schema extraction with sampling enabled', () => {
+      config.appsec.apiSecurity = {
+        enabled: true,
+        requestSampling: 1
+      }
+
+      AppSec.enable(config)
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          'host': 'localhost',
+          cookie: 'a=1;b=2'
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080
+        }
+      }
+      const res = {}
+
+      AppSec.incomingHttpStartTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.request.uri.raw': '/path',
+          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
+          'server.request.method': 'POST',
+          'http.client_ip': '127.0.0.1',
+          'waf.context.processor': { 'extract-schema': true }
+        }
+      }, req)
     })
   })
 
@@ -427,9 +564,10 @@ describe('AppSec Index', () => {
           'content-type': 'application/json',
           'content-lenght': 42
         }),
-        setHeader: sinon.stub(),
+        writeHead: sinon.stub(),
         end: sinon.stub()
       }
+      res.writeHead.returns(res)
 
       AppSec.enable(config)
       AppSec.incomingHttpStartTranslator({ req, res })
@@ -458,7 +596,9 @@ describe('AppSec Index', () => {
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -472,7 +612,9 @@ describe('AppSec Index', () => {
         bodyParser.publish({ req, res, body, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.body': { key: 'value' }
+          persistent: {
+            'server.request.body': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -497,7 +639,9 @@ describe('AppSec Index', () => {
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -510,7 +654,9 @@ describe('AppSec Index', () => {
         cookieParser.publish({ req, res, abortController, cookies })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.cookies': { key: 'value' }
+          persistent: {
+            'server.request.cookies': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -536,7 +682,9 @@ describe('AppSec Index', () => {
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).not.to.have.been.called
         expect(res.end).not.to.have.been.called
@@ -550,7 +698,9 @@ describe('AppSec Index', () => {
         queryParser.publish({ req, res, query, abortController })
 
         expect(waf.run).to.have.been.calledOnceWith({
-          'server.request.query': { key: 'value' }
+          persistent: {
+            'server.request.query': { key: 'value' }
+          }
         })
         expect(abortController.abort).to.have.been.called
         expect(res.end).to.have.been.called
@@ -583,66 +733,6 @@ describe('AppSec Index', () => {
 
         expect(log.warn).to.have.been.calledOnceWithExactly('No rootSpan found in onPassportVerify')
         expect(passport.passportTrackEvent).not.to.have.been.called
-      })
-    })
-
-    describe('onGraphqlQueryParse', () => {
-      it('Should not call waf if resolvers is undefined', () => {
-        const resolvers = undefined
-        const rootSpan = {}
-
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should not call waf if resolvers is not an object', () => {
-        const resolvers = ''
-        const rootSpan = {}
-
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should not call waf if req is unavailable', () => {
-        const resolvers = { user: [ { id: '1234' } ] }
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({})
-
-        graphqlFinishExecute.publish({ resolvers })
-
-        expect(waf.run).not.to.have.been.called
-      })
-
-      it('Should call waf if resolvers is well formatted', () => {
-        const context = {
-          resolvers: {
-            user: [ { id: '1234' } ]
-          }
-        }
-        const rootSpan = {}
-
-        sinon.stub(waf, 'run')
-        sinon.stub(storage, 'getStore').returns({ req: {} })
-        web.root.returns(rootSpan)
-
-        graphqlFinishExecute.publish({ context })
-
-        expect(waf.run).to.have.been.calledOnceWithExactly(
-          {
-            [addresses.HTTP_INCOMING_GRAPHQL_RESOLVERS]: context.resolvers
-          },
-          {}
-        )
       })
     })
   })

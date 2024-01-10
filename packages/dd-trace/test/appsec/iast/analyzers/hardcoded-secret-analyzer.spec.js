@@ -26,12 +26,13 @@ describe('Hardcoded Secret Analyzer', () => {
     afterEach(sinon.restore)
 
     suite.forEach((testCase) => {
-      testCase.samples.forEach(sample => {
-        it(`should match rule ${testCase.id} with value ${sample}`, () => {
+      testCase.samples.forEach((sample, sampleIndex) => {
+        // sample values are arrays containing the parts of the original token
+        it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
           hardcodedSecretAnalyzer.analyze({
             file,
             literals: [{
-              value: sample,
+              value: sample.join(''),
               locations: [{
                 line,
                 column

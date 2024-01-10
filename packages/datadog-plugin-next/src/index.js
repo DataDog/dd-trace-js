@@ -6,6 +6,8 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
+const errorPages = ['/404', '/500', '/_error', '/_not-found']
+
 class NextPlugin extends ServerPlugin {
   static get id () {
     return 'next'
@@ -40,6 +42,13 @@ class NextPlugin extends ServerPlugin {
   }
 
   error ({ span, error }) {
+    if (!span) {
+      const store = storage.getStore()
+      if (!store) return
+
+      span = store.span
+    }
+
     this.addError(error, span)
   }
 
@@ -50,10 +59,20 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = span.context()._tags['error']
+    const requestError = req.error || nextRequest.error
 
-    if (!this.config.validateStatus(res.statusCode) && !error) {
-      span.setTag('error', req.error || nextRequest.error || true)
-      web.addError(req, req.error || nextRequest.error || true)
+    if (requestError) {
+      // prioritize user-set errors from API routes
+      span.setTag('error', requestError)
+      web.addError(req, requestError)
+    } else if (error) {
+      // general error handling
+      span.setTag('error', error)
+      web.addError(req, requestError || error)
+    } else if (!this.config.validateStatus(res.statusCode)) {
+      // where there's no error, we still need to validate status
+      span.setTag('error', true)
+      web.addError(req, true)
     }
 
     span.addTags({
@@ -65,7 +84,7 @@ class NextPlugin extends ServerPlugin {
     span.finish()
   }
 
-  pageLoad ({ page, isAppPath = false }) {
+  pageLoad ({ page, isAppPath = false, isStatic = false }) {
     const store = storage.getStore()
 
     if (!store) return
@@ -73,21 +92,28 @@ class NextPlugin extends ServerPlugin {
     const span = store.span
     const req = this._requests.get(span)
 
+    // safeguard against missing req in complicated timeout scenarios
+    if (!req) return
+
     // Only use error page names if there's not already a name
     const current = span.context()._tags['next.page']
-    if (current && ['/404', '/500', '/_error', '/_not-found'].includes(page)) {
+    const isErrorPage = errorPages.includes(page)
+
+    if (current && isErrorPage) {
       return
     }
 
     // remove ending /route or /page for appDir projects
-    if (isAppPath) page = page.substring(0, page.lastIndexOf('/'))
+    // need to check if not an error page too, as those are marked as app directory
+    // in newer versions
+    if (isAppPath && !isErrorPage) page = page.substring(0, page.lastIndexOf('/'))
 
-    // This is for static files whose 'page' includes the whole file path
-    // For normal page matches, like /api/hello/[name] and a req.url like /api/hello/world,
-    // nothing should happen
-    // For page matches like /User/something/public/text.txt and req.url like /text.txt,
-    // it should disregard the extra absolute path Next.js sometimes sets
-    if (page.includes(req.url)) page = req.url
+    // handle static resource
+    if (isStatic) {
+      page = req.url.includes('_next/static')
+        ? '/_next/static/*'
+        : '/public/*'
+    }
 
     span.addTags({
       [COMPONENT]: this.constructor.id,

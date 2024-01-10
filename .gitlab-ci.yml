@@ -11,12 +11,25 @@ include:
 variables:
   JS_PACKAGE_VERSION:
     description: "Version to build for .deb and .rpm. Must be already published in NPM"
+  DOWNSTREAM_BRANCH:
+    value: "master"
+    description: "Run a specific datadog-reliability-env branch downstream"
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
 package:
   extends: .package
+  rules:
+  - if: $JS_PACKAGE_VERSION
+    when: on_success
+  - if: '$CI_COMMIT_TAG =~ /^v.*/'
+    when: on_success
+  script:
+    - ../.gitlab/build-deb-rpm.sh
+
+package-arm:
+  extends: .package-arm
   rules:
   - if: $JS_PACKAGE_VERSION
     when: on_success
@@ -40,6 +53,7 @@ deploy_to_reliability_env:
       allow_failure: true
   trigger:
     project: DataDog/apm-reliability/datadog-reliability-env
+    branch: $DOWNSTREAM_BRANCH
   variables:
     UPSTREAM_BRANCH: $CI_COMMIT_REF_NAME
     UPSTREAM_PROJECT_ID: $CI_PROJECT_ID

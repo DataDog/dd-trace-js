@@ -84,23 +84,25 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it(`should conform to the naming schema`, done => {
-          agent
-            .use(traces => {
-              const span = selectSpan(traces)
-              const expectedOpName = typeof opName === 'function'
-                ? opName()
-                : opName
-              const expectedServiceName = typeof serviceName === 'function'
-                ? serviceName()
-                : serviceName
+        it(`should conform to the naming schema`, () => {
+          return new Promise((resolve, reject) => {
+            agent
+              .use(traces => {
+                const span = selectSpan(traces)
+                const expectedOpName = typeof opName === 'function'
+                  ? opName()
+                  : opName
+                const expectedServiceName = typeof serviceName === 'function'
+                  ? serviceName()
+                  : serviceName
 
-              expect(span).to.have.property('name', expectedOpName)
-              expect(span).to.have.property('service', expectedServiceName)
-            })
-            .then(done)
-            .catch(done)
-          spanProducerFn(done)
+                expect(span).to.have.property('name', expectedOpName)
+                expect(span).to.have.property('service', expectedServiceName)
+              })
+              .then(resolve)
+              .catch(reject)
+            spanProducerFn(reject)
+          })
         })
       })
     })
@@ -192,7 +194,9 @@ function withVersions (plugin, modules, range, cb) {
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        instrumentation.versions
+        const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+          : instrumentation.versions
+        versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
             const min = semver.coerce(version).version

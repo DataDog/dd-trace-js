@@ -75,6 +75,7 @@ class AgentExporter {
       ['tags[]', 'language:javascript'],
       ['tags[]', 'runtime:nodejs'],
       ['tags[]', `runtime_version:${process.version}`],
+      ['tags[]', `process_id:${process.pid}`],
       ['tags[]', `profiler_version:${version}`],
       ['tags[]', 'format:pprof'],
       ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])

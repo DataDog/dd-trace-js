@@ -36,7 +36,7 @@ class DatabasePlugin extends StoragePlugin {
     const { encodedDddbs, encodedDde, encodedDdps, encodedDdpv } = this.serviceTags
 
     return `dddbs='${encodedDddbs}',dde='${encodedDde}',` +
-    `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
+      `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
   getDbmServiceName (span, tracerService) {

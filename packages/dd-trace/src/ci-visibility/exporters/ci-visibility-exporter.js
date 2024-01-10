@@ -143,7 +143,23 @@ class CiVisibilityExporter extends AgentInfoExporter {
          * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
          */
         this._itrConfig = itrConfig
-        callback(err, itrConfig)
+
+        if (err) {
+          callback(err, {})
+        } else if (itrConfig?.requireGit) {
+          // If the backend requires git, we'll wait for the upload to finish and request settings again
+          this._gitUploadPromise.then(gitUploadError => {
+            if (gitUploadError) {
+              return callback(gitUploadError, {})
+            }
+            getItrConfigurationRequest(configuration, (err, finalItrConfig) => {
+              this._itrConfig = finalItrConfig
+              callback(err, finalItrConfig)
+            })
+          })
+        } else {
+          callback(null, itrConfig)
+        }
       })
     })
   }

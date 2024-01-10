@@ -1,0 +1,43 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.9.0"
+  },
+  "rules": [
+    {
+      "id": "blk-001-001",
+      "name": "Block IP Addresses",
+      "tags": {
+        "type": "block_ip",
+        "category": "security_response"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "http.client_ip"
+              }
+            ],
+            "data": "blocked_ips"
+          },
+          "operator": "ip_match"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "block"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "block",
+      "otherParam": "other"
+    },
+    {
+      "id": "otherId",
+      "moreParams": "more"
+    }
+  ]
+}

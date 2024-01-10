@@ -85,6 +85,72 @@ describe('Plugin', () => {
           })
         })
 
+        it('should support routing with async functions and middleware', done => {
+          const server = restify.createServer()
+
+          server.get(
+            '/user/:id',
+            async function middleware () {},
+            async function handler (req, res) {
+              res.send('hello, ' + req.params.id)
+            }
+          )
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('resource', 'GET /user/:id')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
+                expect(traces[0][0].meta).to.have.property('component', 'restify')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should route without producing any warnings', done => {
+          const warningSpy = sinon.spy((_, msg) => {
+            // eslint-disable-next-line no-console
+            console.error(`route called with warning: ${msg}`)
+          })
+
+          const server = restify.createServer({
+            log: {
+              trace: () => {},
+              warn: warningSpy
+            }
+          })
+
+          server.get(
+            '/user/:id',
+            async function middleware () {},
+            async function handler (req, res) {
+              res.send('hello, ' + req.params.id)
+            }
+          )
+
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(warningSpy).to.not.have.been.called
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
+            })
+          })
+        })
+
         it('should run handlers in the request scope', done => {
           const server = restify.createServer()
           const interval = setInterval(() => {

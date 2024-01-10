@@ -18,13 +18,11 @@ function busyLoop () {
 let counter = 0
 
 function runBusySpans () {
-  tracer.trace('x' + counter, (span, done) => {
-    span.setTag('span.type', 'web')
-    span.setTag('resource.name', `endpoint-${counter}`)
+  tracer.trace('x' + counter, { type: 'web', resource: `endpoint-${counter}` }, (_, done) => {
     setImmediate(() => {
       for (let i = 0; i < 3; ++i) {
         const z = i
-        tracer.trace('y' + i, (span2, done2) => {
+        tracer.trace('y' + i, (_, done2) => {
           setTimeout(() => {
             busyLoop()
             done2()
@@ -41,4 +39,4 @@ function runBusySpans () {
   })
 }
 
-setTimeout(runBusySpans, 100)
+tracer.profilerStarted().then(runBusySpans)

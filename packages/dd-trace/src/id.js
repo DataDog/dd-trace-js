@@ -42,6 +42,18 @@ class Identifier {
   toJSON () {
     return this.toString()
   }
+
+  equals (other) {
+    const length = this._buffer.length
+    const otherLength = other._buffer.length
+
+    // Only compare the bytes available in both IDs.
+    for (let i = length, j = otherLength; i >= 0 && j >= 0; i--, j--) {
+      if (this._buffer[i] !== other._buffer[j]) return false
+    }
+
+    return true
+  }
 }
 
 // Create a buffer, using an optional hexadecimal value if provided.

@@ -1,5 +1,3 @@
-const URL = require('url').URL
-
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -24,6 +22,7 @@ const {
   CI_NODE_LABELS,
   CI_NODE_NAME
 } = require('./tags')
+const { filterSensitiveInfoFromRepository } = require('./url')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -65,20 +64,6 @@ function normalizeRef (ref) {
     return ref
   }
   return ref.replace(/origin\/|refs\/heads\/|tags\//gm, '')
-}
-
-function filterSensitiveInfoFromRepository (repositoryUrl) {
-  if (repositoryUrl.startsWith('git@')) {
-    return repositoryUrl
-  }
-
-  try {
-    const { protocol, hostname, pathname } = new URL(repositoryUrl)
-
-    return `${protocol}//${hostname}${pathname}`
-  } catch (e) {
-    return ''
-  }
 }
 
 function resolveTilde (filePath) {
@@ -271,20 +256,22 @@ module.exports = {
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
 
+      // Both pipeline URL and job URL include GITHUB_SERVER_URL, which can include user credentials,
+      // so we pass them through `filterSensitiveInfoFromRepository`.
       tags = {
         [CI_PIPELINE_ID]: GITHUB_RUN_ID,
         [CI_PIPELINE_NAME]: GITHUB_WORKFLOW,
         [CI_PIPELINE_NUMBER]: GITHUB_RUN_NUMBER,
-        [CI_PIPELINE_URL]: pipelineURL,
+        [CI_PIPELINE_URL]: filterSensitiveInfoFromRepository(pipelineURL),
         [CI_PROVIDER_NAME]: 'github',
         [GIT_COMMIT_SHA]: GITHUB_SHA,
         [GIT_REPOSITORY_URL]: repositoryURL,
-        [CI_JOB_URL]: jobUrl,
+        [CI_JOB_URL]: filterSensitiveInfoFromRepository(jobUrl),
         [CI_JOB_NAME]: GITHUB_JOB,
         [CI_WORKSPACE_PATH]: GITHUB_WORKSPACE,
         [refKey]: ref,
         [CI_ENV_VARS]: JSON.stringify({
-          GITHUB_SERVER_URL,
+          GITHUB_SERVER_URL: filterSensitiveInfoFromRepository(GITHUB_SERVER_URL),
           GITHUB_REPOSITORY,
           GITHUB_RUN_ID,
           GITHUB_RUN_ATTEMPT

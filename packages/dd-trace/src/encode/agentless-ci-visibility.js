@@ -3,8 +3,13 @@ const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
 const id = require('../../../dd-trace/src/id')
-const ENCODING_VERSION = 1
+const {
+  distributionMetric,
+  TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+} = require('../ci-visibility/telemetry')
 
+const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
 const TEST_SUITE_KEYS_LENGTH = 12
@@ -247,6 +252,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
+    const startTime = Date.now()
+
     const rawEvents = trace.map(formatSpan)
 
     const testSessionEvents = rawEvents.filter(
@@ -261,9 +268,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     for (const event of events) {
       this._encodeEvent(bytes, event)
     }
+    distributionMetric(
+      TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+      { endpoint: 'test_cycle' },
+      Date.now() - startTime
+    )
   }
 
   makePayload () {
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
     const bytes = this._traceBytes
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount

@@ -17,13 +17,13 @@ describe('Config', () => {
   let osType
 
   const RECOMMENDED_JSON_PATH = require.resolve('../src/appsec/recommended.json')
-  const RECOMMENDED_JSON = require(RECOMMENDED_JSON_PATH)
   const RULES_JSON_PATH = require.resolve('./fixtures/config/appsec-rules.json')
-  const RULES_JSON = require(RULES_JSON_PATH)
   const BLOCKED_TEMPLATE_HTML_PATH = require.resolve('./fixtures/config/appsec-blocked-template.html')
   const BLOCKED_TEMPLATE_HTML = readFileSync(BLOCKED_TEMPLATE_HTML_PATH, { encoding: 'utf8' })
   const BLOCKED_TEMPLATE_JSON_PATH = require.resolve('./fixtures/config/appsec-blocked-template.json')
   const BLOCKED_TEMPLATE_JSON = readFileSync(BLOCKED_TEMPLATE_JSON_PATH, { encoding: 'utf8' })
+  const BLOCKED_TEMPLATE_GRAPHQL_PATH = require.resolve('./fixtures/config/appsec-blocked-graphql-template.json')
+  const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
   beforeEach(() => {
@@ -89,7 +89,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
-    expect(config).to.have.property('traceId128BitGenerationEnabled', false)
+    expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
@@ -101,7 +101,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
-    expect(config).to.have.nested.property('appsec.rules', RECOMMENDED_JSON)
+    expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
@@ -109,8 +109,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
+    expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -118,6 +121,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
     expect(config).to.have.nested.property('iast.redactionValuePattern', null)
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'INFORMATION')
+    expect(config).to.have.nested.property('installSignature.id', null)
+    expect(config).to.have.nested.property('installSignature.time', null)
+    expect(config).to.have.nested.property('installSignature.type', null)
   })
 
   it('should support logging', () => {
@@ -208,6 +214,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '.*'
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_HTML_PATH
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
+    process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
@@ -222,6 +229,12 @@ describe('Config', () => {
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
+    process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
+    process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
+    process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
+    process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
 
     const config = new Config()
 
@@ -277,7 +290,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -285,8 +298,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -298,6 +314,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('iast.redactionNamePattern', 'REDACTION_NAME_PATTERN')
     expect(config).to.have.nested.property('iast.redactionValuePattern', 'REDACTION_VALUE_PATTERN')
     expect(config).to.have.nested.property('iast.telemetryVerbosity', 'DEBUG')
+    expect(config).to.have.deep.property('installSignature', {
+      id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+      type: 'k8s_single_step',
+      time: '1703188212'
+    })
   })
 
   it('should read case-insensitive booleans from environment variables', () => {
@@ -653,9 +674,12 @@ describe('Config', () => {
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP = '^$'
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON // note the inversion between
-    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML // json and html here
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML = BLOCKED_TEMPLATE_JSON_PATH // note the inversion between
+    process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML_PATH // json and html here
+    process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
@@ -717,8 +741,13 @@ describe('Config', () => {
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+        blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
         eventTracking: {
           mode: 'safe'
+        },
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 1.0
         }
       },
       remoteConfig: {
@@ -745,7 +774,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('traceId128BitGenerationEnabled', false)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
-    expect(config.tags).to.include({ foo: 'foo', baz: 'qux' })
+    expect(config.tags).to.include({ foo: 'foo' })
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.property('spanAttributeSchema', 'v1')
@@ -758,7 +787,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.deep.property('appsec.rules', RULES_JSON)
+    expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -766,8 +795,11 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', BLOCKED_TEMPLATE_HTML)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', BLOCKED_TEMPLATE_JSON)
+    expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
+    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -790,8 +822,13 @@ describe('Config', () => {
         obfuscatorValueRegex: '.*',
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
+        blockedTemplateGraphql: undefined,
         eventTracking: {
           mode: 'disabled'
+        },
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 1.0
         }
       },
       experimental: {
@@ -804,8 +841,13 @@ describe('Config', () => {
           obfuscatorValueRegex: '^$',
           blockedTemplateHtml: BLOCKED_TEMPLATE_HTML_PATH,
           blockedTemplateJson: BLOCKED_TEMPLATE_JSON_PATH,
+          blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL_PATH,
           eventTracking: {
             mode: 'safe'
+          },
+          apiSecurity: {
+            enabled: false,
+            requestSampling: 0.5
           }
         }
       }
@@ -813,7 +855,7 @@ describe('Config', () => {
 
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
-      rules: RECOMMENDED_JSON,
+      rules: undefined,
       customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
@@ -821,9 +863,14 @@ describe('Config', () => {
       obfuscatorValueRegex: '.*',
       blockedTemplateHtml: undefined,
       blockedTemplateJson: undefined,
+      blockedTemplateGraphql: undefined,
       eventTracking: {
         enabled: false,
         mode: 'disabled'
+      },
+      apiSecurity: {
+        enabled: true,
+        requestSampling: 1.0
       }
     })
   })
@@ -1095,9 +1142,10 @@ describe('Config', () => {
     const config = new Config({
       appsec: {
         enabled: true,
-        rules: 'DOES_NOT_EXIST.json',
+        rules: 'path/to/rules.json',
         blockedTemplateHtml: 'DOES_NOT_EXIST.html',
-        blockedTemplateJson: 'DOES_NOT_EXIST.json'
+        blockedTemplateJson: 'DOES_NOT_EXIST.json',
+        blockedTemplateGraphql: 'DOES_NOT_EXIST.json'
       }
     })
 
@@ -1107,10 +1155,11 @@ describe('Config', () => {
     expect(log.error.thirdCall).to.have.been.calledWithExactly(error)
 
     expect(config.appsec.enabled).to.be.true
-    expect(config.appsec.rules).to.be.undefined
+    expect(config.appsec.rules).to.eq('path/to/rules.json')
     expect(config.appsec.customRulesProvided).to.be.true
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
+    expect(config.appsec.blockedTemplateGraphql).to.be.undefined
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -1333,5 +1382,33 @@ describe('Config', () => {
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
     })
+  })
+  it('should sanitize values for API Security sampling between 0 and 1', () => {
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 5
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: -5
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
+
+    expect(new Config({
+      appsec: {
+        apiSecurity: {
+          enabled: true,
+          requestSampling: 0.1
+        }
+      }
+    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
 })

@@ -13,7 +13,7 @@ const {
 } = require('./tags')
 
 const { normalizeRef } = require('./ci')
-const { URL } = require('url')
+const { filterSensitiveInfoFromRepository } = require('./url')
 
 function removeEmptyValues (tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
@@ -27,23 +27,11 @@ function removeEmptyValues (tags) {
   }, {})
 }
 
-function filterSensitiveInfoFromRepository (repositoryUrl) {
-  try {
-    if (repositoryUrl.startsWith('git@')) {
-      return repositoryUrl
-    }
-    const { protocol, hostname, pathname } = new URL(repositoryUrl)
-
-    return `${protocol}//${hostname}${pathname}`
-  } catch (e) {
-    return repositoryUrl
-  }
-}
-
-// The regex is extracted from
+// The regex is inspired by
 // https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87
+// The `.git` suffix is optional in this version
 function validateGitRepositoryUrl (repoUrl) {
-  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\.git)(\/?|#[-\d\w._]+?)$/.test(repoUrl)
+  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\/?|#[-\d\w._]+?)$/.test(repoUrl)
 }
 
 function validateGitCommitSha (gitCommitSha) {

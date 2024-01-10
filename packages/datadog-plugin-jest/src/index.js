@@ -12,10 +12,21 @@ const {
   TEST_FRAMEWORK_VERSION,
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_CODE_COVERAGE_STARTED,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_ITR_UNSKIPPABLE,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES
+} = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 
@@ -81,7 +92,9 @@ class JestPlugin extends CiPlugin {
       )
 
       this.testModuleSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
       this.tracer._exporter.flush()
     })
@@ -103,7 +116,8 @@ class JestPlugin extends CiPlugin {
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
         _ddForcedToRun,
-        _ddUnskippable
+        _ddUnskippable,
+        _ddTestCodeCoverageEnabled
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
@@ -114,8 +128,10 @@ class JestPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
 
       if (_ddUnskippable) {
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         if (_ddForcedToRun) {
+          this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
           testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         }
       }
@@ -128,6 +144,10 @@ class JestPlugin extends CiPlugin {
           ...testSuiteMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+      if (_ddTestCodeCoverageEnabled) {
+        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
+      }
     })
 
     this.addSub('ci:jest:worker-report:trace', traces => {
@@ -164,6 +184,7 @@ class JestPlugin extends CiPlugin {
         this.testSuiteSpan.setTag('error', new Error(errorMessage))
       }
       this.testSuiteSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       // Suites potentially run in a different process than the session,
       // so calling finishAllTraceSpans on the session span is not enough
       finishAllTraceSpans(this.testSuiteSpan)
@@ -180,14 +201,22 @@ class JestPlugin extends CiPlugin {
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */
-    this.addSub('ci:jest:test-suite:code-coverage', (coverageFiles) => {
+    this.addSub('ci:jest:test-suite:code-coverage', ({ coverageFiles, testSuite }) => {
+      if (!coverageFiles.length) {
+        this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
+      }
+      const files = [...coverageFiles, testSuite]
+
       const { _traceId, _spanId } = this.testSuiteSpan.context()
       const formattedCoverage = {
         sessionId: _traceId,
         suiteId: _spanId,
-        files: coverageFiles
+        files
       }
+
       this.tracer._exporter.exportCoverage(formattedCoverage)
+      this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
+      this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 
     this.addSub('ci:jest:test:start', (test) => {
@@ -204,6 +233,11 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
       span.finish()
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+      )
       finishAllTraceSpans(span)
     })
 

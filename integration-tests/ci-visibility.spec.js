@@ -38,7 +38,7 @@ const mochaCommonOptions = {
 
 const jestCommonOptions = {
   name: 'jest',
-  dependencies: ['jest', 'chai', 'jest-jasmine2'],
+  dependencies: ['jest', 'chai@v4', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
     'ci-visibility/test/sum.js',
@@ -51,7 +51,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.js',
-    dependencies: ['mocha', 'chai', 'nyc'],
+    dependencies: ['mocha', 'chai@v4', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -64,7 +64,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.mjs',
-    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+    dependencies: ['mocha', 'chai@v4', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -446,6 +446,51 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+      it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false
+        })
+
+        receiver.assertPayloadReceived(({ payload }) => {
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT)
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DISABLE_CODE_COVERAGE: '1'
+            },
+            stdio: 'inherit'
+          }
+        )
+      })
+      it('reports total code coverage % even when ITR is disabled', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false
+        })
+
+        receiver.assertPayloadReceived(({ payload }) => {
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+      })
     }
 
     it('can run tests and report spans', (done) => {
@@ -703,6 +748,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -720,6 +766,7 @@ testFrameworks.forEach(({
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
           const testModule = payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
@@ -879,6 +926,7 @@ testFrameworks.forEach(({
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })
@@ -1268,6 +1316,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -1282,6 +1331,8 @@ testFrameworks.forEach(({
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
@@ -1479,6 +1530,7 @@ testFrameworks.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })

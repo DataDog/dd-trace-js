@@ -48,8 +48,8 @@ function extractIp (config, req) {
 
   let firstPrivateIp
   if (headers) {
-    for (let i = 0; i < ipHeaderList.length; i++) {
-      const firstIp = findFirstIp(headers[ipHeaderList[i]])
+    for (const ipHeaderName of ipHeaderList) {
+      const firstIp = findFirstIp(headers[ipHeaderName])
 
       if (firstIp.public) {
         return firstIp.public
@@ -59,7 +59,7 @@ function extractIp (config, req) {
     }
   }
 
-  return firstPrivateIp || (req.socket && req.socket.remoteAddress)
+  return firstPrivateIp || req.socket?.remoteAddress
 }
 
 function findFirstIp (str) {
@@ -68,8 +68,8 @@ function findFirstIp (str) {
 
   const splitted = str.split(',')
 
-  for (let i = 0; i < splitted.length; i++) {
-    const chunk = splitted[i].trim()
+  for (const part of splitted) {
+    const chunk = part.trim()
 
     // TODO: strip port and interface data ?
 
@@ -90,5 +90,6 @@ function findFirstIp (str) {
 }
 
 module.exports = {
-  extractIp
+  extractIp,
+  ipHeaderList
 }

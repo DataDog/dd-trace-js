@@ -22,6 +22,10 @@ function withFunction ({ tracerService, pluginConfig, params }) {
 
 const storage = {
   client: {
+    aerospike: {
+      opName: () => 'aerospike.command',
+      serviceName: configWithFallback
+    },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
       serviceName: configWithFallback

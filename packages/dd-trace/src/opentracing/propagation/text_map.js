@@ -236,11 +236,20 @@ class TextMapPropagator {
   _extractDatadogContext (carrier) {
     const spanContext = this._extractGenericContext(carrier, traceKey, spanKey, 10)
 
-    if (spanContext) {
-      this._extractOrigin(carrier, spanContext)
-      this._extractBaggageItems(carrier, spanContext)
-      this._extractSamplingPriority(carrier, spanContext)
-      this._extractTags(carrier, spanContext)
+    if (!spanContext) return spanContext
+
+    this._extractOrigin(carrier, spanContext)
+    this._extractBaggageItems(carrier, spanContext)
+    this._extractSamplingPriority(carrier, spanContext)
+    this._extractTags(carrier, spanContext)
+
+    if (this._config.tracePropagationExtractFirst) return spanContext
+
+    const tc = this._extractTraceparentContext(carrier)
+
+    if (tc && spanContext._traceId.equals(tc._traceId)) {
+      spanContext._traceparent = tc._traceparent
+      spanContext._tracestate = tc._tracestate
     }
 
     return spanContext

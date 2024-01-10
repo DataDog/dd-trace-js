@@ -2,6 +2,9 @@
 
 const { AUTO_KEEP } = require('../../../../ext/priority')
 
+// the lowercase, hex encoded upper 64 bits of a 128-bit trace id, if present
+const TRACE_ID_128 = '_dd.p.tid'
+
 class DatadogSpanContext {
   constructor (props) {
     props = props || {}
@@ -35,8 +38,8 @@ class DatadogSpanContext {
 
   toTraceparent () {
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = this._traceId.toBuffer().length <= 8 && this._trace.tags['_dd.p.tid']
-      ? this._trace.tags['_dd.p.tid'] + this._traceId.toString(16).padStart(16, '0')
+    const traceId = this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
+      ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
       : this._traceId.toString(16).padStart(32, '0')
     const spanId = this._spanId.toString(16).padStart(16, '0')
     const version = (this._traceparent && this._traceparent.version) || '00'
