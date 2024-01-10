@@ -1,6 +1,7 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
+
 let agentTelemetry = true
 
 function getHeaders (config, application, reqType) {
@@ -15,7 +16,20 @@ function getHeaders (config, application, reqType) {
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
+  if (config.apiKey) {
+    headers['dd-api-key'] = config.apiKey
+  }
   return headers
+}
+
+function getAgentlessTelemetryEndpoint (site) {
+  if (site === 'datad0g.com') { // staging
+    return 'https://all-http-intake.logs.datad0g.com'
+  }
+  if (site === 'datadoghq.eu') {
+    return 'https://instrumentation-telemetry-intake.eu1.datadoghq.com'
+  }
+  return `https://instrumentation-telemetry-intake.${site}`
 }
 
 let seqId = 0
@@ -35,17 +49,33 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   const {
     hostname,
     port,
-    url
+    experimental,
+    isCiVisibility
   } = config
+
+  let url = config.url
+
+  const isCiVisibilityAgentlessMode = isCiVisibility && experimental?.exporter === 'datadog'
+
+  if (isCiVisibilityAgentlessMode) {
+    try {
+      url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
+    } catch (err) {
+      log.error(err)
+      // No point to do the request if the URL is invalid
+      return cb(err, { payload, reqType })
+    }
+  }
 
   const options = {
     url,
     hostname,
     port,
     method: 'POST',
-    path: '/telemetry/proxy/api/v2/apmtelemetry',
+    path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType)
   }
+
   const data = JSON.stringify({
     api_version: 'v2',
     naming_schema_version: config.spanAttributeSchema ? config.spanAttributeSchema : '',
@@ -65,24 +95,13 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         agentTelemetry = false
       }
       // figure out which data center to send to
-      let backendUrl
-      const dataCenters = [
-        'datadoghq.com',
-        'us3.datadoghq.com',
-        'us5.datadoghq.com',
-        'ap1.datadoghq.com',
-        'eu1.datadoghq.com'
-      ]
-      if (config.site === 'datad0g.com') { // staging
-        backendUrl = 'https://all-http-intake.logs.datad0g.com/api/v2/apmtelemetry'
-      } else if (dataCenters.includes(config.site)) {
-        backendUrl = 'https://instrumentation-telemetry-intake.' + config.site + '/api/v2/apmtelemetry'
-      }
+      const backendUrl = getAgentlessTelemetryEndpoint(config.site)
       const backendHeader = { ...options.headers, 'DD-API-KEY': process.env.DD_API_KEY }
       const backendOptions = {
         ...options,
         url: backendUrl,
-        headers: backendHeader
+        headers: backendHeader,
+        path: '/api/v2/apmtelemetry'
       }
       if (backendUrl) {
         request(data, backendOptions, (error) => { log.error(error) })
