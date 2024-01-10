@@ -1473,6 +1473,10 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('memcachedCommandEnabled', true)
       })
+      it('should enable telemetry', () => {
+        const config = new Config(options)
+        expect(config).to.nested.property('telemetry.enabled', true)
+      })
     })
     context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
