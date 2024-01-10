@@ -19,15 +19,13 @@ const fromEntries = Object.fromEntries || (entries =>
 
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
-const defaultObfuscatorKeyRegex = `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?\
+const defaultWafObfuscatorKeyRegex = `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?\
 |public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization`
-const defaultObfuscatorValueRegex =
+const defaultWafObfuscatorValueRegex =
 `(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|to\
 ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
-
-const defaultIastRequestSampling = 30
 
 let defaultFlushInterval
 
@@ -546,13 +544,13 @@ class Config {
     this._setValue(defaults, 'appsec.customRulesProvided', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3)
-    this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultObfuscatorKeyRegex)
-    this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultObfuscatorValueRegex)
+    this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
+    this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5)
     this._setBoolean(defaults, 'iast.enabled', false)
-    this._setValue(defaults, 'iast.requestSampling', defaultIastRequestSampling)
+    this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
     this._setValue(defaults, 'iast.maxContextOperations', 2)
     this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
