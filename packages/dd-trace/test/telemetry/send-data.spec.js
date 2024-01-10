@@ -147,4 +147,26 @@ describe('sendData', () => {
     expect(data.request_type).to.equal('message-batch')
     expect(data.payload).to.deep.equal(expectedPayload)
   })
+
+  it('should also work in CI Visibility agentless mode', () => {
+    sendDataModule.sendData(
+      {
+        experimental: { exporter: 'datadog' },
+        isCiVisibility: true,
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu'
+      },
+      application,
+      'test', 'req-type'
+    )
+
+    expect(request).to.have.been.calledOnce
+    const options = request.getCall(0).args[1]
+    expect(options).to.include({
+      method: 'POST',
+      path: '/api/v2/apmtelemetry'
+    })
+    const { url } = options
+    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.eu1.datadoghq.com'))
+  })
 })
