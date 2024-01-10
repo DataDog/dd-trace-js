@@ -21,7 +21,8 @@ describe('esm', () => {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(120 * 1000)
       sandbox = await createSandbox([`'next@${version}'`, 'react', 'react-dom'],
-        false, ['./packages/datadog-plugin-next/test/integration-test/*'], 'yarn exec next build')
+        false, ['./packages/datadog-plugin-next/test/integration-test/*'],
+        'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build')
     })
 
     after(async () => {
@@ -39,7 +40,7 @@ describe('esm', () => {
 
     it('is instrumented', async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
-        NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init`
+        NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
       })
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
