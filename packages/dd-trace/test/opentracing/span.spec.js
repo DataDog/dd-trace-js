@@ -241,19 +241,6 @@ describe('Span', () => {
       expect(span).to.have.property('_links')
       expect(span._links).to.have.lengthOf(1)
     })
-
-    it('should allow links to be searched', () => {
-      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-
-      const link = { traceId: '123', spanId: '789' }
-      span.addLink(link)
-
-      let maybeLink = span.getLink({ traceId: '123', spanId: '789' })
-      expect(maybeLink).to.not.be.undefined
-
-      maybeLink = span.getLink({ traceId: '123', spanId: '456' })
-      expect(maybeLink).to.be.undefined
-    })
   })
 
   describe('getBaggageItem', () => {

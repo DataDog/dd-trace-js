@@ -198,11 +198,6 @@ class Span {
     return this
   }
 
-  // context is { traceId, spanId }
-  getLink (context) {
-    return this._ddSpan.getLink(context)
-  }
-
   setStatus ({ code, message }) {
     if (!this.ended && !this._hasStatus && code) {
       this._hasStatus = true
