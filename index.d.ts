@@ -589,7 +589,7 @@ declare namespace tracer {
          * @default 'safe'
          */
         mode?: 'safe' | 'extended' | 'disabled'
-      }
+      },
       /**
        * Configuration for Api Security sampling
        */
