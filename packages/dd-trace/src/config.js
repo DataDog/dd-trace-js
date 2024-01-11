@@ -795,9 +795,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
-    this._setValue(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
-    this._setValue(env, 'env', DD_ENV || tags.env)
-    this._setValue(env, 'version', DD_VERSION || tags.version)
+    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
+    this._setString(env, 'env', DD_ENV || tags.env)
+    this._setString(env, 'version', DD_VERSION || tags.version)
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
@@ -812,9 +812,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     tagger.add(tags, options.tags)
 
-    this._setValue(opts, 'service', options.service || tags.service)
-    this._setValue(opts, 'env', options.env || tags.env)
-    this._setValue(opts, 'version', options.version || tags.version)
+    this._setString(opts, 'service', options.service || tags.service)
+    this._setString(opts, 'env', options.env || tags.env)
+    this._setString(opts, 'version', options.version || tags.version)
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setArray(opts, 'headerTags', options.headerTags)
@@ -873,6 +873,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+  }
+
+  _setString (obj, name, value) {
+    obj[name] = value || undefined // unset for empty strings
   }
 
   _setTags (obj, name, value) {
