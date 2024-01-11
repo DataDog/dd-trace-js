@@ -328,7 +328,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('env', undefined)
-    expect(config).to.have.property('version', undefined)
+    expect(config).to.have.property('version', '')
   })
 
   it('should read case-insensitive booleans from environment variables', () => {

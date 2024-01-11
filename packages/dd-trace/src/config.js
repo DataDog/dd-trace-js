@@ -765,9 +765,9 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaults = this._defaults = {}
 
-    this._setString(defaults, 'service', service)
-    this._setString(defaults, 'env', undefined)
-    this._setString(defaults, 'version', pkg.version)
+    this._setValue(defaults, 'service', service)
+    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'version', pkg.version)
     this._setUnit(defaults, 'sampleRate', undefined)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
