@@ -1,6 +1,6 @@
 # `dd-trace`: Node.js APM Tracer Library
 
-[![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v4&logo=npm)](https://www.npmjs.com/package/dd-trace)
+[![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v5&logo=npm)](https://www.npmjs.com/package/dd-trace)
 [![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=blue&label=dd-trace%40v4&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node16)
 [![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=blue&label=dd-trace%40v3&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node14)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
