@@ -38,6 +38,20 @@ class JestPlugin extends CiPlugin {
     return 'jest'
   }
 
+  // The lists are the same for every test suite, so we can cache them
+  getUnskippableSuites (unskippableSuitesList) {
+    if (!this.unskippableSuites) {
+      this.unskippableSuites = JSON.parse(unskippableSuitesList)
+    }
+    return this.unskippableSuites
+  }
+  getForcedToRunSuites (forcedToRunSuitesList) {
+    if (!this.forcedToRunSuites) {
+      this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
+    }
+    return this.forcedToRunSuites
+  }
+
   constructor (...args) {
     super(...args)
 
@@ -128,11 +142,17 @@ class JestPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
 
       if (_ddUnskippable) {
-        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
-        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
+        if (unskippableSuites[testSuite]) {
+          this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+          testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+        }
         if (_ddForcedToRun) {
-          this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
-          testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+          const forcedToRunSuites = this.getForcedToRunSuites(_ddForcedToRun)
+          if (forcedToRunSuites[testSuite]) {
+            this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+            testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+          }
         }
       }
 
