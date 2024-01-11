@@ -511,12 +511,12 @@ declare namespace tracer {
         /**
          * Whether to enable vulnerability deduplication
          */
-        deduplicationEnabled?: boolean
+        deduplicationEnabled?: boolean,
         /**
          * Whether to enable vulnerability redaction
          * @default true
          */
-        redactionEnabled?: boolean
+        redactionEnabled?: boolean,
         /**
          * Specifies a regex that will redact sensitive source names in vulnerability reports.
          */
