@@ -8,6 +8,10 @@ import * as otel from "@opentelemetry/api";
  */
 interface Tracer extends opentracing.Tracer {
   /**
+   * Add tracer as a named export
+   */
+  tracer: Tracer;
+  /**
    * For compatibility with NodeNext + esModuleInterop: false
    */
   default: Tracer;
