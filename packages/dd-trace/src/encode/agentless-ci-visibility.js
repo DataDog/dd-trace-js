@@ -13,9 +13,9 @@ const {
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
-const TEST_SUITE_KEYS_LENGTH = 13
-const TEST_MODULE_KEYS_LENGTH = 12
-const TEST_SESSION_KEYS_LENGTH = 11
+const TEST_SUITE_KEYS_LENGTH = 12
+const TEST_MODULE_KEYS_LENGTH = 11
+const TEST_SESSION_KEYS_LENGTH = 10
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
@@ -118,8 +118,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
     this._encodeMap(bytes, content.metrics)
-    this._encodeString(bytes, 'span_links')
-    this._encodeArray(bytes, content.links)
   }
 
   _encodeTestSession (bytes, content) {
@@ -146,8 +144,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
     this._encodeMap(bytes, content.metrics)
-    this._encodeString(bytes, 'span_links')
-    this._encodeArray(bytes, content.links)
   }
 
   _encodeEventContent (bytes, content) {
@@ -227,8 +223,6 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.meta)
     this._encodeString(bytes, 'metrics')
     this._encodeMap(bytes, content.metrics)
-    this._encodeString(bytes, 'span_links')
-    this._encodeArray(bytes, content.links)
   }
 
   _encodeEvent (bytes, event) {

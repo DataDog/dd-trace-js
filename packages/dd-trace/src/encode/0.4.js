@@ -114,12 +114,14 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-      this._encodeString(bytes, 'span_links')
-      this._encodeArray(bytes, span.links)
+      if (span.links) {
+        this._encodeString(bytes, 'span_links')
+        this._encodeArray(bytes, span.links)
+      }
     }
   }
 
-  _encodeArray (bytes, value = []) {
+  _encodeArray (bytes, value) {
     this._encodeArrayPrefix(bytes, value.length)
 
     for (const item of value) {
