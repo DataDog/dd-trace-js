@@ -12,6 +12,13 @@ Node.js 16 has reached EOL in September 2023 and is no longer supported. General
 speaking, we highly recommend always keeping Node.js up to date regardless of
 our support policy.
 
+### Update `trace<T>` TypeScript declaration
+
+The TypeScript declaration for `trace<T>` has been updated to enforce 
+that calls to `tracer.trace(name, fn)` must receive a function which takes at least 
+the span object. Previously the span was technically optional when it should not have 
+been as the span must be handled.
+
 ## 3.0 to 4.0
 
 ### Node 14 is no longer supported
