@@ -1385,7 +1385,7 @@ declare namespace tracer {
      */
     interface ioredis extends Instrumentation {
       /**
-       * List of commands that should be instrumented.
+       * List of commands that should be instrumented. Commands must be in
        * lowercase for example 'xread'.
        *
        * @default /^.*$/
