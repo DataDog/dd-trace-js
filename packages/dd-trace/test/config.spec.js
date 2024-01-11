@@ -321,6 +321,16 @@ describe('Config', () => {
     })
   })
 
+  it('should ignore empty strings', () => {
+    process.env.DD_TAGS = 'service:,env:,version:'
+
+    const config = new Config()
+
+    expect(config).to.have.property('service', 'node')
+    expect(config).to.have.property('env', undefined)
+    expect(config).to.have.property('version', '')
+  })
+
   it('should read case-insensitive booleans from environment variables', () => {
     process.env.DD_TRACING_ENABLED = 'False'
     process.env.DD_TRACE_DEBUG = 'TRUE'
