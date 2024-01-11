@@ -59,7 +59,7 @@ interface Tracer extends opentracing.Tracer {
    * @param plugin The name of a built-in plugin.
    * @param config Configuration options. Can also be `false` to disable the plugin.
    */
-  use<P extends keyof tracer.Plugins> (plugin: P, config?: tracer.Plugins[P] | boolean): this;
+  use<P extends keyof Plugins> (plugin: P, config?: Plugins[P] | boolean): this;
 
   /**
    * Returns a reference to the current scope.
@@ -125,6 +125,63 @@ interface Tracer extends opentracing.Tracer {
   TracerProvider: tracer.opentelemetry.TracerProvider;
 
   dogstatsd: tracer.DogStatsD;
+}
+
+// left out of the namespace, so it
+// is doesn't need to be exported for Tracer
+/** @hidden */
+interface Plugins {
+  "amqp10": tracer.plugins.amqp10;
+  "amqplib": tracer.plugins.amqplib;
+  "aws-sdk": tracer.plugins.aws_sdk;
+  "bunyan": tracer.plugins.bunyan;
+  "cassandra-driver": tracer.plugins.cassandra_driver;
+  "connect": tracer.plugins.connect;
+  "couchbase": tracer.plugins.couchbase;
+  "cucumber": tracer.plugins.cucumber;
+  "cypress": tracer.plugins.cypress;
+  "dns": tracer.plugins.dns;
+  "elasticsearch": tracer.plugins.elasticsearch;
+  "express": tracer.plugins.express;
+  "fastify": tracer.plugins.fastify;
+  "fetch": tracer.plugins.fetch;
+  "generic-pool": tracer.plugins.generic_pool;
+  "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
+  "graphql": tracer.plugins.graphql;
+  "grpc": tracer.plugins.grpc;
+  "hapi": tracer.plugins.hapi;
+  "http": tracer.plugins.http;
+  "http2": tracer.plugins.http2;
+  "ioredis": tracer.plugins.ioredis;
+  "jest": tracer.plugins.jest;
+  "kafkajs": tracer.plugins.kafkajs
+  "knex": tracer.plugins.knex;
+  "koa": tracer.plugins.koa;
+  "mariadb": tracer.plugins.mariadb;
+  "memcached": tracer.plugins.memcached;
+  "microgateway-core": tracer.plugins.microgateway_core;
+  "mocha": tracer.plugins.mocha;
+  "moleculer": tracer.plugins.moleculer;
+  "mongodb-core": tracer.plugins.mongodb_core;
+  "mongoose": tracer.plugins.mongoose;
+  "mysql": tracer.plugins.mysql;
+  "mysql2": tracer.plugins.mysql2;
+  "net": tracer.plugins.net;
+  "next": tracer.plugins.next;
+  "openai": tracer.plugins.openai;
+  "opensearch": tracer.plugins.opensearch;
+  "oracledb": tracer.plugins.oracledb;
+  "paperplane": tracer.plugins.paperplane;
+  "playwright": tracer.plugins.playwright;
+  "pg": tracer.plugins.pg;
+  "pino": tracer.plugins.pino;
+  "redis": tracer.plugins.redis;
+  "restify": tracer.plugins.restify;
+  "rhea": tracer.plugins.rhea;
+  "router": tracer.plugins.router;
+  "sharedb": tracer.plugins.sharedb;
+  "tedious": tracer.plugins.tedious;
+  "winston": tracer.plugins.winston;
 }
 
 declare namespace tracer {
@@ -825,61 +882,6 @@ declare namespace tracer {
   }
 
   /** @hidden */
-  export interface Plugins {
-    "amqp10": plugins.amqp10;
-    "amqplib": plugins.amqplib;
-    "aws-sdk": plugins.aws_sdk;
-    "bunyan": plugins.bunyan;
-    "cassandra-driver": plugins.cassandra_driver;
-    "connect": plugins.connect;
-    "couchbase": plugins.couchbase;
-    "cucumber": plugins.cucumber;
-    "cypress": plugins.cypress;
-    "dns": plugins.dns;
-    "elasticsearch": plugins.elasticsearch;
-    "express": plugins.express;
-    "fastify": plugins.fastify;
-    "fetch": plugins.fetch;
-    "generic-pool": plugins.generic_pool;
-    "google-cloud-pubsub": plugins.google_cloud_pubsub;
-    "graphql": plugins.graphql;
-    "grpc": plugins.grpc;
-    "hapi": plugins.hapi;
-    "http": plugins.http;
-    "http2": plugins.http2;
-    "ioredis": plugins.ioredis;
-    "jest": plugins.jest;
-    "kafkajs": plugins.kafkajs
-    "knex": plugins.knex;
-    "koa": plugins.koa;
-    "mariadb": plugins.mariadb;
-    "memcached": plugins.memcached;
-    "microgateway-core": plugins.microgateway_core;
-    "mocha": plugins.mocha;
-    "moleculer": plugins.moleculer;
-    "mongodb-core": plugins.mongodb_core;
-    "mongoose": plugins.mongoose;
-    "mysql": plugins.mysql;
-    "mysql2": plugins.mysql2;
-    "net": plugins.net;
-    "next": plugins.next;
-    "openai": plugins.openai;
-    "opensearch": plugins.opensearch;
-    "oracledb": plugins.oracledb;
-    "paperplane": plugins.paperplane;
-    "playwright": plugins.playwright;
-    "pg": plugins.pg;
-    "pino": plugins.pino;
-    "redis": plugins.redis;
-    "restify": plugins.restify;
-    "rhea": plugins.rhea;
-    "router": plugins.router;
-    "sharedb": plugins.sharedb;
-    "tedious": plugins.tedious;
-    "winston": plugins.winston;
-  }
-
-  /** @hidden */
   interface Analyzable {
     /**
      * Whether to measure the span. Can also be set to a key-value pair with span
@@ -1385,7 +1387,7 @@ declare namespace tracer {
      */
     interface ioredis extends Instrumentation {
       /**
-       * List of commands that should be instrumented. Commands must be in
+       * List of commands that should be instrumented.
        * lowercase for example 'xread'.
        *
        * @default /^.*$/
