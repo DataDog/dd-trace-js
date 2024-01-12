@@ -339,5 +339,6 @@ module.exports = {
   start,
   stop,
   updateIntegrations,
-  updateConfig
+  updateConfig,
+  onBeforeExit
 }

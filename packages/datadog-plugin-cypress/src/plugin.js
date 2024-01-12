@@ -39,6 +39,7 @@ const {
   incrementCountMetric,
   distributionMetric
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const { onBeforeExit: onBeforeExitTelemetry } = require('../../dd-trace/src/telemetry')
 const {
   GIT_REPOSITORY_URL,
   GIT_COMMIT_SHA,
@@ -429,10 +430,12 @@ module.exports = (on, config) => {
       }
       if (exporter.flush) {
         exporter.flush(() => {
+          onBeforeExitTelemetry()
           resolve(null)
         })
       } else if (exporter._writer) {
         exporter._writer.flush(() => {
+          onBeforeExitTelemetry()
           resolve(null)
         })
       }
