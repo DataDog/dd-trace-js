@@ -22,13 +22,17 @@ if (npm) {
 
   const packName = execSync(`npm pack ${ddtracePath}`, {
     cwd: binariesPath,
+    stdio: [null, null, 'inherit'],
     encoding: 'utf8'
   }).slice(0, -1) // remove trailing newline
 
   writeFileSync(path.join(binariesPath, 'nodejs-load-from-npm'), `/binaries/${packName}`)
 }
 
-execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, { cwd: testDir })
+execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, {
+  cwd: testDir,
+  stdio: [null, 'inherit', 'inherit']
+})
 
 function parseArgs () {
   const args = {
