@@ -8,10 +8,10 @@ const childProcess = require('child_process')
 const { fork } = childProcess
 const path = require('path')
 const { assert } = require('chai')
-const fs = require('node:fs/promises')
-const fsync = require('node:fs')
-const net = require('node:net')
-const zlib = require('node:zlib')
+const fs = require('fs/promises')
+const fsync = require('fs')
+const net = require('net')
+const zlib = require('zlib')
 const { Profile } = require('pprof-format')
 const semver = require('semver')
 
@@ -63,7 +63,7 @@ async function getLatestProfile (cwd, pattern) {
     .name
   const pprofGzipped = await fs.readFile(path.join(cwd, pprofEntry))
   const pprofUnzipped = zlib.gunzipSync(pprofGzipped)
-  return Profile.decode(pprofUnzipped)
+  return { profile: Profile.decode(pprofUnzipped), encoded: pprofGzipped.toString('base64') }
 }
 
 async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args) {
@@ -81,9 +81,9 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   await processExitPromise(proc, 5000)
   const procEnd = BigInt(Date.now() * 1000000)
 
-  const prof = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+  const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
 
-  const strings = prof.stringTable
+  const strings = profile.stringTable
   const tsKey = strings.dedup('end_timestamp_ns')
   const eventKey = strings.dedup('event')
   const hostKey = strings.dedup('host')
@@ -92,7 +92,7 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
   const nameKey = strings.dedup('operation')
   const eventValue = strings.dedup(eventType)
   const events = []
-  for (const sample of prof.sample) {
+  for (const sample of profile.sample) {
     let ts, event, host, address, port, name
     for (const label of sample.label) {
       switch (label.key) {
@@ -102,18 +102,18 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
         case hostKey: host = label.str; break
         case addressKey: address = label.str; break
         case portKey: port = label.num; break
-        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]}`)
+        default: assert.fail(`Unexpected label key ${label.key} ${strings.strings[label.key]} ${encoded}`)
       }
     }
     // Timestamp must be defined and be between process start and end time
-    assert.isDefined(ts)
-    assert.isTrue(ts <= procEnd)
-    assert.isTrue(ts >= procStart)
+    assert.isDefined(ts, encoded)
+    assert.isTrue(ts <= procEnd, encoded)
+    assert.isTrue(ts >= procStart, encoded)
     // Gather only DNS events; ignore sporadic GC events
     if (event === eventValue) {
-      assert.isDefined(name)
+      assert.isDefined(name, encoded)
       // Exactly one of these is defined
-      assert.isTrue(!!address !== !!host)
+      assert.isTrue(!!address !== !!host, encoded)
       const ev = { name: strings.strings[name] }
       if (address) {
         ev.address = strings.strings[address]
@@ -169,7 +169,7 @@ describe('profiler', () => {
     await processExitPromise(proc, 5000)
     const procEnd = BigInt(Date.now() * 1000000)
 
-    const prof = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
+    const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
 
     // We check the profile for following invariants:
     // - every sample needs to have an 'end_timestamp_ns' label that has values (nanos since UNIX
@@ -182,7 +182,7 @@ describe('profiler', () => {
     const rootSpans = new Set()
     const endpoints = new Set()
     const spans = new Map()
-    const strings = prof.stringTable
+    const strings = profile.stringTable
     const tsKey = strings.dedup('end_timestamp_ns')
     const spanKey = strings.dedup('span id')
     const rootSpanKey = strings.dedup('local root span id')
@@ -191,7 +191,9 @@ describe('profiler', () => {
     const threadIdKey = strings.dedup('thread id')
     const osThreadIdKey = strings.dedup('os thread id')
     const threadNameValue = strings.dedup('Main Event Loop')
-    for (const sample of prof.sample) {
+    const nonJSThreadNameValue = strings.dedup('Non-JS threads')
+
+    for (const sample of profile.sample) {
       let ts, spanId, rootSpanId, endpoint, threadName, threadId, osThreadId
       for (const label of sample.label) {
         switch (label.key) {
@@ -202,29 +204,44 @@ describe('profiler', () => {
           case threadNameKey: threadName = label.str; break
           case threadIdKey: threadId = label.str; break
           case osThreadIdKey: osThreadId = label.str; break
-          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)}`)
+          default: assert.fail(`Unexpected label key ${strings.dedup(label.key)} ${encoded}`)
         }
       }
-      // Timestamp must be defined and be between process start and end time
-      assert.isDefined(ts)
-      assert.isNumber(osThreadId)
-      assert.equal(threadId, strings.dedup('0'))
-      assert.isTrue(ts <= procEnd)
-      assert.isTrue(ts >= procStart)
-      // Thread name must be defined and exactly equal "Main Event Loop"
-      assert.equal(threadName, threadNameValue)
+      if (threadName !== nonJSThreadNameValue) {
+        // Timestamp must be defined and be between process start and end time
+        assert.isDefined(ts, encoded)
+        assert.isNumber(osThreadId, encoded)
+        assert.equal(threadId, strings.dedup('0'), encoded)
+        assert.isTrue(ts <= procEnd, encoded)
+        assert.isTrue(ts >= procStart, encoded)
+        // Thread name must be defined and exactly equal "Main Event Loop"
+        assert.equal(threadName, threadNameValue, encoded)
+      } else {
+        assert.equal(threadId, strings.dedup('NA'), encoded)
+      }
       // Either all or none of span-related labels are defined
-      if (spanId || rootSpanId || endpoint) {
-        assert.isDefined(spanId)
-        assert.isDefined(rootSpanId)
-        assert.isDefined(endpoint)
+      if (endpoint === undefined) {
+        // It is possible to catch a sample executing in tracer's startSpan so
+        // that endpoint is not yet set. We'll ignore those samples.
+        continue
+      }
+      if (spanId || rootSpanId) {
+        assert.isDefined(spanId, encoded)
+        assert.isDefined(rootSpanId, encoded)
 
         rootSpans.add(rootSpanId)
+        if (spanId === rootSpanId) {
+          // It is possible to catch a sample executing in the root span before
+          // it entered the nested span; we ignore these too, although we'll
+          // still record the root span ID as we want to assert there'll only be
+          // 3 of them.
+          continue
+        }
         const spanData = { rootSpanId, endpoint }
         const existingSpanData = spans.get(spanId)
         if (existingSpanData) {
           // Span's root span and endpoint must be consistent across samples
-          assert.deepEqual(spanData, existingSpanData)
+          assert.deepEqual(spanData, existingSpanData, encoded)
         } else {
           // New span id, store span data
           spans.set(spanId, spanData)
@@ -237,16 +254,16 @@ describe('profiler', () => {
               endpoints.add(endpoint)
               break
             default:
-              assert.fail(`Unexpected endpoint value ${endpointVal}`)
+              assert.fail(`Unexpected endpoint value ${endpointVal} ${encoded}`)
           }
         }
       }
     }
     // Need to have a total of 9 different spans, with 3 different root spans
     // and 3 different endpoints.
-    assert.equal(spans.size, 9)
-    assert.equal(rootSpans.size, 3)
-    assert.equal(endpoints.size, 3)
+    assert.equal(spans.size, 9, encoded)
+    assert.equal(rootSpans.size, 3, encoded)
+    assert.equal(endpoints.size, 3, encoded)
   })
 
   if (semver.gte(process.version, '16.0.0')) {

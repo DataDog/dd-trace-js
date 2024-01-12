@@ -13,7 +13,7 @@ esbuild.build({
   outfile: SCRIPT,
   plugins: [ddPlugin],
   platform: 'node',
-  target: ['node16'],
+  target: ['node18'],
   external: [ ]
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT])

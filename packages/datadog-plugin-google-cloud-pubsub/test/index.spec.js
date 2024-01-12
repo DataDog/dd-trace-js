@@ -269,6 +269,24 @@ describe('Plugin', () => {
             await pubsub.createTopic(topicName)
           })
         })
+
+        it('should handle manual subscription close', async () => {
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+
+          // message handler takes a while, subscription is closed while it's still running
+          sub.on('message', msg => {
+            setTimeout(() => { msg.ack() }, 2000)
+          })
+
+          await publish(topic, { data: Buffer.from('hello') })
+
+          setTimeout(() => { sub.close() }, 500)
+
+          return new Promise((resolve) => {
+            sub.on('close', resolve)
+          })
+        })
       })
 
       describe('with configuration', () => {

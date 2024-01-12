@@ -1,4 +1,4 @@
-const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
+const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
@@ -159,22 +159,24 @@ class EventsProfiler {
   }
 
   start () {
+    // if already started, do nothing
+    if (this._observer) return
+
     function add (items) {
       this.entries.push(...items.getEntries())
     }
-    if (!this._observer) {
-      this._observer = new PerformanceObserver(add.bind(this))
-    }
+    this._observer = new PerformanceObserver(add.bind(this))
     this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
   }
 
   stop () {
     if (this._observer) {
       this._observer.disconnect()
+      this._observer = undefined
     }
   }
 
-  profile (startDate, endDate) {
+  profile (restart, startDate, endDate) {
     if (this.entries.length === 0) {
       // No events in the period; don't produce a profile
       return null
@@ -242,6 +244,10 @@ class EventsProfiler {
       type: stringTable.dedup(pprofValueType),
       unit: stringTable.dedup(pprofValueUnit)
     })
+
+    if (!restart) {
+      this.stop()
+    }
 
     return new Profile({
       sampleType: [timeValueType],

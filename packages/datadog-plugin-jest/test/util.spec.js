@@ -153,18 +153,24 @@ describe('getJestSuitesToRun', () => {
 
   it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
     const skippableSuites = ['fixtures/test-unskippable.js']
-    const testContext = { config: { testEnvironmentOptions: {} } }
+    // tests share a config object
+    const globalConfig = { testEnvironmentOptions: {} }
     const tests = [
-      { path: path.join(__dirname, './fixtures/test-to-run.js') },
+      {
+        path: path.join(__dirname, './fixtures/test-to-run.js'),
+        context: { config: globalConfig }
+      },
       {
         path: path.join(__dirname, './fixtures/test-unskippable.js'),
-        context: testContext
+        context: { config: globalConfig }
       }
     ]
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(testContext.config.testEnvironmentOptions['_ddUnskippable']).to.equal(true)
-    expect(testContext.config.testEnvironmentOptions['_ddForcedToRun']).to.equal(true)
+    expect(globalConfig.testEnvironmentOptions['_ddUnskippable'])
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    expect(globalConfig.testEnvironmentOptions['_ddForcedToRun'])
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
   })
 })
