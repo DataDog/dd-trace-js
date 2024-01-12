@@ -230,6 +230,13 @@ describe('profiler', () => {
         assert.isDefined(rootSpanId, encoded)
 
         rootSpans.add(rootSpanId)
+        if (spanId === rootSpanId) {
+          // It is possible to catch a sample executing in the root span before
+          // it entered the nested span; we ignore these too, although we'll
+          // still record the root span ID as we want to assert there'll only be
+          // 3 of them.
+          continue
+        }
         const spanData = { rootSpanId, endpoint }
         const existingSpanData = spans.get(spanId)
         if (existingSpanData) {
