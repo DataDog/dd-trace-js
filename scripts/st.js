@@ -29,10 +29,14 @@ if (npm) {
   writeFileSync(path.join(binariesPath, 'nodejs-load-from-npm'), `/binaries/${packName}`)
 }
 
-execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, {
-  cwd: testDir,
-  stdio: [null, 'inherit', 'inherit']
-})
+try {
+  execSync(`./build.sh ${buildAll ? '' : '-i weblog'} && ./run.sh ${testArgs}`, {
+    cwd: testDir,
+    stdio: [null, 'inherit', 'inherit']
+  })
+} catch (err) {
+  process.exit(err.status || 1)
+}
 
 function parseArgs () {
   const args = {
