@@ -227,20 +227,27 @@ describe('Kinesis', function () {
 
       it('Should create a new DSM Stats Bucket when producing a message', (done) => {
         const dsmProcessor = tracer._tracer._dataStreamsProcessor
-        
-        // clear all stats buckets
-        dsmProcessor.buckets.clear()
-
+    
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
+          if (err) return reject(err)
+    
+          // force flush stats to agent
+          dsmProcessor.onInterval()
 
-          const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-          const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-
-          expect(dsmTimeBuckets.length).to.equal(1)
-          expect(dsmStatsBuckets.length).to.equal(1)
-          expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
-          done()
+          let dsmStatsAsserted = false
+          while (!dsmStatsAsserted) {
+            const dsmStats = agent.dsmStats
+            if (dsmStats.length != 0) {
+              console.log(dsmStats)
+              const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
+              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
+      
+              expect(dsmTimeBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets.length).to.equal(1)
+              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
+              done() // Resolve the promise to indicate the interval function has completed
+            }
+          }
         })
       })
     })

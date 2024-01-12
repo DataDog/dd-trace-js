@@ -78,7 +78,7 @@ class Sns extends BaseAwsSdkPlugin {
     // add ddInfo before checking DSM so we can include DD attributes in payload size
     params.MessageAttributes._datadog = {
       DataType: 'Binary',
-      BinaryValue: JSON.stringify(ddInfo)
+      BinaryValue: ddInfo
     }
     if (this.config.dsmEnabled) {
       const payloadSize = getHeadersSize({
