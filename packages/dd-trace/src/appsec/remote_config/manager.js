@@ -25,19 +25,14 @@ class RemoteConfigManager extends EventEmitter {
     super()
 
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
-    const url = config.url || new URL(format({
+
+    this.url = config.url || new URL(format({
       protocol: 'http:',
       hostname: config.hostname || 'localhost',
       port: config.port
     }))
 
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
-
-    this.requestOptions = {
-      url,
-      method: 'POST',
-      path: '/v0.7/config'
-    }
 
     this.state = {
       client: {
@@ -122,7 +117,13 @@ class RemoteConfigManager extends EventEmitter {
   }
 
   poll (cb) {
-    request(this.getPayload(), Object.assign({}, this.requestOptions), (err, data, statusCode) => {
+    const options = {
+      url: this.url,
+      method: 'POST',
+      path: '/v0.7/config'
+    }
+
+    request(this.getPayload(), options, (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
 
