@@ -85,7 +85,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   isAccessControlAllowExclusion (name, ranges) {
-    if (name && name.startsWith('access-control-allow-')) {
+    if (name?.startsWith('access-control-allow-')) {
       return ranges
         .every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE)
     }
