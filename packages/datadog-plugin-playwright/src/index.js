@@ -17,7 +17,7 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-const { onBeforeExit: onBeforeExitTelemetry } = require('../../dd-trace/src/telemetry')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 class PlaywrightPlugin extends CiPlugin {
   static get id () {
@@ -38,7 +38,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      onBeforeExitTelemetry()
+      appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
     })
 
