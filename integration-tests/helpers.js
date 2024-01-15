@@ -87,7 +87,8 @@ class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
-      resultReject([...errors, new Error('timeout')])
+      const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
+      resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
     const resultPromise = new Promise((resolve, reject) => {
@@ -126,7 +127,8 @@ class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
-      resultReject([...errors, new Error('timeout')])
+      const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
+      resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
 
     const resultPromise = new Promise((resolve, reject) => {
