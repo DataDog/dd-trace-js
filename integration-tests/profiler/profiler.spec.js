@@ -3,7 +3,7 @@
 const {
   FakeAgent,
   createSandbox
-} = require('./helpers')
+} = require('../helpers')
 const childProcess = require('child_process')
 const { fork } = childProcess
 const path = require('path')
