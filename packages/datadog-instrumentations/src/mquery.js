@@ -37,7 +37,7 @@ function getFilters (args, methodName) {
 
 addHook({
   name: 'mquery',
-  versions: ['>=3.2.3']
+  versions: ['>=5.0.0']
 }, Query => {
   [...methods, ...methodsOptionalArgs].forEach(methodName => {
     if (!(methodName in Query.prototype)) return
@@ -64,25 +64,25 @@ addHook({
 
       const asyncResource = new AsyncResource('bound-anonymous-fn')
 
+      const finish = asyncResource.bind(function () {
+        finishCh.publish()
+      })
+
       return asyncResource.runInAsyncScope(() => {
         startCh.publish()
 
-        const promise = originalExec.apply(this, arguments)
+        const execResult = originalExec.apply(this, arguments)
 
-        if (!promise || typeof promise.then !== 'function') {
-          finish(finishCh)
-          return promise
+        if (execResult && typeof execResult.then === 'function') {
+          execResult.then(finish, finish)
+        } else {
+          finish()
         }
 
-        return promise.then(asyncResource.bind(() => finish(finishCh)),
-          asyncResource.bind(() => finish(finishCh)))
+        return execResult
       })
     }
   })
 
   return Query
 })
-
-function finish (finishCh) {
-  finishCh.publish()
-}

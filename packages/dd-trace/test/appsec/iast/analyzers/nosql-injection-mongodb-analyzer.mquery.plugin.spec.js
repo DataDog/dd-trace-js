@@ -42,6 +42,9 @@ describe('nosql injection detection with mquery', () => {
 
         testCollection = client.db().collection('Test')
 
+        await testCollection.insertOne({ id: 1, name: 'value' })
+        await testCollection.insertOne({ id: 2, name: 'value2' })
+
         const src = path.join(__dirname, 'resources', vulnerableMethodFilename)
 
         tmpFilePath = path.join(os.tmpdir(), vulnerableMethodFilename)
@@ -55,6 +58,9 @@ describe('nosql injection detection with mquery', () => {
 
       after(async () => {
         fs.unlinkSync(tmpFilePath)
+
+        await testCollection.deleteMany({})
+
         await client.close()
       })
 
@@ -81,14 +87,19 @@ describe('nosql injection detection with mquery', () => {
               occurrences: 1,
               fn: async (req, res) => {
                 try {
-                  await collection
+                  const result = await collection
                     .find({
                       name: req.query.key
                     })
                     .exec()
+
+                  expect(result).to.not.be.undefined
+                  expect(result.length).to.equal(1)
+                  expect(result[0].id).to.be.equal(1)
                 } catch (e) {
                   // do nothing
                 }
+
                 res.end()
               },
               vulnerability: 'NOSQL_MONGODB_INJECTION',
@@ -106,7 +117,11 @@ describe('nosql injection detection with mquery', () => {
                     .find({
                       name: req.query.key
                     })
-                    .then(() => {
+                    .then((result) => {
+                      expect(result).to.not.be.undefined
+                      expect(result.length).to.equal(1)
+                      expect(result[0].id).to.be.equal(1)
+
                       res.end()
                     })
                 } catch (e) {
