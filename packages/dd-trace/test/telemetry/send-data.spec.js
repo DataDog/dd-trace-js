@@ -149,9 +149,9 @@ describe('sendData', () => {
   })
 
   it('should also work in CI Visibility agentless mode', () => {
+    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 1
     sendDataModule.sendData(
       {
-        experimental: { exporter: 'datadog' },
         isCiVisibility: true,
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu'
@@ -168,5 +168,6 @@ describe('sendData', () => {
     })
     const { url } = options
     expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.eu1.datadoghq.com'))
+    delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })
