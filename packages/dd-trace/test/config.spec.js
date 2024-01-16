@@ -132,7 +132,7 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(config.configWithOrigin).to.deep.include(
+    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
       { name: 'service', value: 'node', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
@@ -398,7 +398,7 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(config.configWithOrigin).to.deep.include(
+    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
       { name: 'tracing', value: false, origin: 'env_var' },
       { name: 'debug', value: true, origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
@@ -656,7 +656,7 @@ describe('Config', () => {
 
     expect(Config.prototype._merge.calledOnce).to.be.true
 
-    expect(config.configWithOrigin).to.deep.include(
+    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
       { name: 'protocolVersion', value: '0.5', origin: 'code' },
       { name: 'site', value: 'datadoghq.eu', origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
