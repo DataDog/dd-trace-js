@@ -209,20 +209,18 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
-  const winVolumes = new Set()
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
       await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-      winVolumes.add(folder[0])
     } else {
       await exec(`cp -R ${path} ${folder}`)
-      await exec(`sync ${folder}`)
     }
   }
-  for (const winVolume of winVolumes) {
-    // On Windows, we can only sync entire filesystem volume caches. It can
-    // take longer, so only do it once per target volume.
-    await exec(`Write-VolumeCache ${winVolume}`, { shell: 'powershell.exe' })
+  if (process.platform === 'win32') {
+    // On Windows, we can only sync entire filesystem volume caches.
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+  } else {
+    await exec(`sync ${folder}`)
   }
 
   if (followUpCommand) {
