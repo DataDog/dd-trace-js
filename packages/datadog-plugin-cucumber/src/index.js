@@ -169,12 +169,12 @@ class CucumberPlugin extends CiPlugin {
       }
 
       span.finish()
-      this.telemetry.ciVisEvent(
-        TELEMETRY_EVENT_FINISHED,
-        'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
-      )
       if (!isStep) {
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        )
         finishAllTraceSpans(span)
       }
     })
