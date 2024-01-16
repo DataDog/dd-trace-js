@@ -1,6 +1,7 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
+const { isTrue } = require('../util')
 
 let agentTelemetry = true
 
@@ -49,13 +50,12 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   const {
     hostname,
     port,
-    experimental,
     isCiVisibility
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && experimental?.exporter === 'datadog'
+  const isCiVisibilityAgentlessMode = isCiVisibility && isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
   if (isCiVisibilityAgentlessMode) {
     try {

@@ -495,6 +495,8 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddForcedToRun,
+      _ddUnskippable,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
