@@ -8,8 +8,12 @@ const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const path = require('path')
 
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
+
+const BUILD_COMMAND = NODE_MAJOR < 18
+  ? 'yarn exec next build' : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
+const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11 <13.2' : '>=11'
 
 describe('test suite', () => {
   let server
@@ -17,7 +21,7 @@ describe('test suite', () => {
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-  withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+  withVersions('next', 'next', DD_MAJOR >= 4 && VERSIONS_TO_TEST, version => {
     const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
 
     function initApp (appName) {
@@ -48,7 +52,7 @@ describe('test suite', () => {
         execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+        execSync(BUILD_COMMAND, {
           cwd,
           env: {
             ...process.env,
