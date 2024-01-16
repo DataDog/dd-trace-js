@@ -167,6 +167,7 @@ class Config {
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
+    checkOptionAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
   }
