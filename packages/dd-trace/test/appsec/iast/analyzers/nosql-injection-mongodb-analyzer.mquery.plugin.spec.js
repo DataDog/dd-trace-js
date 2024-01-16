@@ -67,10 +67,6 @@ describe('nosql injection detection with mquery', () => {
         const vulnerableMethodFilename = 'mquery-vulnerable-method.js'
 
         const mqueryPkg = require(`../../../../../../versions/mquery@${mqueryVersion}`)
-        const mongoDbMajor = semver.major(mongodb.version())
-        const mqueryMajor = semver.major(mqueryPkg.version())
-
-        if (mongoDbMajor !== mqueryMajor && (mongoDbMajor > 5 && mqueryMajor < 5)) return
 
         let mquery, collection
 
