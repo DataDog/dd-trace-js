@@ -905,9 +905,6 @@ class Config {
       }
     }
 
-    // accessed by telemetry app-started
-    if (!this.configWithOrigin) this.configWithOrigin = changes
-
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
 

@@ -19,6 +19,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
+let configWithOrigin
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -126,7 +127,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: config.configWithOrigin || flatten(config)
+    configuration: configWithOrigin || flatten(config)
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -298,6 +299,7 @@ function updateIntegrations () {
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
+  if (!configWithOrigin) configWithOrigin = changes
 
   // Hack to make system tests happy until we ship telemetry v2
   if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
