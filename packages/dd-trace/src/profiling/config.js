@@ -158,6 +158,7 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
     logExperimentalVarDeprecation('TIMELINE_ENABLED')
+    checkOptionAllowed(this.timelineEnabled, 'Timeline view')
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,

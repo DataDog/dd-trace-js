@@ -284,6 +284,18 @@ describe('config', () => {
     expect(() => { new Config(options) }).to.throw('CPU profiling not supported on ')
   })
 
+  it('should prevent accidentally enabling timeline view', () => {
+    if (samplingContextsAvailable) {
+      return
+    }
+
+    const options = {
+      timelineEnabled: true
+    }
+    // eslint-disable-next-line no-new
+    expect(() => { new Config(options) }).to.throw('Timeline view not supported on ')
+  })
+
   it('should support tags', () => {
     const tags = {
       env: 'dev'
