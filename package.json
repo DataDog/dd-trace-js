@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "5.0.0-pre",
+  "version": "6.0.0-pre",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -36,6 +36,7 @@
     "test:integration:cucumber": "mocha --colors --timeout 30000 \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --colors --timeout 30000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 \"integration-tests/playwright/*.spec.js\"",
+    "test:integration:profiler": "mocha --colors --timeout 90000 \"integration-tests/profiler/*.spec.js\"",
     "test:integration:serverless": "mocha --colors --timeout 30000 \"integration-tests/serverless/*.spec.js\"",
     "test:integration:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:unit:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
