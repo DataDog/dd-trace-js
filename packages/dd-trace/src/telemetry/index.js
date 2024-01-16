@@ -140,14 +140,18 @@ function appStarted (config) {
   return app
 }
 
-function onBeforeExit () {
-  process.removeListener('beforeExit', onBeforeExit)
+function appClosing () {
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
   // we flush before shutting down. Only in CI Visibility
   if (config.isCiVisibility) {
     metricsManager.send(config, application, host)
   }
+}
+
+function onBeforeExit () {
+  process.removeListener('beforeExit', onBeforeExit)
+  appClosing()
 }
 
 function createAppObject (config) {
@@ -339,5 +343,6 @@ module.exports = {
   start,
   stop,
   updateIntegrations,
-  updateConfig
+  updateConfig,
+  appClosing
 }
