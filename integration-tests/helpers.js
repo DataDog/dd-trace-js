@@ -10,8 +10,7 @@ const childProcess = require('child_process')
 const { fork } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const fs = require('fs')
-const mkdir = promisify(fs.mkdir)
+const fs = require('fs/promises')
 const os = require('os')
 const path = require('path')
 const rimraf = promisify(require('rimraf'))
@@ -206,12 +205,21 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
-  await mkdir(folder)
+  await fs.mkdir(folder)
   await exec(`yarn pack --filename ${out}`) // TODO: cache this
   await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
   for (const path of integrationTestsPaths) {
-    await exec(`cp -R ${path} ${folder}`)
+    if (process.platform === 'win32') {
+      await exec(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+    } else {
+      await exec(`cp -R ${path} ${folder}`)
+    }
+  }
+  if (process.platform === 'win32') {
+    // On Windows, we can only sync entire filesystem volume caches.
+    await exec(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
+  } else {
     await exec(`sync ${folder}`)
   }
 
@@ -221,7 +229,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
-    await exec('echo "node_modules/" > .gitignore', { cwd: folder })
+    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
