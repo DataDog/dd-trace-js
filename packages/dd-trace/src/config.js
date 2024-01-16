@@ -118,8 +118,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    this.configWithOrigin = []
-
     const DD_AGENT_HOST = coalesce(
       options.hostname,
       process.env.DD_AGENT_HOST,
@@ -132,18 +130,18 @@ class Config {
       process.env.DD_TRACE_URL,
       null
     )
-    const DD_IS_CIVISIBILITY = coalesce(
+    this.DD_IS_CIVISIBILITY = coalesce(
       options.isCiVisibility,
       false
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
 
-    const DD_CIVISIBILITY_ITR_ENABLED = coalesce(
+    this.DD_CIVISIBILITY_ITR_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_ITR_ENABLED,
       true
     )
 
-    const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
+    this.DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
       false
     )
@@ -172,7 +170,7 @@ class Config {
 
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
-    const DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
+    this.DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !inServerlessEnvironment
@@ -213,10 +211,6 @@ class Config {
       process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       false
     )
-    const DD_TRACE_EXPORTER = coalesce(
-      options.experimental && options.experimental.exporter,
-      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER
-    )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
         options.spanAttributeSchema,
@@ -233,7 +227,7 @@ class Config {
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     )
 
-    const DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
+    this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
         // In v0, peer service is computed only if it is explicitly set to true
         ? peerServiceSet && isTrue(peerServiceValue)
@@ -241,7 +235,7 @@ class Config {
         : (peerServiceSet ? !isFalse(peerServiceValue) : true)
     )
 
-    const DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
+    this.DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       isGCPFunction || isAzureFunctionConsumptionPlan
@@ -277,22 +271,12 @@ class Config {
       0.1
     )
 
-    const DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
+    this.DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
       process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
       !inServerlessEnvironment
     )
 
     this.iastOptions = options?.experimental?.iast
-    const DD_IAST_ENABLED = coalesce(
-      this.iastOptions &&
-      (this.iastOptions === true || this.iastOptions.enabled === true),
-      process.env.DD_IAST_ENABLED,
-      false
-    )
-    const DD_TELEMETRY_LOG_COLLECTION_ENABLED = coalesce(
-      process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED,
-      DD_IAST_ENABLED
-    )
 
     const DD_IAST_REDACTION_NAME_PATTERN = coalesce(
       this.iastOptions?.redactionNamePattern,
@@ -306,7 +290,7 @@ class Config {
       null
     )
 
-    const DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
+    this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
       true
     )
@@ -330,7 +314,6 @@ class Config {
       null
     )
 
-    const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
       rules: coalesce(
         options.samplingRules,
@@ -359,23 +342,16 @@ class Config {
     this.apiKey = DD_API_KEY
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    const hostname = DD_AGENT_HOST || (this.url && this.url.hostname)
+    this.HOSTNAME = DD_AGENT_HOST || (this.url && this.url.hostname)
     // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.dogstatsd = { hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, hostname) }
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
       extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
     }
     this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this.sampler = sampler
-    this.spanComputePeerService = DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
-    // Disabled for CI Visibility's agentless
-    this.telemetry = {
-      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
-      logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED)
-    }
     this.appsec = {
       blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
@@ -389,28 +365,14 @@ class Config {
       }
     }
 
-    this.remoteConfig = {
-      enabled: DD_REMOTE_CONFIGURATION_ENABLED
-    }
     this.iast = {
       redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
       redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
     }
 
-    this.isIntelligentTestRunnerEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_ITR_ENABLED)
-    this.isGitUploadEnabled = isTrue(DD_IS_CIVISIBILITY) &&
-      (this.isIntelligentTestRunnerEnabled && !isFalse(DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
-
-    this.isManualApiEnabled = isTrue(DD_IS_CIVISIBILITY) && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
-
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
-    this.stats = {
-      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
-    }
-
-    this.isGCPFunction = isGCPFunction
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
 
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
@@ -424,6 +386,7 @@ class Config {
     this._applyDefaults()
     this._applyEnvironment(options)
     this._applyOptions(options)
+    this._applyCalculated(options)
     this._applyRemote({})
     this._merge()
 
@@ -517,6 +480,7 @@ class Config {
     this._setBoolean(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setBoolean(defaults, 'plugins', true)
+    this._setValue(defaults, 'dogstatsd.hostname', '127.0.0.1')
     this._setValue(defaults, 'dogstatsd.port', '8125')
     this._setBoolean(defaults, 'runtimeMetrics', false)
     this._setBoolean(defaults, 'experimental.runtimeId', false)
@@ -533,12 +497,15 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'lookup', undefined)
     this._setBoolean(defaults, 'startupLogs', false)
+    this._setBoolean(defaults, 'telemetry.enabled', true)
+    this._setBoolean(defaults, 'telemetry.logCollection', false)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
     this._setBoolean(defaults, 'telemetry.debug', false)
     this._setBoolean(defaults, 'telemetry.metrics', true)
     this._setBoolean(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'tagsHeaderMaxLength', 512)
+    this._setValue(defaults, 'spanComputePeerService', 'v0')
     this._setBoolean(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.customRulesProvided', false)
@@ -548,6 +515,7 @@ class Config {
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
+    this._setBoolean(defaults, 'remoteConfig.enabled', true)
     this._setValue(defaults, 'remoteConfig.pollInterval', 5)
     this._setBoolean(defaults, 'iast.enabled', false)
     this._setValue(defaults, 'iast.requestSampling', 30)
@@ -557,7 +525,12 @@ class Config {
     this._setBoolean(defaults, 'iast.redactionEnabled', true)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
     this._setBoolean(defaults, 'isCiVisibility', false)
+    this._setBoolean(defaults, 'isIntelligentTestRunnerEnabled', false)
+    this._setBoolean(defaults, 'isManualApiEnabled', false)
+    this._setBoolean(defaults, 'stats.enabled', false)
+    this._setBoolean(defaults, 'isGitUploadEnabled', false)
     this._setBoolean(defaults, 'gitMetadataEnabled', true)
+    this._setBoolean(defaults, 'isGCPFunction', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
     this._setBoolean(defaults, 'traceId128BitGenerationEnabled', true)
     this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
@@ -594,6 +567,7 @@ class Config {
       FUNCTION_NAME,
       K_SERVICE,
       WEBSITE_SITE_NAME,
+      DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
       DD_RUNTIME_METRICS_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
@@ -610,6 +584,7 @@ class Config {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_STARTUP_LOGS,
+      DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_DEBUG,
       DD_TELEMETRY_METRICS_ENABLED,
@@ -675,6 +650,7 @@ class Config {
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setValue(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
     if (DD_DOGSTATSD_PORT) this._setValue(env, 'dogstatsd.port', String(DD_DOGSTATSD_PORT))
+    this._setValue(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     this._setValue(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
@@ -695,6 +671,8 @@ class Config {
       ))
     }
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
+    this._setBoolean(env, 'telemetry.enabled', this.DD_INSTRUMENTATION_TELEMETRY_ENABLED)
+    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
@@ -710,6 +688,7 @@ class Config {
     this._setValue(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
+    this._setBoolean(env, 'remoteConfig.enabled', this.DD_REMOTE_CONFIGURATION_ENABLED)
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
@@ -723,6 +702,7 @@ class Config {
     this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setValue(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
+    this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -756,7 +736,10 @@ class Config {
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setValue(opts, 'clientIpHeader', options.clientIpHeader)
     this._setBoolean(opts, 'plugins', options.plugins)
-    if (options.dogstatsd) this._setValue(opts, 'dogstatsd.port', String(options.dogstatsd.port))
+    if (options.dogstatsd) {
+      this._setValue(opts, 'dogstatsd.port', String(options.dogstatsd.port))
+      this._setValue(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
+    }
     this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
     this._setValue(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
@@ -773,6 +756,8 @@ class Config {
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setValue(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
+    this._setBoolean(opts, 'telemetry.logCollection', this.iastOptions &&
+    (this.iastOptions === true || this.iastOptions.enabled === true))
     this._setValue(opts, 'protocolVersion', options.protocolVersion)
     this._setBoolean(opts, 'appsec.enabled', this.appsecOpt.enabled)
     this._setValue(opts, 'appsec.rules', this.appsecOpt.rules)
@@ -802,6 +787,25 @@ class Config {
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
+  }
+
+  // currently does not support dynamic/remote config
+  _applyCalculated (options) {
+    const calc = this._calculated = {}
+
+    const DD_TRACE_EXPORTER = options.experimental && options.experimental.exporter
+    if (DD_TRACE_EXPORTER === 'datadog') {
+      this._setBoolean(calc, 'telemetry.enabled', false)
+    }
+    this._setValue(calc, 'dogstatsd.hostname', this.HOSTNAME)
+    this._setValue(calc, 'spanComputePeerService', this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+    this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
+      isTrue(this.DD_IS_CIVISIBILITY) && isTrue(this.DD_CIVISIBILITY_ITR_ENABLED))
+    this._setBoolean(calc, 'isGitUploadEnabled',
+      calc['isIntelligentTestRunnerEnabled'] && !isFalse(this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+    this._setBoolean(calc, 'isManualApiEnabled',
+      isTrue(this.DD_IS_CIVISIBILITY) && isTrue(this.DD_CIVISIBILITY_MANUAL_API_ENABLED))
+    this._setBoolean(calc, 'stats.enabled', this.DD_TRACE_STATS_COMPUTATION_ENABLED)
   }
 
   _applyRemote (options) {
@@ -874,8 +878,8 @@ class Config {
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   _merge () {
-    const containers = [this._remote, this._options, this._env, this._defaults]
-    const origins = ['remote_config', 'code', 'env_var', 'default']
+    const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
+    const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
     const changes = []
 
     for (const name in this._defaults) {
@@ -901,35 +905,10 @@ class Config {
       }
     }
 
-    this.sampler.sampleRate = this.sampleRate
+    // accessed by telemetry app-started
+    if (!this.configWithOrigin) this.configWithOrigin = changes
 
-    if (this.configWithOrigin.length === 0) {
-      const calculated = [
-        'telemetry.enabled',
-        'telemetry.logCollection',
-        'dogstatsd.hostname',
-        'spanComputePeerService',
-        'tracePropagationStyle.extract',
-        'remoteConfig.enabled',
-        'isIntelligentTestRunnerEnabled',
-        'isGitUploadEnabled',
-        'isManualApiEnabled',
-        'stats.enabled',
-        'isGCPFunction',
-        'commitSHA',
-        'repositoryUrl'
-      ]
-      this.configWithOrigin = this.configWithOrigin.concat(changes)
-      for (const name in calculated) {
-        if (this._existsPropertyName(name)) {
-          this.configWithOrigin.push({
-            name: name,
-            value: this._getConfigValue(name),
-            origin: 'calculated'
-          })
-        }
-      }
-    }
+    this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
 
     return changes
