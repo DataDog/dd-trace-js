@@ -42,8 +42,7 @@ describe('nosql injection detection with mquery', () => {
 
         testCollection = client.db().collection('Test')
 
-        await testCollection.insertOne({ id: 1, name: 'value' })
-        await testCollection.insertOne({ id: 2, name: 'value2' })
+        await testCollection.insertMany([{ id: 1, name: 'value' }, { id: 2, name: 'value2' }])
 
         const src = path.join(__dirname, 'resources', vulnerableMethodFilename)
 
