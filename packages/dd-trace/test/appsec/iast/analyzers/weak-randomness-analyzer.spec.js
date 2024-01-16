@@ -1,10 +1,11 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const proxyquire = require('proxyquire')
 
-const { copyFileToTmp, prepareTestServerForIast } = require('../utils')
+const { prepareTestServerForIast } = require('../utils')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const weakRandomnessAnalyzer = require('../../../../src/appsec/iast/analyzers/weak-randomness-analyzer')
 
@@ -69,33 +70,44 @@ describe('weak-randomness-analyzer', () => {
   })
 
   describe('Math.random instrumentation', () => {
-    const randomFunctionsFile = path.join(__dirname, 'resources/random-functions.js')
-    let instrumentedRandomFunctionsFile
+    const randomFunctionsPath = path.join(os.tmpdir(), 'random-functions.js')
+
     beforeEach(() => {
-      instrumentedRandomFunctionsFile = copyFileToTmp(randomFunctionsFile)
+      fs.copyFileSync(
+        path.join(__dirname, 'resources', 'random-functions.js'),
+        randomFunctionsPath
+      )
     })
 
     afterEach(() => {
-      fs.unlinkSync(instrumentedRandomFunctionsFile)
+      fs.unlinkSync(randomFunctionsPath)
       clearCache()
     })
 
     prepareTestServerForIast('full feature', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
       describe('should detect weak randomness when calling Math.random', () => {
         testThatRequestHasVulnerability(() => {
-          require(instrumentedRandomFunctionsFile).weakRandom()
-        }, 'WEAK_RANDOMNESS', { occurrences: 1 })
+          require(randomFunctionsPath).weakRandom()
+        },
+        'WEAK_RANDOMNESS',
+        {
+          occurrences: 1,
+          location: {
+            path: randomFunctionsPath,
+            line: 2
+          }
+        })
       })
 
       describe('should not detect weak randomness when calling safe random function', () => {
         testThatRequestHasNoVulnerability(() => {
-          require(instrumentedRandomFunctionsFile).safeRandom()
+          require(randomFunctionsPath).safeRandom()
         }, 'WEAK_RANDOMNESS')
       })
 
       describe('should not detect weak randomness when calling custom random function', () => {
         testThatRequestHasNoVulnerability(() => {
-          require(instrumentedRandomFunctionsFile).customRandom()
+          require(randomFunctionsPath).customRandom()
         }, 'WEAK_RANDOMNESS')
       })
     })
