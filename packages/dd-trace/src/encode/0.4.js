@@ -82,14 +82,18 @@ class AgentEncoder {
     for (let span of trace) {
       span = formatSpan(span)
       bytes.reserve(1)
-
+      const bytesPosition = bytes.length++
+      bytes.buffer[bytesPosition] = 0x8b
       if (span.type) {
-        bytes.buffer[bytes.length++] = 0x8d
-
+        bytes.buffer[bytesPosition]++
         this._encodeString(bytes, 'type')
         this._encodeString(bytes, span.type)
-      } else {
-        bytes.buffer[bytes.length++] = 0x8c
+      }
+
+      if (span.links && span.links.length > 0) {
+        bytes.buffer[bytesPosition]++
+        this._encodeString(bytes, 'span_links')
+        this._encodeArray(bytes, span.links)
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -114,10 +118,6 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-      if (span.links) {
-        this._encodeString(bytes, 'span_links')
-        this._encodeArray(bytes, span.links)
-      }
     }
   }
 
