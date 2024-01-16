@@ -8,11 +8,11 @@ class WeakRandomnessAnalyzer extends Analyzer {
   }
 
   onConfigure () {
-    this.addSub('datadog:random:call', ({ target }) => this.analyze(target))
+    this.addSub('datadog:random:call', ({ fn }) => this.analyze(fn))
   }
 
-  _isVulnerable (target) {
-    return Object.is(target, global.Math)
+  _isVulnerable (fn) {
+    return fn === Math.random
   }
 }
 

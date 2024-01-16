@@ -116,9 +116,9 @@ function csiMethodsOverrides (getContext) {
       String.prototype.trimStart
     ),
 
-    random: function (res, fn, target) {
+    random: function (res, fn) {
       if (mathRandomCallCh.hasSubscribers) {
-        mathRandomCallCh.publish({ target })
+        mathRandomCallCh.publish({ fn })
       }
       return res
     }

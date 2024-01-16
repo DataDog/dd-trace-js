@@ -17,17 +17,15 @@ describe('weak-randomness-analyzer', () => {
   })
 
   it('should detect Math.random as vulnerable', () => {
-    const isVulnerable = weakRandomnessAnalyzer._isVulnerable(Math)
+    const isVulnerable = weakRandomnessAnalyzer._isVulnerable(Math.random)
     expect(isVulnerable).to.be.true
   })
 
   it('should not detect custom random as vulnerable', () => {
-    const myMath = {
-      random: function () {
-        return 4 // chosen by fair dice roll - guaranteed to be random
-      }
+    function random () {
+      return 4 // chosen by fair dice roll - guaranteed to be random
     }
-    const isVulnerable = weakRandomnessAnalyzer._isVulnerable(myMath)
+    const isVulnerable = weakRandomnessAnalyzer._isVulnerable(random)
     expect(isVulnerable).to.be.false
   })
 
@@ -65,7 +63,7 @@ describe('weak-randomness-analyzer', () => {
       {
         './vulnerability-analyzer': ProxyAnalyzer
       })
-    proxiedWeakRandomnessAnalyzer.analyze(Math)
+    proxiedWeakRandomnessAnalyzer.analyze(Math.random)
     expect(addVulnerability).to.have.been.calledOnce
     expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'WEAK_RANDOMNESS' })
   })
