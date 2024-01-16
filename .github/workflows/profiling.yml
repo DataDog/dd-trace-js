@@ -19,6 +19,7 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:profiler:ci
+      - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@v3
 
   ubuntu:
@@ -31,10 +32,13 @@ jobs:
       - run: yarn test:profiler:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:profiler:ci
+      - run: yarn test:integration:profiler
       - uses: ./.github/actions/node/20
       - run: yarn test:profiler:ci
+      - run: yarn test:integration:profiler
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
+      - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@v3
 
   windows:
@@ -44,4 +48,5 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:profiler:ci
+      - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@v3
