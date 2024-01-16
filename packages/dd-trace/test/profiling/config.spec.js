@@ -248,52 +248,36 @@ describe('config', () => {
     expect(config.profilers[0].endpointCollectionEnabled()).false
   })
 
-  it('should prevent accidentally enabling code hotspots', () => {
-    if (samplingContextsAvailable) {
-      return
+  function optionOnlyWorksWithSamplingContexts (property, name) {
+    const options = {
+      [property]: true
     }
 
-    const options = {
-      codeHotspotsEnabled: true
+    if (samplingContextsAvailable) {
+      // should silently succeed
+      // eslint-disable-next-line no-new
+      new Config(options)
+    } else {
+      // should throw
+      // eslint-disable-next-line no-new
+      expect(() => { new Config(options) }).to.throw(`${name} not supported on `)
     }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('Code hotspots not supported on ')
+  }
+
+  it('should only allow code hotspots on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('codeHotspotsEnabled', 'Code hotspots')
   })
 
-  it('should prevent accidentally enabling endpoint collection', () => {
-    if (samplingContextsAvailable) {
-      return
-    }
-
-    const options = {
-      endpointCollection: true
-    }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('Endpoint collection not supported on ')
+  it('should only allow endpoint collection on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('endpointCollection', 'Endpoint collection')
   })
 
-  it('should prevent accidentally enabling CPU profiling', () => {
-    if (samplingContextsAvailable) {
-      return
-    }
-
-    const options = {
-      cpuProfilingEnabled: true
-    }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('CPU profiling not supported on ')
+  it('should only allow CPU profiling on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('cpuProfilingEnabled', 'CPU profiling')
   })
 
-  it('should prevent accidentally enabling timeline view', () => {
-    if (samplingContextsAvailable) {
-      return
-    }
-
-    const options = {
-      timelineEnabled: true
-    }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('Timeline view not supported on ')
+  it('should only allow timeline view on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('timelineEnabled', 'Timeline view')
   })
 
   it('should support tags', () => {
