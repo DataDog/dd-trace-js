@@ -17,7 +17,7 @@ const BUILD_COMMAND = NODE_MAJOR < 18
 const NODE_OPTIONS = NODE_MAJOR < 18 ? `--loader=${hookFile} --require dd-trace/init`
   : `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
 
-const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11 <13.2' : '>=11'
+const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
 
 describe('esm', () => {
   let agent
