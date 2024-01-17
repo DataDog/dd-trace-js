@@ -132,8 +132,10 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+    }
+    if (samplingContextsAvailable) {
+      process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
       logger: nullLogger
@@ -146,7 +148,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
-    expect(config.cpuProfilingEnabled).true
+    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
