@@ -418,10 +418,10 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-appsec@6.0.0":
-  version "6.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-6.0.0.tgz#da753f8566ec5180ad9e83014cb44984b4bc878e"
-  integrity sha512-e7vH5usFoqov7FraPcA99fe80t2/qm4Cmno1T3iBhYlhyO6HD01ArDsCZ/sUvNIUR1ujxtbr8Z9WRGJ0qQ/FDA==
+"@datadog/native-appsec@https://github.com/DataDog/dd-trace-js/raw/3571114cc5bdb1bff02df71917aec6ad4c3bc6b5/datadog-native-appsec-7.0.0-pre.tgz":
+  version "7.0.0-pre"
+  uid "5d9412ed219e37e9a5d8ad20661c8be3a10b87d3"
+  resolved "https://github.com/DataDog/dd-trace-js/raw/3571114cc5bdb1bff02df71917aec6ad4c3bc6b5/datadog-native-appsec-7.0.0-pre.tgz#5d9412ed219e37e9a5d8ad20661c8be3a10b87d3"
   dependencies:
     node-gyp-build "^3.9.0"
 
