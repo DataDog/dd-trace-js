@@ -360,7 +360,7 @@ describe('Sns', () => {
                         // expect to have two time buckets otherwise
                         expect(dsmStats.length).to.be.at.least(2)
                       }
-                    }, {timeoutMs: 10000}).then(done, done)
+                    }, { timeoutMs: 10000 }).then(done, done)
 
                     tracer._tracer._dataStreamsProcessor.onInterval()
                   })
@@ -370,31 +370,43 @@ describe('Sns', () => {
 
         it('outputs DSM checkpoint metrics when publishing a message', done => {
           const dsmStats = agent.getDsmStats()
+          let produceHashFound = false
           if (dsmStats.length !== 0) {
-            dsmStats.forEach((statsTimeBucket) => {
-              statsTimeBucket.Stats.forEach((statsBucket) => {
-                statsBucket.Stats.forEach((stats) => {
+            for (const statsTimeBucket in dsmStats) {
+              for (const statsBucket in dsmStats[statsTimeBucket].Stats) {
+                for (const statsPoint in dsmStats[statsTimeBucket].Stats[statsBucket].Stats) {
+                  const stats = dsmStats[statsTimeBucket].Stats[statsBucket].Stats[statsPoint].Stats
                   if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
                     done()
+                    produceHashFound = true
+                    break
                   }
-                })
-              })
-            })
+                }
+                if (produceHashFound) break
+              }
+              if (produceHashFound) break
+            }
           }
         })
 
         it('outputs DSM checkpoint metrics when consuming a message', done => {
           const dsmStats = agent.getDsmStats()
+          let consumeHashFound = false
           if (dsmStats.length !== 0) {
-            dsmStats.forEach((statsTimeBucket) => {
-              statsTimeBucket.Stats.forEach((statsBucket) => {
-                statsBucket.Stats.forEach((stats) => {
+            for (const statsTimeBucket in dsmStats) {
+              for (const statsBucket in dsmStats[statsTimeBucket].Stats) {
+                for (const statsPoint in dsmStats[statsTimeBucket].Stats[statsBucket].Stats) {
+                  const stats = dsmStats[statsTimeBucket].Stats[statsBucket].Stats[statsPoint].Stats
                   if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
                     done()
+                    consumeHashFound = true
+                    break
                   }
-                })
-              })
-            })
+                }
+                if (consumeHashFound) break
+              }
+              if (consumeHashFound) break
+            }
           }
         })
       })
