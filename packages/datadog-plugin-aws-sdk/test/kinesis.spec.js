@@ -241,40 +241,32 @@ describe('Kinesis', function () {
         })
 
         it('when putting a record', done => {
-          let hashAsserted = false
-          while (!hashAsserted) {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
-                      hashAsserted = true
-                      done()
-                    }
-                  })
+          const dsmStats = agent.getDsmStats()
+          if (dsmStats.length !== 0) {
+            dsmStats.forEach((statsTimeBucket) => {
+              statsTimeBucket.Stats.forEach((statsBucket) => {
+                statsBucket.Stats.forEach((stats) => {
+                  if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
+                    done()
+                  }
                 })
               })
-            }
+            })
           }
         })
 
         it('when getting a record', done => {
-          let hashAsserted = false
-          while (!hashAsserted) {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
-                      hashAsserted = true
-                      done()
-                    }
-                  })
+          const dsmStats = agent.getDsmStats()
+          if (dsmStats.length !== 0) {
+            dsmStats.forEach((statsTimeBucket) => {
+              statsTimeBucket.Stats.forEach((statsBucket) => {
+                statsBucket.Stats.forEach((stats) => {
+                  if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
+                    done()
+                  }
                 })
               })
-            }
+            })
           }
         })
       })

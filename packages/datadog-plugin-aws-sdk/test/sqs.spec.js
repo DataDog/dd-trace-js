@@ -424,40 +424,32 @@ describe('Plugin', () => {
           })
 
           it('when sending a message', done => {
-            let hashAsserted = false
-            while (!hashAsserted) {
-              const dsmStats = agent.getDsmStats()
-              if (dsmStats.length !== 0) {
-                dsmStats.forEach((statsTimeBucket) => {
-                  statsTimeBucket.Stats.forEach((statsBucket) => {
-                    statsBucket.Stats.forEach((stats) => {
-                      if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
-                        hashAsserted = true
-                        done()
-                      }
-                    })
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
+                      done()
+                    }
                   })
                 })
-              }
+              })
             }
           })
 
           it('when receiving a message', done => {
-            let hashAsserted = false
-            while (!hashAsserted) {
-              const dsmStats = agent.getDsmStats()
-              if (dsmStats.length !== 0) {
-                dsmStats.forEach((statsTimeBucket) => {
-                  statsTimeBucket.Stats.forEach((statsBucket) => {
-                    statsBucket.Stats.forEach((stats) => {
-                      if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
-                        hashAsserted = true
-                        done()
-                      }
-                    })
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
+                      done()
+                    }
                   })
                 })
-              }
+              })
             }
           })
         })

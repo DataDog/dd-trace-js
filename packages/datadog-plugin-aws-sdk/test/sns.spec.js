@@ -353,40 +353,34 @@ describe('Sns', () => {
         })
 
         it('when publishing a message', done => {
-          let hashAsserted = false
-          while (!hashAsserted) {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                      hashAsserted = true
-                      done()
-                    }
-                  })
+          const dsmStats = agent.getDsmStats()
+          if (dsmStats.length !== 0) {
+            dsmStats.forEach((statsTimeBucket) => {
+              statsTimeBucket.Stats.forEach((statsBucket) => {
+                statsBucket.Stats.forEach((stats) => {
+                  if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
+                    hashAsserted = true
+                    done()
+                  }
                 })
               })
-            }
+            })
           }
         })
 
         it('when consuming a message', done => {
-          let hashAsserted = false
-          while (!hashAsserted) {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                      hashAsserted = true
-                      done()
-                    }
-                  })
+          const dsmStats = agent.getDsmStats()
+          if (dsmStats.length !== 0) {
+            dsmStats.forEach((statsTimeBucket) => {
+              statsTimeBucket.Stats.forEach((statsBucket) => {
+                statsBucket.Stats.forEach((stats) => {
+                  if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
+                    hashAsserted = true
+                    done()
+                  }
                 })
               })
-            }
+            })
           }
         })
       })
