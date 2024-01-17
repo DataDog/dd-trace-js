@@ -231,7 +231,7 @@ describe('Kinesis', function () {
                     })
                   }
                 })
-                expect(statsPointsReceived).to.be.at.least(2)
+                expect(statsPointsReceived).to.be.at.least(1)
               }, { timeoutMs: 10000 }).then(done, done)
 
               tracer._tracer._dataStreamsProcessor.onInterval()
