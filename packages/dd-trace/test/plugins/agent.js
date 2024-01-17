@@ -193,6 +193,10 @@ module.exports = {
       // if (useTestAgent) res.redirect('http://127.0.0.1:9126/v0.1/pipeline_stats')
       dsmStats.push(req.body)
       res.status(200).send()
+
+      handlers.forEach(({ handler }) => {
+        handler(dsmStats)
+      })
     })
 
     const port = await getPort()

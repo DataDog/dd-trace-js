@@ -325,7 +325,7 @@ describe('Sns', () => {
         })
       })
 
-      describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
+      describe('DSM Metrics Calculations', () => {
         before(done => {
           sns.subscribe(subParams, (err, data) => {
             if (err) return done(err)
@@ -341,11 +341,12 @@ describe('Sns', () => {
                     if (err) return done(err)
                     tracer._tracer._dataStreamsProcessor.onInterval()
 
-                    const intervalId = setInterval(() => {
-                      const dsmStats = agent.getDsmStats()
+                    agent.use((dsmStats) => {
+                      // if we have 2 dsm stats time buckets then resolve
                       if (dsmStats.length >= 2) {
                         clearInterval(intervalId)
                         done()
+                      // if we have 1 dsm stats time bucket then check if we have a total of 2 buckets
                       } else if (dsmStats.length === 1) {
                         let statsBucketLengths = 0
                         dsmStats.forEach((timeStatsBucket) => {
@@ -358,13 +359,13 @@ describe('Sns', () => {
                           done()
                         }
                       }
-                    }, 100)
+                    }).then(done, done)
                   })
               })
           })
         })
 
-        it('when publishing a message', done => {
+        it('outputs DSM checkpoint metrics when publishing a message', done => {
           const dsmStats = agent.getDsmStats()
           if (dsmStats.length !== 0) {
             dsmStats.forEach((statsTimeBucket) => {
@@ -379,7 +380,7 @@ describe('Sns', () => {
           }
         })
 
-        it('when consuming a message', done => {
+        it('outputs DSM checkpoint metrics when consuming a message', done => {
           const dsmStats = agent.getDsmStats()
           if (dsmStats.length !== 0) {
             dsmStats.forEach((statsTimeBucket) => {
