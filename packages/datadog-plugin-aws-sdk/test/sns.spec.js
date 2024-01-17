@@ -326,6 +326,10 @@ describe('Sns', () => {
       })
 
       describe('DSM Metrics Calculations', () => {
+        before(() => {
+          return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
+        })
+
         before(done => {
           sns.subscribe(subParams, (err, data) => {
             if (err) return done(err)
@@ -339,27 +343,26 @@ describe('Sns', () => {
                   receiveParams,
                   (err, res) => {
                     if (err) return done(err)
-                    tracer._tracer._dataStreamsProcessor.onInterval()
 
-                    agent.use((dsmStats) => {
-                      // if we have 2 dsm stats time buckets then resolve
-                      if (dsmStats.length >= 2) {
-                        clearInterval(intervalId)
-                        done()
+                    agent.use(dsmStats => {
                       // if we have 1 dsm stats time bucket then check if we have a total of 2 buckets
-                      } else if (dsmStats.length === 1) {
+                      if (dsmStats.length === 1) {
                         let statsBucketLengths = 0
                         dsmStats.forEach((timeStatsBucket) => {
-                          timeStatsBucket.Stats.forEach((statsBuckets) => {
-                            statsBucketLengths += statsBuckets.Stats.length
-                          })
+                          if (timeStatsBucket && timeStatsBucket.Stats) {
+                            timeStatsBucket.Stats.forEach((statsBuckets) => {
+                              statsBucketLengths += statsBuckets.Stats.length
+                            })
+                          }
                         })
-                        if (statsBucketLengths >= 2) {
-                          clearInterval(intervalId)
-                          done()
-                        }
+                        expect(statsBucketLengths).to.be.at.least(2)
+                      } else {
+                        // expect to have two time buckets otherwise
+                        expect(dsmStats.length).to.be.at.least(2)
                       }
-                    }).then(done, done)
+                    }, {timeoutMs: 10000}).then(done, done)
+
+                    tracer._tracer._dataStreamsProcessor.onInterval()
                   })
               })
           })
