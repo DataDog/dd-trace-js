@@ -424,7 +424,7 @@ describe('Plugin', () => {
                   expect(statsPointsReceived).to.be.at.least(2)
                 }, { timeoutMs: 2000 }).then(done, done)
 
-                tracer._tracer._dataStreamsProcessor.onInterval()
+                process.emit('beforeExit')
               })
             })
           })

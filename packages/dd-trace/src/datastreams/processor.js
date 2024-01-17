@@ -193,6 +193,7 @@ class DataStreamsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), 10000)
       this.timer.unref()
     }
+    process.once('beforeExit', () => this.onInterval())
   }
 
   onInterval () {
