@@ -360,7 +360,7 @@ describe('Sns', () => {
                         // expect to have two time buckets otherwise
                         expect(dsmStats.length).to.be.at.least(2)
                       }
-                    }, { timeoutMs: 10000 }).then(done, done)
+                    }, { timeoutMs: 2000 }).then(done, done)
 
                     tracer._tracer._dataStreamsProcessor.onInterval()
                   })

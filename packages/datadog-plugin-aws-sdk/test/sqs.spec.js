@@ -411,26 +411,25 @@ describe('Plugin', () => {
               }, (err) => {
                 if (err) return done(err)
 
-                tracer._tracer._dataStreamsProcessor.onInterval()
-
-                const intervalId = setInterval(() => {
-                  const dsmStats = agent.getDsmStats()
-                  if (dsmStats.length >= 2) {
-                    clearInterval(intervalId)
-                    done()
-                  } else if (dsmStats.length === 1) {
+                agent.use(dsmStats => {
+                  // if we have 1 dsm stats time bucket then check if we have a total of 2 buckets
+                  if (dsmStats.length === 1) {
                     let statsBucketLengths = 0
                     dsmStats.forEach((timeStatsBucket) => {
-                      timeStatsBucket.Stats.forEach((statsBuckets) => {
-                        statsBucketLengths += statsBuckets.Stats.length
-                      })
+                      if (timeStatsBucket && timeStatsBucket.Stats) {
+                        timeStatsBucket.Stats.forEach((statsBuckets) => {
+                          statsBucketLengths += statsBuckets.Stats.length
+                        })
+                      }
                     })
-                    if (statsBucketLengths >= 2) {
-                      clearInterval(intervalId)
-                      done()
-                    }
+                    expect(statsBucketLengths).to.be.at.least(2)
+                  } else {
+                    // expect to have two time buckets otherwise
+                    expect(dsmStats.length).to.be.at.least(2)
                   }
-                }, 100)
+                }, { timeoutMs: 2000 }).then(done, done)
+
+                tracer._tracer._dataStreamsProcessor.onInterval()
               })
             })
           })
