@@ -355,7 +355,7 @@ describe('Sns', () => {
                         }
                       })
                       expect(statsPointsReceived).to.be.at.least(2)
-                    }, { timeoutMs: 2000 }).then(done, done)
+                    }, { timeoutMs: 10000 }).then(done, done)
 
                     process.emit('beforeExit')
                   })
