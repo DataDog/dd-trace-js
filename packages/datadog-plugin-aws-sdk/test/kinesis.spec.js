@@ -222,8 +222,16 @@ describe('Kinesis', function () {
               if (err) return done(err)
 
               agent.use(dsmStats => {
-                // we should have 1 dsm stats bucket since we only did 1 operation
-                expect(dsmStats.length).to.be.at.least(1)
+                let statsPointsReceived = 0
+                // we should have only have 1 stats point since we only had 1 put operation
+                dsmStats.forEach((timeStatsBucket) => {
+                  if (timeStatsBucket && timeStatsBucket.Stats) {
+                    timeStatsBucket.Stats.forEach((statsBuckets) => {
+                      statsPointsReceived += statsBuckets.Stats.length
+                    })
+                  }
+                })
+                expect(statsPointsReceived).to.be.at.least(2)
               }, { timeoutMs: 10000 }).then(done, done)
 
               tracer._tracer._dataStreamsProcessor.onInterval()

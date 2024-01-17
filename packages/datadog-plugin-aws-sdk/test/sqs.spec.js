@@ -412,21 +412,16 @@ describe('Plugin', () => {
                 if (err) return done(err)
 
                 agent.use(dsmStats => {
-                  // if we have 1 dsm stats time bucket then check if we have a total of 2 buckets
-                  if (dsmStats.length === 1) {
-                    let statsBucketLengths = 0
-                    dsmStats.forEach((timeStatsBucket) => {
-                      if (timeStatsBucket && timeStatsBucket.Stats) {
-                        timeStatsBucket.Stats.forEach((statsBuckets) => {
-                          statsBucketLengths += statsBuckets.Stats.length
-                        })
-                      }
-                    })
-                    expect(statsBucketLengths).to.be.at.least(2)
-                  } else {
-                    // expect to have two time buckets otherwise
-                    expect(dsmStats.length).to.be.at.least(2)
-                  }
+                  let statsPointsReceived = 0
+                  // we should have 2 dsm stats points
+                  dsmStats.forEach((timeStatsBucket) => {
+                    if (timeStatsBucket && timeStatsBucket.Stats) {
+                      timeStatsBucket.Stats.forEach((statsBuckets) => {
+                        statsPointsReceived += statsBuckets.Stats.length
+                      })
+                    }
+                  })
+                  expect(statsPointsReceived).to.be.at.least(2)
                 }, { timeoutMs: 2000 }).then(done, done)
 
                 tracer._tracer._dataStreamsProcessor.onInterval()
