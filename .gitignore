@@ -81,6 +81,7 @@ typings/
 
 # Output of 'npm pack'
 *.tgz
+!datadog-native-appsec-7.0.0-pre.tgz
 
 # Yarn Integrity file
 .yarn-integrity

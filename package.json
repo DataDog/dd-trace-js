@@ -69,7 +69,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@datadog/native-appsec": "6.0.0",
+    "@datadog/native-appsec": "./datadog-native-appsec-7.0.0-pre.tgz",
     "@datadog/native-iast-rewriter": "2.2.2",
     "@datadog/native-iast-taint-tracking": "1.6.4",
     "@datadog/native-metrics": "^2.0.0",

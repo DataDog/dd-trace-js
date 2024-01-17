@@ -19,3 +19,4 @@
 !cypress/**/*
 !ci/**/*
 !version.js
+!datadog-native-appsec-7.0.0-pre.tgz
