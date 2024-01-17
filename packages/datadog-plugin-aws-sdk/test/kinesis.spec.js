@@ -222,10 +222,10 @@ describe('Kinesis', function () {
 
       describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
         before(done => {
-          helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, (err, data) => {
+          helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
             if (err) return done(err)
   
-            helpers.getTestData(kinesis, streamName, data, (err, data) => {
+            helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
               if (err) return done(err)
 
               tracer._tracer._dataStreamsProcessor.onInterval()
