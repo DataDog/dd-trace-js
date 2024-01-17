@@ -234,7 +234,7 @@ describe('Kinesis', function () {
         })
 
         it('when putting a record', done => {
-          if (dsmStatsExist(expectedProducerHash)) {
+          if (dsmStatsExist(agent, expectedProducerHash)) {
             done()
           }
         })

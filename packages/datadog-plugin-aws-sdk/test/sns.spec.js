@@ -369,13 +369,13 @@ describe('Sns', () => {
         })
 
         it('outputs DSM checkpoint metrics when publishing a message', done => {
-          if (dsmStatsExist(expectedProducerHash(TopicArn))) {
+          if (dsmStatsExist(agent, expectedProducerHash(TopicArn))) {
             done()
           }
         })
 
         it('outputs DSM checkpoint metrics when consuming a message', done => {
-          if (dsmStatsExist(expectedConsumerHash(TopicArn))) {
+          if (dsmStatsExist(agent, expectedConsumerHash(TopicArn))) {
             done()
           }
         })

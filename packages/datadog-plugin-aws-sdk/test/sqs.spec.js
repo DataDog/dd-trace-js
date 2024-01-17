@@ -436,13 +436,13 @@ describe('Plugin', () => {
           })
 
           it('when sending a message', done => {
-            if (dsmStatsExist(expectedProducerHash)) {
+            if (dsmStatsExist(agent, expectedProducerHash)) {
               done()
             }
           })
 
           it('when receiving a message', done => {
-            if (dsmStatsExist(expectedConsumerHash)) {
+            if (dsmStatsExist(agent, expectedConsumerHash)) {
               done()
             }
           })

@@ -17,7 +17,7 @@ const helpers = {
     })
   },
 
-  dsmStatsExist (expectedHash) {
+  dsmStatsExist (agent, expectedHash) {
     const dsmStats = agent.getDsmStats()
     let hashFound = false
     if (dsmStats.length !== 0) {
