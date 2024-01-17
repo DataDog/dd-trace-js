@@ -418,7 +418,7 @@ describe('Plugin', () => {
                   if (dsmStats.length >= 2) {
                     clearInterval(intervalId)
                     done()
-                  } else if (dsmStats.length == 1) {
+                  } else if (dsmStats.length === 1) {
                     let statsBucketLengths = 0
                     dsmStats.forEach((timeStatsBucket) => {
                       timeStatsBucket.Stats.forEach((statsBuckets) => {

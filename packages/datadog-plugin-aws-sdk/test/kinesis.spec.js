@@ -15,13 +15,6 @@ const expectedProducerHash = computePathwayHash(
   ENTRY_PARENT_HASH
 )
 
-const expectedConsumerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:in', 'topic:MyStreamDSM', 'type:kinesis'],
-  expectedProducerHash
-)
-
 describe('Kinesis', function () {
   this.timeout(10000)
   setup()
@@ -224,7 +217,7 @@ describe('Kinesis', function () {
         before(done => {
           helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
             if (err) return done(err)
-  
+
             helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
               if (err) return done(err)
 
