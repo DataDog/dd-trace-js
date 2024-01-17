@@ -3,7 +3,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
@@ -369,44 +369,14 @@ describe('Sns', () => {
         })
 
         it('outputs DSM checkpoint metrics when publishing a message', done => {
-          const dsmStats = agent.getDsmStats()
-          let produceHashFound = false
-          if (dsmStats.length !== 0) {
-            for (const statsTimeBucket in dsmStats) {
-              for (const statsBucket in dsmStats[statsTimeBucket].Stats) {
-                for (const statsPoint in dsmStats[statsTimeBucket].Stats[statsBucket].Stats) {
-                  const stats = dsmStats[statsTimeBucket].Stats[statsBucket].Stats[statsPoint].Stats
-                  if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                    done()
-                    produceHashFound = true
-                    break
-                  }
-                }
-                if (produceHashFound) break
-              }
-              if (produceHashFound) break
-            }
+          if (dsmStatsExist(expectedProducerHash(TopicArn))) {
+            done()
           }
         })
 
         it('outputs DSM checkpoint metrics when consuming a message', done => {
-          const dsmStats = agent.getDsmStats()
-          let consumeHashFound = false
-          if (dsmStats.length !== 0) {
-            for (const statsTimeBucket in dsmStats) {
-              for (const statsBucket in dsmStats[statsTimeBucket].Stats) {
-                for (const statsPoint in dsmStats[statsTimeBucket].Stats[statsBucket].Stats) {
-                  const stats = dsmStats[statsTimeBucket].Stats[statsBucket].Stats[statsPoint].Stats
-                  if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                    done()
-                    consumeHashFound = true
-                    break
-                  }
-                }
-                if (consumeHashFound) break
-              }
-              if (consumeHashFound) break
-            }
+          if (dsmStatsExist(expectedConsumerHash(TopicArn))) {
+            done()
           }
         })
       })

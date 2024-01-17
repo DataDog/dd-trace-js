@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
@@ -436,32 +436,14 @@ describe('Plugin', () => {
           })
 
           it('when sending a message', done => {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
-                      done()
-                    }
-                  })
-                })
-              })
+            if (dsmStatsExist(expectedProducerHash)) {
+              done()
             }
           })
 
           it('when receiving a message', done => {
-            const dsmStats = agent.getDsmStats()
-            if (dsmStats.length !== 0) {
-              dsmStats.forEach((statsTimeBucket) => {
-                statsTimeBucket.Stats.forEach((statsBucket) => {
-                  statsBucket.Stats.forEach((stats) => {
-                    if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
-                      done()
-                    }
-                  })
-                })
-              })
+            if (dsmStatsExist(expectedConsumerHash)) {
+              done()
             }
           })
         })

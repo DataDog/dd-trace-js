@@ -2,7 +2,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
@@ -234,17 +234,8 @@ describe('Kinesis', function () {
         })
 
         it('when putting a record', done => {
-          const dsmStats = agent.getDsmStats()
-          if (dsmStats.length !== 0) {
-            dsmStats.forEach((statsTimeBucket) => {
-              statsTimeBucket.Stats.forEach((statsBucket) => {
-                statsBucket.Stats.forEach((stats) => {
-                  if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
-                    done()
-                  }
-                })
-              })
-            })
+          if (dsmStatsExist(expectedProducerHash)) {
+            done()
           }
         })
       })
