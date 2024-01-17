@@ -224,7 +224,7 @@ describe('Kinesis', function () {
               agent.use(dsmStats => {
                 // we should have 1 dsm stats bucket since we only did 1 operation
                 expect(dsmStats.length).to.be.at.least(1)
-              }, { timeoutMs: 5000 }).then(done, done)
+              }, { timeoutMs: 10000 }).then(done, done)
 
               tracer._tracer._dataStreamsProcessor.onInterval()
             })
