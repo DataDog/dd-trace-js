@@ -778,7 +778,7 @@ class Config {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
     }
     this._setValue(opts, 'iast.maxConcurrentRequests',
-      maybeInt(this.iastOptions && this.iastOptions.maxConcurrentRequests))
+      maybeInt(this.iastOptions?.maxConcurrentRequests))
     this._setValue(opts, 'iast.maxContextOperations',
       maybeInt(this.iastOptions && this.iastOptions.maxContextOperations))
     this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
