@@ -414,9 +414,21 @@ describe('Plugin', () => {
                 tracer._tracer._dataStreamsProcessor.onInterval()
 
                 const intervalId = setInterval(() => {
-                  if (agent.getDsmStats().length >= 1) {
+                  const dsmStats = agent.getDsmStats()
+                  if (dsmStats.length >= 2) {
                     clearInterval(intervalId)
                     done()
+                  } else if (dsmStats.length == 1) {
+                    let statsBucketLengths = 0
+                    dsmStats.forEach((timeStatsBucket) => {
+                      timeStatsBucket.Stats.forEach((statsBuckets) => {
+                        statsBucketLengths += statsBuckets.Stats.length
+                      })
+                    })
+                    if (statsBucketLengths >= 2) {
+                      clearInterval(intervalId)
+                      done()
+                    }
                   }
                 }, 100)
               })

@@ -342,9 +342,21 @@ describe('Sns', () => {
                     tracer._tracer._dataStreamsProcessor.onInterval()
 
                     const intervalId = setInterval(() => {
-                      if (agent.getDsmStats().length >= 1) {
+                      const dsmStats = agent.getDsmStats()
+                      if (dsmStats.length >= 2) {
                         clearInterval(intervalId)
                         done()
+                      } else if (dsmStats.length == 1) {
+                        let statsBucketLengths = 0
+                        dsmStats.forEach((timeStatsBucket) => {
+                          timeStatsBucket.Stats.forEach((statsBuckets) => {
+                            statsBucketLengths += statsBuckets.Stats.length
+                          })
+                        })
+                        if (statsBucketLengths >= 2) {
+                          clearInterval(intervalId)
+                          done()
+                        }
                       }
                     }, 100)
                   })
@@ -359,7 +371,6 @@ describe('Sns', () => {
               statsTimeBucket.Stats.forEach((statsBucket) => {
                 statsBucket.Stats.forEach((stats) => {
                   if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                    hashAsserted = true
                     done()
                   }
                 })
@@ -375,7 +386,6 @@ describe('Sns', () => {
               statsTimeBucket.Stats.forEach((statsBucket) => {
                 statsBucket.Stats.forEach((stats) => {
                   if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
-                    hashAsserted = true
                     done()
                   }
                 })
