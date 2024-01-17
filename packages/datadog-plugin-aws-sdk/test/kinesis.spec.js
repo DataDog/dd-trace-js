@@ -222,22 +222,9 @@ describe('Kinesis', function () {
               if (err) return done(err)
 
               agent.use(dsmStats => {
-                // if we have 1 dsm stats time bucket then check if we have a total of 2 buckets
-                if (dsmStats.length === 1) {
-                  let statsBucketLengths = 0
-                  dsmStats.forEach((timeStatsBucket) => {
-                    if (timeStatsBucket && timeStatsBucket.Stats) {
-                      timeStatsBucket.Stats.forEach((statsBuckets) => {
-                        statsBucketLengths += statsBuckets.Stats.length
-                      })
-                    }
-                  })
-                  expect(statsBucketLengths).to.be.at.least(2)
-                } else {
-                  // expect to have two time buckets otherwise
-                  expect(dsmStats.length).to.be.at.least(2)
-                }
-              }, { timeoutMs: 10000 }).then(done, done)
+                // we should have 1 dsm stats bucket since we only did 1 operation
+                expect(dsmStats.length).to.be.at.least(1)
+              }, { timeoutMs: 2000 }).then(done, done)
 
               tracer._tracer._dataStreamsProcessor.onInterval()
             })
