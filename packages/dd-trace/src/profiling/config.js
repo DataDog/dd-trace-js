@@ -40,6 +40,7 @@ class Config {
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
@@ -154,7 +155,10 @@ class Config {
       })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
+      DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+    logExperimentalVarDeprecation('TIMELINE_ENABLED')
+    checkOptionAllowed(this.timelineEnabled, 'Timeline view')
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
@@ -164,6 +168,7 @@ class Config {
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
+    checkOptionAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
   }
