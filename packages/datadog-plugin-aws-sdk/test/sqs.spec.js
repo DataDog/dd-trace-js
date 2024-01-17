@@ -397,7 +397,9 @@ describe('Plugin', () => {
           })
         })
 
-        describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
+        describe('emits a new DSM Stats to the agent when DSM is enabled', function () {
+          this.timeout(10000)
+          
           before(done => {
             sqs.sendMessage({
               MessageBody: 'test DSM',

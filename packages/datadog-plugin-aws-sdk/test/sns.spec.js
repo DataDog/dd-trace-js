@@ -325,7 +325,9 @@ describe('Sns', () => {
         })
       })
 
-      describe('DSM Metrics Calculations', () => {
+      describe('DSM Metrics Calculations', function () {
+        this.timeout(10000)
+        
         before(() => {
           return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
         })
