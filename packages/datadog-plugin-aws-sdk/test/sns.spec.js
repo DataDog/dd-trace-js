@@ -5,10 +5,8 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
-const { ENTRY_PARENT_HASH, getHeadersSize, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const snsPlugin = require('../src/services/sns')
 
 describe('Sns', () => {
   setup()
@@ -272,7 +270,6 @@ describe('Sns', () => {
       })
 
       it('injects DSM pathway hash to SNS publish span', done => {
-
         sns.subscribe(subParams, (err, data) => {
           if (err) return done(err)
 
@@ -281,19 +278,19 @@ describe('Sns', () => {
             (err) => {
               if (err) return done(err)
 
-              let publish_span_meta = {}
+              let publishSpanMeta = {}
               agent.use(traces => {
                 const span = traces[0][0]
-        
+
                 if (span.resource.startsWith('publish')) {
-                  publish_span_meta = span.meta
+                  publishSpanMeta = span.meta
                 }
-        
-                expect(publish_span_meta).to.include({
-                  'pathway.hash': expectedProducerHash(TopicArn).readBigUInt64BE(0).toString(),
+
+                expect(publishSpanMeta).to.include({
+                  'pathway.hash': expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()
                 })
               }).then(done, done)
-          })
+            })
         })
       })
 
@@ -305,7 +302,7 @@ describe('Sns', () => {
             { TopicArn, Message: 'message DSM' },
             (err) => {
               if (err) return done(err)
-          })
+            })
 
           sqs.receiveMessage(
             receiveParams,
@@ -315,72 +312,82 @@ describe('Sns', () => {
               let consumeSpanMeta = {}
               agent.use(traces => {
                 const span = traces[0][0]
-        
+
                 if (span.name === 'aws.response') {
                   consumeSpanMeta = span.meta
                 }
 
                 expect(consumeSpanMeta).to.include({
-                  'pathway.hash': expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString(),
+                  'pathway.hash': expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()
                 })
               }).then(done, done)
             })
         })
       })
 
-      it('creates a new DSM stats bucket if DSM is enabled when publishing a message', done => {
-        const dsmProcessor = tracer._tracer._dataStreamsProcessor
-        
-        // clear all stats buckets 
-        dsmProcessor.buckets.clear()
+      describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
+        before(done => {
+          sns.subscribe(subParams, (err, data) => {
+            if (err) return done(err)
 
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
+            sns.publish(
+              { TopicArn, Message: 'message DSM' },
+              (err) => {
+                if (err) return done(err)
 
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
+                sqs.receiveMessage(
+                  receiveParams,
+                  (err, res) => {
+                    if (err) return done(err)
+                    tracer._tracer._dataStreamsProcessor.onInterval()
 
-              const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-
-              expect(dsmTimeBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash(TopicArn))
-              done()
-            })
+                    const intervalId = setInterval(() => {
+                      if (agent.getDsmStats().length >= 1) {
+                        clearInterval(intervalId)
+                        done()
+                      }
+                    }, 100)
+                  })
+              })
+          })
         })
-      })
 
-      it('creates a new DSM stats bucket if DSM is enabled when consuming a message', done => {
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
-
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
-
-              const dsmProcessor = tracer._tracer._dataStreamsProcessor
-        
-              // clear all stats buckets 
-              dsmProcessor.buckets.clear()
-
-              sqs.receiveMessage(
-                receiveParams,
-                (err, res) => {
-                  if (err) return done(err)
-    
-                  const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-                  const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-    
-                  expect(dsmTimeBuckets.length).to.equal(1)
-                  expect(dsmStatsBuckets.length).to.equal(1)
-                  expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedConsumerHash(TopicArn))
-                  done()
+        it('when publishing a message', done => {
+          let hashAsserted = false
+          while (!hashAsserted) {
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()) {
+                      hashAsserted = true
+                      done()
+                    }
+                  })
                 })
-            })
+              })
+            }
+          }
+        })
+
+        it('when consuming a message', done => {
+          let hashAsserted = false
+          while (!hashAsserted) {
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()) {
+                      hashAsserted = true
+                      done()
+                    }
+                  })
+                })
+              })
+            }
+          }
         })
       })
     })

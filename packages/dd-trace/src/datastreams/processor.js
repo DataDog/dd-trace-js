@@ -340,6 +340,10 @@ class DataStreamsProcessor {
       Stats: serializedBuckets
     }
   }
+
+  setUrl (url) {
+    this.writer.setUrl(url)
+  }
 }
 
 module.exports = {

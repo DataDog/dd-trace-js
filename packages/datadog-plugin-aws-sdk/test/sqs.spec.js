@@ -3,10 +3,8 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
-const { ENTRY_PARENT_HASH, DataStreamsProcessor, getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const sqsPlugin = require('../src/services/sqs')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -313,14 +311,13 @@ describe('Plugin', () => {
           expectedProducerHash
         )
 
-        before(done => {
+        before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
-          done()
         })
 
-        beforeEach(async () => {
+        before(async () => {
           return agent.load('aws-sdk', {
             sqs: {
               consumer: false,
@@ -359,13 +356,13 @@ describe('Plugin', () => {
             let produceSpanMeta = {}
             agent.use(traces => {
               const span = traces[0][0]
-      
-              if (span.resource.startsWith('sendMessage'))  {
+
+              if (span.resource.startsWith('sendMessage')) {
                 produceSpanMeta = span.meta
               }
 
               expect(produceSpanMeta).to.include({
-                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
               })
             }).then(done, done)
           })
@@ -387,67 +384,81 @@ describe('Plugin', () => {
               let consumeSpanMeta = {}
               agent.use(traces => {
                 const span = traces[0][0]
-        
+
                 if (span.name === 'aws.response') {
                   consumeSpanMeta = span.meta
                 }
-  
+
                 expect(consumeSpanMeta).to.include({
-                  'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString(),
+                  'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
                 })
               }).then(done, done)
             })
           })
         })
 
-        it('Should create a new DSM Stats Bucket when producing a message', (done) => {
-          const dsmProcessor = tracer._tracer._dataStreamsProcessor
-
-          // clear all stats buckets 
-          dsmProcessor.buckets.clear()
-
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-            const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-
-            expect(dsmTimeBuckets.length).to.equal(1)
-            expect(dsmStatsBuckets.length).to.equal(1)
-            expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
-            done()
-          })
-        })
-
-        it('Should create a new DSM Stats Bucket when consuming a message', (done) => {
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            const dsmProcessor = tracer._tracer._dataStreamsProcessor
-
-            // clear all stats buckets 
-            dsmProcessor.buckets.clear()
-
-            sqs.receiveMessage({
-              QueueUrl,
-              MessageAttributeNames: ['.*']
+        describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
+          before(done => {
+            sqs.sendMessage({
+              MessageBody: 'test DSM',
+              QueueUrl
             }, (err) => {
               if (err) return done(err)
 
-              const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-  
-              expect(dsmTimeBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedConsumerHash)
-              done()
+              sqs.receiveMessage({
+                QueueUrl,
+                MessageAttributeNames: ['.*']
+              }, (err) => {
+                if (err) return done(err)
+
+                tracer._tracer._dataStreamsProcessor.onInterval()
+
+                const intervalId = setInterval(() => {
+                  if (agent.getDsmStats().length >= 1) {
+                    clearInterval(intervalId)
+                    done()
+                  }
+                }, 100)
+              })
             })
+          })
+
+          it('when sending a message', done => {
+            let hashAsserted = false
+            while (!hashAsserted) {
+              const dsmStats = agent.getDsmStats()
+              if (dsmStats.length !== 0) {
+                dsmStats.forEach((statsTimeBucket) => {
+                  statsTimeBucket.Stats.forEach((statsBucket) => {
+                    statsBucket.Stats.forEach((stats) => {
+                      if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
+                        hashAsserted = true
+                        done()
+                      }
+                    })
+                  })
+                })
+              }
+            }
+          })
+
+          it('when receiving a message', done => {
+            let hashAsserted = false
+            while (!hashAsserted) {
+              const dsmStats = agent.getDsmStats()
+              if (dsmStats.length !== 0) {
+                dsmStats.forEach((statsTimeBucket) => {
+                  statsTimeBucket.Stats.forEach((statsBucket) => {
+                    statsBucket.Stats.forEach((stats) => {
+                      if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
+                        hashAsserted = true
+                        done()
+                      }
+                    })
+                  })
+                })
+              }
+            }
           })
         })
       })

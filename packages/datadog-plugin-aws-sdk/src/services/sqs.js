@@ -143,10 +143,12 @@ class Sqs extends BaseAwsSdkPlugin {
     const datadogAttribute = message.MessageAttributes._datadog
 
     const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
-    if (parsedAttributes) return {
-      datadogContext: this.tracer.extract('text_map', parsedAttributes),
-      parsedAttributes: parsedAttributes
-    } 
+    if (parsedAttributes) {
+      return {
+        datadogContext: this.tracer.extract('text_map', parsedAttributes),
+        parsedAttributes: parsedAttributes
+      }
+    }
   }
 
   parseDatadogAttributes (attributes) {

@@ -17,7 +17,7 @@ let listener = null
 let tracer = null
 let plugins = []
 const testedPlugins = []
-const dsmStats = []
+let dsmStats = []
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -137,6 +137,10 @@ function checkAgentStatus () {
   })
 }
 
+function getDsmStats () {
+  return dsmStats
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
@@ -184,10 +188,11 @@ module.exports = {
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
     // DSM Checkpoint endpoint
+    dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       // if (useTestAgent) res.redirect('http://127.0.0.1:9126/v0.1/pipeline_stats')
       dsmStats.push(req.body)
-      res.status(200).end()
+      res.status(200).send()
     })
 
     const port = await getPort()
@@ -362,6 +367,7 @@ module.exports = {
       })
   },
 
+  tracer,
   testedPlugins,
-  dsmStats
+  getDsmStats
 }

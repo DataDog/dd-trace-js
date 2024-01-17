@@ -5,13 +5,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const {
-  ENTRY_PARENT_HASH,
-  DataStreamsProcessor,
-  getSizeOrZero
-} = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 
 const expectedProducerHash = computePathwayHash(
   'test',
@@ -213,39 +208,72 @@ describe('Kinesis', function () {
           let putRecordSpanMeta = {}
           agent.use(traces => {
             const span = traces[0][0]
-    
+
             if (span.resource.startsWith('putRecord')) {
               putRecordSpanMeta = span.meta
             }
-    
+
             expect(putRecordSpanMeta).to.include({
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString(),
+              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
             })
           }).then(done, done)
         })
       })
 
-      it('Should create a new DSM Stats Bucket when producing a message', (done) => {
-        const dsmProcessor = tracer._tracer._dataStreamsProcessor
-    
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return reject(err)
-    
-          // force flush stats to agent
-          dsmProcessor.onInterval()
+      describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
+        before(done => {
+          helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, (err, data) => {
+            if (err) return done(err)
+  
+            helpers.getTestData(kinesis, streamName, data, (err, data) => {
+              if (err) return done(err)
 
-          let dsmStatsAsserted = false
-          while (!dsmStatsAsserted) {
-            const dsmStats = agent.dsmStats
-            if (dsmStats.length != 0) {
-              console.log(dsmStats)
-              const dsmTimeBuckets = dsmProcessor._serializeBuckets().Stats
-              const dsmStatsBuckets = dsmTimeBuckets[0].Stats
-      
-              expect(dsmTimeBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets.length).to.equal(1)
-              expect(dsmStatsBuckets[0].Hash.buffer).to.equal(expectedProducerHash)
-              done() // Resolve the promise to indicate the interval function has completed
+              tracer._tracer._dataStreamsProcessor.onInterval()
+
+              const intervalId = setInterval(() => {
+                if (agent.getDsmStats().length >= 1) {
+                  clearInterval(intervalId)
+                  done()
+                }
+              }, 100)
+            })
+          })
+        })
+
+        it('when putting a record', done => {
+          let hashAsserted = false
+          while (!hashAsserted) {
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedProducerHash.readBigUInt64BE(0).toString()) {
+                      hashAsserted = true
+                      done()
+                    }
+                  })
+                })
+              })
+            }
+          }
+        })
+
+        it('when getting a record', done => {
+          let hashAsserted = false
+          while (!hashAsserted) {
+            const dsmStats = agent.getDsmStats()
+            if (dsmStats.length !== 0) {
+              dsmStats.forEach((statsTimeBucket) => {
+                statsTimeBucket.Stats.forEach((statsBucket) => {
+                  statsBucket.Stats.forEach((stats) => {
+                    if (stats.Hash.toString() === expectedConsumerHash.readBigUInt64BE(0).toString()) {
+                      hashAsserted = true
+                      done()
+                    }
+                  })
+                })
+              })
             }
           }
         })
