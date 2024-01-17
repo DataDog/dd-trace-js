@@ -231,9 +231,20 @@ describe('Kinesis', function () {
               tracer._tracer._dataStreamsProcessor.onInterval()
 
               const intervalId = setInterval(() => {
-                if (agent.getDsmStats().length >= 1) {
+                if (agent.getDsmStats().length >= 2) {
                   clearInterval(intervalId)
                   done()
+                } else if (agent.getDsmStats().length == 1) {
+                  let statsBucketLengths = 0
+                  agent.getDsmStats().forEach((timeStatsBucket) => {
+                    timeStatsBucket.Stats.forEach((statsBuckets) => {
+                      statsBucketLengths += statsBuckets.Stats.length
+                    })
+                  })
+                  if (statsBucketLengths >= 2) {
+                    clearInterval(intervalId)
+                    done()
+                  }
                 }
               }, 100)
             })
