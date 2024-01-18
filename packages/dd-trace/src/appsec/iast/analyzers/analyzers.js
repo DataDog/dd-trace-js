@@ -16,5 +16,6 @@ module.exports = {
   'UNVALIDATED_REDIRECT_ANALYZER': require('./unvalidated-redirect-analyzer'),
   'WEAK_CIPHER_ANALYZER': require('./weak-cipher-analyzer'),
   'WEAK_HASH_ANALYZER': require('./weak-hash-analyzer'),
+  'WEAK_RANDOMNESS_ANALYZER': require('./weak-randomness-analyzer'),
   'XCONTENTTYPE_HEADER_MISSING_ANALYZER': require('./xcontenttype-header-missing-analyzer')
 }
