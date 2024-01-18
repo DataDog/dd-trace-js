@@ -19,10 +19,30 @@ function wrapHandle (handle) {
 
 const wrapRouterMethod = createWrapRouterMethod('express')
 
+const responseJsonChannel = channel('datadog:express:response:json:start')
+
+function wrapResponseJson (json) {
+  return function wrappedJson (obj) {
+    if (responseJsonChannel.hasSubscribers) {
+      // backward compat
+      if (arguments.length === 2 && typeof arguments[1] !== 'number') {
+        obj = arguments[1]
+      }
+
+      responseJsonChannel.publish({ body: obj })
+    }
+
+    return json.apply(this, arguments)
+  }
+}
+
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
+
+  shimmer.wrap(express.response, 'json', wrapResponseJson)
+  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
 
   return express
 })
