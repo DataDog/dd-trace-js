@@ -1,15 +1,14 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const {
   channel,
-  addHook,
-  AsyncResource
+  addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const prepareCh = channel('datadog:mquery:filter:prepare')
-const startCh = channel('datadog:mquery:filter:start')
-const finishCh = channel('datadog:mquery:filter:finish')
+const prepareCh = channel('tracing:datadog:mquery:filter:prepare')
+const tracingCh = dc.tracingChannel('datadog:mquery:filter')
 
 const methods = [
   'find',
@@ -43,7 +42,7 @@ addHook({
     if (!(methodName in Query.prototype)) return
 
     shimmer.wrap(Query.prototype, methodName, method => {
-      return function wrappedMqueryMethod () {
+      return function () {
         if (prepareCh.hasSubscribers) {
           const filters = getFilters(arguments, methodName)
           if (filters?.length) {
@@ -58,29 +57,7 @@ addHook({
 
   shimmer.wrap(Query.prototype, 'exec', originalExec => {
     return function wrappedExec () {
-      if (!startCh.hasSubscribers) {
-        return originalExec.apply(this, arguments)
-      }
-
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-      const finish = asyncResource.bind(function () {
-        finishCh.publish()
-      })
-
-      return asyncResource.runInAsyncScope(() => {
-        startCh.publish()
-
-        const execResult = originalExec.apply(this, arguments)
-
-        if (execResult && typeof execResult.then === 'function') {
-          execResult.then(finish, finish)
-        } else {
-          finish()
-        }
-
-        return execResult
-      })
+      return tracingCh.tracePromise(originalExec, {}, this, arguments)
     }
   })
 

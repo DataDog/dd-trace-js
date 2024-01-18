@@ -67,9 +67,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
     this.addSub('datadog:mongoose:model:filter:finish', onFinish)
 
-    this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addSub('datadog:mquery:filter:start', onStartAndEnterWithStore)
-    this.addSub('datadog:mquery:filter:finish', onFinish)
+    this.addSub('tracing:datadog:mquery:filter:prepare', onStart)
+    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
+    this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
   }
 
   configureSanitizers () {
