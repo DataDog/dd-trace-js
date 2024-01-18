@@ -29,7 +29,7 @@ function wrapResponseJson (json) {
         obj = arguments[1]
       }
 
-      responseJsonChannel.publish({ body: obj })
+      responseJsonChannel.publish({ req: this.req, body: obj })
     }
 
     return json.apply(this, arguments)
