@@ -12,7 +12,7 @@ const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 const samplingContextsAvailable = process.platform !== 'win32'
-const oomMonitoringSupported = process.platform !== 'win32'
+const oomMonitoringSupported = true //process.platform !== 'win32'
 
 describe('config', () => {
   let Config
