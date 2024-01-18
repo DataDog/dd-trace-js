@@ -360,9 +360,7 @@ describe('profiler', () => {
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
-    }
 
-    if (process.platform !== 'win32') { // PROF-8905
       it('sends a heap profile on OOM with external process and exits successfully', async () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -375,23 +373,21 @@ describe('profiler', () => {
         })
         return checkProfiles(agent, proc, timeout, ['space'], false, 2)
       })
-    }
 
-    it('sends a heap profile on OOM with async callback', async () => {
-      proc = fork(oomTestFile, {
-        cwd,
-        execArgv: oomExecArgv,
-        env: {
-          ...oomEnv,
-          DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
-          DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
-          DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
-        }
+      it('sends a heap profile on OOM with async callback', async () => {
+        proc = fork(oomTestFile, {
+          cwd,
+          execArgv: oomExecArgv,
+          env: {
+            ...oomEnv,
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: 10000000,
+            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: 1,
+            DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
+          }
+        })
+        return checkProfiles(agent, proc, timeout, ['space'], true)
       })
-      return checkProfiles(agent, proc, timeout, ['space'], true)
-    })
 
-    if (process.platform !== 'win32') { // PROF-8905
       it('sends heap profiles on OOM with multiple strategies', async () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -405,9 +401,7 @@ describe('profiler', () => {
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, 2)
       })
-    }
 
-    if (process.platform !== 'win32') { // PROF-8905
       it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
         proc = fork(oomTestFile, [1, 50], {
           cwd,
