@@ -309,56 +309,45 @@ describe('Sns', () => {
         })
       })
 
-      describe('DSM Metrics Calculations', function () {
-        this.timeout(10000)
-
-        before(() => {
-          return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
-        })
-
-        before(done => {
-          agent.expectStats(dsmStats => {
-            let statsPointsReceived = 0
-            // we should have 2 dsm stats points
-            dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
-                timeStatsBucket.Stats.forEach((statsBuckets) => {
-                  statsPointsReceived += statsBuckets.Stats.length
-                })
-              }
-            })
-            expect(statsPointsReceived).to.be.at.least(2)
-          }, { timeoutMs: 10000 }).then(done, done)
-
-          sns.subscribe(subParams, (err, data) => {
-            if (err) return done(err)
-
-            sns.publish(
-              { TopicArn, Message: 'message DSM' },
-              (err) => {
-                if (err) return done(err)
-
-                sqs.receiveMessage(
-                  receiveParams,
-                  (err, res) => {
-                    if (err) return done(err)
-
-                    process.emit('beforeExit')
-                  })
+      it('outputs DSM stats to the agent when publishing a message', done => {
+        agent.expectStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have 1 dsm stats points
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
               })
+            }
           })
-        })
+          expect(statsPointsReceived).to.be.at.least(1)
+          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+        }).then(done, done)
 
-        it('outputs DSM checkpoint metrics when publishing a message', done => {
-          if (dsmStatsExist(agent, expectedProducerHash)) {
-            done()
-          }
+        sns.subscribe(subParams, () => {
+          sns.publish({ TopicArn, Message: 'message DSM' }, () => {})
         })
+      })
 
-        it('outputs DSM checkpoint metrics when consuming a message', done => {
-          if (dsmStatsExist(agent, expectedConsumerHash)) {
-            done()
-          }
+      it('outputs DSM stats to the agent when consuming a message', done => {
+        agent.expectStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have 2 dsm stats points
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          })
+          expect(statsPointsReceived).to.be.at.least(2)
+          expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+        }).then(done, done)
+
+        sns.subscribe(subParams, () => {
+          sns.publish({ TopicArn, Message: 'message DSM' }, () => {
+            sqs.receiveMessage(receiveParams, () => {})
+          })
         })
       })
     })

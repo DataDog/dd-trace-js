@@ -192,7 +192,7 @@ class DataStreamsProcessor {
     this.flushInterval = flushInterval
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), this.flushInterval)
+      this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
     process.once('beforeExit', () => this.onInterval())

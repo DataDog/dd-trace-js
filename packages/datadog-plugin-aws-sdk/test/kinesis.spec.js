@@ -7,7 +7,6 @@ const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
 describe('Kinesis', function () {
-  this.timeout(10000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -188,54 +187,41 @@ describe('Kinesis', function () {
       })
 
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
+        let putRecordSpanMeta
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          if (span.resource.startsWith('putRecord')) {
+            putRecordSpanMeta = span.meta
+          }
+
+          expect(putRecordSpanMeta).to.include({
+            'pathway.hash': expectedProducerHash
+          })
+        }).then(done, done)
+
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
-
-          let putRecordSpanMeta = {}
-          agent.use(traces => {
-            const span = traces[0][0]
-
-            if (span.resource.startsWith('putRecord')) {
-              putRecordSpanMeta = span.meta
-            }
-
-            expect(putRecordSpanMeta).to.include({
-              'pathway.hash': expectedProducerHash
-            })
-          }).then(done, done)
         })
       })
 
-      describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
-        before(done => {
-          agent.expectStats(dsmStats => {
-            let statsPointsReceived = 0
-            // we should have only have 1 stats point since we only had 1 put operation
-            dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
-                timeStatsBucket.Stats.forEach((statsBuckets) => {
-                  statsPointsReceived += statsBuckets.Stats.length
-                })
-              }
-            })
-            expect(statsPointsReceived).to.be.at.least(1)
-          }, { timeoutMs: 10000 }).then(done, done)
-
-          helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-            if (err) return done(err)
-
-            helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
-              if (err) return done(err)
-
-              process.emit('beforeExit')
-            })
+      it('emits DSM stats to the agent during Kinesis putRecord', done => {
+        agent.expectStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have only have 1 stats point since we only had 1 put operation
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
           })
-        })
+          expect(statsPointsReceived).to.be.at.least(1)
+          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+        }).then(done, done)
 
-        it('when putting a record', done => {
-          if (dsmStatsExist(agent, expectedProducerHash)) {
-            done()
-          }
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
         })
       })
     })

@@ -385,50 +385,41 @@ describe('Plugin', () => {
           })
         })
 
-        describe('emits a new DSM Stats to the agent when DSM is enabled', function () {
-          this.timeout(10000)
-
-          before(done => {
-            agent.expectStats(dsmStats => {
-              let statsPointsReceived = 0
-              // we should have 2 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived += statsBuckets.Stats.length
-                  })
-                }
-              })
-              expect(statsPointsReceived).to.be.at.least(2)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            sqs.sendMessage({
-              MessageBody: 'test DSM',
-              QueueUrl
-            }, (err) => {
-              if (err) return done(err)
-
-              sqs.receiveMessage({
-                QueueUrl,
-                MessageAttributeNames: ['.*']
-              }, (err) => {
-                if (err) return done(err)
-
-                process.emit('beforeExit')
-              })
+        it('Should emit DSM stats to the agent when sending a message', done => {
+          agent.expectStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 1 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
             })
-          })
+            expect(statsPointsReceived).to.be.at.least(1)
+            expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          }).then(done, done)
 
-          it('when sending a message', done => {
-            if (dsmStatsExist(agent, expectedProducerHash)) {
-              done()
-            }
-          })
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl }, () => {})
+        })
 
-          it('when receiving a message', done => {
-            if (dsmStatsExist(agent, expectedConsumerHash)) {
-              done()
-            }
+        it('Should emit DSM stats to the agent when receiving a message', done => {
+          agent.expectStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 2 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(2)
+            expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+          }).then(done, done)
+
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl }, () => {
+            sqs.receiveMessage({ QueueUrl, MessageAttributeNames: ['.*'] }, () => {})
           })
         })
       })
