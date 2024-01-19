@@ -208,24 +208,24 @@ describe('Kinesis', function () {
 
       describe('emits a new DSM Stats to the agent when DSM is enabled', () => {
         before(done => {
+          agent.expectStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have only have 1 stats point since we only had 1 put operation
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(1)
+          }, { timeoutMs: 10000 }).then(done, done)
+
           helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
             if (err) return done(err)
 
             helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
               if (err) return done(err)
-
-              agent.expectStats(dsmStats => {
-                let statsPointsReceived = 0
-                // we should have only have 1 stats point since we only had 1 put operation
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                expect(statsPointsReceived).to.be.at.least(1)
-              }, { timeoutMs: 10000 }).then(done, done)
 
               process.emit('beforeExit')
             })

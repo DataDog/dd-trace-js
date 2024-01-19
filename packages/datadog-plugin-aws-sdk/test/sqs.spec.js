@@ -389,6 +389,19 @@ describe('Plugin', () => {
           this.timeout(10000)
 
           before(done => {
+            agent.expectStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(2)
+            }, { timeoutMs: 10000 }).then(done, done)
+
             sqs.sendMessage({
               MessageBody: 'test DSM',
               QueueUrl
@@ -400,19 +413,6 @@ describe('Plugin', () => {
                 MessageAttributeNames: ['.*']
               }, (err) => {
                 if (err) return done(err)
-
-                agent.expectStats(dsmStats => {
-                  let statsPointsReceived = 0
-                  // we should have 2 dsm stats points
-                  dsmStats.forEach((timeStatsBucket) => {
-                    if (timeStatsBucket && timeStatsBucket.Stats) {
-                      timeStatsBucket.Stats.forEach((statsBuckets) => {
-                        statsPointsReceived += statsBuckets.Stats.length
-                      })
-                    }
-                  })
-                  expect(statsPointsReceived).to.be.at.least(2)
-                }, { timeoutMs: 10000 }).then(done, done)
 
                 process.emit('beforeExit')
               })
