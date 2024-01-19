@@ -4,12 +4,20 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 
-const queueOptions = {
-  QueueName: 'SQS_QUEUE_NAME',
-  Attributes: {
-    'MessageRetentionPeriod': '86400'
+const queueName = 'SQS_QUEUE_NAME'
+const queueNameDSM = 'SQS_QUEUE_NAME_DSM'
+
+const getQueueParams = (queueName) => {
+  return {
+    QueueName: queueName,
+    Attributes: {
+      'MessageRetentionPeriod': '86400'
+    }
   }
 }
+
+const queueOptions = getQueueParams(queueName)
+const queueOptionsDsm = getQueueParams(queueNameDSM)
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
@@ -19,6 +27,7 @@ describe('Plugin', () => {
       let AWS
       let sqs
       const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
+      const QueueUrlDsm = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM'
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -106,6 +115,9 @@ describe('Plugin', () => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
+            expect(span.meta).to.include({
+              'queuename': 'SQS_QUEUE_NAME'
+            })
 
             parentId = span.span_id.toString()
             traceId = span.trace_id.toString()
@@ -296,8 +308,8 @@ describe('Plugin', () => {
       })
 
       describe('data stream monitoring', () => {
-        const expectedProducerHash = '14488894942657629507'
-        const expectedConsumerHash = '11095382856038679518'
+        const expectedProducerHash = '4673734031235697865'
+        const expectedConsumerHash = '9749472979704578383'
 
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -319,7 +331,7 @@ describe('Plugin', () => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-          sqs.createQueue(queueOptions, (err, res) => {
+          sqs.createQueue(queueOptionsDsm, (err, res) => {
             if (err) return done(err)
 
             done()
@@ -327,7 +339,7 @@ describe('Plugin', () => {
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl: QueueUrl }, done)
+          sqs.deleteQueue({ QueueUrl: QueueUrlDsm }, done)
         })
 
         after(() => {
@@ -337,7 +349,7 @@ describe('Plugin', () => {
         it('Should set pathway hash tag on a span when producing', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl
+            QueueUrl: QueueUrlDsm
           }, (err) => {
             if (err) return done(err)
 
@@ -359,12 +371,12 @@ describe('Plugin', () => {
         it('Should set pathway hash tag on a span when consuming', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl
+            QueueUrl: QueueUrlDsm
           }, (err) => {
             if (err) return done(err)
 
             sqs.receiveMessage({
-              QueueUrl,
+              QueueUrl: QueueUrlDsm,
               MessageAttributeNames: ['.*']
             }, (err) => {
               if (err) return done(err)
@@ -400,7 +412,7 @@ describe('Plugin', () => {
             expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
           }).then(done, done)
 
-          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl }, () => {})
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
         })
 
         it('Should emit DSM stats to the agent when receiving a message', done => {
@@ -418,8 +430,8 @@ describe('Plugin', () => {
             expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
           }).then(done, done)
 
-          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl }, () => {
-            sqs.receiveMessage({ QueueUrl, MessageAttributeNames: ['.*'] }, () => {})
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
+            sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
           })
         })
       })
