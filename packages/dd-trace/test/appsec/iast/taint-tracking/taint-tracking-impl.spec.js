@@ -82,6 +82,32 @@ describe('TaintTracking', () => {
         })
       })
     })
+
+    describe('using JSON.parse', () => {
+      testThatRequestHasVulnerability(function () {
+        const store = storage.getStore()
+        const iastContext = iastContextFunctions.getIastContext(store)
+
+        const json = '{"command":"ls -la"}'
+        const jsonTainted = newTaintedString(iastContext, json, 'param', 'Request')
+
+        const propFnInstrumented = require(instrumentedFunctionsFile)['jsonParseStr']
+        const propFnOriginal = propagationFunctions['jsonParseStr']
+
+        const result = propFnInstrumented(jsonTainted)
+        expect(isTainted(iastContext, result.command)).to.be.true
+
+        const resultOrig = propFnOriginal(jsonTainted)
+        expect(result).deep.eq(resultOrig)
+
+        try {
+          const childProcess = require('child_process')
+          childProcess.execSync(result.command, { stdio: 'ignore' })
+        } catch (e) {
+          // do nothing
+        }
+      }, 'COMMAND_INJECTION')
+    })
   })
 
   describe('should not catch original Error', () => {
