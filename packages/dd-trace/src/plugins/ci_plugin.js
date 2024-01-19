@@ -53,11 +53,11 @@ module.exports = class CiPlugin extends Plugin {
       if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
+      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, correlationId) => {
         if (err) {
           log.error(`Skippable suites could not be fetched. ${err.message}`)
         }
-        onDone({ err, skippableSuites })
+        onDone({ err, skippableSuites, correlationId })
       })
     })
 

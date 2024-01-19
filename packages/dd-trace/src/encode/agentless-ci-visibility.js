@@ -45,7 +45,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSuite (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
+    let keysLength = TEST_SUITE_KEYS_LENGTH
+    if (content.meta.itr_correlation_id) {
+      keysLength++
+    }
+
+    this._encodeMapPrefix(bytes, keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -57,6 +62,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'test_suite_id')
     this._encodeId(bytes, content.span_id)
+
+    if (content.meta.itr_correlation_id) {
+      this._encodeString(bytes, 'itr_correlation_id')
+      this._encodeString(bytes, content.meta.itr_correlation_id)
+      delete content.meta.itr_correlation_id
+    }
 
     this._encodeString(bytes, 'error')
     this._encodeNumber(bytes, content.error)
@@ -142,6 +153,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       totalKeysLength = totalKeysLength + 1
     }
     if (content.meta.test_suite_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.meta.itr_correlation_id) {
       totalKeysLength = totalKeysLength + 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)

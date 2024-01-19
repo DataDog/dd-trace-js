@@ -14,7 +14,8 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -66,7 +67,12 @@ class MochaPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
     })
 
-    this.addSub('ci:mocha:test-suite:start', ({ testSuite, isUnskippable, isForcedToRun }) => {
+    this.addSub('ci:mocha:test-suite:start', ({
+      testSuite,
+      isUnskippable,
+      isForcedToRun,
+      skippableSuitesCorrelationId
+    }) => {
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -94,6 +100,9 @@ class MochaPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.itrConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
+      }
+      if (skippableSuitesCorrelationId) {
+        testSuiteSpan.setTag(ITR_CORRELATION_ID, skippableSuitesCorrelationId)
       }
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
