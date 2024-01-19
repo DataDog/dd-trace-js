@@ -5,8 +5,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 
 describe('Sns', () => {
   setup()
@@ -228,22 +226,8 @@ describe('Sns', () => {
     })
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = function (topicArn) {
-        return computePathwayHash(
-          'test',
-          'tester',
-          ['direction:out', `topic:${topicArn}`, 'type:sns'],
-          ENTRY_PARENT_HASH
-        )
-      }
-      const expectedConsumerHash = function (topicArn) {
-        return computePathwayHash(
-          'test',
-          'tester',
-          ['direction:in', 'topic:TestQueueDSM', 'type:sqs'],
-          expectedProducerHash(topicArn)
-        )
-      }
+      const expectedProducerHash = '5117773060236273241'
+      const expectedConsumerHash = '1353703578833511841'
 
       before(() => {
         return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
@@ -287,7 +271,7 @@ describe('Sns', () => {
                 }
 
                 expect(publishSpanMeta).to.include({
-                  'pathway.hash': expectedProducerHash(TopicArn).readBigUInt64BE(0).toString()
+                  'pathway.hash': expectedProducerHash
                 })
               }).then(done, done)
             })
@@ -318,7 +302,7 @@ describe('Sns', () => {
                 }
 
                 expect(consumeSpanMeta).to.include({
-                  'pathway.hash': expectedConsumerHash(TopicArn).readBigUInt64BE(0).toString()
+                  'pathway.hash': expectedConsumerHash
                 })
               }).then(done, done)
             })
@@ -327,7 +311,7 @@ describe('Sns', () => {
 
       describe('DSM Metrics Calculations', function () {
         this.timeout(10000)
-        
+
         before(() => {
           return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
         })
@@ -346,7 +330,7 @@ describe('Sns', () => {
                   (err, res) => {
                     if (err) return done(err)
 
-                    agent.use(dsmStats => {
+                    agent.expectStats(dsmStats => {
                       let statsPointsReceived = 0
                       // we should have 2 dsm stats points
                       dsmStats.forEach((timeStatsBucket) => {
@@ -366,13 +350,13 @@ describe('Sns', () => {
         })
 
         it('outputs DSM checkpoint metrics when publishing a message', done => {
-          if (dsmStatsExist(agent, expectedProducerHash(TopicArn))) {
+          if (dsmStatsExist(agent, expectedProducerHash)) {
             done()
           }
         })
 
         it('outputs DSM checkpoint metrics when consuming a message', done => {
-          if (dsmStatsExist(agent, expectedConsumerHash(TopicArn))) {
+          if (dsmStatsExist(agent, expectedConsumerHash)) {
             done()
           }
         })

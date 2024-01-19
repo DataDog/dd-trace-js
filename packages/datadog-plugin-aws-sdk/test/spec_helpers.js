@@ -24,7 +24,7 @@ const helpers = {
       dsmStats.forEach((statsTimeBucket) => {
         statsTimeBucket.Stats.forEach((statsBucket) => {
           statsBucket.Stats.forEach((stats) => {
-            if (stats.Hash.toString() === expectedHash.readBigUInt64BE(0).toString()) {
+            if (stats.Hash.toString() === expectedHash) {
               hashFound = true
               return hashFound
             }

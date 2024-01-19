@@ -3,8 +3,6 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 
 const queueOptions = {
   QueueName: 'SQS_QUEUE_NAME',
@@ -298,18 +296,8 @@ describe('Plugin', () => {
       })
 
       describe('data stream monitoring', () => {
-        const expectedProducerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:out', 'topic:SQS_QUEUE_NAME', 'type:sqs'],
-          ENTRY_PARENT_HASH
-        )
-        const expectedConsumerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:in', 'topic:SQS_QUEUE_NAME', 'type:sqs'],
-          expectedProducerHash
-        )
+        const expectedProducerHash = '14488894942657629507'
+        const expectedConsumerHash = '11095382856038679518'
 
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -362,7 +350,7 @@ describe('Plugin', () => {
               }
 
               expect(produceSpanMeta).to.include({
-                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+                'pathway.hash': expectedProducerHash
               })
             }).then(done, done)
           })
@@ -390,7 +378,7 @@ describe('Plugin', () => {
                 }
 
                 expect(consumeSpanMeta).to.include({
-                  'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
+                  'pathway.hash': expectedConsumerHash
                 })
               }).then(done, done)
             })
@@ -399,7 +387,7 @@ describe('Plugin', () => {
 
         describe('emits a new DSM Stats to the agent when DSM is enabled', function () {
           this.timeout(10000)
-          
+
           before(done => {
             sqs.sendMessage({
               MessageBody: 'test DSM',
@@ -413,7 +401,7 @@ describe('Plugin', () => {
               }, (err) => {
                 if (err) return done(err)
 
-                agent.use(dsmStats => {
+                agent.expectStats(dsmStats => {
                   let statsPointsReceived = 0
                   // we should have 2 dsm stats points
                   dsmStats.forEach((timeStatsBucket) => {

@@ -172,7 +172,8 @@ class DataStreamsProcessor {
     env,
     tags,
     version,
-    service
+    service,
+    flushInterval
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
@@ -188,9 +189,10 @@ class DataStreamsProcessor {
     this.service = service || 'unnamed-nodejs-service'
     this.version = version || ''
     this.sequence = 0
+    this.flushInterval = flushInterval
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 10000)
+      this.timer = setInterval(this.onInterval.bind(this), this.flushInterval)
       this.timer.unref()
     }
     process.once('beforeExit', () => this.onInterval())

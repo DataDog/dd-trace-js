@@ -5,15 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, dsmStatsExist } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-
-const expectedProducerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:out', 'topic:MyStreamDSM', 'type:kinesis'],
-  ENTRY_PARENT_HASH
-)
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -173,6 +164,8 @@ describe('Kinesis', function () {
     })
 
     describe('DSM Context Propagation', () => {
+      const expectedProducerHash = '15481393933680799703'
+
       before(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
       })
@@ -207,7 +200,7 @@ describe('Kinesis', function () {
             }
 
             expect(putRecordSpanMeta).to.include({
-              'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+              'pathway.hash': expectedProducerHash
             })
           }).then(done, done)
         })
@@ -221,7 +214,7 @@ describe('Kinesis', function () {
             helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
               if (err) return done(err)
 
-              agent.use(dsmStats => {
+              agent.expectStats(dsmStats => {
                 let statsPointsReceived = 0
                 // we should have only have 1 stats point since we only had 1 put operation
                 dsmStats.forEach((timeStatsBucket) => {
