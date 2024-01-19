@@ -11,7 +11,8 @@ const {
   passportVerify,
   queryParser,
   nextBodyParsed,
-  nextQueryParsed
+  nextQueryParsed,
+  responseBody
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -53,6 +54,7 @@ function enable (_config) {
     nextQueryParsed.subscribe(onRequestQueryParsed)
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
+    responseBody.subscribe(onResponseBody)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -93,7 +95,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (apiSecuritySampler.sampleRequest()) {
+  if (apiSecuritySampler.sampleRequest(req)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
@@ -194,6 +196,19 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
+function onResponseBody ({ req, body }) {
+  if (!body || typeof body !== 'object') return
+  if (!apiSecuritySampler.isSampled(req)) return
+
+  // we don't support blocking at this point, so no results needed
+  waf.run({
+    persistent: {
+      [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true },
+      [addresses.HTTP_OUTGOING_BODY]: body
+    }
+  }, req)
+}
+
 function onPassportVerify ({ credentials, user }) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
@@ -233,6 +248,7 @@ function disable () {
   if (incomingHttpRequestEnd.hasSubscribers) incomingHttpRequestEnd.unsubscribe(incomingHttpEndTranslator)
   if (queryParser.hasSubscribers) queryParser.unsubscribe(onRequestQueryParsed)
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
+  if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
 }
 
