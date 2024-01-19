@@ -7,7 +7,7 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const prepareCh = channel('tracing:datadog:mquery:filter:prepare')
+const prepareCh = channel('datadog:mquery:filter:prepare')
 const tracingCh = dc.tracingChannel('datadog:mquery:filter')
 
 const methods = [
