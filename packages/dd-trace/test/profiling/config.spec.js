@@ -132,8 +132,10 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+    }
+    if (samplingContextsAvailable) {
+      process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
       logger: nullLogger
@@ -146,7 +148,7 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
-    expect(config.cpuProfilingEnabled).true
+    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -248,28 +250,36 @@ describe('config', () => {
     expect(config.profilers[0].endpointCollectionEnabled()).false
   })
 
-  it('should prevent accidentally enabling code hotspots', () => {
-    if (samplingContextsAvailable) {
-      return
+  function optionOnlyWorksWithSamplingContexts (property, name) {
+    const options = {
+      [property]: true
     }
 
-    const options = {
-      codeHotspotsEnabled: true
+    if (samplingContextsAvailable) {
+      // should silently succeed
+      // eslint-disable-next-line no-new
+      new Config(options)
+    } else {
+      // should throw
+      // eslint-disable-next-line no-new
+      expect(() => { new Config(options) }).to.throw(`${name} not supported on `)
     }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('Code hotspots not supported on ')
+  }
+
+  it('should only allow code hotspots on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('codeHotspotsEnabled', 'Code hotspots')
   })
 
-  it('should prevent accidentally enabling endpoint collection', () => {
-    if (samplingContextsAvailable) {
-      return
-    }
+  it('should only allow endpoint collection on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('endpointCollection', 'Endpoint collection')
+  })
 
-    const options = {
-      endpointCollection: true
-    }
-    // eslint-disable-next-line no-new
-    expect(() => { new Config(options) }).to.throw('Endpoint collection not supported on ')
+  it('should only allow CPU profiling on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('cpuProfilingEnabled', 'CPU profiling')
+  })
+
+  it('should only allow timeline view on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('timelineEnabled', 'Timeline view')
   })
 
   it('should support tags', () => {
