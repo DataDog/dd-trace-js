@@ -505,7 +505,7 @@ class Config {
     this._setBoolean(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'tagsHeaderMaxLength', 512)
-    this._setValue(defaults, 'spanComputePeerService', 'v0')
+    this._setValue(defaults, 'spanComputePeerService', false)
     this._setBoolean(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.customRulesProvided', false)
