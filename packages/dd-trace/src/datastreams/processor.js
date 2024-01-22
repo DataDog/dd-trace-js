@@ -125,6 +125,21 @@ function getSizeOrZero (obj) {
   if (Buffer.isBuffer(obj)) {
     return obj.length
   }
+  if (Array.isArray(obj) && obj.length > 0) {
+    if (typeof obj[0] === 'number') return Buffer.from(obj).length
+    let payloadSize = 0
+    obj.forEach(item => {
+      payloadSize += getSizeOrZero(item)
+    })
+    return payloadSize
+  }
+  if (typeof obj === 'object') {
+    try {
+      return getHeadersSize(obj)
+    } catch {
+      // pass
+    }
+  }
   return 0
 }
 
@@ -162,7 +177,8 @@ class DataStreamsProcessor {
     env,
     tags,
     version,
-    service
+    service,
+    flushInterval
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
@@ -178,11 +194,13 @@ class DataStreamsProcessor {
     this.service = service || 'unnamed-nodejs-service'
     this.version = version || ''
     this.sequence = 0
+    this.flushInterval = flushInterval
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 10000)
+      this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
+    process.once('beforeExit', () => this.onInterval())
   }
 
   onInterval () {
@@ -206,7 +224,8 @@ class DataStreamsProcessor {
    */
   bucketFromTimestamp (timestamp) {
     const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
-    return this.buckets.forTime(bucketTime)
+    const bucket = this.buckets.forTime(bucketTime)
+    return bucket
   }
 
   recordCheckpoint (checkpoint, span = null) {
@@ -264,8 +283,10 @@ class DataStreamsProcessor {
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
-      payloadSize += getSizeOrZero(encodePathwayContext(dataStreamsContext))
-      payloadSize += CONTEXT_PROPAGATION_KEY.length
+      // - 1 to account for extra byte for {
+      const ddInfoContinued = {}
+      ddInfoContinued[CONTEXT_PROPAGATION_KEY] = encodePathwayContext(dataStreamsContext).toJSON()
+      payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
     }
     const checkpoint = {
       currentTimestamp: nowNs,
@@ -326,6 +347,10 @@ class DataStreamsProcessor {
     return {
       Stats: serializedBuckets
     }
+  }
+
+  setUrl (url) {
+    this.writer.setUrl(url)
   }
 }
 
