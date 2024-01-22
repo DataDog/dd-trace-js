@@ -36,7 +36,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   getRootSpan (store, topContext) {
-    return store.span
+    return store?.span
   }
 
   getTopContext (data) {

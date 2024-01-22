@@ -27,13 +27,19 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
     if (iastContext) {
       const { key, value } = message
 
-      shimmer.wrap(key, 'toString',
-        toString => this.getToStringWrap(toString, iastContext, 'key', KAFKA_KEY))
-      shimmer.wrap(value, 'toString',
-        toString => this.getToStringWrap(toString, iastContext, 'value', KAFKA_VALUE))
+      if (key && typeof key === 'object') {
+        shimmer.wrap(key, 'toString',
+          toString => this.getToStringWrap(toString, iastContext, 'key', KAFKA_KEY))
 
-      newTaintedObject(iastContext, key, 'key', KAFKA_KEY)
-      newTaintedObject(iastContext, value, 'value', KAFKA_VALUE)
+        newTaintedObject(iastContext, key, 'key', KAFKA_KEY)
+      }
+
+      if (value && typeof value === 'object') {
+        shimmer.wrap(value, 'toString',
+          toString => this.getToStringWrap(toString, iastContext, 'value', KAFKA_VALUE))
+
+        newTaintedObject(iastContext, value, 'value', KAFKA_VALUE)
+      }
     }
   }
 }
