@@ -323,6 +323,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
         expect(waf.update).to.have.been.calledOnceWithExactly(testRules)
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
       })
 
       it('should maintain previously added exclusions and rules_overrides', () => {
@@ -367,6 +368,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
         expect(waf.update).to.have.been.calledWithExactly({ ...testRules, ...asm })
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
       })
 
       it('should support hotswapping ruleset in same batch', () => {
