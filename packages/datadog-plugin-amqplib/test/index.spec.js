@@ -13,6 +13,7 @@ describe('Plugin', () => {
   describe('amqplib', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
+        process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
       })
 
@@ -309,13 +310,12 @@ describe('Plugin', () => {
           let queue
   
           before(() => {
-            process.env.DD_DATA_STREAMS_ENABLED = 'true'
             tracer = require('../../dd-trace')
             tracer.use('amqplib')
           })
   
           before(async () => {
-            return agent.load('amqplib', {}, { dsmEnabled: true })
+            return agent.load('amqplib')
           })
   
           after(() => {
