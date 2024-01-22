@@ -424,7 +424,7 @@ describe('AppSec Rule Manager', () => {
     })
 
     describe('ASM', () => {
-      it('should apply both rules_override and exclusions', () => {
+      it('should apply rules_override, exclusions, custom_rules and processor_override', () => {
         const asm = {
           'exclusions': [{
             ekey: 'eValue'
@@ -434,6 +434,9 @@ describe('AppSec Rule Manager', () => {
           }],
           'custom_rules': [{
             piKey: 'piValue'
+          }],
+          'processor_override': [{
+            poKey: 'poValue'
           }]
         }
 

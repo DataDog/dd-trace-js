@@ -282,6 +282,8 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
 
         expect(rc.on).to.have.been.calledWith('ASM_DATA')
         expect(rc.on).to.have.been.calledWith('ASM_DD')

@@ -13,6 +13,7 @@ let appliedRulesOverride = new Map()
 let appliedExclusions = new Map()
 let appliedCustomRules = new Map()
 let appliedActions = new Map()
+let appliedProcessorOverride = new Map()
 
 function loadRules (config) {
   defaultRules = config.rules
@@ -36,6 +37,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   const newExclusions = new SpyMap(appliedExclusions)
   const newCustomRules = new SpyMap(appliedCustomRules)
   const newActions = new SpyMap(appliedActions)
+  const newProcessorOverride = new SpyMap(appliedProcessorOverride)
 
   for (const item of toUnapply) {
     const { product, id } = item
@@ -51,6 +53,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       newExclusions.delete(id)
       newCustomRules.delete(id)
       newActions.delete(id)
+      newProcessorOverride.delete(id)
     }
   }
 
@@ -98,6 +101,11 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         newActions.set(id, file.actions)
       }
 
+      if (file && file.processor_override && file.processor_override.length) {
+        batchConfiguration = true
+        newProcessorOverride.set(id, file.processor_override)
+      }
+
       // "actions" data is managed by tracer and not by waf
       if (batchConfiguration) {
         batch.add(item)
@@ -112,7 +120,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     newRuleset ||
     newRulesOverride.modified ||
     newExclusions.modified ||
-    newCustomRules.modified) {
+    newCustomRules.modified ||
+    newProcessorOverride.modified) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
@@ -126,6 +135,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     }
     if (newCustomRules.modified) {
       payload.custom_rules = concatArrays(newCustomRules)
+    }
+    if (newProcessorOverride.modified) {
+      payload.processor_override = concatArrays(newProcessorOverride)
     }
 
     try {
@@ -145,6 +157,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
       if (newCustomRules.modified) {
         appliedCustomRules = newCustomRules
+      }
+      if (newProcessorOverride.modified) {
+        appliedProcessorOverride = newProcessorOverride
       }
     } catch (err) {
       newApplyState = ERROR
@@ -252,6 +267,7 @@ function clearAllRules () {
   appliedExclusions.clear()
   appliedCustomRules.clear()
   appliedActions.clear()
+  appliedProcessorOverride.clear()
 }
 
 module.exports = {
