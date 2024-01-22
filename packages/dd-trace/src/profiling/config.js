@@ -136,7 +136,7 @@ class Config {
 
     const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, oomMonitoringSupported))
-    checkOptionWithSamplingContextAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
+    checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
 
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
