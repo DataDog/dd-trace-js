@@ -2,7 +2,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, dsmStatsExist } = require('./spec_helpers')
+const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
@@ -218,7 +218,7 @@ describe('Kinesis', function () {
             }
           })
           expect(statsPointsReceived).to.be.at.least(1)
-          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }).then(done, done)
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {

@@ -10,8 +10,7 @@ describe('Plugin', () => {
   let connection
   let channel
 
-  describe('amqplib', function() {
-    this.timeout(10000)
+  describe('amqplib', () => {
     withVersions('amqplib', 'amqplib', version => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -302,7 +301,9 @@ describe('Plugin', () => {
           })
         })
 
-        describe('when data streams monitoring is enabled', () => {
+        describe('when data streams monitoring is enabled', function () {
+          this.timeout(10000)
+
           const expectedProducerHash = '17191234428405871432'
           const expectedConsumerHash = '18277095184718602853'
           let queue
@@ -369,43 +370,57 @@ describe('Plugin', () => {
             })
           })
   
-          // it('Should emit DSM stats to the agent when sending a message', done => {
-          //   agent.expectStats(dsmStats => {
-          //     let statsPointsReceived = 0
-          //     // we should have 1 dsm stats points
-          //     dsmStats.forEach((timeStatsBucket) => {
-          //       if (timeStatsBucket && timeStatsBucket.Stats) {
-          //         timeStatsBucket.Stats.forEach((statsBuckets) => {
-          //           statsPointsReceived += statsBuckets.Stats.length
-          //         })
-          //       }
-          //     })
-          //     expect(statsPointsReceived).to.be.at.least(1)
-          //     expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-          //   }).then(done, done)
+          it('Should emit DSM stats to the agent when sending a message', done => {
+            agent.expectStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(1)
+              expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            }).then(done, done)
   
-          //   sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
-          // })
+            channel.assertQueue('testDSM', {}, (err, ok) => {
+              if (err) return done(err)
+
+              queue = ok.queue
+
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+            })
+          })
   
-          // it('Should emit DSM stats to the agent when receiving a message', done => {
-          //   agent.expectStats(dsmStats => {
-          //     let statsPointsReceived = 0
-          //     // we should have 2 dsm stats points
-          //     dsmStats.forEach((timeStatsBucket) => {
-          //       if (timeStatsBucket && timeStatsBucket.Stats) {
-          //         timeStatsBucket.Stats.forEach((statsBuckets) => {
-          //           statsPointsReceived += statsBuckets.Stats.length
-          //         })
-          //       }
-          //     })
-          //     expect(statsPointsReceived).to.be.at.least(2)
-          //     expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-          //   }).then(done, done)
+          it('Should emit DSM stats to the agent when receiving a message', done => {
+            agent.expectStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(2)
+              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            }, {timeoutMs: 10000}).then(done, done)
   
-          //   sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
-          //     sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
-          //   })
-          // })
+
+            channel.assertQueue('testDSM', {}, (err, ok) => {
+              if (err) return done(err)
+
+              queue = ok.queue
+
+              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
+              channel.consume(ok.queue, () => {}, {}, (err, ok) => {
+                if (err) console.log(err)
+              })
+            })
+          })
         })
       })
 
