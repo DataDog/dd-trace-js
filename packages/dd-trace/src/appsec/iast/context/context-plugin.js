@@ -52,7 +52,7 @@ class IastContextPlugin extends IastPlugin {
   }
 
   addIastEnabledTag (isRequestAcquired, rootSpan) {
-    if (rootSpan.addTags) {
+    if (rootSpan?.addTags) {
       rootSpan.addTags({
         [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
       })
@@ -94,7 +94,7 @@ class IastContextPlugin extends IastPlugin {
     if (store) {
       const topContext = this.getTopContext(data)
       const iastContext = iastContextFunctions.getIastContext(store, topContext)
-      const rootSpan = iastContext.rootSpan
+      const rootSpan = iastContext?.rootSpan
       if (iastContext && rootSpan) {
         vulnerabilityReporter.sendVulnerabilities(iastContext.vulnerabilities, rootSpan)
         removeTransaction(iastContext)

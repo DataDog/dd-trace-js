@@ -10,7 +10,7 @@ describe('IastContextPlugin', () => {
   let IastContextPlugin, addSub, getAndRegisterSubscription
   let plugin
   let acquireRequest, initializeRequestContext, releaseRequest
-  let saveIastContext, getIastContext
+  let saveIastContext, getIastContext, cleanIastContext
   let createTransaction, removeTransaction
   let sendVulnerabilities
 
@@ -24,6 +24,7 @@ describe('IastContextPlugin', () => {
 
     saveIastContext = sinon.stub()
     getIastContext = sinon.stub()
+    cleanIastContext = sinon.stub()
 
     createTransaction = sinon.stub()
     removeTransaction = sinon.stub()
@@ -39,7 +40,8 @@ describe('IastContextPlugin', () => {
       },
       '../iast-context': {
         saveIastContext,
-        getIastContext
+        getIastContext,
+        cleanIastContext
       },
       '../taint-tracking/operations': {
         createTransaction,
@@ -127,9 +129,7 @@ describe('IastContextPlugin', () => {
   })
 
   describe('startContext', () => {
-    const store = {}
     const topContext = {}
-
     const rootSpan = {
       context: () => {
         return {
@@ -140,16 +140,24 @@ describe('IastContextPlugin', () => {
       addTags: () => {}
     }
 
-    beforeEach(() => {
-      sinon.stub(storage, 'getStore').returns(store)
+    const store = {
+      span: rootSpan
+    }
 
-      sinon.stub(plugin, 'canCreateContext').returns(true)
-      sinon.stub(plugin, 'getTopContext').returns(topContext)
-      sinon.stub(plugin, 'getRootSpan').returns(rootSpan)
+    let getStore
+
+    beforeEach(() => {
+      getStore = sinon.stub(storage, 'getStore')
+      getStore.returns(store)
     })
 
     it('should obtain needed info from data before starting iast context', () => {
       const data = {}
+
+      sinon.stub(plugin, 'canCreateContext').returns(true)
+      sinon.stub(plugin, 'getTopContext').returns(topContext)
+      sinon.stub(plugin, 'getRootSpan').returns(rootSpan)
+
       plugin.startContext(data)
 
       expect(plugin.canCreateContext).to.be.calledOnceWith(data)
@@ -168,6 +176,14 @@ describe('IastContextPlugin', () => {
       plugin.startContext({})
 
       expect(addTags).to.be.calledOnceWith({ [IAST_ENABLED_TAG_KEY]: 0 })
+    })
+
+    it('should not fail if store does not contain span', () => {
+      getStore.returns({})
+
+      plugin.startContext({})
+
+      expect(acquireRequest).to.be.calledOnceWith(undefined)
     })
 
     describe('if acquireRequest', () => {
@@ -252,14 +268,21 @@ describe('IastContextPlugin', () => {
         vulnerabilities: []
       }
 
+      cleanIastContext.returns(true)
       getIastContext.returns(iastContext)
 
       plugin.finishContext()
 
-      expect(iastContext.rootSpan).to.be.undefined
-      expect(iastContext.vulnerabilities).to.be.undefined
-
+      expect(cleanIastContext).to.be.calledOnce
       expect(releaseRequest).to.be.calledOnce
+    })
+
+    it('should not fail if there is no iastContext', () => {
+      getIastContext.returns(undefined)
+
+      plugin.finishContext()
+
+      expect(cleanIastContext).to.be.calledOnce
     })
   })
 })
