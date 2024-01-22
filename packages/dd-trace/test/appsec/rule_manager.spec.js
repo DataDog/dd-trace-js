@@ -498,7 +498,7 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly(asm)
-        // customs_scanners is not a real data, waf update could fail,
+        // processor_override value is not a real data, waf update could fail,
         // but it should fill apply_state
         expect(toApply[0].apply_state).to.not.equal(undefined)
       })
@@ -521,7 +521,7 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly(asm)
-        // customs_scanners is not a real data, waf update could fail,
+        // custom_scanners value is not a real data, waf update could fail,
         // but it should fill apply_state
         expect(toApply[0].apply_state).to.not.equal(undefined)
       })
