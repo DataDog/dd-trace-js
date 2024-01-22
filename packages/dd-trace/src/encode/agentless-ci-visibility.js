@@ -2,7 +2,8 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
-const id = require('../../../dd-trace/src/id')
+const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const id = require('../../src/id')
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
@@ -46,7 +47,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   _encodeTestSuite (bytes, content) {
     let keysLength = TEST_SUITE_KEYS_LENGTH
-    if (content.meta.itr_correlation_id) {
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
       keysLength++
     }
 
@@ -63,10 +65,10 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeString(bytes, 'test_suite_id')
     this._encodeId(bytes, content.span_id)
 
-    if (content.meta.itr_correlation_id) {
-      this._encodeString(bytes, 'itr_correlation_id')
-      this._encodeString(bytes, content.meta.itr_correlation_id)
-      delete content.meta.itr_correlation_id
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
     }
 
     this._encodeString(bytes, 'error')
@@ -155,7 +157,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     if (content.meta.test_suite_id) {
       totalKeysLength = totalKeysLength + 1
     }
-    if (content.meta.itr_correlation_id) {
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
       totalKeysLength = totalKeysLength + 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)
@@ -206,6 +209,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
+    }
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
     }
 
     this._encodeString(bytes, 'meta')

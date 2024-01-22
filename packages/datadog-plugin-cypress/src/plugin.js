@@ -23,7 +23,8 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -216,6 +217,7 @@ module.exports = (on, config) => {
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
+  let itrCorrelationId = ''
   const unskippableSuites = []
   let hasForcedToRunSuites = false
   let hasUnskippableSuites = false
@@ -296,6 +298,7 @@ module.exports = (on, config) => {
             log.error(err)
           } else {
             testsToSkip = skippableTests || []
+            itrCorrelationId = correlationId
           }
 
           // `details.specs` are test files
@@ -360,6 +363,9 @@ module.exports = (on, config) => {
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
       }
+      if (itrCorrelationId) {
+        skippedTestSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
       skippedTestSpan.finish()
     })
 
@@ -380,6 +386,9 @@ module.exports = (on, config) => {
       if (cypressTestStatus !== finishedTest.testStatus) {
         finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
         finishedTest.testSpan.setTag('error', latestError)
+      }
+      if (itrCorrelationId) {
+        finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })

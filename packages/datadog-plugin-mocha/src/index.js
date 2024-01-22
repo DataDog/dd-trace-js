@@ -71,7 +71,7 @@ class MochaPlugin extends CiPlugin {
       testSuite,
       isUnskippable,
       isForcedToRun,
-      skippableSuitesCorrelationId
+      itrCorrelationId
     }) => {
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
@@ -101,8 +101,8 @@ class MochaPlugin extends CiPlugin {
       if (this.itrConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
-      if (skippableSuitesCorrelationId) {
-        testSuiteSpan.setTag(ITR_CORRELATION_ID, skippableSuitesCorrelationId)
+      if (itrCorrelationId) {
+        testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)

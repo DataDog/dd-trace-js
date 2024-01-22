@@ -15,7 +15,8 @@ const {
   TEST_MODULE,
   getTestSuiteCommonTags,
   TEST_STATUS,
-  TEST_SKIPPED_BY_ITR
+  TEST_SKIPPED_BY_ITR,
+  ITR_CORRELATION_ID
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -53,11 +54,13 @@ module.exports = class CiPlugin extends Plugin {
       if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, correlationId) => {
+      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
           log.error(`Skippable suites could not be fetched. ${err.message}`)
+        } else {
+          this.itrCorrelationId = itrCorrelationId
         }
-        onDone({ err, skippableSuites, correlationId })
+        onDone({ err, skippableSuites, itrCorrelationId })
       })
     })
 
@@ -95,6 +98,9 @@ module.exports = class CiPlugin extends Plugin {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
       skippedSuites.forEach((testSuite) => {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
+        if (this.itrCorrelationId) {
+          testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
+        }
 
         this.tracer.startSpan(`${this.constructor.id}.test_suite`, {
           childOf: this.testModuleSpan,
