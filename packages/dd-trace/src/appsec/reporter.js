@@ -29,9 +29,10 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'accept-encoding',
   'accept-language',
   'host',
-  'user-agent',
   'forwarded',
+  'user-agent',
   'via',
+  'x-amzn-trace-id',
 
   ...ipHeaderList,
   ...contentHeaderList
