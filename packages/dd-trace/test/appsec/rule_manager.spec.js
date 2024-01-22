@@ -75,6 +75,10 @@ describe('AppSec Rule Manager', () => {
 
   describe('updateWafFromRC', () => {
     describe('ASM_DATA', () => {
+      beforeEach(() => {
+        loadRules(config.appsec)
+      })
+
       it('should call update with modified rules', () => {
         const rulesData = {
           rules_data: [{
@@ -299,7 +303,13 @@ describe('AppSec Rule Manager', () => {
               'category': 'attack_attempt',
               'confidence': '1'
             },
-            'conditions': []
+            'conditions': [{
+              'parameters': {
+                'inputs': [{ 'address': 'http.client_ip' }],
+                'data': 'blocked_ips'
+              },
+              'operator': 'ip_match'
+            }]
           }]
         }
 
@@ -332,7 +342,13 @@ describe('AppSec Rule Manager', () => {
               'category': 'attack_attempt',
               'confidence': '1'
             },
-            'conditions': []
+            'conditions': [{
+              'parameters': {
+                'inputs': [{ 'address': 'http.client_ip' }],
+                'data': 'blocked_ips'
+              },
+              'operator': 'ip_match'
+            }]
           }]
         }
 
@@ -424,6 +440,10 @@ describe('AppSec Rule Manager', () => {
     })
 
     describe('ASM', () => {
+      beforeEach(() => {
+        loadRules(config.appsec)
+      })
+
       it('should apply both rules_override, exclusions, custom_rules and custom_scanners', () => {
         const asm = {
           'exclusions': [{
@@ -451,6 +471,8 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
+        expect(toApply[0].apply_error).to.equal(undefined)
       })
 
       it('should apply blocking actions', () => {
@@ -549,6 +571,8 @@ describe('AppSec Rule Manager', () => {
           'exclusions': asm['exclusions'],
           'rules_override': asm['rules_override']
         })
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
+        expect(toApply[0].apply_error).to.equal(undefined)
       })
     })
   })
