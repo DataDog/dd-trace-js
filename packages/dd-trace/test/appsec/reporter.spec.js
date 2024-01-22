@@ -271,6 +271,17 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
     })
+
+    it('should include x-amzn-trace-id header', () => {
+      req.headers['x-amzn-trace-id'] = 'aws-id'
+
+      const result = Reporter.reportAttack('[{"rule":{},"rule_matches":[{}]}]')
+
+      expect(result).to.not.be.false
+      expect(span.addTags).to.have.been.calledOnce
+      expect(span.addTags.firstCall.args[0]).to.not.undefined
+      expect(span.addTags.firstCall.args[0]['http.request.headers.x-amzn-trace-id']).to.be.eq('aws-id')
+    })
   })
 
   describe('reportWafUpdate', () => {
