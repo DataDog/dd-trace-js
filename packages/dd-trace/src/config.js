@@ -365,11 +365,6 @@ class Config {
       }
     }
 
-    this.iast = {
-      redactionNamePattern: DD_IAST_REDACTION_NAME_PATTERN,
-      redactionValuePattern: DD_IAST_REDACTION_VALUE_PATTERN
-    }
-
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
@@ -524,6 +519,8 @@ class Config {
     this._setBoolean(defaults, 'iast.deduplicationEnabled', true)
     this._setBoolean(defaults, 'iast.redactionEnabled', true)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'iast.redactionNamePattern', null)
+    this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setBoolean(defaults, 'isCiVisibility', false)
     this._setBoolean(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setBoolean(defaults, 'isManualApiEnabled', false)
@@ -607,6 +604,8 @@ class Config {
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_REDACTION_ENABLED,
       DD_IAST_TELEMETRY_VERBOSITY,
+      DD_IAST_REDACTION_NAME_PATTERN,
+      DD_IAST_REDACTION_VALUE_PATTERN,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
@@ -701,6 +700,8 @@ class Config {
       DD_IAST_DEDUPLICATION_ENABLED && isTrue(DD_IAST_DEDUPLICATION_ENABLED))
     this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setString(env, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
+    this._setString(env, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
@@ -784,6 +785,8 @@ class Config {
     this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
     this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
     this._setString(opts, 'iast.telemetryVerbosity', this.iastOptions && this.iastOptions.telemetryVerbosity)
+    this._setString(opts, 'iast.redactionNamePattern', this.iastOptions?.redactionNamePattern)
+    this._setString(opts, 'iast.redactionValuePattern', this.iastOptions?.redactionValuePattern)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
