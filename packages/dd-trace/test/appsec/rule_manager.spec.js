@@ -444,7 +444,7 @@ describe('AppSec Rule Manager', () => {
         loadRules(config.appsec)
       })
 
-      it('should apply both rules_override, exclusions, custom_rules and custom_scanners', () => {
+      it('should apply rules_override, exclusions, custom_rules, processor_override and custom_scanners', () => {
         const asm = {
           'exclusions': [{
             ekey: 'eValue'
@@ -454,6 +454,9 @@ describe('AppSec Rule Manager', () => {
           }],
           'custom_rules': [{
             piKey: 'piValue'
+          }],
+          'processor_override': [{
+            poKey: 'poValue'
           }],
           'custom_scanners': [{
             csKey: 'csValue'

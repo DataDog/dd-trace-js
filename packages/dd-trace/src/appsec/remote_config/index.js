@@ -72,6 +72,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
 
     rc.on('ASM_DATA', noop)
@@ -94,6 +95,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, false)
 
     rc.off('ASM_DATA', noop)

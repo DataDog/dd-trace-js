@@ -283,6 +283,8 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
         expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
 
         expect(rc.on).to.have.been.calledWith('ASM_DATA')
