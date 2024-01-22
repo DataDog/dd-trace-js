@@ -138,6 +138,11 @@ function getMessageSize (message) {
   return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
 }
 
+function getAmqpMessageSize (message) {
+  const { headers, content } = message
+  return getSizeOrZero(content) + getHeadersSize(headers)
+}
+
 class TimeBuckets extends Map {
   forTime (time) {
     if (!this.has(time)) {
@@ -333,6 +338,7 @@ module.exports = {
   getMessageSize,
   getHeadersSize,
   getSizeOrZero,
+  getAmqpMessageSize,
   ENTRY_PARENT_HASH,
   CONTEXT_PROPAGATION_KEY
 }
