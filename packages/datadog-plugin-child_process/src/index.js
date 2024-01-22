@@ -24,7 +24,7 @@ function truncateCommand (cmdFields) {
 
 class ChildProcessPlugin extends TracingPlugin {
   static get id () { return 'child_process' }
-  static get prefix () { return 'datadog:child_process:execution' }
+  static get prefix () { return 'tracing:datadog:child_process:execution' }
 
   get tracer () {
     return this._tracer
@@ -51,9 +51,30 @@ class ChildProcessPlugin extends TracingPlugin {
     })
   }
 
-  finish ({ exitCode }) {
+  end ({ result, error }) {
+    let exitCode
+
+    if (result !== undefined) {
+      exitCode = result?.status || 0
+    } else if (error !== undefined) {
+      exitCode = error?.status || error?.code || 0
+    } else {
+      // TracingChannels call start, end synchronously. Later when the promise is resolved then asyncStart asyncEnd.
+      // Therefore in the case of calling end with neither result nor error means that they will come in the asyncEnd.
+      return
+    }
+
     this.activeSpan.setTag('cmd.exit_code', `${exitCode}`)
-    super.finish()
+    this.activeSpan?.finish()
+  }
+
+  error (error) {
+    this.addError(error)
+  }
+
+  asyncEnd ({ result }) {
+    this.activeSpan.setTag('cmd.exit_code', `${result}`)
+    this.activeSpan?.finish()
   }
 }
 

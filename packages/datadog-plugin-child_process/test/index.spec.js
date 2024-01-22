@@ -39,156 +39,214 @@ describe('Child process plugin', () => {
       sinon.restore()
     })
 
-    it('should call startSpan with proper parameters', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+    describe('start', () => {
+      it('should call startSpan with proper parameters', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
-      shellPlugin.start({ command: 'ls -l' })
+        shellPlugin.start({ command: 'ls -l' })
 
-      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
-        'command_execution',
-        {
-          childOf: undefined,
-          tags: {
-            component: 'subprocess',
-            'service.name': undefined,
-            'resource.name': 'ls',
-            'span.kind': undefined,
-            'span.type': 'system',
-            'cmd.exec': JSON.stringify([ 'ls', '-l' ])
-          },
-          integrationName: 'system'
-        }
-      )
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'ls',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.exec': JSON.stringify([ 'ls', '-l' ])
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should call startSpan with cmd.shell property', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.start({ command: 'ls -l', shell: true })
+
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'ls',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.shell': JSON.stringify([ 'ls', '-l' ])
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should truncate path and blank last argument', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+        const path = '/home/'.padEnd(4000 * 8, '/')
+        const command = 'ls -l' + ' ' + path + ' -t'
+
+        shellPlugin.start({ command, shell: true })
+
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'ls',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.shell': JSON.stringify([ 'ls', '-l', '/h', '' ])
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should truncate first argument and blank the rest', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+        const option = '-l'.padEnd(4000 * 8, 't')
+        const path = '/home'
+        const command = `ls ${option} ${path} -t`
+
+        shellPlugin.start({ command, shell: true })
+
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'ls',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.shell': JSON.stringify([ 'ls', '-l', '', '' ])
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should truncate last argument', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+        const option = '-t'.padEnd(4000 * 8, 'u')
+        const path = '/home'
+        const command = 'ls' + ' -l' + ' ' + path + ' ' + option
+
+        shellPlugin.start({ command, shell: true })
+
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'ls',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.shell': JSON.stringify([ 'ls', '-l', '/home', '-t' ])
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should not crash if command is not a string', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.start({ command: undefined })
+
+        expect(tracerStub.startSpan).not.to.have.been.called
+      })
+
+      it('should not crash if command does not exist', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.start({})
+
+        expect(tracerStub.startSpan).not.to.have.been.called
+      })
     })
 
-    it('should call startSpan with cmd.shell property', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+    describe('end', () => {
+      it('should not call setTag if neither error nor result is passed', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
-      shellPlugin.start({ command: 'ls -l', shell: true })
+        shellPlugin.end({})
 
-      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
-        'command_execution',
-        {
-          childOf: undefined,
-          tags: {
-            component: 'subprocess',
-            'service.name': undefined,
-            'resource.name': 'ls',
-            'span.kind': undefined,
-            'span.type': 'system',
-            'cmd.shell': JSON.stringify([ 'ls', '-l' ])
-          },
-          integrationName: 'system'
-        }
-      )
+        expect(spanStub.setTag).not.to.have.been.called
+        expect(spanStub.finish).not.to.have.been.called
+      })
+
+      it('should call setTag with proper code when result is a buffer', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.end({ result: Buffer.from('test') })
+
+        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
+        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+      })
+
+      it('should call setTag with proper code when result is a string', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.end({ result: 'test' })
+
+        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
+        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+      })
+
+      it('should call setTag with proper code when an error is thrown', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.end({ error: { status: -1 } })
+
+        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '-1')
+        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+      })
     })
 
-    it('should truncate path and blank last argument', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-      const path = '/home/'.padEnd(4000 * 8, '/')
-      const command = 'ls -l' + ' ' + path + ' -t'
+    describe('asyncEnd', () => {
+      it('should call setTag with undefined code if neither error nor result is passed', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
 
-      shellPlugin.start({ command, shell: true })
+        shellPlugin.asyncEnd({})
 
-      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
-        'command_execution',
-        {
-          childOf: undefined,
-          tags: {
-            component: 'subprocess',
-            'service.name': undefined,
-            'resource.name': 'ls',
-            'span.kind': undefined,
-            'span.type': 'system',
-            'cmd.shell': JSON.stringify([ 'ls', '-l', '/h', '' ])
-          },
-          integrationName: 'system'
-        }
-      )
+        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', 'undefined')
+        expect(spanStub.finish).to.have.been.calledOnce
+      })
+
+      it('should call setTag with proper code when a proper code is returned', () => {
+        sinon.stub(storage, 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ result: 0 })
+
+        expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
+        expect(spanStub.finish).to.have.been.calledOnceWithExactly()
+      })
     })
 
-    it('should truncate first argument and blank the rest', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-      const option = '-l'.padEnd(4000 * 8, 't')
-      const path = '/home'
-      const command = `ls ${option} ${path} -t`
+    describe('channel', () => {
+      it('should return proper prefix', () => {
+        expect(ChildProcessPlugin.prefix).to.be.equal('tracing:datadog:child_process:execution')
+      })
 
-      shellPlugin.start({ command, shell: true })
-
-      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
-        'command_execution',
-        {
-          childOf: undefined,
-          tags: {
-            component: 'subprocess',
-            'service.name': undefined,
-            'resource.name': 'ls',
-            'span.kind': undefined,
-            'span.type': 'system',
-            'cmd.shell': JSON.stringify([ 'ls', '-l', '', '' ])
-          },
-          integrationName: 'system'
-        }
-      )
-    })
-
-    it('should truncate last argument', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-      const option = '-t'.padEnd(4000 * 8, 'u')
-      const path = '/home'
-      const command = 'ls' + ' -l' + ' ' + path + ' ' + option
-
-      shellPlugin.start({ command, shell: true })
-
-      expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
-        'command_execution',
-        {
-          childOf: undefined,
-          tags: {
-            component: 'subprocess',
-            'service.name': undefined,
-            'resource.name': 'ls',
-            'span.kind': undefined,
-            'span.type': 'system',
-            'cmd.shell': JSON.stringify([ 'ls', '-l', '/home', '-t' ])
-          },
-          integrationName: 'system'
-        }
-      )
-    })
-
-    it('should not crash if command is not a string', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-
-      shellPlugin.start({ command: undefined })
-
-      expect(tracerStub.startSpan).not.to.have.been.called
-    })
-
-    it('should not crash if command does not exist', () => {
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-
-      shellPlugin.start({})
-
-      expect(tracerStub.startSpan).not.to.have.been.called
-    })
-
-    it('should call setTag with proper code', () => {
-      sinon.stub(storage, 'getStore').returns({ span: spanStub })
-      const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-
-      shellPlugin.finish({ exitCode: 0 })
-
-      expect(spanStub.setTag).to.have.been.calledOnceWithExactly('cmd.exit_code', '0')
-      expect(spanStub.finish).to.have.been.calledOnceWithExactly()
-    })
-
-    it('should return proper prefix', () => {
-      expect(ChildProcessPlugin.prefix).to.be.equal('datadog:child_process:execution')
-    })
-
-    it('should return proper id', () => {
-      expect(ChildProcessPlugin.id).to.be.equal('child_process')
+      it('should return proper id', () => {
+        expect(ChildProcessPlugin.id).to.be.equal('child_process')
+      })
     })
   })
 
@@ -235,6 +293,7 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0'
                   }
                 }
+
                 expectSomeSpan(agent, expected).then(done, done)
 
                 const res = childProcess[methodName]('ls')
@@ -309,7 +368,7 @@ describe('Child process plugin', () => {
 
     describe('Methods which do not spawn a shell by default', () => {
       const execAsyncMethods = ['execFile', 'spawn']
-      const execSyncMethods = ['execFile', 'spawnSync']
+      const execSyncMethods = ['execFileSync', 'spawnSync']
       let childProcess, tracer
 
       beforeEach(() => {
@@ -389,7 +448,8 @@ describe('Child process plugin', () => {
                 const options = {
                   stdio: 'pipe'
                 }
-                const expected = {
+
+                const errorExpected = {
                   type: 'system',
                   name: 'command_execution',
                   error: 1,
@@ -400,15 +460,31 @@ describe('Child process plugin', () => {
                   }
                 }
 
-                expectSomeSpan(agent, expected).then(done, done)
+                const noErrorExpected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.exec': '["node","-badOption"]',
+                    'cmd.exit_code': '9'
+                  }
+                }
+
 
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
+                  expectSomeSpan(agent, errorExpected).then(done, done)
                   const res = childProcess[methodName].apply(null, args)
                   res.on('close', noop)
                 } else {
                   try {
+                    if (methodName === 'spawnSync') {
+                      expectSomeSpan(agent, noErrorExpected).then(done, done)
+                    } else {
+                      expectSomeSpan(agent, errorExpected).then(done, done)
+                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
@@ -422,7 +498,7 @@ describe('Child process plugin', () => {
                   stdio: 'pipe',
                   shell: true
                 }
-                const expected = {
+                const errorExpected = {
                   type: 'system',
                   name: 'command_execution',
                   error: 1,
@@ -433,15 +509,30 @@ describe('Child process plugin', () => {
                   }
                 }
 
-                expectSomeSpan(agent, expected).then(done, done)
+                const noErrorExpected = {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.exit_code': '9'
+                  }
+                }
 
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
+                  expectSomeSpan(agent, errorExpected).then(done, done)
                   const res = childProcess[methodName].apply(null, args)
                   res.on('close', noop)
                 } else {
                   try {
+                    if (methodName === 'spawnSync') {
+                      expectSomeSpan(agent, noErrorExpected).then(done, done)
+                    } else {
+                      expectSomeSpan(agent, errorExpected).then(done, done)
+                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected

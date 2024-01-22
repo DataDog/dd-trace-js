@@ -8,10 +8,9 @@ const {
   AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const dc = require('dc-polyfill')
 
-const childProcessChannelStart = channel('datadog:child_process:execution:start')
-const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
-const childProcessChannelError = channel('datadog:child_process:execution:error')
+const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
 // ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn']
@@ -34,7 +33,7 @@ names.forEach(name => {
   })
 })
 
-function normalizeArgs (args) {
+function normalizeArgs (args, shell) {
   const childProcessInfo = {
     command: args[0]
   }
@@ -47,6 +46,11 @@ function normalizeArgs (args) {
   } else if (args[1] != null && typeof args[1] === 'object') {
     childProcessInfo.options = args[1]
   }
+  if (shell || childProcessInfo.options?.shell === true || typeof childProcessInfo.options?.shell === 'string') {
+    childProcessInfo.shell = true
+  } else {
+    childProcessInfo.shell = false
+  }
 
   return childProcessInfo
 }
@@ -54,81 +58,55 @@ function normalizeArgs (args) {
 function wrapChildProcessSyncMethod (shell = false) {
   return function wrapMethod (childProcessMethod) {
     return function () {
-      if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
+      if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = normalizeArgs(arguments)
+      const childProcessInfo = normalizeArgs(arguments, shell)
 
-      if (shell || childProcessInfo.options?.shell === true || typeof childProcessInfo?.options?.shell === 'string') {
-        childProcessInfo.shell = true
-      } else {
-        childProcessInfo.shell = false
-      }
-
-      childProcessChannelStart.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
-
-      let error
-      let result
-      try {
-        result = childProcessMethod.apply(this, arguments)
-        return result
-      } catch (err) {
-        childProcessChannelError.publish(err)
-        error = err
-        throw err
-      } finally {
-        const exitCode = error?.status || error?.code || result?.status || 0
-        if (!error && (exitCode !== 0 || result?.error)) {
-          childProcessChannelError.publish()
-        }
-        childProcessChannelFinish.publish({ exitCode })
-      }
+      return childProcessChannel.traceSync(
+        childProcessMethod,
+        {
+          command: childProcessInfo.command,
+          shell: childProcessInfo.shell
+        },
+        this,
+        ...arguments)
     }
   }
 }
 
-function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod) {
+function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
   return function () {
-    if (!childProcessChannelStart.hasSubscribers || arguments.length === 0) {
+    if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
       return customPromisifyMethod.apply(this, arguments)
     }
 
-    const command = arguments[0]
-    childProcessChannelStart.publish({ command })
+    const childProcessInfo = normalizeArgs(arguments, shell)
 
-    const promise = customPromisifyMethod.apply(this, arguments)
-    return promise.then((res) => {
-      childProcessChannelFinish.publish({ exitCode: 0 })
-
-      return res
-    }).catch((err) => {
-      childProcessChannelError.publish(err.status || err.code)
-      childProcessChannelFinish.publish({ exitCode: err.status || err.code || 0 })
-
-      return Promise.reject(err)
-    })
+    return childProcessChannel.tracePromise(
+      customPromisifyMethod,
+      {
+        command: childProcessInfo.command,
+        shell: childProcessInfo.shell
+      },
+      this,
+      ...arguments)
   }
 }
 
 function wrapChildProcessAsyncMethod (shell = false) {
   return function wrapMethod (childProcessMethod) {
     function wrappedChildProcessMethod () {
-      if (!childProcessChannelStart.hasSubscribers) {
+      if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = normalizeArgs(arguments)
-
-      if (shell || childProcessInfo.options?.shell === true || typeof childProcessInfo.options?.shell === 'string') {
-        childProcessInfo.shell = true
-      } else {
-        childProcessInfo.shell = false
-      }
+      const childProcessInfo = normalizeArgs(arguments, shell)
 
       const innerResource = new AsyncResource('bound-anonymous-fn')
       return innerResource.runInAsyncScope(() => {
-        childProcessChannelStart.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
+        childProcessChannel.start.publish({ command: childProcessInfo.command, shell: childProcessInfo.shell })
 
         const childProcess = childProcessMethod.apply(this, arguments)
         if (childProcess) {
@@ -136,15 +114,19 @@ function wrapChildProcessAsyncMethod (shell = false) {
 
           childProcess.on('error', (e) => {
             errorExecuted = true
-            childProcessChannelError.publish(e)
+            childProcessChannel.error.publish(e)
           })
 
           childProcess.on('close', (code) => {
             code = code || 0
             if (!errorExecuted && code !== 0) {
-              childProcessChannelError.publish()
+              childProcessChannel.error.publish()
             }
-            childProcessChannelFinish.publish({ exitCode: code })
+            childProcessChannel.asyncEnd.publish({
+              command: childProcessInfo.command,
+              shell: childProcessInfo.shell,
+              result: code
+            })
           })
         }
 
@@ -155,7 +137,7 @@ function wrapChildProcessAsyncMethod (shell = false) {
     if (childProcessMethod[util.promisify.custom]) {
       const wrapedChildProcessCustomPromisifyMethod =
         shimmer.wrap(childProcessMethod[util.promisify.custom],
-          wrapChildProcessCustomPromisifyMethod(childProcessMethod[util.promisify.custom]))
+          wrapChildProcessCustomPromisifyMethod(childProcessMethod[util.promisify.custom]), shell)
 
       // should do it in this way because the original property is readonly
       const descriptor = Object.getOwnPropertyDescriptor(childProcessMethod, util.promisify.custom)

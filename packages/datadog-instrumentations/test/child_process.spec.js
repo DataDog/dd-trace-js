@@ -1,23 +1,21 @@
 'use strict'
 
-const { channel } = require('../src/helpers/instrument')
 const { promisify } = require('util')
 const agent = require('../../dd-trace/test/plugins/agent')
+const dc = require('dc-polyfill')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
   const execAsyncMethods = ['execFile', 'spawn']
   const execAsyncShellMethods = ['exec']
-  const execSyncMethods = ['execFileSync', 'spawnSync']
+  const execSyncMethods = ['execFileSync']
   const execSyncShellMethods = ['execSync']
 
-  const childProcessChannelStart = channel('datadog:child_process:execution:start')
-  const childProcessChannelFinish = channel('datadog:child_process:execution:finish')
-  const childProcessChannelError = channel('datadog:child_process:execution:error')
+  const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
   modules.forEach((childProcessModuleName) => {
     describe(childProcessModuleName, () => {
-      let start, finish, error, childProcess
+      let start, finish, error, childProcess, asyncFinish
 
       before(() => {
         return agent.load(childProcessModuleName)
@@ -31,18 +29,25 @@ describe('child process', () => {
         start = sinon.stub()
         finish = sinon.stub()
         error = sinon.stub()
+        asyncFinish = sinon.stub()
 
-        childProcessChannelStart.subscribe(start)
-        childProcessChannelFinish.subscribe(finish)
-        childProcessChannelError.subscribe(error)
+        childProcessChannel.subscribe({
+          start: start,
+          end: finish,
+          asyncEnd: asyncFinish,
+          error: error
+        })
 
         childProcess = require(childProcessModuleName)
       })
 
       afterEach(() => {
-        childProcessChannelStart.unsubscribe(start)
-        childProcessChannelFinish.unsubscribe(finish)
-        childProcessChannelError.unsubscribe(error)
+        childProcessChannel.unsubscribe({
+          start: start,
+          end: finish,
+          asyncEnd: asyncFinish,
+          error: error
+        })
       })
 
       describe('async methods', (done) => {
@@ -50,37 +55,42 @@ describe('child process', () => {
           execAsyncMethods.forEach(methodName => {
             describe(`method ${methodName}`, () => {
               it('should execute success callbacks', (done) => {
-                const res = childProcess[methodName]('ls')
+                const childEmitter = childProcess[methodName]('ls')
 
-                res.on('close', () => {
+                childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: false })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                  expect(finish).to.have.been.calledOnceWith({ command: 'ls', shell: false, result: 0 })
                   expect(error).not.to.have.been.called
-
                   done()
                 })
               })
 
               it('should execute error callback', (done) => {
-                const res = childProcess[methodName]('invalid_command_test')
+                const childEmitter = childProcess[methodName]('invalid_command_test')
 
-                res.on('close', () => {
+                childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test', shell: false })
-                  expect(finish).to.have.been.calledOnce
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'invalid_command_test',
+                    shell: false,
+                    result: -2
+                  })
                   expect(error).to.have.been.calledOnce
-
                   done()
                 })
               })
 
               it('should execute error callback with `exit 1` command', (done) => {
-                const res = childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
+                const childEmitter = childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
 
-                res.on('close', () => {
+                childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'node -e "process.exit(1)"',
+                    shell: true,
+                    result: 1
+                  })
                   expect(error).to.have.been.calledOnce
-
                   done()
                 })
               })
@@ -89,30 +99,65 @@ describe('child process', () => {
             if (methodName !== 'spawn') {
               describe(`method ${methodName} with promisify`, () => {
                 it('should execute success callbacks', async () => {
-                  await promisify(childProcess[methodName])('ls')
-                  expect(start).to.have.been.calledOnceWith({ command: 'ls' })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                  await promisify(childProcess[methodName])('echo')
+                  expect(start.firstCall.firstArg).to.include({
+                    command: 'echo',
+                    shell: false
+                  })
+
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'echo',
+                    shell: false,
+                    result: {
+                      stdout: '\n',
+                      stderr: ''
+                    }
+                  })
                   expect(error).not.to.have.been.called
                 })
 
                 it('should execute error callback', async () => {
                   try {
                     await promisify(childProcess[methodName])('invalid_command_test')
-                    return Promise.reject(new Error('Command expected to fail'))
                   } catch (e) {
-                    expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test' })
+                    expect(start).to.have.been.calledOnce
+                    expect(start.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
+
+                    const errStub = new Error('spawn invalid_command_test ENOENT')
+                    errStub.code = 'ENOENT'
+                    errStub.errno = -2
+
                     expect(finish).to.have.been.calledOnce
+                    expect(finish.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
+                    expect(finish.firstCall.firstArg).to.deep.include({
+                      command: 'invalid_command_test',
+                      shell: false,
+                      error: errStub
+                    })
+
                     expect(error).to.have.been.calledOnce
                   }
                 })
 
                 it('should execute error callback with `exit 1` command', async () => {
+                  const errStub = new Error('Command failed: node -e "process.exit(1)"\n')
+                  errStub.code = 1
+                  errStub.cmd = 'node -e "process.exit(1)"'
+
                   try {
                     await promisify(childProcess[methodName])('node -e "process.exit(1)"', { shell: true })
-                    return Promise.reject(new Error('Command expected to fail'))
                   } catch (e) {
-                    expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"' })
-                    expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
+                    expect(start).to.have.been.calledOnce
+                    expect(start.firstCall.firstArg).to.include({ command: 'node -e "process.exit(1)"', shell: true })
+
+                    expect(finish).to.have.been.calledOnce
+                    expect(finish.firstCall.firstArg).to.include({ command: 'node -e "process.exit(1)"', shell: true })
+                    expect(finish.firstCall.firstArg).to.deep.include({
+                      command: 'node -e "process.exit(1)"',
+                      shell: true,
+                      error: errStub
+                    })
+
                     expect(error).to.have.been.calledOnce
                   }
                 })
@@ -120,17 +165,32 @@ describe('child process', () => {
             }
           })
         })
+
         describe('command interpreted by a shell by default', () => {
           execAsyncShellMethods.forEach(methodName => {
             describe(`method ${methodName}`, () => {
               it('should execute success callbacks', (done) => {
                 const res = childProcess[methodName]('ls')
 
-                res.on('close', () => {
+                res.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                  expect(finish).to.have.been.calledOnceWith({ command: 'ls', shell: true, result: 0 })
                   expect(error).not.to.have.been.called
+                  done()
+                })
+              })
 
+              it('should execute error callback with `exit 1` command', (done) => {
+                const res = childProcess[methodName]('node -e "process.exit(1)"')
+
+                res.once('close', () => {
+                  expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'node -e "process.exit(1)"',
+                    shell: true,
+                    result: 1
+                  })
+                  expect(error).not.to.have.been.called
                   done()
                 })
               })
@@ -138,23 +198,14 @@ describe('child process', () => {
               it('should execute error callback', (done) => {
                 const res = childProcess[methodName]('invalid_command_test')
 
-                res.on('close', () => {
+                res.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test', shell: true })
-                  expect(finish).to.have.been.calledOnce
                   expect(error).to.have.been.calledOnce
-
-                  done()
-                })
-              })
-
-              it('should execute error callback with `exit 1` command', (done) => {
-                const res = childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
-
-                res.on('close', () => {
-                  expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
-                  expect(error).to.have.been.calledOnce
-
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'invalid_command_test',
+                    shell: true,
+                    result: 127
+                  })
                   done()
                 })
               })
@@ -162,9 +213,16 @@ describe('child process', () => {
 
             describe(`method ${methodName} with promisify`, () => {
               it('should execute success callbacks', async () => {
-                await promisify(childProcess[methodName])('ls')
-                expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: true })
-                expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                await promisify(childProcess[methodName])('echo')
+                expect(start).to.have.been.calledOnceWith({
+                  command: 'echo',
+                  shell: true
+                })
+                expect(finish).to.have.been.calledOnceWith({
+                  command: 'echo',
+                  shell: true,
+                  result: 0
+                })
                 expect(error).not.to.have.been.called
               })
 
@@ -185,7 +243,11 @@ describe('child process', () => {
                   return Promise.reject(new Error('Command expected to fail'))
                 } catch (e) {
                   expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({ exitCode: 1 })
+                  expect(finish).to.have.been.calledOnceWith({
+                    command: 'node -e "process.exit(1)"',
+                    shell: true,
+                    result: 1
+                  })
                   expect(error).to.have.been.calledOnce
                 }
               })
@@ -199,22 +261,36 @@ describe('child process', () => {
           execSyncMethods.forEach(methodName => {
             describe(`method ${methodName}`, () => {
               it('should execute success callbacks', () => {
-                childProcess[methodName]('ls')
+                const result = childProcess[methodName]('ls')
 
-                expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: false })
-                expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                expect(start).to.have.been.calledOnceWith({
+                  command: 'ls',
+                  shell: false,
+                  result: result
+                },
+                'tracing:datadog:child_process:execution:start')
+
+                expect(finish).to.have.been.calledOnceWith({
+                  command: 'ls',
+                  shell: false,
+                  result: result
+                },
+                'tracing:datadog:child_process:execution:end')
+
                 expect(error).not.to.have.been.called
               })
 
               it('should execute error callback', () => {
+                let childError
                 try {
                   childProcess[methodName]('invalid_command_test')
-                } catch {
-                  // do nothing
+                } catch (error) {
+                  childError = error
                 } finally {
                   expect(start).to.have.been.calledOnceWith({
                     command: 'invalid_command_test',
-                    shell: false
+                    shell: false,
+                    error: childError
                   })
                   expect(finish).to.have.been.calledOnce
                   expect(error).to.have.been.calledOnce
@@ -222,12 +298,17 @@ describe('child process', () => {
               })
 
               it('should execute error callback with `exit 1` command', () => {
+                let childError
                 try {
                   childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
-                } catch {
-                  // do nothing
+                } catch (error) {
+                  childError = error
                 } finally {
-                  expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
+                  expect(start).to.have.been.calledOnceWith({
+                    command: 'node -e "process.exit(1)"',
+                    shell: true,
+                    error: childError
+                  })
                   expect(finish).to.have.been.calledOnce
                 }
               })
@@ -239,22 +320,32 @@ describe('child process', () => {
           execSyncShellMethods.forEach(methodName => {
             describe(`method ${methodName}`, () => {
               it('should execute success callbacks', () => {
-                childProcess[methodName]('ls')
+                const result = childProcess[methodName]('ls')
 
-                expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: true })
-                expect(finish).to.have.been.calledOnceWith({ exitCode: 0 })
+                expect(start).to.have.been.calledOnceWith({
+                  command: 'ls',
+                  shell: true,
+                  result
+                })
+                expect(finish).to.have.been.calledOnceWith({
+                  command: 'ls',
+                  shell: true,
+                  result
+                })
                 expect(error).not.to.have.been.called
               })
 
               it('should execute error callback', () => {
+                let childError
                 try {
                   childProcess[methodName]('invalid_command_test')
-                } catch {
-                  // do nothing
+                } catch (error) {
+                  childError = error
                 } finally {
                   expect(start).to.have.been.calledOnceWith({
                     command: 'invalid_command_test',
-                    shell: true
+                    shell: true,
+                    error: childError
                   })
                   expect(finish).to.have.been.calledOnce
                   expect(error).to.have.been.calledOnce
@@ -262,12 +353,17 @@ describe('child process', () => {
               })
 
               it('should execute error callback with `exit 1` command', () => {
+                let childError
                 try {
                   childProcess[methodName]('node -e "process.exit(1)"')
-                } catch {
-                  // do nothing
+                } catch (error) {
+                  childError = error
                 } finally {
-                  expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
+                  expect(start).to.have.been.calledOnceWith({
+                    command: 'node -e "process.exit(1)"',
+                    shell: true,
+                    error: childError
+                  })
                   expect(finish).to.have.been.calledOnce
                 }
               })
