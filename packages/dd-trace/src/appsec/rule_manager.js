@@ -110,6 +110,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
 
       if (file && file.custom_scanners && file.custom_scanners.length) {
+        batchConfiguration = true
         newCustomScanners.set(id, file.custom_scanners)
       }
 

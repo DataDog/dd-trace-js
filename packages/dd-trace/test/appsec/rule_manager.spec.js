@@ -478,6 +478,52 @@ describe('AppSec Rule Manager', () => {
         expect(toApply[0].apply_error).to.equal(undefined)
       })
 
+      it('should apply processor_override', () => {
+        const asm = {
+          'processor_override': [{
+            poKey: 'poValue'
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        // customs_scanners is not a real data, waf update could fail,
+        // but it should fill apply_state
+        expect(toApply[0].apply_state).to.not.equal(undefined)
+      })
+
+      it('should apply custom_scanners', () => {
+        const asm = {
+          'custom_scanners': [{
+            csKey: 'csValue'
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        // customs_scanners is not a real data, waf update could fail,
+        // but it should fill apply_state
+        expect(toApply[0].apply_state).to.not.equal(undefined)
+      })
+
       it('should apply blocking actions', () => {
         const asm = {
           actions: [
