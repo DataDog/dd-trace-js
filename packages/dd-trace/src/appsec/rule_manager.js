@@ -13,6 +13,7 @@ let appliedRulesOverride = new Map()
 let appliedExclusions = new Map()
 let appliedCustomRules = new Map()
 let appliedActions = new Map()
+let appliedCustomScanners = new Map()
 
 function loadRules (config) {
   defaultRules = config.rules
@@ -36,6 +37,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   const newExclusions = new SpyMap(appliedExclusions)
   const newCustomRules = new SpyMap(appliedCustomRules)
   const newActions = new SpyMap(appliedActions)
+  const newCustomScanners = new SpyMap(appliedCustomScanners)
 
   for (const item of toUnapply) {
     const { product, id } = item
@@ -51,6 +53,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       newExclusions.delete(id)
       newCustomRules.delete(id)
       newActions.delete(id)
+      newCustomScanners.delete(id)
     }
   }
 
@@ -98,6 +101,10 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         newActions.set(id, file.actions)
       }
 
+      if (file && file.custom_scanners && file.custom_scanners.length) {
+        newCustomScanners.set(id, file.custom_scanners)
+      }
+
       // "actions" data is managed by tracer and not by waf
       if (batchConfiguration) {
         batch.add(item)
@@ -112,7 +119,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     newRuleset ||
     newRulesOverride.modified ||
     newExclusions.modified ||
-    newCustomRules.modified) {
+    newCustomRules.modified ||
+    newCustomScanners.modified) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
@@ -126,6 +134,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     }
     if (newCustomRules.modified) {
       payload.custom_rules = concatArrays(newCustomRules)
+    }
+    if (newCustomScanners.modified) {
+      payload.custom_scanners = concatArrays(newCustomScanners)
     }
 
     try {
@@ -145,6 +156,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
       if (newCustomRules.modified) {
         appliedCustomRules = newCustomRules
+      }
+      if (newCustomScanners.modified) {
+        appliedCustomScanners = newCustomScanners
       }
     } catch (err) {
       newApplyState = ERROR
@@ -252,6 +266,7 @@ function clearAllRules () {
   appliedExclusions.clear()
   appliedCustomRules.clear()
   appliedActions.clear()
+  appliedCustomScanners.clear()
 }
 
 module.exports = {
