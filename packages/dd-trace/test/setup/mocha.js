@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 require('./core')
 
 const os = require('os')
@@ -12,6 +14,8 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
+const mochaVersion = require('mocha/package.json').version
+console.log('MOCHA VERSION', mochaVersion)
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -246,6 +250,7 @@ function withVersions (plugin, modules, range, cb) {
           })
 
           after(() => {
+            console.log('MOCHA AFTER', moduleVersionDidFail, v.version)
             if (moduleVersionDidFail) {
               if (!packageVersionFailures[moduleName]) {
                 packageVersionFailures[moduleName] = new Set()
