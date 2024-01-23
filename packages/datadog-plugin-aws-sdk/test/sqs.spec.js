@@ -398,7 +398,7 @@ describe('Plugin', () => {
         })
 
         it('Should emit DSM stats to the agent when sending a message', done => {
-          agent.expectStats(dsmStats => {
+          agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
             // we should have 1 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
@@ -416,7 +416,7 @@ describe('Plugin', () => {
         })
 
         it('Should emit DSM stats to the agent when receiving a message', done => {
-          agent.expectStats(dsmStats => {
+          agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
             // we should have 2 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {

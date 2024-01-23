@@ -341,7 +341,7 @@ module.exports = {
   /**
    * Register a callback with expectations to be run on every stats payload sent to the agent.
    */
-  expectStats (callback, options) {
+  expectPipelineStats (callback, options) {
     return runCallback(callback, options, statsHandlers)
   },
 
