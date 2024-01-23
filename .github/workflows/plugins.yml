@@ -161,12 +161,12 @@ jobs:
         env:
           QPIDD_ADMIN_USERNAME: admin
           QPIDD_ADMIN_PASSWORD: admin
-          DD_DATA_STREAMS_ENABLED: true
         ports:
           - 5673:5672
     env:
       PLUGINS: amqp10|rhea
       SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
