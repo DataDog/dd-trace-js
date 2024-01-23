@@ -4,7 +4,6 @@ const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const config = require('../../dd-trace/src/config')
 
 describe('Plugin', () => {
   let tracer
@@ -46,7 +45,7 @@ describe('Plugin', () => {
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
 
-            console.log(`dsmEnabled: ${config.dsmEnabled}`)
+            console.log(`dsmEnabled: ${tracer.config.dsmEnabled}`)
           })
 
           const expectedProducerHash = '15837999642856815456'
