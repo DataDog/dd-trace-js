@@ -2,6 +2,8 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const { encodePathwayContext } = require('../../dd-trace/src/datastreams/pathway')
+const { getAmqpMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 
 class RheaProducerPlugin extends ProducerPlugin {
   static get id () { return 'rhea' }
@@ -36,6 +38,16 @@ function addDeliveryAnnotations (msg, tracer, span) {
     msg.delivery_annotations = msg.delivery_annotations || {}
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
+
+    console.log(`rhea: ${tracer._config.dsmEnabled}`)
+    if (tracer._config.dsmEnabled) {
+      const targetName = span.context()._tags['amqp.link.target.address']
+      const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
+      const dataStreamsContext = tracer
+        .setCheckpoint(['direction:out', `exchange:${targetName}`, 'type:rabbitmq'], span, payloadSize)
+      const pathwayCtx = encodePathwayContext(dataStreamsContext)
+      msg.delivery_annotations[CONTEXT_PROPAGATION_KEY] = pathwayCtx
+    }
   }
 }
 
