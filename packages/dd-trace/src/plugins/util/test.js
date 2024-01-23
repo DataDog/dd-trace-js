@@ -60,6 +60,7 @@ const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
+const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -111,6 +112,7 @@ module.exports = {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
