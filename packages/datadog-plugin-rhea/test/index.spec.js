@@ -44,14 +44,14 @@ describe('Plugin', () => {
             })
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
-
-            console.log(`dsmEnabled: ${tracer._config.dsmEnabled}`)
           })
 
           const expectedProducerHash = '15837999642856815456'
           const expectedConsumerHash = '18403970455318595370'
 
           it('Should set pathway hash tag on a span when producing', (done) => {
+            console.log(`dsmEnabled: ${tracer._config.dsmEnabled}`)
+
             let produceSpanMeta = {}
             agent.use(traces => {
               const span = traces[0][0]
