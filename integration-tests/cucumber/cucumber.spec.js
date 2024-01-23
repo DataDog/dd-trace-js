@@ -766,6 +766,32 @@ versions.forEach(version => {
                 })
               })
             }
+            it('reports itr_correlation_id in test suites', (done) => {
+              const itrCorrelationId = '4321'
+              receiver.setItrCorrelationId(itrCorrelationId)
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+                  testSuites.forEach(testSuite => {
+                    assert.equal(testSuite.itr_correlation_id, itrCorrelationId)
+                  })
+                }, 25000)
+
+              childProcess = exec(
+                runTestsWithCoverageCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'inherit'
+                }
+              )
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
           })
         })
       })
