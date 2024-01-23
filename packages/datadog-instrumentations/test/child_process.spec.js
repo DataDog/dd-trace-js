@@ -59,7 +59,7 @@ describe('child process', () => {
 
                 childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: false })
-                  expect(finish).to.have.been.calledOnceWith({ command: 'ls', shell: false, result: 0 })
+                  expect(asyncFinish).to.have.been.calledOnceWith({ command: 'ls', shell: false, result: 0 })
                   expect(error).not.to.have.been.called
                   done()
                 })
@@ -70,7 +70,7 @@ describe('child process', () => {
 
                 childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test', shell: false })
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'invalid_command_test',
                     shell: false,
                     result: -2
@@ -85,7 +85,7 @@ describe('child process', () => {
 
                 childEmitter.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'node -e "process.exit(1)"',
                     shell: true,
                     result: 1
@@ -105,7 +105,7 @@ describe('child process', () => {
                     shell: false
                   })
 
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'echo',
                     shell: false,
                     result: {
@@ -127,9 +127,9 @@ describe('child process', () => {
                     errStub.code = 'ENOENT'
                     errStub.errno = -2
 
-                    expect(finish).to.have.been.calledOnce
-                    expect(finish.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
-                    expect(finish.firstCall.firstArg).to.deep.include({
+                    expect(asyncFinish).to.have.been.calledOnce
+                    expect(asyncFinish.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
+                    expect(asyncFinish.firstCall.firstArg).to.deep.include({
                       command: 'invalid_command_test',
                       shell: false,
                       error: errStub
@@ -150,9 +150,12 @@ describe('child process', () => {
                     expect(start).to.have.been.calledOnce
                     expect(start.firstCall.firstArg).to.include({ command: 'node -e "process.exit(1)"', shell: true })
 
-                    expect(finish).to.have.been.calledOnce
-                    expect(finish.firstCall.firstArg).to.include({ command: 'node -e "process.exit(1)"', shell: true })
-                    expect(finish.firstCall.firstArg).to.deep.include({
+                    expect(asyncFinish).to.have.been.calledOnce
+                    expect(asyncFinish.firstCall.firstArg).to.include({
+                      command: 'node -e "process.exit(1)"',
+                      shell: true
+                    })
+                    expect(asyncFinish.firstCall.firstArg).to.deep.include({
                       command: 'node -e "process.exit(1)"',
                       shell: true,
                       error: errStub
@@ -174,7 +177,7 @@ describe('child process', () => {
 
                 res.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'ls', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({ command: 'ls', shell: true, result: 0 })
+                  expect(asyncFinish).to.have.been.calledOnceWith({ command: 'ls', shell: true, result: 0 })
                   expect(error).not.to.have.been.called
                   done()
                 })
@@ -185,12 +188,12 @@ describe('child process', () => {
 
                 res.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'node -e "process.exit(1)"',
                     shell: true,
                     result: 1
                   })
-                  expect(error).not.to.have.been.called
+                  expect(error).to.have.been.called
                   done()
                 })
               })
@@ -201,7 +204,7 @@ describe('child process', () => {
                 res.once('close', () => {
                   expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test', shell: true })
                   expect(error).to.have.been.calledOnce
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'invalid_command_test',
                     shell: true,
                     result: 127
@@ -218,7 +221,7 @@ describe('child process', () => {
                   command: 'echo',
                   shell: true
                 })
-                expect(finish).to.have.been.calledOnceWith({
+                expect(asyncFinish).to.have.been.calledOnceWith({
                   command: 'echo',
                   shell: true,
                   result: 0
@@ -232,7 +235,7 @@ describe('child process', () => {
                   return Promise.reject(new Error('Command expected to fail'))
                 } catch (e) {
                   expect(start).to.have.been.calledOnceWith({ command: 'invalid_command_test', shell: true })
-                  expect(finish).to.have.been.calledOnce
+                  expect(asyncFinish).to.have.been.calledOnce
                   expect(error).to.have.been.calledOnce
                 }
               })
@@ -243,7 +246,7 @@ describe('child process', () => {
                   return Promise.reject(new Error('Command expected to fail'))
                 } catch (e) {
                   expect(start).to.have.been.calledOnceWith({ command: 'node -e "process.exit(1)"', shell: true })
-                  expect(finish).to.have.been.calledOnceWith({
+                  expect(asyncFinish).to.have.been.calledOnceWith({
                     command: 'node -e "process.exit(1)"',
                     shell: true,
                     result: 1
