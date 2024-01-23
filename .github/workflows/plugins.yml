@@ -5,7 +5,7 @@ on:
   push:
     branches: [master]
   schedule:
-    - cron: "0 4 * * *"
+    - cron: '0 4 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -40,7 +40,7 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: "3.16.2 - 3.16.7"
+      PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
       DD_TEST_AGENT_URL: http://testagent:9126
       AEROSPIKE_HOST_ADDRESS: aerospike
     steps:
@@ -48,17 +48,17 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: "14"
+          node-version: '14'
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          echo 'json=$content' >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+          version='${{fromJson(steps.pkg.outputs.json).version}}'
+          majorVersion=$(echo '$version' | cut -d '.' -f 1)
+          echo 'Major Version: $majorVersion'
+          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
       - name: Install dependencies and run tests
         if: env.MAJOR_VERSION == '3'
         run: |
@@ -79,11 +79,11 @@ jobs:
       aerospike:
         image: aerospike:ce-5.7.0.15
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - '127.0.0.1:3000-3002:3000-3002'
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: ">=4.0.0 <5.2.0"
+      PACKAGE_VERSION_RANGE: '>=4.0.0 <5.2.0'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -91,13 +91,13 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          echo 'json=$content' >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+          version='${{fromJson(steps.pkg.outputs.json).version}}'
+          majorVersion=$(echo '$version' | cut -d '.' -f 1)
+          echo 'Major Version: $majorVersion'
+          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
       - name: Install dependencies and run tests
         if: env.MAJOR_VERSION == '4'
@@ -112,16 +112,16 @@ jobs:
     strategy:
       matrix:
         node-version: [18]
-        range: ["5.2.0 - 5.7.0"]
+        range: ['5.2.0 - 5.7.0']
         include:
           - node-version: 20
-            range: ">=5.8.0"
+            range: '>=5.8.0'
     runs-on: ubuntu-latest
     services:
       aerospike:
         image: aerospike:ce-6.4.0.3
         ports:
-          - "127.0.0.1:3000-3002:3000-3002"
+          - '127.0.0.1:3000-3002:3000-3002'
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -133,13 +133,13 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
+          echo 'json=$content' >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+          version='${{fromJson(steps.pkg.outputs.json).version}}'
+          majorVersion=$(echo '$version' | cut -d '.' -f 1)
+          echo 'Major Version: $majorVersion'
+          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
@@ -216,9 +216,9 @@ jobs:
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: "true"
+          FORCE_NONINTERACTIVE: 'true'
           LAMBDA_EXECUTOR: local
-          START_WEB: "0"
+          START_WEB: '0'
         ports:
           - 4566:4566
       # we have two localstacks since upgrading localstack was causing lambda & S3 tests to fail
@@ -226,15 +226,15 @@ jobs:
       localstack-legacy:
         image: localstack/localstack:1.1.0
         ports:
-          - "127.0.0.1:4567:4567" # Edge
+          - '127.0.0.1:4567:4567' # Edge
         env:
           LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
-          FORCE_NONINTERACTIVE: "true"
+          FORCE_NONINTERACTIVE: 'true'
           LAMBDA_EXECUTOR: local
-          START_WEB: "0"
+          START_WEB: '0'
           GATEWAY_LISTEN: 127.0.0.1:4567
           EDGE_PORT: 4567
           EDGE_PORT_HTTP: 4567
@@ -314,7 +314,7 @@ jobs:
       cassandra:
         image: spotify/cassandra
         env:
-          CASSANDRA_TOKEN: "-9223372036854775808"
+          CASSANDRA_TOKEN: '-9223372036854775808'
         ports:
           - 9042:9042
     env:
@@ -650,11 +650,11 @@ jobs:
         image: debezium/kafka:1.7
         env:
           CLUSTER_ID: 5Yr1SIgYQz-b-dgRabWx4g
-          NODE_ID: "1"
-          CREATE_TOPICS: "test-topic:1:1"
+          NODE_ID: '1'
+          CREATE_TOPICS: 'test-topic:1:1'
           KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
           KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
-          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
         ports:
           - 9092:9092
           - 9093:9093
@@ -716,9 +716,9 @@ jobs:
       limitd:
         image: rochdev/limitd
         env:
-          BUCKET_1_NAME: "user"
-          BUCKET_1_SIZE: "10"
-          BUCKET_1_PER_SECOND: "5"
+          BUCKET_1_NAME: 'user'
+          BUCKET_1_SIZE: '10'
+          BUCKET_1_PER_SECOND: '5'
         ports:
           - 9231:9231
     env:
@@ -863,8 +863,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-          MYSQL_DATABASE: "db"
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
         ports:
           - 3306:3306
     env:
@@ -943,7 +943,7 @@ jobs:
       opensearch:
         image: opensearchproject/opensearch:2.8.0
         env:
-          plugins.security.disabled: "true"
+          plugins.security.disabled: 'true'
           discovery.type: single-node
         ports:
           - 9201:9200
@@ -994,7 +994,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           cache: yarn
-          node-version: "16"
+          node-version: '16'
       - run: yarn install --ignore-engines
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
@@ -1045,7 +1045,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      PG_TEST_NATIVE: "true"
+      PG_TEST_NATIVE: 'true'
       PLUGINS: pg
       SERVICES: postgres
     steps:
@@ -1192,7 +1192,7 @@ jobs:
       mssql:
         image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
         env:
-          ACCEPT_EULA: "Y"
+          ACCEPT_EULA: 'Y'
           SA_PASSWORD: DD_HUNTER2
           MSSQL_PID: Express
         ports:

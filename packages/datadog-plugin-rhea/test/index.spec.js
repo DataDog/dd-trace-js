@@ -20,7 +20,8 @@ describe('Plugin', () => {
         let context
 
         beforeEach(() => {
-          tracer = require('../../dd-trace')
+          tracer = require('../../dd-trace').init({ dsmEnabled: true })
+          console.log(tracer._tracer._config.dsmEnabled)
         })
 
         afterEach((done) => {
