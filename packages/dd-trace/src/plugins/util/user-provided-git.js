@@ -27,10 +27,11 @@ function removeEmptyValues (tags) {
   }, {})
 }
 
-// The regex is extracted from
+// The regex is inspired by
 // https://github.com/jonschlinkert/is-git-url/blob/396965ffabf2f46656c8af4c47bef1d69f09292e/index.js#L9C15-L9C87
+// The `.git` suffix is optional in this version
 function validateGitRepositoryUrl (repoUrl) {
-  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\.git)(\/?|#[-\d\w._]+?)$/.test(repoUrl)
+  return /(?:git|ssh|https?|git@[-\w.]+):(\/\/)?(.*?)(\/?|#[-\d\w._]+?)$/.test(repoUrl)
 }
 
 function validateGitCommitSha (gitCommitSha) {

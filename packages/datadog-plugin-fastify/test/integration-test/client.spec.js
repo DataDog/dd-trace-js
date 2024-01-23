@@ -14,9 +14,8 @@ describe('esm', () => {
   let proc
   let sandbox
 
-  // TODO: fastify instrumentation breaks with esm for version 4.23.2 but works for commonJS,
-  // fix it and change the versions tested
-  withVersions('fastify', 'fastify', '^3', version => {
+  // skip older versions of fastify due to syntax differences
+  withVersions('fastify', 'fastify', '>=3', version => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,

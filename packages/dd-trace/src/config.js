@@ -109,13 +109,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    this.tags = {}
-
-    tagger.add(this.tags, process.env.DD_TAGS)
-    tagger.add(this.tags, process.env.DD_TRACE_TAGS)
-    tagger.add(this.tags, process.env.DD_TRACE_GLOBAL_TAGS)
-    tagger.add(this.tags, options.tags)
-
     const DD_TRACING_ENABLED = coalesce(
       process.env.DD_TRACING_ENABLED,
       true
@@ -184,32 +177,11 @@ class Config {
       false
     )
 
-    const DD_SERVICE = options.service ||
-      process.env.DD_SERVICE ||
-      process.env.DD_SERVICE_NAME ||
-      this.tags.service ||
-      process.env.AWS_LAMBDA_FUNCTION_NAME ||
-      process.env.FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
-      process.env.K_SERVICE || // Google Cloud Function Name set by newer runtimes
-      process.env.WEBSITE_SITE_NAME || // set by Azure Functions
-      pkg.name ||
-      'node'
     const DD_SERVICE_MAPPING = coalesce(
       options.serviceMapping,
       process.env.DD_SERVICE_MAPPING ? fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
-    )
-    const DD_ENV = coalesce(
-      options.env,
-      process.env.DD_ENV,
-      this.tags.env
-    )
-    const DD_VERSION = coalesce(
-      options.version,
-      process.env.DD_VERSION,
-      this.tags.version,
-      pkg.version
     )
     const DD_TRACE_STARTUP_LOGS = coalesce(
       options.startupLogs,
@@ -435,6 +407,10 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       maybeFile(appsec.blockedTemplateJson),
       maybeFile(process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON)
     )
+    const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
+      maybeFile(appsec.blockedTemplateGraphql),
+      maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
+    )
     const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
       appsec.eventTracking && appsec.eventTracking.mode,
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
@@ -546,6 +522,19 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       0
     )
 
+    const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_ID,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
+      null
+    )
+    const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
+      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
+      null
+    )
+
     const ingestion = options.ingestion || {}
     const dogstatsd = coalesce(options.dogstatsd, {})
     const sampler = {
@@ -579,7 +568,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
     this.apiKey = DD_API_KEY
-    this.env = DD_ENV
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.site = coalesce(options.site, process.env.DD_SITE, 'datadoghq.com')
@@ -591,9 +579,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.clientIpEnabled = DD_TRACE_CLIENT_IP_ENABLED
     this.clientIpHeader = DD_TRACE_CLIENT_IP_HEADER
     this.plugins = !!coalesce(options.plugins, true)
-    this.service = DD_SERVICE
     this.serviceMapping = DD_SERVICE_MAPPING
-    this.version = DD_VERSION
     this.dogstatsd = {
       hostname: coalesce(dogstatsd.hostname, process.env.DD_DOGSTATSD_HOSTNAME, this.hostname),
       port: String(coalesce(dogstatsd.port, process.env.DD_DOGSTATSD_PORT, 8125))
@@ -625,7 +611,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
     // Disabled for CI Visibility's agentless
     this.telemetry = {
-      enabled: DD_TRACE_EXPORTER !== 'datadog' && isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
+      enabled: isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
       debug: isTrue(DD_TELEMETRY_DEBUG),
       logCollection: isTrue(DD_TELEMETRY_LOG_COLLECTION_ENABLED),
@@ -644,6 +630,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       obfuscatorValueRegex: DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       blockedTemplateHtml: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       blockedTemplateJson: DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       eventTracking: {
         enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
@@ -685,6 +672,37 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
 
+    this.stats = {
+      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
+    }
+
+    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
+    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+
+    this.isGCPFunction = isGCPFunction
+    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
+
+    this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
+
+    this.installSignature = {
+      id: DD_INSTRUMENTATION_INSTALL_ID,
+      time: DD_INSTRUMENTATION_INSTALL_TIME,
+      type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this._applyDefaults()
+    this._applyEnvironment()
+    this._applyOptions(options)
+    this._applyRemote({})
+    this._merge()
+
+    tagger.add(this.tags, {
+      service: this.service,
+      env: this.env,
+      version: this.version,
+      'runtime-id': uuid()
+    })
+
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
@@ -717,31 +735,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         }
       }
     }
-
-    this.stats = {
-      enabled: isTrue(DD_TRACE_STATS_COMPUTATION_ENABLED)
-    }
-
-    this.traceId128BitGenerationEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
-    this.traceId128BitLoggingEnabled = isTrue(DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
-
-    this.isGCPFunction = isGCPFunction
-    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
-
-    this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
-
-    tagger.add(this.tags, {
-      service: this.service,
-      env: this.env,
-      version: this.version,
-      'runtime-id': uuid()
-    })
-
-    this._applyDefaults()
-    this._applyEnvironment()
-    this._applyOptions(options)
-    this._applyRemote({})
-    this._merge()
   }
 
   // Supports only a subset of options for now.
@@ -756,48 +749,93 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
   }
 
   _applyDefaults () {
+    const {
+      AWS_LAMBDA_FUNCTION_NAME,
+      FUNCTION_NAME,
+      K_SERVICE,
+      WEBSITE_SITE_NAME
+    } = process.env
+
+    const service = AWS_LAMBDA_FUNCTION_NAME ||
+      FUNCTION_NAME || // Google Cloud Function Name set by deprecated runtimes
+      K_SERVICE || // Google Cloud Function Name set by newer runtimes
+      WEBSITE_SITE_NAME || // set by Azure Functions
+      pkg.name ||
+      'node'
+
     const defaults = this._defaults = {}
 
+    this._setValue(defaults, 'service', service)
+    this._setValue(defaults, 'env', undefined)
+    this._setValue(defaults, 'version', pkg.version)
     this._setUnit(defaults, 'sampleRate', undefined)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
+    this._setValue(defaults, 'tags', {})
   }
 
   _applyEnvironment () {
     const {
-      DD_TRACE_SAMPLE_RATE,
+      DD_ENV,
       DD_LOGS_INJECTION,
-      DD_TRACE_HEADER_TAGS
+      DD_SERVICE,
+      DD_SERVICE_NAME,
+      DD_TAGS,
+      DD_TRACE_GLOBAL_TAGS,
+      DD_TRACE_HEADER_TAGS,
+      DD_TRACE_SAMPLE_RATE,
+      DD_TRACE_TAGS,
+      DD_VERSION
     } = process.env
 
+    const tags = {}
     const env = this._env = {}
 
+    tagger.add(tags, DD_TAGS)
+    tagger.add(tags, DD_TRACE_TAGS)
+    tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+
+    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
+    this._setString(env, 'env', DD_ENV || tags.env)
+    this._setString(env, 'version', DD_VERSION || tags.version)
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
+    this._setTags(env, 'tags', tags)
   }
 
   _applyOptions (options) {
     const opts = this._options = this._options || {}
+    const tags = {}
 
     options = Object.assign({ ingestion: {} }, options, opts)
 
+    tagger.add(tags, options.tags)
+
+    this._setString(opts, 'service', options.service || tags.service)
+    this._setString(opts, 'env', options.env || tags.env)
+    this._setString(opts, 'version', options.version || tags.version)
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setArray(opts, 'headerTags', options.headerTags)
+    this._setTags(opts, 'tags', tags)
   }
 
   _applyRemote (options) {
     const opts = this._remote = this._remote || {}
+    const tags = {}
     const headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
         return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
       })
       : undefined
 
+    tagger.add(tags, options.tracing_tags)
+
     this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
+    this._setTags(opts, 'tags', tags)
   }
 
   _setBoolean (obj, name, value) {
@@ -835,6 +873,18 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     if (Array.isArray(value)) {
       this._setValue(obj, name, value)
     }
+  }
+
+  _setString (obj, name, value) {
+    obj[name] = value || undefined // unset for empty strings
+  }
+
+  _setTags (obj, name, value) {
+    if (!value || Object.keys(value).length === 0) {
+      return this._setValue(obj, name, null)
+    }
+
+    this._setValue(obj, name, value)
   }
 
   _setValue (obj, name, value) {

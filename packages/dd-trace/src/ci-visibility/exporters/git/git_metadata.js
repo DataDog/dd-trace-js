@@ -15,6 +15,20 @@ const {
   unshallowRepository
 } = require('../../../plugins/util/git')
 
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
+  getErrorTypeFromStatusCode
+} = require('../../../ci-visibility/telemetry')
+
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
 
@@ -74,8 +88,13 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
     }))
   })
 
-  request(localCommitData, options, (err, response) => {
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
+  const startTime = Date.now()
+  request(localCommitData, options, (err, response, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType })
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
@@ -83,6 +102,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
     try {
       alreadySeenCommits = validateCommits(JSON.parse(response).data)
     } catch (e) {
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
     log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
@@ -147,12 +167,20 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
     delete options.headers['dd-api-key']
   }
 
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES)
+
+  const uploadSize = form.size()
+
+  const startTime = Date.now()
   request(form, options, (err, _, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { errorType })
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
-      return callback(error)
+      return callback(error, uploadSize)
     }
-    callback(null)
+    callback(null, uploadSize)
   })
 }
 
@@ -173,10 +201,14 @@ function generateAndUploadPackFiles ({
     return callback(new Error('Failed to generate packfiles'))
   }
 
+  distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM, {}, packFilesToUpload.length)
   let packFileIndex = 0
+  let totalUploadedBytes = 0
   // This uploads packfiles sequentially
-  const uploadPackFileCallback = (err) => {
+  const uploadPackFileCallback = (err, byteLength) => {
+    totalUploadedBytes += byteLength
     if (err || packFileIndex === packFilesToUpload.length) {
+      distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES, {}, totalUploadedBytes)
       return callback(err)
     }
     return uploadPackFile(

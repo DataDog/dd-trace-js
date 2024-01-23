@@ -1,8 +1,7 @@
 'use strict'
 const {
   CONTEXT_PROPAGATION_KEY,
-  getSizeOrZero,
-  getHeadersSize
+  getSizeOrZero
 } = require('../../../dd-trace/src/datastreams/processor')
 const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
@@ -140,15 +139,11 @@ class Kinesis extends BaseAwsSdkPlugin {
       const parsedData = this._tryParse(injectPath.Data)
       if (parsedData) {
         parsedData._datadog = traceData
-        const originalData = injectPath.Data
-
-        // set this now so that computed dsm payload size is correct
-        injectPath.Data = JSON.stringify(parsedData)
 
         // set DSM hash if enabled
         if (this.config.dsmEnabled) {
           // get payload size of request data
-          const payloadSize = getSizeOrZero(JSON.stringify(parsedData))
+          const payloadSize = Buffer.from(JSON.stringify(parsedData)).byteLength
           let stream
           // users can optionally use either stream name or stream arn
           if (request.params && request.params.StreamArn) {

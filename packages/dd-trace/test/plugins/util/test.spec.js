@@ -177,7 +177,7 @@ describe('metadata validation', () => {
       [GIT_COMMIT_SHA]: 'abc123'
     }
     const invalidMetadata2 = {
-      [GIT_REPOSITORY_URL]: 'https://datadog.com/repo',
+      [GIT_REPOSITORY_URL]: 'htps://datadog.com/repo',
       [CI_PIPELINE_URL]: 'datadog.com',
       [GIT_COMMIT_SHA]: 'abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123'
     }
@@ -194,7 +194,9 @@ describe('metadata validation', () => {
     const invalidMetadata5 = { [GIT_REPOSITORY_URL]: '', [CI_PIPELINE_URL]: '', [GIT_COMMIT_SHA]: '' }
     const invalidMetadatas = [invalidMetadata1, invalidMetadata2, invalidMetadata3, invalidMetadata4, invalidMetadata5]
     invalidMetadatas.forEach((invalidMetadata) => {
-      expect(JSON.stringify(removeInvalidMetadata(invalidMetadata))).to.equal(JSON.stringify({}))
+      expect(
+        JSON.stringify(removeInvalidMetadata(invalidMetadata)), `${JSON.stringify(invalidMetadata)} is valid`
+      ).to.equal(JSON.stringify({}))
     })
   })
   it('should keep valid metadata', () => {

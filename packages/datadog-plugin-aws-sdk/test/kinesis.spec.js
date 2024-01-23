@@ -2,42 +2,18 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const {
-  ENTRY_PARENT_HASH,
-  DataStreamsProcessor,
-  getSizeOrZero,
-  getHeadersSize
-} = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const kinesisPlugin = require('../src/services/kinesis')
-
-const expectedProducerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:out', 'topic:MyStreamDSM', 'type:kinesis'],
-  ENTRY_PARENT_HASH
-)
-const expectedConsumerHash = computePathwayHash(
-  'test',
-  'tester',
-  ['direction:in', 'topic:MyStreamDSM', 'type:kinesis'],
-  expectedProducerHash
-)
 
 describe('Kinesis', function () {
-  this.timeout(5000)
+  this.timeout(10000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let AWS
     let kinesis
     let tracer
-    let parentId
-    let spanId
 
     const streamName = 'MyStream'
     const streamNameDSM = 'MyStreamDSM'
@@ -63,23 +39,10 @@ describe('Kinesis', function () {
         StreamName: streamName,
         ShardCount: 1
       }, (err, res) => {
+        if (err) return cb(err)
+
         helpers.waitForActiveStream(kinesis, streamName, cb)
       })
-    }
-
-    const assertPropagation = done => {
-      agent.use(traces => {
-        const span = traces[0][0]
-
-        if (span.resource.startsWith('putRecord')) {
-          spanId = span.span_id.toString()
-        } else if (span.name === 'aws.response') {
-          parentId = span.parent_id.toString()
-        }
-
-        expect(parentId).to.not.equal('0')
-        expect(parentId).to.equal(spanId)
-      }).then(done, done)
     }
 
     before(() => {
@@ -88,9 +51,6 @@ describe('Kinesis', function () {
 
     describe('no configuration', () => {
       before(() => {
-        parentId = '0'
-        spanId = '0'
-
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: true })
       })
 
@@ -115,9 +75,7 @@ describe('Kinesis', function () {
         rawExpectedSchema.outbound
       )
 
-      it('injects trace context to Kinesis putRecord and propagates to Kinesis getRecord', done => {
-        assertPropagation(done)
-
+      it('injects trace context to Kinesis putRecord', done => {
         helpers.putTestRecord(kinesis, streamName, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
 
@@ -126,6 +84,8 @@ describe('Kinesis', function () {
 
             expect(data).to.have.property('_datadog')
             expect(data._datadog).to.have.property('x-datadog-trace-id')
+
+            done()
           })
         })
       })
@@ -204,6 +164,8 @@ describe('Kinesis', function () {
     })
 
     describe('DSM Context Propagation', () => {
+      const expectedProducerHash = '15481393933680799703'
+
       before(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
       })
@@ -225,123 +187,42 @@ describe('Kinesis', function () {
         })
       })
 
-      it('injects DSM trace context to Kinesis putRecord', done => {
-        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-          DataStreamsContext.setDataStreamsContext.restore()
-        }
-        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+      it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
+        let putRecordSpanMeta
+        agent.use(traces => {
+          const span = traces[0][0]
 
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          expect(
-            setDataStreamsContextSpy.args[0][0].hash
-          ).to.equal(expectedProducerHash)
-
-          setDataStreamsContextSpy.restore()
-          done()
-        })
-      })
-
-      it('extracts DSM trace context during Kinesis getRecords', done => {
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          kinesis.getShardIterator({
-            ShardId: data.ShardId,
-            ShardIteratorType: 'AT_SEQUENCE_NUMBER',
-            StartingSequenceNumber: data.SequenceNumber,
-            StreamName: streamNameDSM
-          }, (err, { ShardIterator } = {}) => {
-            if (err) return done(err)
-
-            if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-              DataStreamsContext.setDataStreamsContext.restore()
-            }
-            const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-
-            kinesis.getRecords({
-              ShardIterator,
-              Limit: 1
-            }, (err, response) => {
-              if (err) return done(err)
-
-              let parsedData
-              try {
-                parsedData = JSON.parse(response.Records[0].Data)
-              } catch {
-                parsedData = JSON.parse(Buffer.from(response.Records[0].Data))
-              }
-
-              expect(parsedData).to.have.property('_datadog')
-              expect(parsedData._datadog).to.have.property('x-datadog-trace-id')
-
-              expect(
-                setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
-              ).to.equal(expectedConsumerHash)
-
-              setDataStreamsContextSpy.restore()
-              done()
-            })
-          })
-        })
-      })
-
-      it('Should set a message payload size when producing a message', (done) => {
-        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-          DataStreamsProcessor.prototype.recordCheckpoint.restore()
-        }
-        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-        if (kinesisPlugin.prototype.requestInject.isSinonProxy) {
-          kinesisPlugin.prototype.requestInject.restore()
-        }
-        const requestInjectSpy = sinon.spy(kinesisPlugin.prototype, 'requestInject')
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err) => {
-          if (err) return done(err)
-
-          const payloadSize = getHeadersSize(requestInjectSpy.args[0][1].params)
-
-          expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-          expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-          recordCheckpointSpy.restore()
-          requestInjectSpy.restore()
-          done()
-        })
-      })
-
-      it('Should set a message payload size when consuming a message', (done) => {
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
+          if (span.resource.startsWith('putRecord')) {
+            putRecordSpanMeta = span.meta
           }
-          const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
 
-          kinesis.getShardIterator({
-            ShardId: data.ShardId,
-            ShardIteratorType: 'AT_SEQUENCE_NUMBER',
-            StartingSequenceNumber: data.SequenceNumber,
-            StreamName: streamNameDSM
-          }, (err, { ShardIterator } = {}) => {
-            if (err) return done(err)
-
-            kinesis.getRecords({
-              ShardIterator,
-              Limit: 1
-            }, (err, response) => {
-              if (err) return done(err)
-
-              const payloadSize = getSizeOrZero(response.Records[0].Data)
-
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-              recordCheckpointSpy.restore()
-              done()
-            })
+          expect(putRecordSpanMeta).to.include({
+            'pathway.hash': expectedProducerHash
           })
+        }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+        })
+      })
+
+      it('emits DSM stats to the agent during Kinesis putRecord', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have only have 1 stats point since we only had 1 put operation
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          })
+          expect(statsPointsReceived).to.be.at.least(1)
+          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+        }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
         })
       })
     })

@@ -8,10 +8,16 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED
+} = require('../../dd-trace/src/ci-visibility/telemetry')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 class PlaywrightPlugin extends CiPlugin {
   static get id () {
@@ -28,8 +34,11 @@ class PlaywrightPlugin extends CiPlugin {
       this.testSessionSpan.setTag(TEST_STATUS, status)
 
       this.testModuleSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
     })
 
@@ -52,6 +61,7 @@ class PlaywrightPlugin extends CiPlugin {
           ...testSuiteMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       this.enter(testSuiteSpan, store)
 
       this._testSuites.set(testSuite, testSuiteSpan)
@@ -63,6 +73,7 @@ class PlaywrightPlugin extends CiPlugin {
       if (!span) return
       span.setTag(TEST_STATUS, status)
       span.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
     this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine }) => {
@@ -104,6 +115,13 @@ class PlaywrightPlugin extends CiPlugin {
       })
 
       span.finish()
+
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+      )
+
       finishAllTraceSpans(span)
     })
   }

@@ -46,8 +46,7 @@ async function createProfile (periodType) {
 
   await wait(50)
 
-  const profile = profiler.profile()
-  profiler.stop()
+  const profile = profiler.profile(false)
   return profiler.encode(profile)
 }
 
@@ -75,6 +74,7 @@ describe('exporters/agent', function () {
       'language:javascript',
       'runtime:nodejs',
       `runtime_version:${process.version}`,
+      `process_id:${process.pid}`,
       `profiler_version:${version}`,
       'format:pprof',
       'runtime-id:a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
@@ -359,6 +359,7 @@ describe('exporters/agent', function () {
               'language:javascript',
               'runtime:nodejs',
               `runtime_version:${process.version}`,
+              `process_id:${process.pid}`,
               `profiler_version:${version}`,
               'format:pprof',
               'foo:bar'

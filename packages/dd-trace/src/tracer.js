@@ -46,6 +46,10 @@ class DatadogTracer extends Tracer {
     return ctx
   }
 
+  setOffset (offsetData) {
+    return this._dataStreamsProcessor.setOffset(offsetData)
+  }
+
   trace (name, options, fn) {
     options = Object.assign({
       childOf: this.scope().active()
@@ -131,6 +135,7 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
+    this._dataStreamsProcessor.setUrl(url)
   }
 
   scope () {

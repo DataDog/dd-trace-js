@@ -3,7 +3,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 const { ENTRY_PARENT_HASH, getHeadersSize, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
@@ -230,22 +230,8 @@ describe('Sns', () => {
     })
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = function (topicArn) {
-        return computePathwayHash(
-          'test',
-          'tester',
-          ['direction:out', `topic:${topicArn}`, 'type:sns'],
-          ENTRY_PARENT_HASH
-        )
-      }
-      const expectedConsumerHash = function (topicArn) {
-        return computePathwayHash(
-          'test',
-          'tester',
-          ['direction:in', 'topic:TestQueueDSM', 'type:sqs'],
-          expectedProducerHash(topicArn)
-        )
-      }
+      const expectedProducerHash = '5117773060236273241'
+      const expectedConsumerHash = '1353703578833511841'
 
       before(() => {
         return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
@@ -271,79 +257,101 @@ describe('Sns', () => {
         return agent.close({ ritmReset: false })
       })
 
-      it('injects DSM trace context to SNS publish', done => {
-        let producerHashCreated = false
-        let consumerHashCreated = false
-
-        if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-          DataStreamsContext.setDataStreamsContext.restore()
-        }
-        const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-
+      it('injects DSM pathway hash to SNS publish span', done => {
         sns.subscribe(subParams, (err, data) => {
           if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+
+              let publishSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                if (span.resource.startsWith('publish')) {
+                  publishSpanMeta = span.meta
+                }
+
+                expect(publishSpanMeta).to.include({
+                  'pathway.hash': expectedProducerHash
+                })
+              }).then(done, done)
+            })
+        })
+      })
+
+      it('injects DSM pathway hash to SQS receive span from SNS topic', done => {
+        sns.subscribe(subParams, (err, data) => {
+          if (err) return done(err)
+
+          sns.publish(
+            { TopicArn, Message: 'message DSM' },
+            (err) => {
+              if (err) return done(err)
+            })
 
           sqs.receiveMessage(
             receiveParams,
             (err, res) => {
               if (err) return done(err)
 
-              setDataStreamsContextSpy.args.forEach(functionCall => {
-                if (functionCall[0].hash === expectedConsumerHash(TopicArn)) {
-                  consumerHashCreated = true
-                } else if (functionCall[0].hash === expectedProducerHash(TopicArn)) {
-                  producerHashCreated = true
-                }
-              })
+              let consumeSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
 
-              expect(consumerHashCreated).to.equal(true)
-              expect(producerHashCreated).to.equal(true)
-              setDataStreamsContextSpy.restore()
-              done()
-            })
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
+                if (span.name === 'aws.response') {
+                  consumeSpanMeta = span.meta
+                }
+
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
+                })
+              }).then(done, done)
             })
         })
       })
 
-      it('sets a message payload size when DSM is enabled', done => {
-        if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-          DataStreamsProcessor.prototype.recordCheckpoint.restore()
-        }
-        const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-        if (snsPlugin.prototype._injectMessageAttributes.isSinonProxy) {
-          snsPlugin.prototype._injectMessageAttributes.restore()
-        }
-        const injectMessageSpy = sinon.spy(snsPlugin.prototype, '_injectMessageAttributes')
-
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
-
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
-
-              const params = injectMessageSpy.args[0][1]
-              // decode the raw buffer to JSON string
-              params.MessageAttributes._datadog.BinaryValue = JSON.stringify(
-                JSON.parse(Buffer.from(params.MessageAttributes._datadog.BinaryValue, 'base64'))
-              )
-              const payloadSize = getHeadersSize({
-                Message: params.Message,
-                MessageAttributes: params.MessageAttributes
+      it('outputs DSM stats to the agent when publishing a message', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have 1 dsm stats points
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
               })
+            }
+          })
+          expect(statsPointsReceived).to.be.at.least(1)
+          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+        }).then(done, done)
 
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-              injectMessageSpy.restore()
-              recordCheckpointSpy.restore()
-              done()
-            })
+        sns.subscribe(subParams, () => {
+          sns.publish({ TopicArn, Message: 'message DSM' }, () => {})
+        })
+      })
+
+      it('outputs DSM stats to the agent when consuming a message', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have 2 dsm stats points
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          })
+          expect(statsPointsReceived).to.be.at.least(2)
+          expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+        }).then(done, done)
+
+        sns.subscribe(subParams, () => {
+          sns.publish({ TopicArn, Message: 'message DSM' }, () => {
+            sqs.receiveMessage(receiveParams, () => {})
+          })
         })
       })
     })

@@ -206,6 +206,51 @@ describe('Plugin', () => {
         })
       })
 
+      describe('connection cleanup', () => {
+        let container
+        let context
+        let spy
+        let rheaInstumentation
+
+        beforeEach(() => agent.reload('rhea'))
+
+        beforeEach(done => {
+          rheaInstumentation = require('../../datadog-instrumentations/src/rhea')
+          spy = sinon.spy(rheaInstumentation, 'beforeFinish')
+          container = require(`../../../versions/rhea@${version}`).get()
+
+          container.once('sendable', _context => {
+            context = _context
+            done()
+          })
+          const connection = container.connect({
+            username: 'admin',
+            password: 'admin',
+            host: 'localhost',
+            port: 5673
+          })
+          connection.open_sender('amq.topic')
+          connection.open_receiver('amq.topic')
+        })
+
+        it('should automatically instrument', (done) => {
+          agent.use(traces => {
+            const beforeFinishContext = rheaInstumentation.contexts.get(spy.firstCall.firstArg)
+            expect(spy).to.have.been.called
+            expect(beforeFinishContext).to.have.property('connection')
+            expect(beforeFinishContext.connection).to.have.property(rheaInstumentation.inFlightDeliveries)
+            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries]).to.be.instanceof(Set)
+            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries].size).to.equal(0)
+          })
+            .then(done, done)
+          context.sender.send({ body: 'Hello World!' })
+        })
+
+        afterEach(() => {
+          spy.restore()
+        })
+      })
+
       describe('without broker', () => {
         let server
         let serverContext

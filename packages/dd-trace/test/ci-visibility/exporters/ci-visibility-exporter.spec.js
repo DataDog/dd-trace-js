@@ -3,6 +3,7 @@
 require('../../../../dd-trace/test/setup/tap')
 
 const cp = require('child_process')
+const fs = require('fs')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const nock = require('nock')
@@ -13,6 +14,7 @@ describe('CI Visibility Exporter', () => {
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
+    sinon.stub(fs, 'readFileSync').returns('')
     process.env.DD_API_KEY = '1'
     nock.cleanAll()
   })
@@ -374,6 +376,9 @@ describe('CI Visibility Exporter', () => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, JSON.stringify({
+            meta: {
+              correlation_id: '1234'
+            },
             data: [{
               type: 'suite',
               attributes: {

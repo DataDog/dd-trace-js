@@ -1,5 +1,5 @@
-const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
-const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
+const { performance, constants, PerformanceObserver } = require('perf_hooks')
+const { END_TIMESTAMP_LABEL } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
@@ -74,39 +74,6 @@ class GCDecorator {
   }
 }
 
-// Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
-// decorator starts out with no lanes, and dynamically adds them as needed.
-// Every event is put in the first lane where it doesn't overlap with the last
-// event in that lane. If there's no lane without overlaps, a new lane is
-// created.
-class Lanes {
-  constructor (stringTable, name) {
-    this.stringTable = stringTable
-    this.name = name
-    this.lanes = []
-  }
-
-  getLabelFor (item) {
-    const startTime = item.startTime
-    const endTime = startTime + item.duration
-
-    // Biases towards populating earlier lanes, but at least it's simple
-    for (const lane of this.lanes) {
-      if (lane.endTime <= startTime) {
-        lane.endTime = endTime
-        return lane.label
-      }
-    }
-    const label = labelFromStrStr(
-      this.stringTable,
-      THREAD_NAME,
-      `${this.name}-${this.lanes.length}`
-    )
-    this.lanes.push({ endTime, label })
-    return label
-  }
-}
-
 class DNSDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
@@ -114,7 +81,6 @@ class DNSDecorator {
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} DNS`)
   }
 
   decorateSample (sampleInput, item) {
@@ -142,7 +108,6 @@ class DNSDecorator {
           addLabel(this.hostLabelKey, detail.host)
         }
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -152,7 +117,6 @@ class NetDecorator {
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
   }
 
   decorateSample (sampleInput, item) {
@@ -165,10 +129,9 @@ class NetDecorator {
     addLabel(this.operationNameLabelKey, op)
     if (op === 'connect') {
       const detail = item.detail
-      addLabel(this.stringTable, this.hostLabelKey, detail.host)
+      addLabel(this.hostLabelKey, detail.host)
       labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -196,22 +159,24 @@ class EventsProfiler {
   }
 
   start () {
+    // if already started, do nothing
+    if (this._observer) return
+
     function add (items) {
       this.entries.push(...items.getEntries())
     }
-    if (!this._observer) {
-      this._observer = new PerformanceObserver(add.bind(this))
-    }
+    this._observer = new PerformanceObserver(add.bind(this))
     this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
   }
 
   stop () {
     if (this._observer) {
       this._observer.disconnect()
+      this._observer = undefined
     }
   }
 
-  profile () {
+  profile (restart, startDate, endDate) {
     if (this.entries.length === 0) {
       // No events in the period; don't produce a profile
       return null
@@ -239,12 +204,11 @@ class EventsProfiler {
       decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
       decorators[eventType] = decorator
     }
-    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
+    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
 
-    let durationFrom = Number.POSITIVE_INFINITY
-    let durationTo = 0
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
-
+    const lateEntries = []
+    const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
       const decorator = decorators[item.entryType]
       if (!decorator) {
@@ -253,9 +217,15 @@ class EventsProfiler {
         return null
       }
       const { startTime, duration } = item
+      if (startTime >= perfEndDate) {
+        // An event past the current recording end date; save it for the next
+        // profile. Not supposed to happen as long as there's no async activity
+        // between capture of the endDate value in profiler.js _collect() and
+        // here, but better be safe than sorry.
+        lateEntries.push(item)
+        return null
+      }
       const endTime = startTime + duration
-      if (durationFrom > startTime) durationFrom = startTime
-      if (durationTo < endTime) durationTo = endTime
       const sampleInput = {
         value: [Math.round(duration * MS_TO_NS)],
         locationId,
@@ -268,19 +238,23 @@ class EventsProfiler {
       return new Sample(sampleInput)
     }).filter(v => v)
 
-    this.entries = []
+    this.entries = lateEntries
 
     const timeValueType = new ValueType({
       type: stringTable.dedup(pprofValueType),
       unit: stringTable.dedup(pprofValueUnit)
     })
 
+    if (!restart) {
+      this.stop()
+    }
+
     return new Profile({
       sampleType: [timeValueType],
-      timeNanos: dateOffset + BigInt(Math.round(durationFrom * MS_TO_NS)),
+      timeNanos: endDate.getTime() * MS_TO_NS,
       periodType: timeValueType,
-      period: this._flushIntervalNanos,
-      durationNanos: Math.max(0, Math.round((durationTo - durationFrom) * MS_TO_NS)),
+      period: 1,
+      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
       sample: samples,
       location: locations,
       function: functions,

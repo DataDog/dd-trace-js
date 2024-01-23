@@ -1,19 +1,27 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor, getHeadersSize } = require('../../dd-trace/src/datastreams/processor')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
 const sqsPlugin = require('../src/services/sqs')
 
-const queueOptions = {
-  QueueName: 'SQS_QUEUE_NAME',
-  Attributes: {
-    'MessageRetentionPeriod': '86400'
+const queueName = 'SQS_QUEUE_NAME'
+const queueNameDSM = 'SQS_QUEUE_NAME_DSM'
+
+const getQueueParams = (queueName) => {
+  return {
+    QueueName: queueName,
+    Attributes: {
+      'MessageRetentionPeriod': '86400'
+    }
   }
 }
+
+const queueOptions = getQueueParams(queueName)
+const queueOptionsDsm = getQueueParams(queueNameDSM)
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
@@ -23,6 +31,7 @@ describe('Plugin', () => {
       let AWS
       let sqs
       const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME'
+      const QueueUrlDsm = 'http://127.0.0.1:4566/00000000000000000000/SQS_QUEUE_NAME_DSM'
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
@@ -110,6 +119,9 @@ describe('Plugin', () => {
             const span = traces[0][0]
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
+            expect(span.meta).to.include({
+              'queuename': 'SQS_QUEUE_NAME'
+            })
 
             parentId = span.span_id.toString()
             traceId = span.trace_id.toString()
@@ -300,27 +312,16 @@ describe('Plugin', () => {
       })
 
       describe('data stream monitoring', () => {
-        const expectedProducerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:out', 'topic:SQS_QUEUE_NAME', 'type:sqs'],
-          ENTRY_PARENT_HASH
-        )
-        const expectedConsumerHash = computePathwayHash(
-          'test',
-          'tester',
-          ['direction:in', 'topic:SQS_QUEUE_NAME', 'type:sqs'],
-          expectedProducerHash
-        )
+        const expectedProducerHash = '4673734031235697865'
+        const expectedConsumerHash = '9749472979704578383'
 
-        before(done => {
+        before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           tracer.use('aws-sdk', { sqs: { dsmEnabled: true } })
-          done()
         })
 
-        beforeEach(async () => {
+        before(async () => {
           return agent.load('aws-sdk', {
             sqs: {
               consumer: false,
@@ -334,7 +335,7 @@ describe('Plugin', () => {
           AWS = require(`../../../versions/${sqsClientName}@${version}`).get()
 
           sqs = new AWS.SQS({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-          sqs.createQueue(queueOptions, (err, res) => {
+          sqs.createQueue(queueOptionsDsm, (err, res) => {
             if (err) return done(err)
 
             done()
@@ -342,124 +343,99 @@ describe('Plugin', () => {
         })
 
         after(done => {
-          sqs.deleteQueue({ QueueUrl: QueueUrl }, done)
+          sqs.deleteQueue({ QueueUrl: QueueUrlDsm }, done)
         })
 
         after(() => {
           return agent.close({ ritmReset: false })
         })
 
-        it('Should set a checkpoint on produce', (done) => {
-          if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-            DataStreamsContext.setDataStreamsContext.restore()
-          }
-          const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+        it('Should set pathway hash tag on a span when producing', (done) => {
           sqs.sendMessage({
             MessageBody: 'test DSM',
-            QueueUrl
+            QueueUrl: QueueUrlDsm
           }, (err) => {
             if (err) return done(err)
 
-            expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
-            setDataStreamsContextSpy.restore()
-            done()
-          })
-        })
+            let produceSpanMeta = {}
+            agent.use(traces => {
+              const span = traces[0][0]
 
-        it('Should set a checkpoint on consume', (done) => {
-          if (DataStreamsContext.setDataStreamsContext.isSinonProxy) {
-            DataStreamsContext.setDataStreamsContext.restore()
-          }
-          const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
+              if (span.resource.startsWith('sendMessage')) {
+                produceSpanMeta = span.meta
+              }
 
-            sqs.receiveMessage({
-              QueueUrl,
-              MessageAttributeNames: ['.*']
-            }, (err) => {
-              if (err) return done(err)
-
-              expect(
-                setDataStreamsContextSpy.args[setDataStreamsContextSpy.args.length - 1][0].hash
-              ).to.equal(expectedConsumerHash)
-              setDataStreamsContextSpy.restore()
-              done()
-            })
-          })
-        })
-
-        it('Should set a message payload size when producing a message', (done) => {
-          if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-            DataStreamsProcessor.prototype.recordCheckpoint.restore()
-          }
-          const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-          if (sqsPlugin.prototype.requestInject.isSinonProxy) {
-            sqsPlugin.prototype.requestInject.restore()
-          }
-          const injectMessageSpy = sinon.spy(sqsPlugin.prototype, 'requestInject')
-
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            const payloadSize = getHeadersSize({
-              Body: injectMessageSpy.args[0][1].params.MessageBody,
-              MessageAttributes: injectMessageSpy.args[0][1].params.MessageAttributes
-            })
-
-            expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-            expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
-
-            recordCheckpointSpy.restore()
-            injectMessageSpy.restore()
-
-            done()
-          })
-        })
-
-        it('Should set a message payload size when consuming a message', (done) => {
-          if (sqsPlugin.prototype.responseExtractDSMContext.isSinonProxy) {
-            sqsPlugin.prototype.responseExtractDSMContext.restore()
-          }
-          const extractSpy = sinon.spy(sqsPlugin.prototype, 'responseExtractDSMContext')
-
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl
-          }, (err) => {
-            if (err) return done(err)
-
-            if (DataStreamsProcessor.prototype.recordCheckpoint.isSinonProxy) {
-              DataStreamsProcessor.prototype.recordCheckpoint.restore()
-            }
-            const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
-
-            sqs.receiveMessage({
-              QueueUrl,
-              MessageAttributeNames: ['.*']
-            }, (err) => {
-              if (err) return done(err)
-
-              const payloadSize = getHeadersSize({
-                Body: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].Body,
-                MessageAttributes: extractSpy.args[extractSpy.args.length - 1][2].Messages[0].MessageAttributes
+              expect(produceSpanMeta).to.include({
+                'pathway.hash': expectedProducerHash
               })
+            }).then(done, done)
+          })
+        })
 
-              expect(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
-              expect(recordCheckpointSpy.args[0][0].payloadSize).to.equal(payloadSize)
+        it('Should set pathway hash tag on a span when consuming', (done) => {
+          sqs.sendMessage({
+            MessageBody: 'test DSM',
+            QueueUrl: QueueUrlDsm
+          }, (err) => {
+            if (err) return done(err)
 
-              recordCheckpointSpy.restore()
-              extractSpy.restore()
+            sqs.receiveMessage({
+              QueueUrl: QueueUrlDsm,
+              MessageAttributeNames: ['.*']
+            }, (err) => {
+              if (err) return done(err)
 
-              done()
+              let consumeSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                if (span.name === 'aws.response') {
+                  consumeSpanMeta = span.meta
+                }
+
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
+                })
+              }).then(done, done)
             })
+          })
+        })
+
+        it('Should emit DSM stats to the agent when sending a message', done => {
+          agent.expectPipelineStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 1 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(1)
+            expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          }).then(done, done)
+
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
+        })
+
+        it('Should emit DSM stats to the agent when receiving a message', done => {
+          agent.expectPipelineStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 2 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(2)
+            expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+          }).then(done, done)
+
+          sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
+            sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
           })
         })
       })

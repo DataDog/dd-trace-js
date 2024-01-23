@@ -12,10 +12,22 @@ const {
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_CODE_COVERAGE_STARTED,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_ITR_UNSKIPPABLE,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES
+} = require('../../dd-trace/src/ci-visibility/telemetry')
 
 class CucumberPlugin extends CiPlugin {
   static get id () {
@@ -54,14 +66,16 @@ class CucumberPlugin extends CiPlugin {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
 
       this.itrConfig = null
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun }) => {
+    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId }) => {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
@@ -69,10 +83,15 @@ class CucumberPlugin extends CiPlugin {
         'cucumber'
       )
       if (isUnskippable) {
+        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
       }
       if (isForcedToRun) {
+        this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+      }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
       this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
@@ -82,19 +101,30 @@ class CucumberPlugin extends CiPlugin {
           ...testSuiteMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+      if (this.itrConfig?.isCodeCoverageEnabled) {
+        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
+      }
     })
 
     this.addSub('ci:cucumber:test-suite:finish', status => {
       this.testSuiteSpan.setTag(TEST_STATUS, status)
       this.testSuiteSpan.finish()
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
     this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+      if (!this.itrConfig?.isCodeCoverageEnabled) {
         return
       }
+      if (!coverageFiles.length) {
+        this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
+      }
+
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.sourceRoot))
+
+      this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
       const formattedCoverage = {
         sessionId: this.testSuiteSpan.context()._traceId,
@@ -103,6 +133,7 @@ class CucumberPlugin extends CiPlugin {
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
+      this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
     this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
@@ -143,6 +174,11 @@ class CucumberPlugin extends CiPlugin {
 
       span.finish()
       if (!isStep) {
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        )
         finishAllTraceSpans(span)
       }
     })
