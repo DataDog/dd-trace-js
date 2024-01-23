@@ -310,7 +310,7 @@ describe('Sns', () => {
       })
 
       it('outputs DSM stats to the agent when publishing a message', done => {
-        agent.expectStats(dsmStats => {
+        agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
           // we should have 1 dsm stats points
           dsmStats.forEach((timeStatsBucket) => {
@@ -330,7 +330,7 @@ describe('Sns', () => {
       })
 
       it('outputs DSM stats to the agent when consuming a message', done => {
-        agent.expectStats(dsmStats => {
+        agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
           // we should have 2 dsm stats points
           dsmStats.forEach((timeStatsBucket) => {
