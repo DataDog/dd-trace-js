@@ -207,7 +207,7 @@ describe('Kinesis', function () {
       })
 
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
-        agent.expectStats(dsmStats => {
+        agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
           // we should have only have 1 stats point since we only had 1 put operation
           dsmStats.forEach((timeStatsBucket) => {
