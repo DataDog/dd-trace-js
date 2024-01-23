@@ -18,6 +18,7 @@ env:
 
 # TODO: upstream jobs
 
+
 jobs:
   aerospike-node-14:
     runs-on: ubuntu-latest
@@ -52,14 +53,14 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo 'json=$content' >> $GITHUB_OUTPUT
+          echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version='${{fromJson(steps.pkg.outputs.json).version}}'
-          majorVersion=$(echo '$version' | cut -d '.' -f 1)
-          echo 'Major Version: $majorVersion'
-          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
-      - name: Install dependencies and run tests
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
+      - name: Install dependencies and run tests 
         if: env.MAJOR_VERSION == '3'
         run: |
           apt-get update && \
@@ -79,7 +80,7 @@ jobs:
       aerospike:
         image: aerospike:ce-5.7.0.15
         ports:
-          - '127.0.0.1:3000-3002:3000-3002'
+          - "127.0.0.1:3000-3002:3000-3002"
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -91,15 +92,15 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo 'json=$content' >> $GITHUB_OUTPUT
+          echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version='${{fromJson(steps.pkg.outputs.json).version}}'
-          majorVersion=$(echo '$version' | cut -d '.' -f 1)
-          echo 'Major Version: $majorVersion'
-          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
-      - name: Install dependencies and run tests
+      - name: Install dependencies and run tests 
         if: env.MAJOR_VERSION == '4'
         run: |
           yarn install --ignore-engines
@@ -121,7 +122,7 @@ jobs:
       aerospike:
         image: aerospike:ce-6.4.0.3
         ports:
-          - '127.0.0.1:3000-3002:3000-3002'
+          - "127.0.0.1:3000-3002:3000-3002"
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -133,17 +134,17 @@ jobs:
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
-          echo 'json=$content' >> $GITHUB_OUTPUT
+          echo "json=$content" >> $GITHUB_OUTPUT
       - id: extract
         run: |
-          version='${{fromJson(steps.pkg.outputs.json).version}}'
-          majorVersion=$(echo '$version' | cut -d '.' -f 1)
-          echo 'Major Version: $majorVersion'
-          echo 'MAJOR_VERSION=$majorVersion' >> $GITHUB_ENV
+          version="${{fromJson(steps.pkg.outputs.json).version}}"
+          majorVersion=$(echo "$version" | cut -d '.' -f 1)
+          echo "Major Version: $majorVersion"
+          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Install dependencies and run tests
+      - name: Install dependencies and run tests 
         if: env.MAJOR_VERSION >= '5'
         run: |
           yarn install --ignore-engines
@@ -226,7 +227,7 @@ jobs:
       localstack-legacy:
         image: localstack/localstack:1.1.0
         ports:
-          - '127.0.0.1:4567:4567' # Edge
+          - "127.0.0.1:4567:4567" # Edge
         env:
           LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
@@ -650,11 +651,11 @@ jobs:
         image: debezium/kafka:1.7
         env:
           CLUSTER_ID: 5Yr1SIgYQz-b-dgRabWx4g
-          NODE_ID: '1'
-          CREATE_TOPICS: 'test-topic:1:1'
+          NODE_ID: "1"
+          CREATE_TOPICS: "test-topic:1:1"
           KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
           KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
-          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
         ports:
           - 9092:9092
           - 9093:9093
