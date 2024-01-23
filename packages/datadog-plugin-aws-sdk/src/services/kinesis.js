@@ -27,6 +27,8 @@ class Kinesis extends BaseAwsSdkPlugin {
       if (streamName) {
         this.requestTags.streamName = streamName
       }
+
+      let span
       const responseExtraction = this.responseExtract(request.params, request.operation, response)
       if (responseExtraction && responseExtraction.maybeChildOf) {
         obj.needsFinish = true
@@ -38,10 +40,13 @@ class Kinesis extends BaseAwsSdkPlugin {
             { 'span.kind': 'server' }
           )
         }
-        const span = plugin.tracer.startSpan('aws.response', options)
-        this.responseExtractDSMContext(response, responseExtraction.traceContext, this.requestTags.streamName, span)
+        span = plugin.tracer.startSpan('aws.response', options)
         this.enter(span, store)
       }
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
+      this.responseExtractDSMContext(
+        request.operation, response, span ?? null, streamName
+      )
     })
 
     this.addSub('apm:aws:response:finish:kinesis', err => {
@@ -70,7 +75,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   responseExtract (params, operation, response) {
     if (operation !== 'getRecords') return
     if (params.Limit && params.Limit !== 1) return
-    if (!response || !response.Records || !response.Records[0] || response.Records.length > 1) return
+    if (!response || !response.Records || !response.Records[0]) return
 
     const record = response.Records[0]
 
@@ -79,25 +84,31 @@ class Kinesis extends BaseAwsSdkPlugin {
 
       return {
         maybeChildOf: this.tracer.extract('text_map', decodedData._datadog),
-        traceContext: decodedData._datadog
+        parsedAttributes: decodedData._datadog
       }
     } catch (e) {
       log.error(e)
     }
   }
 
-  responseExtractDSMContext (response, context, streamName, span) {
-    if (this.config.dsmEnabled && context && context[CONTEXT_PROPAGATION_KEY] && streamName) {
-      let payloadSize = 0
-      if (response && response.Records) {
-        for (const record of response.Records) {
-          payloadSize += getSizeOrZero(record.Data)
-        }
+  responseExtractDSMContext (operation, response, span, streamName) {
+    if (!this.config.dsmEnabled) return
+    if (operation !== 'getRecords') return
+    if (!response || !response.Records || !response.Records[0]) return
+
+    // we only want to set the payloadSize on the span if we have one message, not repeatedly
+    span = response.Records.length > 1 ? null : span
+
+    response.Records.forEach(record => {
+      const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
+
+      if (parsedAttributes && parsedAttributes[CONTEXT_PROPAGATION_KEY] & streamName) {
+        const payloadSize = getSizeOrZero(record.Data)
+        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes[CONTEXT_PROPAGATION_KEY]))
+        this.tracer
+          .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
-      this.tracer.decodeDataStreamsContext(Buffer.from(context[CONTEXT_PROPAGATION_KEY]))
-      this.tracer
-        .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
-    }
+    })
   }
 
   // AWS-SDK will b64 kinesis payloads
