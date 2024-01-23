@@ -307,61 +307,56 @@ describe('Plugin', () => {
 
           const expectedProducerHash = '17191234428405871432'
           const expectedConsumerHash = '18277095184718602853'
-          let queue
-  
+
           before(() => {
             tracer = require('../../dd-trace')
             tracer.use('amqplib')
           })
-  
+
           before(async () => {
             return agent.load('amqplib')
           })
-  
+
           after(() => {
             return agent.close({ ritmReset: false })
           })
-  
+
           it('Should set pathway hash tag on a span when producing', (done) => {
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
-
-              queue = ok.queue
 
               channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
 
               let produceSpanMeta = {}
               agent.use(traces => {
                 const span = traces[0][0]
-  
+
                 if (span.resource.startsWith('basic.publish')) {
                   produceSpanMeta = span.meta
                 }
-  
+
                 expect(produceSpanMeta).to.include({
                   'pathway.hash': expectedProducerHash
                 })
               }).then(done, done)
             })
           })
-  
+
           it('Should set pathway hash tag on a span when consuming', (done) => {
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
 
-              queue = ok.queue
-
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
                 if (err) return done(err)
-                
+
                 let consumeSpanMeta = {}
                 agent.use(traces => {
                   const span = traces[0][0]
-  
+
                   if (span.resource.startsWith('basic.deliver')) {
                     consumeSpanMeta = span.meta
                   }
-  
+
                   expect(consumeSpanMeta).to.include({
                     'pathway.hash': expectedConsumerHash
                   })
@@ -369,9 +364,9 @@ describe('Plugin', () => {
               })
             })
           })
-  
+
           it('Should emit DSM stats to the agent when sending a message', done => {
-            agent.expectStats(dsmStats => {
+            agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
               // we should have 1 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
@@ -384,18 +379,16 @@ describe('Plugin', () => {
               expect(statsPointsReceived).to.be.at.least(1)
               expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
             }).then(done, done)
-  
+
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
-
-              queue = ok.queue
 
               channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
             })
           })
-  
+
           it('Should emit DSM stats to the agent when receiving a message', done => {
-            agent.expectStats(dsmStats => {
+            agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
               // we should have 2 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
@@ -407,17 +400,14 @@ describe('Plugin', () => {
               })
               expect(statsPointsReceived).to.be.at.least(2)
               expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-            }, {timeoutMs: 10000}).then(done, done)
-  
+            }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
 
-              queue = ok.queue
-
               channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
-                if (err) console.log(err)
+                if (err) done(err)
               })
             })
           })

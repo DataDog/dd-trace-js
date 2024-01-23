@@ -11,7 +11,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
   static get id () { return 'amqplib' }
   static get operation () { return 'command' }
 
-  start ({ channel = {}, method, fields, message}) {
+  start ({ channel = {}, method, fields, message }) {
     if (method !== 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
@@ -35,9 +35,11 @@ class AmqplibProducerPlugin extends ProducerPlugin {
 
     if (this.config.dsmEnabled) {
       const hasRoutingKey = fields.routingKey != null
-      const payloadSize = getAmqpMessageSize({content: message, headers: fields.headers})
+      const payloadSize = getAmqpMessageSize({ content: message, headers: fields.headers })
       const dataStreamsContext = this.tracer
-        .setCheckpoint(['direction:out', `exchange:${fields.exchange}`, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq'], span, payloadSize)
+        .setCheckpoint(
+          ['direction:out', `exchange:${fields.exchange}`, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq']
+          , span, payloadSize)
       const pathwayCtx = encodePathwayContext(dataStreamsContext)
       fields.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
     }

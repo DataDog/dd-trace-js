@@ -29,7 +29,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
     })
 
     if (this.config.dsmEnabled && message) {
-      const payloadSize = getAmqpMessageSize({headers: message.properties.headers, content: message.content})
+      const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
       const queue = fields.routingKey
       this.tracer.decodeDataStreamsContext(message.properties.headers[CONTEXT_PROPAGATION_KEY])
       this.tracer
