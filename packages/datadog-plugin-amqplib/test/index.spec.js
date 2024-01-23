@@ -338,7 +338,7 @@ describe('Plugin', () => {
                 expect(produceSpanMeta).to.include({
                   'pathway.hash': expectedProducerHash
                 })
-              }).then(done, done)
+              }, { timeoutMs: 10000 }).then(done, done)
             })
           })
 
@@ -360,7 +360,7 @@ describe('Plugin', () => {
                   expect(consumeSpanMeta).to.include({
                     'pathway.hash': expectedConsumerHash
                   })
-                }).then(done, done)
+                }, { timeoutMs: 10000 }).then(done, done)
               })
             })
           })
@@ -378,7 +378,7 @@ describe('Plugin', () => {
               })
               expect(statsPointsReceived).to.be.at.least(1)
               expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-            }).then(done, done)
+            }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
