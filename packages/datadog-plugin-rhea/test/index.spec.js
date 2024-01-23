@@ -62,7 +62,7 @@ describe('Plugin', () => {
               expect(produceSpanMeta).to.include({
                 'pathway.hash': expectedProducerHash
               })
-            }).then(done, done)
+            }, { timeoutMs: 2000 }).then(done, done)
 
             context.sender.send({ body: 'hello from DSM' })
           })
@@ -82,7 +82,7 @@ describe('Plugin', () => {
                 expect(consumeSpanMeta).to.include({
                   'pathway.hash': expectedConsumerHash
                 })
-              }).then(done, done)
+              }, { timeoutMs: 2000 }).then(done, done)
             })
           })
 
@@ -96,7 +96,7 @@ describe('Plugin', () => {
                     statsPointsReceived += statsBuckets.Stats.length
                   })
                 }
-              })
+              }, { timeoutMs: 2000 })
               expect(statsPointsReceived).to.be.at.least(1)
               expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
             }).then(done, done)
@@ -117,7 +117,7 @@ describe('Plugin', () => {
               })
               expect(statsPointsReceived).to.be.at.least(2)
               expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-            }, { timeoutMs: 10000 }).then(done, done)
+            }, { timeoutMs: 2000 }).then(done, done)
 
             context.sender.send({ body: 'hello from DSM' })
             container.once('message', msg => {
