@@ -376,6 +376,9 @@ describe('CI Visibility Exporter', () => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/tests/skippable')
           .reply(200, JSON.stringify({
+            meta: {
+              correlation_id: '1234'
+            },
             data: [{
               type: 'suite',
               attributes: {
