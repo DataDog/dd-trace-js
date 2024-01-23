@@ -403,7 +403,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
             .map(filename => getTestSuitePath(filename, environment.rootDir))
           asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
+            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
@@ -495,6 +495,8 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddForcedToRun,
+      _ddUnskippable,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

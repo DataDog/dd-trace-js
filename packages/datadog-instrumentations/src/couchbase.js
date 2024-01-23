@@ -252,9 +252,10 @@ addHook({ name: 'couchbase', file: 'lib/cluster.js', versions: ['^3.0.7', '^3.1.
   return Cluster
 })
 
-// semver >=3.2.0
+// semver >=3.2.2
+// NOTE: <3.2.2 segfaults on cluster.close() https://issues.couchbase.com/browse/JSCBC-936
 
-addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }, collection => {
+addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.2'] }, collection => {
   const Collection = collection.Collection
 
   wrapAllNames(['upsert', 'insert', 'replace'], name => {
@@ -264,7 +265,7 @@ addHook({ name: 'couchbase', file: 'dist/collection.js', versions: ['>=3.2.0'] }
   return collection
 })
 
-addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bucket => {
+addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.2'] }, bucket => {
   const Bucket = bucket.Bucket
   shimmer.wrap(Bucket.prototype, 'collection', getCollection => {
     return function () {
@@ -278,7 +279,7 @@ addHook({ name: 'couchbase', file: 'dist/bucket.js', versions: ['>=3.2.0'] }, bu
   return bucket
 })
 
-addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['3.2.0 - 3.2.1', '>=3.2.2'] }, (cluster) => {
+addHook({ name: 'couchbase', file: 'dist/cluster.js', versions: ['>=3.2.2'] }, (cluster) => {
   const Cluster = cluster.Cluster
 
   shimmer.wrap(Cluster.prototype, 'query', wrapV3Query)

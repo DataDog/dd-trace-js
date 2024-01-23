@@ -40,13 +40,13 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/${lambdaClientName}@${version}`).get()
 
-          lambda = new AWS.Lambda({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+          lambda = new AWS.Lambda({ endpoint: 'http://127.0.0.1:4567', region: 'us-east-1' })
           lambda.createFunction({
             FunctionName: 'ironmaiden',
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs16.x'
+            Runtime: 'nodejs18.x'
           }, (err, res) => {
             if (err) return done(err)
 

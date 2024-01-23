@@ -18,10 +18,10 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [16, 18, latest]
+        version: [18, 20, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -33,7 +33,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [16, latest]
+        version: [18, latest]
         framework: [cucumber, playwright]
     runs-on: ubuntu-latest
     env:
@@ -41,7 +41,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -62,13 +62,14 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: yarn install --ignore-engines
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn test:integration:cypress
+      - run: yarn config set ignore-engines true
+      - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
@@ -76,7 +77,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn lint
@@ -84,7 +85,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn type:test

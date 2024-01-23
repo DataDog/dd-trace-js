@@ -28,7 +28,7 @@ describe('exporters/file', () => {
     await exporter.export({ profiles, end: new Date('2023-02-10T21:03:05Z') })
 
     sinon.assert.calledOnce(fs.writeFile)
-    sinon.assert.calledWith(fs.writeFile, 'test_20230210T210305Z.pprof', buffer)
+    sinon.assert.calledWith(fs.writeFile, 'test_worker_0_20230210T210305Z.pprof', buffer)
   })
 
   it('should export to a file per profile type with given prefix', async () => {
@@ -40,6 +40,6 @@ describe('exporters/file', () => {
     await exporter.export({ profiles, end: new Date('2023-02-10T21:03:05Z') })
 
     sinon.assert.calledOnce(fs.writeFile)
-    sinon.assert.calledWith(fs.writeFile, 'myprefix_test_20230210T210305Z.pprof', buffer)
+    sinon.assert.calledWith(fs.writeFile, 'myprefix_test_worker_0_20230210T210305Z.pprof', buffer)
   })
 })

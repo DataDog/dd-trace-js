@@ -29,6 +29,30 @@ const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_ITR_UNSKIPPABLE,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  incrementCountMetric,
+  distributionMetric
+} = require('../../dd-trace/src/ci-visibility/telemetry')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
+const {
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_PROVIDER_NAME
+} = require('../../dd-trace/src/plugins/util/tags')
+const {
+  OS_VERSION,
+  OS_PLATFORM,
+  OS_ARCHITECTURE,
+  RUNTIME_NAME,
+  RUNTIME_VERSION
+} = require('../../dd-trace/src/plugins/util/env')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -152,15 +176,18 @@ module.exports = (on, config) => {
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const {
-    'git.repository_url': repositoryUrl,
-    'git.commit.sha': sha,
-    'os.version': osVersion,
-    'os.platform': osPlatform,
-    'os.architecture': osArchitecture,
-    'runtime.name': runtimeName,
-    'runtime.version': runtimeVersion,
-    'git.branch': branch
+    [GIT_REPOSITORY_URL]: repositoryUrl,
+    [GIT_COMMIT_SHA]: sha,
+    [OS_VERSION]: osVersion,
+    [OS_PLATFORM]: osPlatform,
+    [OS_ARCHITECTURE]: osArchitecture,
+    [RUNTIME_NAME]: runtimeName,
+    [RUNTIME_VERSION]: runtimeVersion,
+    [GIT_BRANCH]: branch,
+    [CI_PROVIDER_NAME]: ciProviderName
   } = testEnvironmentMetadata
+
+  const isUnsupportedCIProvider = !ciProviderName
 
   const finishedTestsByFile = {}
 
@@ -192,6 +219,15 @@ module.exports = (on, config) => {
   let hasForcedToRunSuites = false
   let hasUnskippableSuites = false
 
+  function ciVisEvent (name, testLevel, tags = {}) {
+    incrementCountMetric(name, {
+      testLevel,
+      testFramework: 'cypress',
+      isUnsupportedCIProvider,
+      ...tags
+    })
+  }
+
   function getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
     const testSuiteTags = {
       [TEST_COMMAND]: command,
@@ -220,13 +256,17 @@ module.exports = (on, config) => {
 
     if (isUnskippable) {
       hasUnskippableSuites = true
+      incrementCountMetric(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
     }
 
     if (isForcedToRun) {
       hasForcedToRunSuites = true
+      incrementCountMetric(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
     }
+
+    ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
     return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
@@ -281,6 +321,8 @@ module.exports = (on, config) => {
             ...testSessionSpanMetadata
           }
         })
+        ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
         testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
           childOf: testSessionSpan,
           tags: {
@@ -289,6 +331,8 @@ module.exports = (on, config) => {
             ...testModuleSpanMetadata
           }
         })
+        ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
+
         return details
       })
     })
@@ -347,6 +391,7 @@ module.exports = (on, config) => {
       }
       testSuiteSpan.finish()
       testSuiteSpan = null
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
   })
 
@@ -371,7 +416,9 @@ module.exports = (on, config) => {
       )
 
       testModuleSpan.finish()
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       testSessionSpan.finish()
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
 
       finishAllTraceSpans(testSessionSpan)
     }
@@ -383,10 +430,12 @@ module.exports = (on, config) => {
       }
       if (exporter.flush) {
         exporter.flush(() => {
+          appClosingTelemetry()
           resolve(null)
         })
       } else if (exporter._writer) {
         exporter._writer.flush(() => {
+          appClosingTelemetry()
           resolve(null)
         })
       }
@@ -406,6 +455,7 @@ module.exports = (on, config) => {
           ...testSuiteSpanMetadata
         }
       })
+      ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       return null
     },
     'dd:beforeEach': (test) => {
@@ -435,6 +485,10 @@ module.exports = (on, config) => {
         if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          if (!relativeCoverageFiles.length) {
+            incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
+          distributionMetric(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
           const { _traceId, _spanId } = testSuiteSpan.context()
           const formattedCoverage = {
             sessionId: _traceId,
@@ -470,6 +524,7 @@ module.exports = (on, config) => {
         // test spans are finished at after:spec
       }
       activeSpan = null
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
       return null
     },
     'dd:addTags': (tags) => {

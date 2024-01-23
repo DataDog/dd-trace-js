@@ -9,7 +9,7 @@ esbuild.build({
   outfile: 'out.js',
   plugins: [ddPlugin],
   platform: 'node',
-  target: ['node16'],
+  target: ['node18'],
   external: [
     // dead code paths introduced by knex
     'pg',

@@ -112,10 +112,25 @@ function flatten (input, result = [], prefix = [], traversedObjects = null) {
   return result
 }
 
+function getInstallSignature (config) {
+  const { installSignature: sig } = config
+  if (sig && (sig.id || sig.time || sig.type)) {
+    return {
+      install_id: sig.id,
+      install_time: sig.time,
+      install_type: sig.type
+    }
+  }
+}
+
 function appStarted (config) {
   const app = {
     products: getProducts(config),
     configuration: flatten(config)
+  }
+  const installSignature = getInstallSignature(config)
+  if (installSignature) {
+    app.install_signature = installSignature
   }
   // TODO: add app.error with correct error codes
   // if (errors.agentError) {
@@ -125,10 +140,18 @@ function appStarted (config) {
   return app
 }
 
-function onBeforeExit () {
-  process.removeListener('beforeExit', onBeforeExit)
+function appClosing () {
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  // we flush before shutting down. Only in CI Visibility
+  if (config.isCiVisibility) {
+    metricsManager.send(config, application, host)
+  }
+}
+
+function onBeforeExit () {
+  process.removeListener('beforeExit', onBeforeExit)
+  appClosing()
 }
 
 function createAppObject (config) {
@@ -286,11 +309,30 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const configuration = changes.map(change => ({
-    name: change.name,
-    value: Array.isArray(change.value) ? change.value.join(',') : change.value,
-    origin: change.origin
-  }))
+  const names = {
+    sampleRate: 'DD_TRACE_SAMPLE_RATE',
+    logInjection: 'DD_LOG_INJECTION',
+    headerTags: 'DD_TRACE_HEADER_TAGS',
+    tags: 'DD_TAGS'
+  }
+
+  const configuration = []
+
+  for (const change of changes) {
+    if (!names.hasOwnProperty(change.name)) continue
+
+    const name = names[change.name]
+    const { origin, value } = change
+    const entry = { name, origin, value }
+
+    if (Array.isArray(value)) {
+      entry.value = value.join(',')
+    } else if (name === 'DD_TAGS') {
+      entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
+    }
+
+    configuration.push(entry)
+  }
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
@@ -301,5 +343,6 @@ module.exports = {
   start,
   stop,
   updateIntegrations,
-  updateConfig
+  updateConfig,
+  appClosing
 }

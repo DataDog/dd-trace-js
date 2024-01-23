@@ -1,0 +1,56 @@
+name: Release (4.x)
+
+on:
+  push:
+    branches:
+      - v4.x
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+      contents: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm publish --tag latest-node16 --provenance
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - run: |
+          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
+          git push origin v${{ fromJson(steps.pkg.outputs.json).version }}
+
+  injection-image-publish:
+    runs-on: ubuntu-latest
+    needs: ['publish']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+      - name: Log in to the Container registry
+        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - name: npm pack for injection image
+        run: |
+          npm pack dd-trace@${{ fromJson(steps.pkg.outputs.json).version }}
+      - uses: ./.github/actions/injection
+        with:
+          init-image-version: v${{ fromJson(steps.pkg.outputs.json).version }}

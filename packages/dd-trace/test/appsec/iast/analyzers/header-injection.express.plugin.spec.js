@@ -84,6 +84,22 @@ describe('Header injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability({
+          testDescription: 'should not have HEADER_INJECTION vulnerability ' +
+            'when is the header same header',
+          fn: (req, res) => {
+            setHeaderFunction('testheader', req.get('testheader'), res)
+          },
+          vulnerability: 'HEADER_INJECTION',
+          makeRequest: (done, config) => {
+            return axios.get(`http://localhost:${config.port}/`, {
+              headers: {
+                testheader: 'headerValue'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
           testDescription: 'should not have HEADER_INJECTION vulnerability when the header value is not tainted',
           fn: (req, res) => {
             setHeaderFunction('custom', 'not tainted string', res)
@@ -219,6 +235,37 @@ describe('Header injection vulnerability', () => {
             }, {
               headers: {
                 testheader: 'headerValue'
+              }
+            }).catch(done)
+          }
+        })
+
+        testThatRequestHasNoVulnerability({
+          fn: (req, res) => {
+            setHeaderFunction('Access-Control-Allow-Origin', req.headers['origin'], res)
+            setHeaderFunction('Access-Control-Allow-Headers', req.headers['access-control-request-headers'], res)
+            setHeaderFunction('Access-Control-Allow-Methods', req.headers['access-control-request-methods'], res)
+          },
+          testDescription: 'Should not have vulnerability with CORS headers',
+          vulnerability: 'HEADER_INJECTION',
+          occurrencesAndLocation: {
+            occurrences: 1,
+            location: {
+              path: setHeaderFunctionFilename,
+              line: 4
+            }
+          },
+          cb: (headerInjectionVulnerabilities) => {
+            const evidenceString = headerInjectionVulnerabilities[0].evidence.valueParts
+              .map(part => part.value).join('')
+            expect(evidenceString).to.be.equal('custom: value')
+          },
+          makeRequest: (done, config) => {
+            return axios.options(`http://localhost:${config.port}/`, {
+              headers: {
+                'origin': 'http://custom-origin',
+                'Access-Control-Request-Headers': 'TestHeader',
+                'Access-Control-Request-Methods': 'GET'
               }
             }).catch(done)
           }

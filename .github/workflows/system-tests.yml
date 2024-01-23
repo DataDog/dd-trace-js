@@ -26,12 +26,12 @@ jobs:
 
     steps:
       - name: Checkout system tests
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
 
       - name: Checkout dd-trace-js
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: 'binaries/dd-trace-js'
 
@@ -62,15 +62,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TEST_LIBRARY: nodejs
-      NODEJS_DDTRACE_MODULE: datadog/dd-trace-js#${{ github.sha }}
     steps:
       - name: Checkout system tests
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v4
+        with:
+          path: 'binaries/dd-trace-js'
       - name: Build
         run: ./build.sh -i runner
       - name: Run

@@ -74,6 +74,11 @@ describe('telemetry', () => {
       peerServiceMapping: {
         'service_1': 'remapped_service_1',
         'service_2': 'remapped_service_2'
+      },
+      installSignature: {
+        id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+        type: 'k8s_single_step',
+        time: '1703188212'
       }
     }, {
       _pluginsByName: pluginsByName
@@ -89,7 +94,7 @@ describe('telemetry', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
-        profiler: { version: '5.0.0-pre', enabled: true }
+        profiler: { version: tracerVersion, enabled: true }
       })
       expect(payload).to.have.property('configuration').that.deep.equal([
         { name: 'telemetry.enabled', value: true, origin: 'unknown' },
@@ -105,8 +110,16 @@ describe('telemetry', () => {
         { name: 'appsec.enabled', value: true, origin: 'unknown' },
         { name: 'profiling.enabled', value: true, origin: 'unknown' },
         { name: 'peerServiceMapping.service_1', value: 'remapped_service_1', origin: 'unknown' },
-        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'unknown' }
+        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'unknown' },
+        { name: 'installSignature.id', value: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', origin: 'unknown' },
+        { name: 'installSignature.type', value: 'k8s_single_step', origin: 'unknown' },
+        { name: 'installSignature.time', value: '1703188212', origin: 'unknown' }
       ])
+      expect(payload).to.have.property('install_signature').that.deep.equal({
+        install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
+        install_type: 'k8s_single_step',
+        install_time: '1703188212'
+      })
     })
   })
 

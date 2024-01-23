@@ -21,8 +21,8 @@ describe('user_blocking', () => {
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')
-      runStub.withArgs({ [USER_ID]: 'user' }).returns(['block'])
-      runStub.withArgs({ [USER_ID]: 'gooduser' }).returns([''])
+      runStub.withArgs({ persistent: { [USER_ID]: 'user' } }).returns(['block'])
+      runStub.withArgs({ persistent: { [USER_ID]: 'gooduser' } }).returns([''])
     })
 
     beforeEach(() => {
