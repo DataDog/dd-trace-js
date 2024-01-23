@@ -8,7 +8,8 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let tracer
 
-  describe('rhea', () => {
+  describe('rhea', function () {
+    this.timeout(20000)
     before(() => agent.load('rhea'))
     after(() => agent.close({ ritmReset: false }))
 
@@ -44,6 +45,84 @@ describe('Plugin', () => {
             })
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
+          })
+
+          const expectedProducerHash = '15837999642856815456'
+          const expectedConsumerHash = '18403970455318595370'
+
+          it('Should set pathway hash tag on a span when producing', (done) => {
+            let produceSpanMeta = {}
+            agent.use(traces => {
+              const span = traces[0][0]
+
+              if (span.meta['span.kind'] === 'producer') {
+                produceSpanMeta = span.meta
+              }
+
+              expect(produceSpanMeta).to.include({
+                'pathway.hash': expectedProducerHash
+              })
+            }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+          })
+
+          it('Should set pathway hash tag on a span when consuming', (done) => {
+            context.sender.send({ body: 'hello from DSM' })
+
+            container.once('message', msg => {
+              let consumeSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                if (span.meta['span.kind'] === 'consumer') {
+                  consumeSpanMeta = span.meta
+                }
+
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
+                })
+              }).then(done, done)
+            })
+          })
+
+          it('Should emit DSM stats to the agent when sending a message', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(1)
+              expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+          })
+
+          it('Should emit DSM stats to the agent when receiving a message', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(2)
+              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            }, { timeoutMs: 10000 }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+            container.once('message', msg => {
+              msg.delivery.accept()
+            })
           })
 
           describe('sending a message', () => {
@@ -612,115 +691,6 @@ describe('Plugin', () => {
               connection.socket.end()
             })
             serverContext.sender.send({ body: 'hello' })
-          })
-        })
-      })
-
-      describe('when data streams monitoring is enabled', function () {
-        let container
-        let context
-
-        this.timeout(10000)
-
-        const expectedProducerHash = '17191234428405871432'
-        const expectedConsumerHash = '18277095184718602853'
-
-        before(async () => {
-          tracer = require('../../dd-trace')
-          tracer.use('rhea')
-
-          agent.reload('rhea')
-        })
-
-        beforeEach(done => {
-          container = require(`../../../versions/rhea@${version}`).get()
-
-          container.once('sendable', _context => {
-            context = _context
-            done()
-          })
-          const connection = container.connect({
-            username: 'admin',
-            password: 'admin',
-            host: 'localhost',
-            port: 5673
-          })
-          connection.open_sender('amqp.topic')
-          connection.open_receiver('amqp.topic')
-        })
-
-        it('Should set pathway hash tag on a span when producing', (done) => {
-          let produceSpanMeta = {}
-          agent.use(traces => {
-            const span = traces[0][0]
-
-            if (span.meta['span.kind'] === 'producer') {
-              produceSpanMeta = span.meta
-            }
-
-            expect(produceSpanMeta).to.include({
-              'pathway.hash': expectedProducerHash
-            })
-          }).then(done, done)
-
-          context.sender.send({ body: 'hello from DSM' })
-        })
-
-        it('Should set pathway hash tag on a span when consuming', (done) => {
-          context.sender.send({ body: 'hello from DSM' })
-
-          container.once('message', msg => {
-            let consumeSpanMeta = {}
-            agent.use(traces => {
-              const span = traces[0][0]
-
-              if (span.meta['span.kind'] === 'consumer') {
-                consumeSpanMeta = span.meta
-              }
-
-              expect(consumeSpanMeta).to.include({
-                'pathway.hash': expectedConsumerHash
-              })
-            }).then(done, done)
-          })
-        })
-
-        it('Should emit DSM stats to the agent when sending a message', done => {
-          agent.expectPipelineStats(dsmStats => {
-            let statsPointsReceived = 0
-            // we should have 1 dsm stats points
-            dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
-                timeStatsBucket.Stats.forEach((statsBuckets) => {
-                  statsPointsReceived += statsBuckets.Stats.length
-                })
-              }
-            })
-            expect(statsPointsReceived).to.be.at.least(1)
-            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-          }).then(done, done)
-
-          context.sender.send({ body: 'hello from DSM' })
-        })
-
-        it('Should emit DSM stats to the agent when receiving a message', done => {
-          agent.expectPipelineStats(dsmStats => {
-            let statsPointsReceived = 0
-            // we should have 2 dsm stats points
-            dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
-                timeStatsBucket.Stats.forEach((statsBuckets) => {
-                  statsPointsReceived += statsBuckets.Stats.length
-                })
-              }
-            })
-            expect(statsPointsReceived).to.be.at.least(2)
-            expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
-          }, { timeoutMs: 10000 }).then(done, done)
-
-          context.sender.send({ body: 'hello from DSM' })
-          container.once('message', msg => {
-            msg.delivery.accept()
           })
         })
       })
