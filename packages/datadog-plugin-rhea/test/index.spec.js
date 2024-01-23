@@ -674,7 +674,7 @@ describe('Plugin', () => {
             agent.use(traces => {
               const span = traces[0][0]
 
-              if (span.meta['span.kind'] === 'producer') {
+              if (span.meta['span.kind'] === 'consumer') {
                 consumeSpanMeta = span.meta
               }
 

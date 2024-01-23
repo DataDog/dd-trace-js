@@ -292,6 +292,7 @@ module.exports = {
 
     server.on('close', () => {
       tracer = null
+      dsmStats = []
     })
 
     tracer.init(Object.assign({}, {
@@ -315,6 +316,7 @@ module.exports = {
     pluginName = [].concat(pluginName)
     plugins = pluginName
     config = [].concat(config)
+    dsmStats = []
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
