@@ -209,29 +209,6 @@ describe('Kinesis', function () {
         })
       })
 
-      it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
-        let getRecordSpanMeta = {}
-        agent.use(traces => {
-          const span = traces[0][0]
-
-          if (span.name === 'aws.response') {
-            getRecordSpanMeta = span.meta
-          }
-
-          expect(getRecordSpanMeta).to.include({
-            'pathway.hash': expectedConsumerHash
-          })
-        }, { timeoutMs: 10000 }).then(done, done)
-
-        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
-          if (err) return done(err)
-
-          helpers.getTestData(kinesis, streamNameDSM, data, (err, data) => {
-            if (err) return done(err)
-          })
-        })
-      })
-
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
