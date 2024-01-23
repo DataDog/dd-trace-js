@@ -7,7 +7,7 @@ const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
 describe('Kinesis', function () {
-  this.timeout(20000)
+  this.timeout(10000)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -51,7 +51,7 @@ describe('Kinesis', function () {
 
     describe('no configuration', () => {
       before(() => {
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: true })
       })
 
       before(done => {
@@ -214,7 +214,7 @@ describe('Kinesis', function () {
         agent.use(traces => {
           const span = traces[0][0]
 
-          if (span.resource.startsWith('getRecord')) {
+          if (span.name === 'aws.response') {
             getRecordSpanMeta = span.meta
           }
 
