@@ -45,7 +45,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
-        request.operation, response, span ?? null, streamName
+        request.operation, response, span ?? null, this.requestTags.streamName
       )
     })
 
@@ -102,9 +102,14 @@ class Kinesis extends BaseAwsSdkPlugin {
     response.Records.forEach(record => {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
-      if (parsedAttributes && parsedAttributes[CONTEXT_PROPAGATION_KEY] & streamName) {
+      if (
+        parsedAttributes &&
+        parsedAttributes._datadog &&
+        parsedAttributes._datadog[CONTEXT_PROPAGATION_KEY] &&
+        streamName
+      ) {
         const payloadSize = getSizeOrZero(record.Data)
-        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes[CONTEXT_PROPAGATION_KEY]))
+        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes._datadog[CONTEXT_PROPAGATION_KEY]))
         this.tracer
           .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
