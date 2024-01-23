@@ -9,7 +9,9 @@ describe('Plugin', () => {
   let tracer
 
   describe('rhea', function () {
-    before(() => agent.load('rhea'))
+    before(() => {
+      agent.load('rhea', {}, { dsmEnabled: true })
+    })
     after(() => agent.close({ ritmReset: false }))
 
     withVersions('rhea', 'rhea', version => {
