@@ -19,11 +19,13 @@ const DEFAULT_GIT_UPLOAD_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
   endpoints: ['/evp_proxy/v2']
 }
+const DEFAULT_CORRELATION_ID = '1234'
 
 let settings = DEFAULT_SETTINGS
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
+let correlationId = DEFAULT_CORRELATION_ID
 
 class FakeCiVisIntake extends FakeAgent {
   setInfoResponse (newInfoResponse) {
@@ -36,6 +38,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSuitesToSkip (newSuitesToSkip) {
     suitesToSkip = newSuitesToSkip
+  }
+
+  setItrCorrelationId (newCorrelationId) {
+    correlationId = newCorrelationId
   }
 
   setSettings (newSettings) {
@@ -140,7 +146,10 @@ class FakeCiVisIntake extends FakeAgent {
       '/evp_proxy/v2/api/v2/ci/tests/skippable'
     ], (req, res) => {
       res.status(200).send(JSON.stringify({
-        data: suitesToSkip
+        data: suitesToSkip,
+        meta: {
+          correlation_id: correlationId
+        }
       }))
       this.emit('message', {
         headers: req.headers,
