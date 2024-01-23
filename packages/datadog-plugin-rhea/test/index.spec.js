@@ -10,7 +10,7 @@ describe('Plugin', () => {
 
   describe('rhea', function () {
     before(() => {
-      agent.load('rhea', {}, { dsmEnabled: true })
+      agent.load('rhea')
     })
     after(() => agent.close({ ritmReset: false }))
 
@@ -20,8 +20,7 @@ describe('Plugin', () => {
         let context
 
         beforeEach(() => {
-          tracer = require('../../dd-trace').init({ dsmEnabled: true })
-          console.log(tracer._tracer._config.dsmEnabled)
+          tracer = require('../../dd-trace')
         })
 
         afterEach((done) => {
@@ -30,7 +29,7 @@ describe('Plugin', () => {
         })
 
         describe('without configuration', () => {
-          beforeEach(() => agent.reload('rhea', {}, { dsmEnabled: true }))
+          beforeEach(() => agent.reload('rhea'))
 
           beforeEach(done => {
             container = require(`../../../versions/rhea@${version}`).get()
@@ -53,8 +52,6 @@ describe('Plugin', () => {
           const expectedConsumerHash = '18403970455318595370'
 
           it('Should set pathway hash tag on a span when producing', (done) => {
-            console.log(`dsmEnabled: ${tracer._tracer._config.dsmEnabled}`)
-
             let produceSpanMeta = {}
             agent.use(traces => {
               const span = traces[0][0]
