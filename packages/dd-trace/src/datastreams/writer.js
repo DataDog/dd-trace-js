@@ -59,6 +59,15 @@ class DataStreamsWriter {
       })
     })
   }
+
+  setUrl (url) {
+    try {
+      url = new URL(url)
+      this._url = url
+    } catch (e) {
+      log.warn(e.stack)
+    }
+  }
 }
 
 module.exports = {
