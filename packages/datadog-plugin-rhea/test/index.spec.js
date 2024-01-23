@@ -50,7 +50,7 @@ describe('Plugin', () => {
           const expectedConsumerHash = '18403970455318595370'
 
           it('Should set pathway hash tag on a span when producing', (done) => {
-            console.log(`dsmEnabled: ${tracer._config.dsmEnabled}`)
+            console.log(`dsmEnabled: ${tracer._tracer._config.dsmEnabled}`)
 
             let produceSpanMeta = {}
             agent.use(traces => {

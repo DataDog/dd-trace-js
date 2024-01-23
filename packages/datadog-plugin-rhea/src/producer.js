@@ -39,6 +39,7 @@ function addDeliveryAnnotations (msg, tracer, span) {
 
     tracer.inject(span, 'text_map', msg.delivery_annotations)
 
+    console.log(`rhea: ${tracer._config.dsmEnabled}`)
     if (tracer._config.dsmEnabled) {
       const targetName = span.context()._tags['amqp.link.target.address']
       const payloadSize = getAmqpMessageSize({ content: msg.body, headers: msg.delivery_annotations })
