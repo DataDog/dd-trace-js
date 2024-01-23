@@ -800,19 +800,19 @@ class Config {
     this._setBoolean(calc, 'stats.enabled', this.DD_TRACE_STATS_COMPUTATION_ENABLED)
   }
 
-  _applyRemote () {
+  _applyRemote (options) {
     const opts = this._remote = this._remote || {}
     const tags = {}
-    const headerTags = this.options.tracing_header_tags
-      ? this.options.tracing_header_tags.map(tag => {
+    const headerTags = options.tracing_header_tags
+      ? options.tracing_header_tags.map(tag => {
         return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
       })
       : undefined
 
-    tagger.add(tags, this.options.tracing_tags)
+    tagger.add(tags, options.tracing_tags)
 
-    this._setUnit(opts, 'sampleRate', this.options.tracing_sampling_rate)
-    this._setBoolean(opts, 'logInjection', this.options.log_injection_enabled)
+    this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
+    this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
   }
