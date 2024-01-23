@@ -2,7 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const { SourceIastPlugin } = require('../../../../../src/appsec/iast/iast-plugin')
-const { KAFKA_KEY, KAFKA_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('Kafka consumer plugin', () => {
   let kafkaConsumerPlugin
@@ -42,7 +42,7 @@ describe('Kafka consumer plugin', () => {
   it('should subscribe to dd-trace:kafkajs:consumer:start channel', () => {
     expect(addSub).to.be.calledOnceWith({
       channelName: 'dd-trace:kafkajs:consumer:start',
-      tag: [KAFKA_KEY, KAFKA_VALUE]
+      tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE]
     })
   })
 
@@ -56,8 +56,8 @@ describe('Kafka consumer plugin', () => {
 
     expect(newTaintedObject).to.be.calledTwice
 
-    expect(newTaintedObject.firstCall).to.be.calledWith(iastContext, message.key, 'key', KAFKA_KEY)
-    expect(newTaintedObject.secondCall).to.be.calledWith(iastContext, message.value, 'value', KAFKA_VALUE)
+    expect(newTaintedObject.firstCall).to.be.calledWith(iastContext, message.key, 'key', KAFKA_MESSAGE_KEY)
+    expect(newTaintedObject.secondCall).to.be.calledWith(iastContext, message.value, 'value', KAFKA_MESSAGE_VALUE)
   })
 
   it('should taint key Buffer.toString method', () => {
@@ -70,7 +70,7 @@ describe('Kafka consumer plugin', () => {
 
     const keyStr = message.key.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, keyStr, 'key', KAFKA_KEY)
+    expect(newTaintedString).to.be.calledOnceWith(iastContext, keyStr, 'key', KAFKA_MESSAGE_KEY)
   })
 
   it('should taint value Buffer.toString method', () => {
@@ -83,7 +83,7 @@ describe('Kafka consumer plugin', () => {
 
     const valueStr = message.value.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, valueStr, 'value', KAFKA_VALUE)
+    expect(newTaintedString).to.be.calledOnceWith(iastContext, valueStr, 'value', KAFKA_MESSAGE_VALUE)
   })
 
   it('should not fail with an unknown kafka message', () => {

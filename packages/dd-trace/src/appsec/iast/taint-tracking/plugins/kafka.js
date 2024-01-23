@@ -3,13 +3,13 @@
 const shimmer = require('../../../../../../datadog-shimmer')
 const { storage } = require('../../../../../../datadog-core')
 const { getIastContext } = require('../../iast-context')
-const { KAFKA_VALUE, KAFKA_KEY } = require('../source-types')
+const { KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE } = require('../source-types')
 const { newTaintedObject, newTaintedString } = require('../operations')
 const { SourceIastPlugin } = require('../../iast-plugin')
 
 class KafkaConsumerIastPlugin extends SourceIastPlugin {
   onConfigure () {
-    this.addSub({ channelName: 'dd-trace:kafkajs:consumer:start', tag: [KAFKA_KEY, KAFKA_VALUE] },
+    this.addSub({ channelName: 'dd-trace:kafkajs:consumer:start', tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE] },
       ({ message }) => this.taintKafkaMessage(message)
     )
   }
@@ -29,16 +29,16 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
 
       if (key && typeof key === 'object') {
         shimmer.wrap(key, 'toString',
-          toString => this.getToStringWrap(toString, iastContext, 'key', KAFKA_KEY))
+          toString => this.getToStringWrap(toString, iastContext, 'key', KAFKA_MESSAGE_KEY))
 
-        newTaintedObject(iastContext, key, 'key', KAFKA_KEY)
+        newTaintedObject(iastContext, key, 'key', KAFKA_MESSAGE_KEY)
       }
 
       if (value && typeof value === 'object') {
         shimmer.wrap(value, 'toString',
-          toString => this.getToStringWrap(toString, iastContext, 'value', KAFKA_VALUE))
+          toString => this.getToStringWrap(toString, iastContext, 'value', KAFKA_MESSAGE_VALUE))
 
-        newTaintedObject(iastContext, value, 'value', KAFKA_VALUE)
+        newTaintedObject(iastContext, value, 'value', KAFKA_MESSAGE_VALUE)
       }
     }
   }
