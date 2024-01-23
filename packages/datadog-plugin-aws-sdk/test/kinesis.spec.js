@@ -190,6 +190,29 @@ describe('Kinesis', function () {
 
       afterEach(() => agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true }))
 
+      it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
+        let getRecordSpanMeta = {}
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          if (span.name === 'aws.response') {
+            getRecordSpanMeta = span.meta
+          }
+
+          expect(getRecordSpanMeta).to.include({
+            'pathway.hash': expectedConsumerHash
+          })
+        }, { timeoutMs: 10000 }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+            if (err) return done(err)
+          })
+        })
+      })
+
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
         let putRecordSpanMeta = {}
         agent.use(traces => {
