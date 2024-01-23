@@ -45,7 +45,7 @@ describe('Plugin', () => {
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
 
-            console.log(`dsmEnabled: ${tracer.config.dsmEnabled}`)
+            console.log(`dsmEnabled: ${tracer._config.dsmEnabled}`)
           })
 
           const expectedProducerHash = '15837999642856815456'
