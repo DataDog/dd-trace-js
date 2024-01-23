@@ -9,7 +9,6 @@ describe('Plugin', () => {
   let tracer
 
   describe('rhea', function () {
-    this.timeout(20000)
     before(() => agent.load('rhea'))
     after(() => agent.close({ ritmReset: false }))
 
@@ -19,6 +18,7 @@ describe('Plugin', () => {
         let context
 
         beforeEach(() => {
+          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
         })
 
