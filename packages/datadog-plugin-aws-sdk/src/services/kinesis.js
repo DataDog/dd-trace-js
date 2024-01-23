@@ -164,7 +164,6 @@ class Kinesis extends BaseAwsSdkPlugin {
         // Kinesis max payload size is 1MB
         // So we must ensure adding DD context won't go over that (512b is an estimate)
         if (byteSize >= 1048576) {
-          injectPath.Data = originalData
           log.info('Payload size too large to pass context')
           return
         }

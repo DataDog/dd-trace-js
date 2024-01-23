@@ -5,10 +5,6 @@ const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, dsmStatsExist } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
-const { ENTRY_PARENT_HASH, getHeadersSize, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const snsPlugin = require('../src/services/sns')
 
 describe('Sns', () => {
   setup()
