@@ -47,6 +47,10 @@ function safeJsonParse (input) {
   }
 }
 
+const isGCPFunction = getIsGCPFunction()
+const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
+const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 const namingVersions = ['v0', 'v1']
 const defaultNamingVersion = 'v0'
 
@@ -118,25 +122,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_TRACE_AGENT_URL = coalesce(
-      options.url,
-      process.env.DD_TRACE_AGENT_URL,
-      process.env.DD_TRACE_URL,
-      null
-    )
-
-    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
-
-    this.DD_CIVISIBILITY_ITR_ENABLED = coalesce(
-      process.env.DD_CIVISIBILITY_ITR_ENABLED,
-      true
-    )
-
-    this.DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
-      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
-      false
-    )
-
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       false
@@ -152,19 +137,6 @@ class Config {
     const DD_API_KEY = coalesce(
       process.env.DATADOG_API_KEY,
       process.env.DD_API_KEY
-    )
-
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-
-    const isGCPFunction = getIsGCPFunction()
-    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-
-    const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
-
-    this.DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
-      process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !inServerlessEnvironment
     )
 
     // TODO: Remove the experimental env vars as a major?
@@ -233,11 +205,6 @@ class Config {
       0.1
     )
 
-    this.DD_REMOTE_CONFIGURATION_ENABLED = coalesce(
-      process.env.DD_REMOTE_CONFIGURATION_ENABLED && isTrue(process.env.DD_REMOTE_CONFIGURATION_ENABLED),
-      !inServerlessEnvironment
-    )
-
     this.iastOptions = options?.experimental?.iast
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
@@ -285,8 +252,6 @@ class Config {
     defaultFlushInterval = inAWSLambda ? 0 : 2000
 
     this.apiKey = DD_API_KEY
-    this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(DD_TRACE_AGENT_URL, options)
     // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
@@ -376,6 +341,8 @@ class Config {
       this._applyRemote(options)
     } else {
       this._applyOptions(options)
+      this._applyEnvironment()
+      this._applyCalculated()
     }
 
     this._merge()
@@ -477,6 +444,14 @@ class Config {
     this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
   }
 
+  _isInstrumentationTelemetryEnabled () {
+    return coalesce(
+      process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+      !inServerlessEnvironment
+    )
+  }
+
   _applyEnvironment () {
     const {
       DD_ENV,
@@ -525,7 +500,9 @@ class Config {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_STARTUP_LOGS,
+      DD_TRACE_TELEMETRY_ENABLED,
       DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_DEBUG,
       DD_TELEMETRY_METRICS_ENABLED,
@@ -540,6 +517,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_IAST_ENABLED,
       DD_IAST_REQUEST_SAMPLING,
@@ -614,7 +592,11 @@ class Config {
       ))
     }
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
-    this._setBoolean(env, 'telemetry.enabled', this.DD_INSTRUMENTATION_TELEMETRY_ENABLED)
+    this._setBoolean(env, 'telemetry.enabled', coalesce(
+      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+      !inServerlessEnvironment
+    ))
     this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
@@ -631,7 +613,10 @@ class Config {
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
-    this._setBoolean(env, 'remoteConfig.enabled', this.DD_REMOTE_CONFIGURATION_ENABLED)
+    this._setBoolean(env, 'remoteConfig.enabled', coalesce(
+      isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
+      !inServerlessEnvironment
+    ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     const iastRequestSampling = maybeInt(DD_IAST_REQUEST_SAMPLING)
@@ -755,13 +740,22 @@ class Config {
   }
 
   _getHostname () {
+    const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
+    const DD_TRACE_AGENT_URL = coalesce(
+      this.options.url,
+      process.env.DD_TRACE_AGENT_URL,
+      process.env.DD_TRACE_URL,
+      null
+    )
+    const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
+      : getAgentUrl(DD_TRACE_AGENT_URL, this.options)
     const DD_AGENT_HOST = coalesce(
       this.options.hostname,
       process.env.DD_AGENT_HOST,
       process.env.DD_TRACE_AGENT_HOSTNAME,
       '127.0.0.1'
     )
-    return DD_AGENT_HOST || (this.url && this.url.hostname)
+    return DD_AGENT_HOST || (url && url.hostname)
   }
 
   _getSpanComputePeerService () {
