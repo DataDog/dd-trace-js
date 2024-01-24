@@ -135,6 +135,7 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
+    this._dataStreamsProcessor.setUrl(url)
   }
 
   scope () {

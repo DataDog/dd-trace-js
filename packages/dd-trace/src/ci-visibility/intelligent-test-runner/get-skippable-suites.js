@@ -83,7 +83,8 @@ function getSkippableSuites ({
     } else {
       let skippableSuites = []
       try {
-        skippableSuites = JSON.parse(res)
+        const parsedResponse = JSON.parse(res)
+        skippableSuites = parsedResponse
           .data
           .filter(({ type }) => type === testLevel)
           .map(({ attributes: { suite, name } }) => {
@@ -92,6 +93,7 @@ function getSkippableSuites ({
             }
             return { suite, name }
           })
+        const { meta: { correlation_id: correlationId } } = parsedResponse
         incrementCountMetric(
           testLevel === 'test'
             ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
@@ -100,7 +102,7 @@ function getSkippableSuites ({
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
         log.debug(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
-        done(null, skippableSuites)
+        done(null, skippableSuites, correlationId)
       } catch (err) {
         done(err)
       }

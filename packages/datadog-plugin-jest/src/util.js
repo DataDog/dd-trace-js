@@ -77,30 +77,52 @@ function isMarkedAsUnskippable (test) {
 }
 
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
-  return originalTests.reduce((acc, test) => {
+  const unskippableSuites = {}
+  const forcedToRunSuites = {}
+
+  const skippedSuites = []
+  const suitesToRun = []
+
+  for (const test of originalTests) {
     const relativePath = getTestSuitePath(test.path, rootDir)
     const shouldBeSkipped = skippableSuites.includes(relativePath)
-
     if (isMarkedAsUnskippable(test)) {
-      acc.suitesToRun.push(test)
-      if (test?.context?.config?.testEnvironmentOptions) {
-        test.context.config.testEnvironmentOptions['_ddUnskippable'] = true
-        acc.hasUnskippableSuites = true
-        if (shouldBeSkipped) {
-          test.context.config.testEnvironmentOptions['_ddForcedToRun'] = true
-          acc.hasForcedToRunSuites = true
-        }
+      suitesToRun.push(test)
+      unskippableSuites[relativePath] = true
+      if (shouldBeSkipped) {
+        forcedToRunSuites[relativePath] = true
       }
-      return acc
+      continue
     }
-
     if (shouldBeSkipped) {
-      acc.skippedSuites.push(relativePath)
+      skippedSuites.push(relativePath)
     } else {
-      acc.suitesToRun.push(test)
+      suitesToRun.push(test)
     }
-    return acc
-  }, { skippedSuites: [], suitesToRun: [], hasUnskippableSuites: false, hasForcedToRunSuites: false })
+  }
+
+  const hasUnskippableSuites = Object.keys(unskippableSuites).length > 0
+  const hasForcedToRunSuites = Object.keys(forcedToRunSuites).length > 0
+
+  if (originalTests.length) {
+    // The config object is shared by all tests, so we can just take the first one
+    const [test] = originalTests
+    if (test?.context?.config?.testEnvironmentOptions) {
+      if (hasUnskippableSuites) {
+        test.context.config.testEnvironmentOptions._ddUnskippable = JSON.stringify(unskippableSuites)
+      }
+      if (hasForcedToRunSuites) {
+        test.context.config.testEnvironmentOptions._ddForcedToRun = JSON.stringify(forcedToRunSuites)
+      }
+    }
+  }
+
+  return {
+    skippedSuites,
+    suitesToRun,
+    hasUnskippableSuites,
+    hasForcedToRunSuites
+  }
 }
 
 module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun, isMarkedAsUnskippable }

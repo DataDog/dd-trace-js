@@ -13,7 +13,8 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -74,7 +75,7 @@ class CucumberPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun }) => {
+    this.addSub('ci:cucumber:test-suite:start', ({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId }) => {
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
         this.frameworkVersion,
@@ -88,6 +89,9 @@ class CucumberPlugin extends CiPlugin {
       if (isForcedToRun) {
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+      }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
       this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
@@ -169,12 +173,12 @@ class CucumberPlugin extends CiPlugin {
       }
 
       span.finish()
-      this.telemetry.ciVisEvent(
-        TELEMETRY_EVENT_FINISHED,
-        'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
-      )
       if (!isStep) {
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        )
         finishAllTraceSpans(span)
       }
     })
