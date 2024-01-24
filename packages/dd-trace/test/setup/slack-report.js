@@ -83,6 +83,8 @@ async function describe (packageName, versions) {
 }
 
 async function reportToSlack (message) {
+  console.log(message)
+  /*
   await fetch(SLACK_WEBHOOK, {
     method: 'POST',
     headers: {
@@ -94,6 +96,7 @@ async function reportToSlack (message) {
       unfurl_media: false
     })
   })
+  */
 }
 
 async function getVersionData (packageName) {
