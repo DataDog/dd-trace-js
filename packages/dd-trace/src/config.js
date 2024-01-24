@@ -130,10 +130,7 @@ class Config {
       process.env.DD_TRACE_URL,
       null
     )
-    this.DD_IS_CIVISIBILITY = coalesce(
-      options.isCiVisibility,
-      false
-    )
+
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
 
     this.DD_CIVISIBILITY_ITR_ENABLED = coalesce(
@@ -423,6 +420,20 @@ class Config {
     }
 
     this._merge()
+  }
+
+  _isCiVisibility () {
+    return coalesce(
+      this.options.isCiVisibility,
+      false
+    )
+  }
+
+  _isCiVisibilityItrEnabled () {
+    return coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      true
+    )
   }
 
   _applyDefaults () {
@@ -791,7 +802,7 @@ class Config {
     this._setString(calc, 'dogstatsd.hostname', this.HOSTNAME)
     this._setString(calc, 'spanComputePeerService', this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
     this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
-      isTrue(this.DD_IS_CIVISIBILITY) && isTrue(this.DD_CIVISIBILITY_ITR_ENABLED))
+      isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityItrEnabled()))
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc['isIntelligentTestRunnerEnabled'] && !isFalse(this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
     this._setBoolean(calc, 'isManualApiEnabled',
