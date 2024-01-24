@@ -241,6 +241,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
       SERVICES: localstack localstack-legacy
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start

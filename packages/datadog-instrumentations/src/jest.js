@@ -497,6 +497,7 @@ addHook({
       _ddTestCommand,
       _ddForcedToRun,
       _ddUnskippable,
+      _ddItrCorrelationId,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
