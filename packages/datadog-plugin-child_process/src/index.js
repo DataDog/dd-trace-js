@@ -3,23 +3,28 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const scrubChildProcessCmd = require('./scrub-cmd-params')
 
-const MAX_ARG_SIZE = 32000 // 4kB
+const MAX_ARG_SIZE = 4096 // 4kB
 
 function truncateCommand (cmdFields) {
   let size = cmdFields[0].length
-  let limit = false
+  let truncated = false
   for (let i = 1; i < cmdFields.length; i++) {
-    size += cmdFields[i].length
-    if (size >= MAX_ARG_SIZE && !limit) {
-      cmdFields[i] = cmdFields[i].substring(0, 2)
-      limit = true
+    if (size >= MAX_ARG_SIZE) {
+      truncated = true
+      cmdFields[i] = ''
       continue
     }
 
-    if (limit) {
-      cmdFields[i] = ''
+    const argLen = cmdFields[i].length
+    if (size < MAX_ARG_SIZE && size + argLen > MAX_ARG_SIZE) {
+      cmdFields[i] = cmdFields[i].substring(0, 2)
+      truncated = true
     }
+
+    size += argLen
   }
+
+  return truncated
 }
 
 class ChildProcessPlugin extends TracingPlugin {
@@ -36,18 +41,23 @@ class ChildProcessPlugin extends TracingPlugin {
     }
 
     const cmdFields = scrubChildProcessCmd(command)
-    truncateCommand(cmdFields)
-
+    const truncated = truncateCommand(cmdFields)
     const property = (shell === true) ? 'cmd.shell' : 'cmd.exec'
+
+    const meta = {
+      'component': 'subprocess',
+      [property]: (shell === true) ? cmdFields.join(' ') : JSON.stringify(cmdFields)
+    }
+
+    if (truncated) {
+      meta['cmd.truncated'] = `${truncated}`
+    }
 
     this.startSpan('command_execution', {
       service: this.config.service,
-      resource: cmdFields[0],
+      resource: (shell === true) ? 'sh' : cmdFields[0],
       type: 'system',
-      meta: {
-        'component': 'subprocess',
-        [property]: JSON.stringify(cmdFields)
-      }
+      meta
     })
   }
 

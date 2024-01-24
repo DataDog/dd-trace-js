@@ -74,10 +74,35 @@ describe('Child process plugin', () => {
             tags: {
               component: 'subprocess',
               'service.name': undefined,
-              'resource.name': 'ls',
+              'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.shell': JSON.stringify([ 'ls', '-l' ])
+              'cmd.shell': 'ls -l'
+            },
+            integrationName: 'system'
+          }
+        )
+      })
+
+      it('should truncate last argument', () => {
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+        const arg = 'a'.padEnd(4092, 'a')
+        const command = 'echo' + ' ' + arg + ' arg2'
+
+        shellPlugin.start({ command })
+
+        expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
+          'command_execution',
+          {
+            childOf: undefined,
+            tags: {
+              component: 'subprocess',
+              'service.name': undefined,
+              'resource.name': 'echo',
+              'span.kind': undefined,
+              'span.type': 'system',
+              'cmd.exec': JSON.stringify([ 'echo', arg, '' ]),
+              'cmd.truncated': 'true'
             },
             integrationName: 'system'
           }
@@ -86,7 +111,7 @@ describe('Child process plugin', () => {
 
       it('should truncate path and blank last argument', () => {
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-        const path = '/home/'.padEnd(4000 * 8, '/')
+        const path = '/home/'.padEnd(4096, '/')
         const command = 'ls -l' + ' ' + path + ' -t'
 
         shellPlugin.start({ command, shell: true })
@@ -98,10 +123,11 @@ describe('Child process plugin', () => {
             tags: {
               component: 'subprocess',
               'service.name': undefined,
-              'resource.name': 'ls',
+              'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.shell': JSON.stringify([ 'ls', '-l', '/h', '' ])
+              'cmd.shell': 'ls -l /h ',
+              'cmd.truncated': 'true'
             },
             integrationName: 'system'
           }
@@ -110,11 +136,11 @@ describe('Child process plugin', () => {
 
       it('should truncate first argument and blank the rest', () => {
         const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
-        const option = '-l'.padEnd(4000 * 8, 't')
+        const option = '-l'.padEnd(4096, 't')
         const path = '/home'
         const command = `ls ${option} ${path} -t`
 
-        shellPlugin.start({ command, shell: true })
+        shellPlugin.start({ command })
 
         expect(tracerStub.startSpan).to.have.been.calledOnceWithExactly(
           'command_execution',
@@ -126,7 +152,8 @@ describe('Child process plugin', () => {
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.shell': JSON.stringify([ 'ls', '-l', '', '' ])
+              'cmd.exec': JSON.stringify([ 'ls', '-l', '', '' ]),
+              'cmd.truncated': 'true'
             },
             integrationName: 'system'
           }
@@ -148,10 +175,11 @@ describe('Child process plugin', () => {
             tags: {
               component: 'subprocess',
               'service.name': undefined,
-              'resource.name': 'ls',
+              'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.shell': JSON.stringify([ 'ls', '-l', '/home', '-t' ])
+              'cmd.shell': 'ls -l /home -t',
+              'cmd.truncated': 'true'
             },
             integrationName: 'system'
           }
@@ -289,7 +317,7 @@ describe('Child process plugin', () => {
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': '["ls"]',
+                    'cmd.shell': 'ls',
                     'cmd.exit_code': '0'
                   }
                 }
@@ -309,7 +337,7 @@ describe('Child process plugin', () => {
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': '["echo","password","?"]',
+                    'cmd.shell': 'echo password ?',
                     'cmd.exit_code': '0'
                   }
                 }
@@ -340,7 +368,7 @@ describe('Child process plugin', () => {
                   error: 1,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.shell': 'node -badOption',
                     'cmd.exit_code': '9'
                   }
                 }
@@ -504,7 +532,7 @@ describe('Child process plugin', () => {
                   error: 1,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.shell': 'node -badOption',
                     'cmd.exit_code': '9'
                   }
                 }
@@ -515,7 +543,7 @@ describe('Child process plugin', () => {
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': '["node","-badOption"]',
+                    'cmd.shell': 'node -badOption',
                     'cmd.exit_code': '9'
                   }
                 }
