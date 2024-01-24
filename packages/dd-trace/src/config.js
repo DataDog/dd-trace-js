@@ -101,16 +101,16 @@ function propagationStyle (key, option, defaultValue) {
 
 class Config {
   constructor (options) {
-    this.options = options || {}
+    options = this.options = options || {}
 
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
       false
     ))
-    this.logger = this.options.logger
+    this.logger = options.logger
     this.logLevel = coalesce(
-      this.options.logLevel,
+      options.logLevel,
       process.env.DD_TRACE_LOG_LEVEL,
       'debug'
     )
@@ -119,19 +119,19 @@ class Config {
     log.toggle(this.debug, this.logLevel, this)
 
     const DD_AGENT_HOST = coalesce(
-      this.options.hostname,
+      options.hostname,
       process.env.DD_AGENT_HOST,
       process.env.DD_TRACE_AGENT_HOSTNAME,
       '127.0.0.1'
     )
     const DD_TRACE_AGENT_URL = coalesce(
-      this.options.url,
+      options.url,
       process.env.DD_TRACE_AGENT_URL,
       process.env.DD_TRACE_URL,
       null
     )
     this.DD_IS_CIVISIBILITY = coalesce(
-      this.options.isCiVisibility,
+      options.isCiVisibility,
       false
     )
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
@@ -152,7 +152,7 @@ class Config {
     )
 
     const DD_SERVICE_MAPPING = coalesce(
-      this.options.serviceMapping,
+      options.serviceMapping,
       process.env.DD_SERVICE_MAPPING ? fromEntries(
         process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ) : {}
@@ -178,7 +178,7 @@ class Config {
 
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
-      this.options.experimental && this.options.experimental.b3,
+      options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
@@ -199,12 +199,12 @@ class Config {
     }
     const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
-      this.options.tracePropagationStyle,
+      options.tracePropagationStyle,
       defaultPropagationStyle
     )
     const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
       'extract',
-      this.options.tracePropagationStyle,
+      options.tracePropagationStyle,
       defaultPropagationStyle
     )
     const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
@@ -213,17 +213,17 @@ class Config {
     )
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
-        this.options.spanAttributeSchema,
+        options.spanAttributeSchema,
         process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
       )
     )
 
     const peerServiceSet = (
-      this.options.hasOwnProperty('spanComputePeerService') ||
+      options.hasOwnProperty('spanComputePeerService') ||
       process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
-      this.options.spanComputePeerService,
+      options.spanComputePeerService,
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     )
 
@@ -236,13 +236,12 @@ class Config {
     )
 
     this.DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
-      this.options.stats,
+      options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       isGCPFunction || isAzureFunctionConsumptionPlan
     )
 
-    this.appsecOpt = this.options.appsec != null ? this.options.appsec
-      : this.options.experimental && this.options.experimental.appsec
+    this.appsecOpt = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof this.appsecOpt === 'boolean') {
       this.appsecOpt = {
@@ -277,7 +276,7 @@ class Config {
       !inServerlessEnvironment
     )
 
-    this.iastOptions = this.options?.experimental?.iast
+    this.iastOptions = options?.experimental?.iast
 
     this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
@@ -305,7 +304,7 @@ class Config {
 
     const sampler = {
       rules: coalesce(
-        this.options.samplingRules,
+        options.samplingRules,
         safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
         []
       ).map(rule => {
@@ -314,7 +313,7 @@ class Config {
         })
       }),
       spanSamplingRules: coalesce(
-        this.options.spanSamplingRules,
+        options.spanSamplingRules,
         safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
         safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
         []
@@ -330,10 +329,10 @@ class Config {
 
     this.apiKey = DD_API_KEY
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(DD_TRACE_AGENT_URL, this.options)
+      : getAgentUrl(DD_TRACE_AGENT_URL, options)
     this.HOSTNAME = DD_AGENT_HOST || (this.url && this.url.hostname)
     // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
-    this.flushInterval = coalesce(parseInt(this.options.flushInterval, 10), defaultFlushInterval)
+    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
@@ -368,9 +367,9 @@ class Config {
     }
 
     this._applyDefaults()
-    this._applyEnvironment()
-    this._applyOptions(this.options)
-    this._applyCalculated()
+    this._applyEnvironment(options)
+    this._applyOptions(options)
+    this._applyCalculated(options)
     this._applyRemote({})
     this._merge()
 
@@ -522,7 +521,7 @@ class Config {
     this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
   }
 
-  _applyEnvironment () {
+  _applyEnvironment (options) {
     const {
       DD_ENV,
       DD_LOGS_INJECTION,
@@ -622,7 +621,7 @@ class Config {
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     } else {
-      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), this.options))
+      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), options))
     }
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
@@ -719,7 +718,7 @@ class Config {
     if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url, options))
     this._setString(opts, 'site', options.site)
     this._setString(opts, 'hostname', options.hostname)
-    this._setString(opts, 'port', String(options.port))
+    if (options.port) this._setString(opts, 'port', String(options.port))
     // if (parseInt(options.flushInterval, 10))
     // this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
@@ -782,10 +781,10 @@ class Config {
   }
 
   // currently does not support dynamic/remote config
-  _applyCalculated () {
+  _applyCalculated (options) {
     const calc = this._calculated = {}
 
-    const DD_TRACE_EXPORTER = this.options.experimental && this.options.experimental.exporter
+    const DD_TRACE_EXPORTER = options.experimental && options.experimental.exporter
     if (DD_TRACE_EXPORTER === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
