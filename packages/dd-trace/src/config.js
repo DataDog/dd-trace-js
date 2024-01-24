@@ -422,20 +422,6 @@ class Config {
     this._merge()
   }
 
-  _isCiVisibility () {
-    return coalesce(
-      this.options.isCiVisibility,
-      false
-    )
-  }
-
-  _isCiVisibilityItrEnabled () {
-    return coalesce(
-      process.env.DD_CIVISIBILITY_ITR_ENABLED,
-      true
-    )
-  }
-
   _applyDefaults () {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
@@ -791,12 +777,29 @@ class Config {
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
   }
 
+  _isCiVisibility () {
+    return coalesce(
+      this.options.isCiVisibility,
+      false
+    )
+  }
+
+  _isCiVisibilityItrEnabled () {
+    return coalesce(
+      process.env.DD_CIVISIBILITY_ITR_ENABLED,
+      true
+    )
+  }
+
+  _getTraceExporter () {
+    return this.options.experimental && this.options.experimental.exporter
+  }
+
   // currently does not support dynamic/remote config
   _applyCalculated () {
     const calc = this._calculated = {}
 
-    const DD_TRACE_EXPORTER = this.options.experimental && this.options.experimental.exporter
-    if (DD_TRACE_EXPORTER === 'datadog') {
+    if (this._getTraceExporter() === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
     this._setString(calc, 'dogstatsd.hostname', this.HOSTNAME)
@@ -806,7 +809,7 @@ class Config {
     this._setBoolean(calc, 'isGitUploadEnabled',
       calc['isIntelligentTestRunnerEnabled'] && !isFalse(this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
     this._setBoolean(calc, 'isManualApiEnabled',
-      isTrue(this.DD_IS_CIVISIBILITY) && isTrue(this.DD_CIVISIBILITY_MANUAL_API_ENABLED))
+      isTrue(this._isCiVisibility()) && isTrue(this.DD_CIVISIBILITY_MANUAL_API_ENABLED))
     this._setBoolean(calc, 'stats.enabled', this.DD_TRACE_STATS_COMPUTATION_ENABLED)
   }
 
