@@ -3,7 +3,6 @@
 const util = require('util')
 
 const {
-  channel,
   addHook,
   AsyncResource
 } = require('./helpers/instrument')

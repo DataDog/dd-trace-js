@@ -499,7 +499,6 @@ describe('Child process plugin', () => {
                   }
                 }
 
-
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
