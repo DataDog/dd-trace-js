@@ -203,12 +203,6 @@ class Config {
       false
     )
 
-    this.DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
-      options.stats,
-      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      isGCPFunction || isAzureFunctionConsumptionPlan
-    )
-
     this.appsecOpt = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
 
     if (typeof this.appsecOpt === 'boolean') {
@@ -245,11 +239,6 @@ class Config {
     )
 
     this.iastOptions = options?.experimental?.iast
-
-    this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = coalesce(
-      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
-      true
-    )
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
     const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
@@ -803,6 +792,28 @@ class Config {
     return spanComputePeerService
   }
 
+  _isCiVisibilityGitUploadEnabled () {
+    return coalesce(
+      process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
+      true
+    )
+  }
+
+  _isCiVisibilityManualApiEnabled () {
+    return coalesce(
+      process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
+      false
+    )
+  }
+
+  _isTraceStatsComputationEnabled () {
+    return coalesce(
+      this.options.stats,
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
+      getIsGCPFunction() || getIsAzureFunctionConsumptionPlan()
+    )
+  }
+
   // currently does not support dynamic/remote config
   _applyCalculated () {
     const calc = this._calculated = {}
@@ -815,10 +826,10 @@ class Config {
     this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
       isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityItrEnabled()))
     this._setBoolean(calc, 'isGitUploadEnabled',
-      calc['isIntelligentTestRunnerEnabled'] && !isFalse(this.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED))
+      calc['isIntelligentTestRunnerEnabled'] && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'isManualApiEnabled',
-      isTrue(this._isCiVisibility()) && isTrue(this.DD_CIVISIBILITY_MANUAL_API_ENABLED))
-    this._setBoolean(calc, 'stats.enabled', this.DD_TRACE_STATS_COMPUTATION_ENABLED)
+      isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityManualApiEnabled()))
+    this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
   }
 
   _applyRemote (options) {
