@@ -202,29 +202,6 @@ class Config {
       process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       false
     )
-    const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
-      coalesce(
-        options.spanAttributeSchema,
-        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
-      )
-    )
-
-    const peerServiceSet = (
-      options.hasOwnProperty('spanComputePeerService') ||
-      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
-    )
-    const peerServiceValue = coalesce(
-      options.spanComputePeerService,
-      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
-    )
-
-    this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = (
-      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
-        // In v0, peer service is computed only if it is explicitly set to true
-        ? peerServiceSet && isTrue(peerServiceValue)
-        // In >v0, peer service is false only if it is explicitly set to false
-        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
-    )
 
     this.DD_TRACE_STATS_COMPUTATION_ENABLED = coalesce(
       options.stats,
@@ -798,6 +775,34 @@ class Config {
     return DD_AGENT_HOST || (this.url && this.url.hostname)
   }
 
+  _getSpanComputePeerService () {
+    const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
+      coalesce(
+        this.options.spanAttributeSchema,
+        process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      )
+    )
+
+    const peerServiceSet = (
+      this.options.hasOwnProperty('spanComputePeerService') ||
+      process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
+    )
+    const peerServiceValue = coalesce(
+      this.options.spanComputePeerService,
+      process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+    )
+
+    const spanComputePeerService = (
+      DD_TRACE_SPAN_ATTRIBUTE_SCHEMA === 'v0'
+        // In v0, peer service is computed only if it is explicitly set to true
+        ? peerServiceSet && isTrue(peerServiceValue)
+        // In >v0, peer service is false only if it is explicitly set to false
+        : (peerServiceSet ? !isFalse(peerServiceValue) : true)
+    )
+
+    return spanComputePeerService
+  }
+
   // currently does not support dynamic/remote config
   _applyCalculated () {
     const calc = this._calculated = {}
@@ -806,7 +811,7 @@ class Config {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
-    this._setString(calc, 'spanComputePeerService', this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
+    this._setString(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
       isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityItrEnabled()))
     this._setBoolean(calc, 'isGitUploadEnabled',
