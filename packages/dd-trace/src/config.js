@@ -367,9 +367,9 @@ class Config {
     }
 
     this._applyDefaults()
-    this._applyEnvironment(options)
+    this._applyEnvironment()
     this._applyOptions(options)
-    this._applyCalculated(options)
+    this._applyCalculated()
     this._applyRemote({})
     this._merge()
 
@@ -521,7 +521,7 @@ class Config {
     this._setBoolean(defaults, 'traceId128BitLoggingEnabled', false)
   }
 
-  _applyEnvironment (options) {
+  _applyEnvironment () {
     const {
       DD_ENV,
       DD_LOGS_INJECTION,
@@ -621,7 +621,7 @@ class Config {
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     } else {
-      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), options))
+      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), this.options))
     }
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
@@ -701,7 +701,7 @@ class Config {
     const opts = this._options = this._options || {}
     const tags = {}
 
-    options = Object.assign({ ingestion: {} }, options, opts)
+    options = this.options = Object.assign({ ingestion: {} }, options, opts)
 
     tagger.add(tags, options.tags)
 
@@ -781,10 +781,10 @@ class Config {
   }
 
   // currently does not support dynamic/remote config
-  _applyCalculated (options) {
+  _applyCalculated () {
     const calc = this._calculated = {}
 
-    const DD_TRACE_EXPORTER = options.experimental && options.experimental.exporter
+    const DD_TRACE_EXPORTER = this.options.experimental && this.options.experimental.exporter
     if (DD_TRACE_EXPORTER === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
