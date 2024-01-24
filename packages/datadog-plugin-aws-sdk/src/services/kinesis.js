@@ -66,7 +66,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   getStreamName (params, operation) {
-    if (!operation || operation !== 'getShardIterator') return null
+    if (!operation || operation !== 'getShardIterator' || operation !== 'listShards') return null
     if (!params || !params.StreamName) return null
 
     return params.StreamName
