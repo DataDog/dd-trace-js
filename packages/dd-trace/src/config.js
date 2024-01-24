@@ -118,12 +118,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_AGENT_HOST = coalesce(
-      options.hostname,
-      process.env.DD_AGENT_HOST,
-      process.env.DD_TRACE_AGENT_HOSTNAME,
-      '127.0.0.1'
-    )
     const DD_TRACE_AGENT_URL = coalesce(
       options.url,
       process.env.DD_TRACE_AGENT_URL,
@@ -327,7 +321,6 @@ class Config {
     this.apiKey = DD_API_KEY
     this.url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(DD_TRACE_AGENT_URL, options)
-    this.HOSTNAME = DD_AGENT_HOST || (this.url && this.url.hostname)
     // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
@@ -795,6 +788,16 @@ class Config {
     return this.options.experimental && this.options.experimental.exporter
   }
 
+  _getHostname () {
+    const DD_AGENT_HOST = coalesce(
+      this.options.hostname,
+      process.env.DD_AGENT_HOST,
+      process.env.DD_TRACE_AGENT_HOSTNAME,
+      '127.0.0.1'
+    )
+    return DD_AGENT_HOST || (this.url && this.url.hostname)
+  }
+
   // currently does not support dynamic/remote config
   _applyCalculated () {
     const calc = this._calculated = {}
@@ -802,7 +805,7 @@ class Config {
     if (this._getTraceExporter() === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
-    this._setString(calc, 'dogstatsd.hostname', this.HOSTNAME)
+    this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setString(calc, 'spanComputePeerService', this.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED)
     this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
       isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityItrEnabled()))
