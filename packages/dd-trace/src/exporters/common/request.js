@@ -7,6 +7,8 @@ const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const { parse: urlParse } = require('url')
+const zlib = require('zlib')
+
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
@@ -93,15 +95,29 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
-    let responseData = ''
+    const chunks = []
 
     res.setTimeout(timeout)
 
-    res.on('data', chunk => { responseData += chunk })
+    res.on('data', chunk => {
+      const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      chunks.push(bufferChunk)
+    })
     res.on('end', () => {
+      const buffer = Buffer.concat(chunks)
       activeRequests--
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
+        let responseData = ''
+        if (res.headers['content-encoding'] === 'gzip') {
+          try {
+            responseData = zlib.gunzipSync(buffer).toString()
+          } catch (e) {
+            log.error(`Could not gunzip response: ${e.message}`)
+          }
+        } else {
+          responseData = buffer.toString()
+        }
         callback(null, responseData, res.statusCode)
       } else {
         let errorMessage = ''
@@ -114,8 +130,9 @@ function request (data, options, callback) {
         } catch (e) {
           // ignore error
         }
-        if (responseData) {
-          errorMessage += ` Response from the endpoint: "${responseData}"`
+        const errorResponse = buffer.toString()
+        if (errorResponse) {
+          errorMessage += ` Response from the endpoint: "${errorResponse}"`
         }
         const error = new Error(errorMessage)
         error.status = res.statusCode
