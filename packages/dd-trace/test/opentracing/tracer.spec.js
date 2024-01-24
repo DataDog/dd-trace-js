@@ -259,7 +259,8 @@ describe('Tracer', () => {
     })
 
     it('should start a span with span links attached', () => {
-      fields.links = [{ traceId: '123', spanId: '456' }]
+      const context = new SpanContext()
+      fields.links = [{ context }]
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
@@ -273,7 +274,7 @@ describe('Tracer', () => {
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: [{ traceId: '123', spanId: '456' }]
+        links: [{ context }]
       })
 
       expect(testSpan).to.equal(span)

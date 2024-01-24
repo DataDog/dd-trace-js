@@ -289,13 +289,15 @@ describe('OTel Span', () => {
 
   it('should set span links', () => {
     const span = makeSpan('name')
+    const span2 = makeSpan('name2')
+    const span3 = makeSpan('name3')
 
     const { _links } = span._ddSpan
 
-    span.addLink({ traceId: '123', spanId: '456' })
+    span.addLink(span2.spanContext())
     expect(_links).to.have.lengthOf(1)
 
-    span.addLink({ traceId: '789', spanId: '012' })
+    span.addLink(span3.spanContext())
     expect(_links).to.have.lengthOf(2)
   })
 

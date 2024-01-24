@@ -6,6 +6,7 @@ const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
 const { getExtraServices } = require('../src/service-naming/extra-services')
+const proxyquire = require('proxyquire')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
@@ -24,12 +25,18 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 
 const spanId = id('0234567812345678')
+const spanId2 = id('0254567812345678')
+const spanId3 = id('0264567812345678')
 
 describe('format', () => {
   let format
   let span
+  let span2
+  let span3
   let trace
   let spanContext
+  let spanContext2
+  let spanContext3
 
   beforeEach(() => {
     spanContext = {
@@ -56,6 +63,56 @@ describe('format', () => {
     }
 
     spanContext._trace.started.push(span)
+
+    spanContext2 = {
+      _traceId: spanId2,
+      _spanId: spanId2,
+      _parentId: spanId2,
+      _tags: {},
+      _metrics: {},
+      _sampling: {},
+      _trace: {
+        started: []
+      },
+      _name: 'operation'
+    }
+
+    span2 = {
+      context: sinon.stub().returns(spanContext2),
+      tracer: sinon.stub().returns({
+        _service: 'test'
+      }),
+      setTag: sinon.stub(),
+      _startTime: 1500000000000.123456,
+      _duration: 100
+    }
+
+    spanContext2._trace.started.push(span2)
+
+    spanContext3 = {
+      _traceId: spanId3,
+      _spanId: spanId3,
+      _parentId: spanId3,
+      _tags: {},
+      _metrics: {},
+      _sampling: {},
+      _trace: {
+        started: []
+      },
+      _name: 'operation'
+    }
+
+    span3 = {
+      context: sinon.stub().returns(spanContext3),
+      tracer: sinon.stub().returns({
+        _service: 'test'
+      }),
+      setTag: sinon.stub(),
+      _startTime: 1500000000000.123456,
+      _duration: 100
+    }
+
+    spanContext3._trace.started.push(span3)
 
     format = require('../src/format')
   })
@@ -185,44 +242,67 @@ describe('format', () => {
     it('should format span links', () => {
       span._links = [
         {
-          length: 0,
-          toString: () => 'link1'
+          context: spanContext2
         },
         {
-          length: 0,
-          toString: () => 'link2'
+          context: spanContext3
         }
       ]
 
       trace = format(span)
 
-      expect(trace.links).to.deep.equal([ 'link1', 'link2' ])
+      expect(trace.links).to.deep.equal([`{"trace_id":"${spanContext2._traceId}","span_id":"${spanContext2._spanId}"}`,
+        `{"trace_id":"${spanContext3._traceId}","span_id":"${spanContext3._spanId}"}`])
     })
 
     it('should drop span link attributes if they exceed the maximum length', () => {
+      const spanLinkLength = sinon.stub()
+      spanLinkLength.onFirstCall().returns(25000)
+      spanLinkLength.onSecondCall().returns(0)
+      const spanLinkFlushAttributes = sinon.stub().callsFake((link) => {
+        link.entered = 0
+      })
+      const spanLinkToString = sinon.stub().callsFake((link) => {
+        return link.entered === 0 ? 'link' : 'wrong'
+      })
+      format = proxyquire('../src/format', {
+        './span_link_processor': { spanLinkLength, spanLinkFlushAttributes, spanLinkToString }
+      })
+
       const link = {
-        length: 25000,
-        flushAttributes: () => { link.length = 0 },
-        toString: () => link.length > 0 ? 'wrong' : 'link'
+        context: spanContext2
+
       }
       span._links = [link]
-
       trace = format(span)
 
       expect(trace.links).to.deep.equal(['link'])
     })
 
     it('should drop entire span link if it exceeds the maximum length', () => {
+      const spanLinkLength = sinon.stub()
+      spanLinkLength.onFirstCall().returns(25000)
+      spanLinkLength.onSecondCall().returns(0)
+      spanLinkLength.onThirdCall().returns(25000)
+      spanLinkLength.onCall(4).returns(0)
+      const spanLinkFlushAttributes = sinon.stub().callsFake((link) => {
+        link.entered = 0
+      })
+      const spanLinkToString = sinon.stub().callsFake((link) => {
+        return link.entered === 0 ? 'link' : 'wrong'
+      })
+      format = proxyquire('../src/format', {
+        './span_link_processor': { spanLinkLength, spanLinkFlushAttributes, spanLinkToString }
+      })
+
       const link = {
-        length: 25000,
-        flushAttributes: () => { link.length = 0 },
-        toString: () => link.length > 0 ? 'wrong' : 'link'
+        context: spanContext2
       }
+
       const linkToDrop = {
-        length: 25000,
-        flushAttributes: () => {},
-        toString: () => 'wrong'
+        context: spanContext3
       }
+
       span._links = [link, linkToDrop]
 
       trace = format(span)

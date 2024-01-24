@@ -5,6 +5,7 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
+const { handleSpanLinks } = require('./span_link_processor')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -71,14 +72,9 @@ function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
-      let linksString = links.join() // Convert array elements to a string
-      if (Buffer.byteLength(linksString) + link.length >= MAX_SPAN_LINKS_LENGTH) {
-        link.flushAttributes()
-      }
-      linksString = links.join() // Update the string after possible flushing
-      if (Buffer.byteLength(linksString) + link.length < MAX_SPAN_LINKS_LENGTH) {
-        links.push(link.toString())
-      }
+      // link = { context, attributes }
+
+      handleSpanLinks(link, link.context, link.attributes, span.context())
     }
   }
   trace.links = links

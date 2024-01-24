@@ -14,7 +14,6 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
-const SpanLink = require('./span_link')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -83,7 +82,7 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._links = (fields.links || []).map(link => SpanLink.from(link, this._spanContext))
+    this._links = fields.links || []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -153,8 +152,11 @@ class DatadogSpan {
 
   logEvent () {}
 
-  addLink (link) {
-    this._links.push(SpanLink.from(link, this._spanContext))
+  addLink (context, attributes) {
+    if (!(context instanceof SpanContext)) {
+      throw new Error('Span.addLink: first argument must be of type SpanContext')
+    }
+    this._links.push({ context, attributes })
   }
 
   finish (finishTime) {

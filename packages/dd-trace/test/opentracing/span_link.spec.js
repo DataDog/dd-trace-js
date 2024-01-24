@@ -7,70 +7,36 @@ describe('SpanLink', () => {
   let SpanContext
   let TraceState
   let id
-
   let traceId
   let spanId
+  let handleSpanLinks
+  let traceId2
+  let spanId2
 
   beforeEach(() => {
     SpanLink = require('../../src/opentracing/span_link')
     SpanContext = require('../../src/opentracing/span_context')
     TraceState = require('../../src/opentracing/propagation/tracestate')
+    const module = require('../../src/span_link_processor')
+    handleSpanLinks = module.handleSpanLinks
     id = require('../../src/id')
 
     traceId = id('123', 10)
     spanId = id('456', 10)
+    traceId2 = id('789', 10)
+    spanId2 = id('101', 10)
   })
 
-  it('creates a span link from raw information', () => {
+  it('creates a span link', () => {
     const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
-    const props = {
+
+    const spanContext2 = new SpanContext({
       traceId,
-      spanId,
-      attributes: { foo: 'bar' },
-      flags: 1,
-      tracestate: ts,
-      traceIdHigh: '789',
-      droppedAttributesCount: 1
-    }
-
-    const spanLink = new SpanLink(props)
-    expect(spanLink).to.have.property('traceId', traceId)
-    expect(spanLink).to.have.property('spanId', spanId)
-    expect(spanLink).to.have.property('flags', 1)
-    expect(spanLink).to.have.property('tracestate', ts)
-    expect(spanLink).to.have.property('traceIdHigh', '789')
-    expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
-  })
-
-  it('creates a span link from a link object', () => {
-    const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
-    const link = {
-      traceId,
-      spanId,
-      tracestate: ts,
-      attributes: {
-        foo: 'bar'
-      },
-      flags: 0
-    }
-
-    const spanLink = SpanLink.from(link)
-    expect(spanLink).to.have.property('traceId', traceId)
-    expect(spanLink).to.have.property('spanId', spanId)
-    expect(spanLink).to.have.property('flags', 0)
-    expect(spanLink).to.have.property('tracestate', ts)
-    expect(spanLink).to.have.property('traceIdHigh', undefined)
-    expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
-  })
-
-  it('uses the span context to default to parent span and current trace', () => {
-    const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
-    const spanContext = new SpanContext({
-      traceId,
-      spanId: id(), // not used
-      parentId: spanId,
+      spanId: spanId2,
       tracestate: ts,
       trace: {
+        started: [],
+        finished: [],
         origin: 'synthetics',
         tags: {
           '_dd.p.tid': '789'
@@ -78,29 +44,39 @@ describe('SpanLink', () => {
       }
     })
 
-    const spanLink = SpanLink.from({}, spanContext)
-    expect(spanLink).to.have.property('traceId', traceId)
-    expect(spanLink).to.have.property('spanId', spanId)
+    spanContext2._flags = 0
+    const spanContext = new SpanContext({
+      traceId: traceId,
+      spanId: spanId
+    })
+
+    const links = []
+    handleSpanLinks(links, spanContext2, { foo: 'bar' }, spanContext)
+    const spanLink = JSON.parse(links[0])
+    expect(spanLink).to.have.property('trace_id', '789' + traceId.toString())
+    expect(spanLink).to.have.property('span_id', spanId2.toString())
     expect(spanLink).to.have.property('flags', 0)
-    expect(spanLink).to.have.property('tracestate', ts)
-    expect(spanLink).to.have.property('traceIdHigh', '789')
-    expect(spanLink.attributes).to.deep.equal({})
+    expect(spanLink).to.have.property('tracestate', ts.toString())
+    expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
+    expect(spanLink).to.have.property('trace_id_high', '789')
   })
 
   it('will not use the span context if the link object specifies a different trace', () => {
-    const link = { traceId, spanId }
+    const spanContext2 = new SpanContext({ traceId, spanId })
     const spanContext = new SpanContext({
       traceId: id(), // not used
       spanId: id() // not used
     })
 
-    const spanLink = SpanLink.from(link, spanContext)
-    expect(spanLink).to.have.property('traceId', traceId)
-    expect(spanLink).to.have.property('spanId', spanId)
-    expect(spanLink).to.have.property('flags', undefined)
-    expect(spanLink).to.have.property('tracestate', undefined)
-    expect(spanLink).to.have.property('traceIdHigh', undefined)
-    expect(spanLink.attributes).to.deep.equal({})
+    const links = []
+    handleSpanLinks(links, spanContext2, {}, spanContext)
+    const spanLink = JSON.parse(links[0])
+    expect(spanLink).to.have.property('trace_id', traceId.toString())
+    expect(spanLink).to.have.property('span_id', spanId.toString())
+    expect(spanLink).to.not.have.property('flags')
+    expect(spanLink).to.not.have.property('tracestate')
+    expect(spanLink).to.not.have.property('trace_id_high')
+    expect(spanLink).to.not.have.property('attributes')
   })
 
   describe('sanitizing', () => {
@@ -110,7 +86,15 @@ describe('SpanLink', () => {
         baz: 'qux'
       }
 
-      const spanLink = new SpanLink({ traceId, spanId, attributes })
+      const spanContext2 = new SpanContext({ traceId, spanId })
+      const spanContext = new SpanContext({
+        traceId: id(), // not used
+        spanId: id() // not used
+      })
+
+      const links = []
+      handleSpanLinks(links, spanContext2, attributes, spanContext)
+      const spanLink = JSON.parse(links[0])
       expect(spanLink.attributes).to.deep.equal(attributes)
     })
 
@@ -122,7 +106,16 @@ describe('SpanLink', () => {
         qux: [1, 2, 3]
       }
 
-      const spanLink = new SpanLink({ traceId, spanId, attributes })
+      const spanContext2 = new SpanContext({ traceId, spanId })
+      const spanContext = new SpanContext({
+        traceId: id(), // not used
+        spanId: id() // not used
+      })
+
+      const links = []
+      handleSpanLinks(links, spanContext2, attributes, spanContext)
+      const spanLink = JSON.parse(links[0])
+      console.log(44, spanLink)
       expect(spanLink.attributes).to.deep.equal({
         foo: true,
         bar: 'hi',

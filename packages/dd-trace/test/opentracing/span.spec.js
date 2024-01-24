@@ -7,7 +7,6 @@ const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Span', () => {
   let Span
-  let SpanLink
   let span
   let tracer
   let processor
@@ -34,20 +33,6 @@ describe('Span', () => {
 
     tracer = {}
 
-    SpanLink = {
-      // dummy logic spanlink
-      // needed because of faked IDs above
-      from: ({ traceId, spanId }) => {
-        this.traceId = traceId
-        this.spanId = spanId
-        return {
-          traceId,
-          spanId,
-          matches: ({ traceId, spanId }) => traceId === this.traceId && spanId === this.spanId
-        }
-      }
-    }
-
     processor = {
       process: sinon.stub()
     }
@@ -68,8 +53,7 @@ describe('Span', () => {
       },
       '../id': id,
       '../tagger': tagger,
-      '../metrics': metrics,
-      './span_link': SpanLink
+      '../metrics': metrics
     })
   })
 
@@ -236,8 +220,9 @@ describe('Span', () => {
   describe('links', () => {
     it('should allow links to be added', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      span.addLink({ traceId: '123', spanId: '456' })
+      span.addLink(span2.context())
       expect(span).to.have.property('_links')
       expect(span._links).to.have.lengthOf(1)
     })
