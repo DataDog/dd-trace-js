@@ -88,6 +88,7 @@
     "koalas": "^1.0.2",
     "limiter": "1.1.5",
     "lodash": "4.17.21",
+    "lodash.sortby": "^4.7.0",
     "lru-cache": "^7.14.0",
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",

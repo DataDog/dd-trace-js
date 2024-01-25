@@ -9,42 +9,42 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const visitor_1 = require("graphql/language/visitor");
 const printer_1 = require("graphql/language/printer");
 const utilities_1 = require("graphql/utilities");
-const { sortby: lodash_sortby_1 } = __importDefault(require("lodash"));
-function hideLiterals (ast) {
+const lodash_sortby_1 = __importDefault(require("lodash.sortby"));
+function hideLiterals(ast) {
     return visitor_1.visit(ast, {
-        IntValue (node) {
+        IntValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
-        FloatValue (node) {
+        FloatValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
-        StringValue (node) {
+        StringValue(node) {
             return Object.assign({}, node, { value: "", block: false });
         },
-        ListValue (node) {
+        ListValue(node) {
             return Object.assign({}, node, { values: [] });
         },
-        ObjectValue (node) {
+        ObjectValue(node) {
             return Object.assign({}, node, { fields: [] });
         }
     });
 }
 exports.hideLiterals = hideLiterals;
-function hideStringAndNumericLiterals (ast) {
+function hideStringAndNumericLiterals(ast) {
     return visitor_1.visit(ast, {
-        IntValue (node) {
+        IntValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
-        FloatValue (node) {
+        FloatValue(node) {
             return Object.assign({}, node, { value: "0" });
         },
-        StringValue (node) {
+        StringValue(node) {
             return Object.assign({}, node, { value: "", block: false });
         }
     });
 }
 exports.hideStringAndNumericLiterals = hideStringAndNumericLiterals;
-function dropUnusedDefinitions (ast, operationName) {
+function dropUnusedDefinitions(ast, operationName) {
     const separated = utilities_1.separateOperations(ast)[operationName];
     if (!separated) {
         return ast;
@@ -52,49 +52,49 @@ function dropUnusedDefinitions (ast, operationName) {
     return separated;
 }
 exports.dropUnusedDefinitions = dropUnusedDefinitions;
-function sorted (items) {
+function sorted(items) {
     if (items) {
         return lodash_sortby_1.default.apply(null, arguments);
     }
     return undefined;
 }
-function sortAST (ast) {
+function sortAST(ast) {
     return visitor_1.visit(ast, {
-        OperationDefinition (node) {
+        OperationDefinition(node) {
             return Object.assign({}, node, { variableDefinitions: sorted(node.variableDefinitions, "variable.name.value") });
         },
-        SelectionSet (node) {
+        SelectionSet(node) {
             return Object.assign({}, node, { selections: lodash_sortby_1.default(node.selections, "kind", "name.value") });
         },
-        Field (node) {
+        Field(node) {
             return Object.assign({}, node, { arguments: sorted(node.arguments, "name.value") });
         },
-        FragmentSpread (node) {
+        FragmentSpread(node) {
             return Object.assign({}, node, { directives: sorted(node.directives, "name.value") });
         },
-        InlineFragment (node) {
+        InlineFragment(node) {
             return Object.assign({}, node, { directives: sorted(node.directives, "name.value") });
         },
-        FragmentDefinition (node) {
+        FragmentDefinition(node) {
             return Object.assign({}, node, { directives: sorted(node.directives, "name.value"), variableDefinitions: sorted(node.variableDefinitions, "variable.name.value") });
         },
-        Directive (node) {
+        Directive(node) {
             return Object.assign({}, node, { arguments: sorted(node.arguments, "name.value") });
         }
     });
 }
 exports.sortAST = sortAST;
-function removeAliases (ast) {
+function removeAliases(ast) {
     return visitor_1.visit(ast, {
-        Field (node) {
+        Field(node) {
             return Object.assign({}, node, { alias: undefined });
         }
     });
 }
 exports.removeAliases = removeAliases;
-function printWithReducedWhitespace (ast) {
+function printWithReducedWhitespace(ast) {
     const sanitizedAST = visitor_1.visit(ast, {
-        StringValue (node) {
+        StringValue(node) {
             return Object.assign({}, node, { value: Buffer.from(node.value, "utf8").toString("hex"), block: false });
         }
     });
