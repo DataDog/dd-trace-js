@@ -165,6 +165,7 @@ describe('Kinesis', function () {
 
     describe('DSM Context Propagation', () => {
       const expectedProducerHash = '15481393933680799703'
+      const expectedConsumerHash = '10538746554122257118'
 
       before(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
@@ -187,8 +188,33 @@ describe('Kinesis', function () {
         })
       })
 
+      afterEach(() => agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true }))
+
+      it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
+        let getRecordSpanMeta = {}
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          if (span.name === 'aws.response') {
+            getRecordSpanMeta = span.meta
+          }
+
+          expect(getRecordSpanMeta).to.include({
+            'pathway.hash': expectedConsumerHash
+          })
+        }, { timeoutMs: 10000 }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+            if (err) return done(err)
+          })
+        })
+      })
+
       it('injects DSM pathway hash during Kinesis putRecord to the span', done => {
-        let putRecordSpanMeta
+        let putRecordSpanMeta = {}
         agent.use(traces => {
           const span = traces[0][0]
 
@@ -223,6 +249,30 @@ describe('Kinesis', function () {
 
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
           if (err) return done(err)
+        })
+      })
+
+      it('emits DSM stats to the agent during Kinesis getRecord', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have only have 1 stats point since we only had 1 put operation
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          }, { timeoutMs: 10000 })
+          expect(statsPointsReceived).to.be.at.least(2)
+          expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+        }, { timeoutMs: 10000 }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestData(kinesis, streamNameDSM, data, (err) => {
+            if (err) return done(err)
+          })
         })
       })
     })
