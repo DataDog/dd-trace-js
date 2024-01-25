@@ -95,30 +95,36 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
+    const isGzip = res.headers['content-encoding'] === 'gzip'
     const chunks = []
+    let responseData = ''
 
     res.setTimeout(timeout)
 
     res.on('data', chunk => {
-      const bufferChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
-      chunks.push(bufferChunk)
+      if (isGzip) {
+        chunks.push(chunk)
+      } else {
+        responseData += chunk
+      }
     })
     res.on('end', () => {
-      const buffer = Buffer.concat(chunks)
       activeRequests--
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
-        let responseData = ''
-        if (res.headers['content-encoding'] === 'gzip') {
-          try {
-            responseData = zlib.gunzipSync(buffer).toString()
-          } catch (e) {
-            log.error(`Could not gunzip response: ${e.message}`)
-          }
+        if (isGzip) {
+          const buffer = Buffer.concat(chunks)
+          zlib.gunzip(buffer, (err, result) => {
+            if (err) {
+              log.error(`Could not gunzip response: ${err.message}`)
+              callback(null, '', res.statusCode)
+            } else {
+              callback(null, result.toString(), res.statusCode)
+            }
+          })
         } else {
-          responseData = buffer.toString()
+          callback(null, responseData, res.statusCode)
         }
-        callback(null, responseData, res.statusCode)
       } else {
         let errorMessage = ''
         try {
@@ -130,9 +136,8 @@ function request (data, options, callback) {
         } catch (e) {
           // ignore error
         }
-        const errorResponse = buffer.toString()
-        if (errorResponse) {
-          errorMessage += ` Response from the endpoint: "${errorResponse}"`
+        if (responseData) {
+          errorMessage += ` Response from the endpoint: "${responseData}"`
         }
         const error = new Error(errorMessage)
         error.status = res.statusCode
