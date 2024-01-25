@@ -9,7 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const visitor_1 = require("graphql/language/visitor");
 const printer_1 = require("graphql/language/printer");
 const utilities_1 = require("graphql/utilities");
-const lodash_sortby_1 = __importDefault(require("lodash.sortby"));
+const {sortby: lodash_sortby_1} = __importDefault(require("lodash"));
 function hideLiterals(ast) {
     return visitor_1.visit(ast, {
         IntValue(node) {

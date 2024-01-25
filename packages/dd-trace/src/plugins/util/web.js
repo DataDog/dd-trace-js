@@ -1,6 +1,6 @@
 'use strict'
 
-const uniq = require('lodash.uniq')
+const { uniq } = require('lodash')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
