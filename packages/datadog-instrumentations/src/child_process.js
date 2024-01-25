@@ -45,7 +45,9 @@ function normalizeArgs (args, shell) {
   } else if (args[1] != null && typeof args[1] === 'object') {
     childProcessInfo.options = args[1]
   }
-  childProcessInfo.shell = shell || childProcessInfo.options?.shell === true || typeof childProcessInfo.options?.shell === 'string'
+  childProcessInfo.shell = shell ||
+    childProcessInfo.options?.shell === true ||
+    typeof childProcessInfo.options?.shell === 'string'
 
   return childProcessInfo
 }
