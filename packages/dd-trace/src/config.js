@@ -47,10 +47,10 @@ function safeJsonParse (input) {
   }
 }
 
-const isGCPFunction = getIsGCPFunction()
-const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
+let inAWSLambda
+let isGCPFunction
+let isAzureFunctionConsumptionPlan
+let inServerlessEnvironment
 const namingVersions = ['v0', 'v1']
 const defaultNamingVersion = 'v0'
 
@@ -138,6 +138,11 @@ class Config {
       process.env.DATADOG_API_KEY,
       process.env.DD_API_KEY
     )
+
+    inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+    isGCPFunction = getIsGCPFunction()
+    isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
+    inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
@@ -614,7 +619,7 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
-      isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
+      DD_REMOTE_CONFIGURATION_ENABLED && isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
       !inServerlessEnvironment
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
@@ -915,7 +920,7 @@ class Config {
           let value = container[name]
           this._setConfigValue(name, value)
 
-          if (name === 'url') value = value.toString()
+          if (name === 'url' && value) value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
           if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
           if (name === 'headerTags') value = value.toString()
