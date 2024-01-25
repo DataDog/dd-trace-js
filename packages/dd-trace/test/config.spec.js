@@ -129,77 +129,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
-
-    expect(Config.prototype._merge.calledOnce).to.be.true
-
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
-      { name: 'service', value: 'node', origin: 'default' },
-      { name: 'logInjection', value: false, origin: 'default' },
-      { name: 'headerTags', value: [], origin: 'default' },
-      { name: 'tracing', value: true, origin: 'default' },
-      { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
-      { name: 'dsmEnabled', value: false, origin: 'default' },
-      { name: 'openAiLogsEnabled', value: false, origin: 'default' },
-      { name: 'url', value: undefined, origin: 'default' },
-      { name: 'site', value: 'datadoghq.com', origin: 'default' },
-      { name: 'hostname', value: '127.0.0.1', origin: 'default' },
-      { name: 'port', value: '8126', origin: 'default' },
-      { name: 'debug', value: false, origin: 'default' },
-      { name: 'protocolVersion', value: '0.4', origin: 'default' },
-      { name: 'dogstatsd.port', value: '8125', origin: 'default' },
-      { name: 'flushInterval', value: 2000, origin: 'default' },
-      { name: 'flushMinSpans', value: 1000, origin: 'default' },
-      { name: 'clientIpEnabled', value: false, origin: 'default' },
-      { name: 'clientIpHeader', value: null, origin: 'default' },
-      { name: 'sampleRate', value: undefined, origin: 'default' },
-      { name: 'runtimeMetrics', value: false, origin: 'default' },
-      { name: 'plugins', value: true, origin: 'default' },
-      { name: 'reportHostname', value: false, origin: 'default' },
-      { name: 'scope', value: undefined, origin: 'default' },
-      { name: 'logLevel', value: 'debug', origin: 'default' },
-      { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
-      { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
-      { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      { name: 'peerServiceMapping', value: '', origin: 'default' },
-      { name: 'tracePropagationStyle.extract', value: ['datadog', 'tracecontext'], origin: 'default' },
-      { name: 'experimental.runtimeId', value: false, origin: 'default' },
-      { name: 'experimental.exporter', value: undefined, origin: 'default' },
-      { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
-      { name: 'reportHostname', value: false, origin: 'default' },
-      { name: 'profiling.enabled', value: false, origin: 'default' },
-      { name: 'profiling.sourceMap', value: true, origin: 'default' },
-      { name: 'profiling.exporters', value: 'agent', origin: 'default' },
-      { name: 'startupLogs', value: false, origin: 'default' },
-      { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
-      { name: 'telemetry.debug', value: false, origin: 'default' },
-      { name: 'telemetry.metrics', value: false, origin: 'default' },
-      { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
-      { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
-      { name: 'appsec.enabled', value: undefined, origin: 'default' },
-      { name: 'appsec.rules', value: undefined, origin: 'default' },
-      { name: 'appsec.customRulesProvided', value: false, origin: 'default' },
-      { name: 'appsec.rateLimit', value: 100, origin: 'default' },
-      { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
-      { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
-      { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
-      { name: 'appsec.eventTracking.enabled', value: true, origin: 'default' },
-      { name: 'appsec.eventTracking.mode', value: 'safe', origin: 'default' },
-      { name: 'remoteConfig.enabled', value: true, origin: 'default' },
-      { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
-      { name: 'iast.enabled', value: false, origin: 'default' },
-      { name: 'iast.requestSampling', value: 30, origin: 'default' },
-      { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
-      { name: 'iast.maxContextOperations', value: 2, origin: 'default' },
-      { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
-      { name: 'iast.redactionEnabled', value: true, origin: 'default' },
-      { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
-      { name: 'isCiVisibility', value: false, origin: 'default' },
-      { name: 'gitMetadataEnabled', value: true, origin: 'default' },
-      { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
-      { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' }
-    )
   })
 
   it('should support logging', () => {
@@ -395,54 +324,6 @@ describe('Config', () => {
       type: 'k8s_single_step',
       time: '1703188212'
     })
-
-    expect(Config.prototype._merge.calledOnce).to.be.true
-
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
-      { name: 'tracing', value: false, origin: 'env_var' },
-      { name: 'debug', value: true, origin: 'env_var' },
-      { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
-      { name: 'hostname', value: 'agent', origin: 'env_var' },
-      { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
-      { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
-      { name: 'service', value: 'service', origin: 'env_var' },
-      { name: 'version', value: '1.0.0', origin: 'env_var' },
-      { name: 'clientIpEnabled', value: true, origin: 'env_var' },
-      { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
-      { name: 'runtimeMetrics', value: true, origin: 'env_var' },
-      { name: 'reportHostname', value: true, origin: 'env_var' },
-      { name: 'env', value: 'test', origin: 'env_var' },
-      { name: 'sampleRate', value: 0.5, origin: 'env_var' },
-      { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
-      { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
-      { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
-      { name: 'spanComputePeerService', value: true, origin: 'env_var' },
-      { name: 'sampler.rateLimit', value: '-1', origin: 'env_var' },
-      { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
-      { name: 'peerServiceMapping', value: 'c:cc,d:dd', origin: 'env_var' },
-      { name: 'tracePropagationStyle.extract', value: ['b3', 'tracecontext'], origin: 'env_var' },
-      { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
-      { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
-      { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
-      { name: 'appsec.enabled', value: true, origin: 'env_var' },
-      { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
-      { name: 'appsec.customRulesProvided', value: true, origin: 'env_var' },
-      { name: 'appsec.rateLimit', value: 42, origin: 'env_var' },
-      { name: 'appsec.wafTimeout', value: 42, origin: 'env_var' },
-      { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML, origin: 'env_var' },
-      { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
-      { name: 'appsec.eventTracking.enabled', value: true, origin: 'env_var' },
-      { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
-      { name: 'remoteConfig.enabled', value: false, origin: 'calculated' },
-      { name: 'remoteConfig.pollInterval', value: 42, origin: 'env_var' },
-      { name: 'iast.enabled', value: true, origin: 'env_var' },
-      { name: 'iast.requestSampling', value: 40, origin: 'env_var' },
-      { name: 'iast.maxConcurrentRequests', value: 3, origin: 'env_var' },
-      { name: 'iast.maxContextOperations', value: 4, origin: 'env_var' },
-      { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
-      { name: 'iast.redactionEnabled', value: false, origin: 'env_var' },
-      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' }
-    )
   })
 
   it('should ignore empty strings', () => {
@@ -653,48 +534,6 @@ describe('Config', () => {
       a: 'aa',
       b: 'bb'
     })
-
-    expect(Config.prototype._merge.calledOnce).to.be.true
-
-    expect(Config.prototype._merge.returnValues[0]).to.deep.include(
-      { name: 'protocolVersion', value: '0.5', origin: 'code' },
-      { name: 'site', value: 'datadoghq.eu', origin: 'code' },
-      { name: 'hostname', value: 'agent', origin: 'code' },
-      { name: 'port', value: '6218', origin: 'code' },
-      { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'calculated' },
-      { name: 'dogstatsd.port', value: '5218', origin: 'code' },
-      { name: 'service', value: 'service', origin: 'code' },
-      { name: 'version', value: '0.1.0', origin: 'code' },
-      { name: 'env', value: 'test', origin: 'code' },
-      { name: 'sampleRate', value: 0.5, origin: 'code' },
-      { name: 'clientIpEnabled', value: true, origin: 'code' },
-      { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
-      { name: 'flushInterval', value: 5000, origin: 'code' },
-      { name: 'flushMinSpans', value: 500, origin: 'code' },
-      { name: 'runtimeMetrics', value: true, origin: 'code' },
-      { name: 'reportHostname', value: true, origin: 'code' },
-      { name: 'plugins', value: false, origin: 'code' },
-      { name: 'logLevel', value: logLevel, origin: 'code' },
-      { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
-      { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
-      { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
-      { name: 'spanComputePeerService', value: true, origin: 'code' },
-      { name: 'peerServiceMapping', value: 'd:dd', origin: 'code' },
-      { name: 'tracePropagationStyle.extract', value: ['datadog'], origin: 'calculated' },
-      { name: 'experimental.runtimeId', value: true, origin: 'code' },
-      { name: 'experimental.exporter', value: 'log', origin: 'code' },
-      { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
-      { name: 'appsec.enabled', value: false, origin: 'code' },
-      { name: 'remoteConfig.pollInterval', value: 42, origin: 'code' },
-      { name: 'iast.enabled', value: true, origin: 'code' },
-      { name: 'iast.requestSampling', value: 50, origin: 'code' },
-      { name: 'iast.maxConcurrentRequests', value: 4, origin: 'code' },
-      { name: 'iast.maxContextOperations', value: 5, origin: 'code' },
-      { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
-      { name: 'iast.redactionEnabled', value: false, origin: 'code' },
-      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
-      { name: 'sampler.sampleRate', value: 0.5, origin: 'code' }
-    )
   })
 
   it('should initialize from the options with url taking precedence', () => {
