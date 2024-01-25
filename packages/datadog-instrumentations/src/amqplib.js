@@ -5,7 +5,7 @@ const {
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
-const kebabCase = require('lodash.kebabcase')
+const kebabCase = require('../../utils/src/kebabcase')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:amqplib:command:start')
