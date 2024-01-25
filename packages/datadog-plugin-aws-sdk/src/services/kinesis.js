@@ -23,30 +23,39 @@ class Kinesis extends BaseAwsSdkPlugin {
       const { request, response } = obj
       const store = storage.getStore()
       const plugin = this
-      const streamName = this.getStreamName(request.params, request.operation)
-      if (streamName) {
-        this.requestTags.streamName = streamName
+
+      // if we have either of these operations, we want to store the streamName param
+      // since it is not typically available during get/put records requests
+      if (request.operation === 'getShardIterator' || request.operation === 'listShards') {
+        this.storeStreamName(request.params, request.operation, store)
+        return
       }
 
-      let span
-      const responseExtraction = this.responseExtract(request.params, request.operation, response)
-      if (responseExtraction && responseExtraction.maybeChildOf) {
-        obj.needsFinish = true
-        const options = {
-          childOf: responseExtraction.maybeChildOf,
-          tags: Object.assign(
-            {},
-            this.requestTags.get(request) || {},
-            { 'span.kind': 'server' }
-          )
+      if (request.operation === 'getRecords') {
+        let span
+        const responseExtraction = this.responseExtract(request.params, request.operation, response)
+        if (responseExtraction && responseExtraction.maybeChildOf) {
+          obj.needsFinish = true
+          const options = {
+            childOf: responseExtraction.maybeChildOf,
+            tags: Object.assign(
+              {},
+              this.requestTags.get(request) || {},
+              { 'span.kind': 'server' }
+            )
+          }
+          span = plugin.tracer.startSpan('aws.response', options)
+          this.enter(span, store)
         }
-        span = plugin.tracer.startSpan('aws.response', options)
-        this.enter(span, store)
+
+        // get the stream name that should have been stored previously
+        const { streamName } = storage.getStore()
+
+        // extract DSM context after as we might not have a parent-child but may have a DSM context
+        this.responseExtractDSMContext(
+          request.operation, response, span ?? null, streamName
+        )
       }
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
-      this.responseExtractDSMContext(
-        request.operation, response, span ?? null, this.requestTags.streamName
-      )
     })
 
     this.addSub('apm:aws:response:finish:kinesis', err => {
@@ -65,11 +74,12 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
   }
 
-  getStreamName (params, operation) {
-    if (!operation || operation !== 'getShardIterator' || operation !== 'listShards') return null
-    if (!params || !params.StreamName) return null
+  storeStreamName (params, operation, store) {
+    if (!operation || operation !== 'getShardIterator' || operation !== 'listShards') return
+    if (!params || !params.StreamName || !store) return
 
-    return params.StreamName
+    const streamName = params.StreamName
+    storage.enterWith({ ...store, streamName })
   }
 
   responseExtract (params, operation, response) {
