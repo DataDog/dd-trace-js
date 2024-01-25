@@ -86,7 +86,7 @@
     "istanbul-lib-coverage": "3.2.0",
     "jest-docblock": "^29.7.0",
     "koalas": "^1.0.2",
-    "limiter": "^1.1.5",
+    "limiter": "1.1.5",
     "lodash": "4.17.21",
     "lru-cache": "^7.14.0",
     "methods": "^1.1.2",
