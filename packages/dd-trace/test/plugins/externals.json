@@ -59,6 +59,16 @@
       "versions": ["1.20.1"]
     }
   ],
+  "mquery": [
+    {
+      "name": "mquery",
+      "versions": [">=5.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["5", ">=6"]
+    }
+  ],
   "fastify": [
     {
       "name": "fastify",
