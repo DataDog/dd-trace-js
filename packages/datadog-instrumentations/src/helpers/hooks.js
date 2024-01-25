@@ -73,6 +73,7 @@ module.exports = {
   'mongodb': () => require('../mongodb'),
   'mongodb-core': () => require('../mongodb-core'),
   'mongoose': () => require('../mongoose'),
+  'mquery': () => require('../mquery'),
   'mysql': () => require('../mysql'),
   'mysql2': () => require('../mysql2'),
   'net': () => require('../net'),
