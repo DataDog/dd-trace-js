@@ -75,8 +75,8 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   storeStreamName (params, operation, store) {
-    if (!operation || operation !== 'getShardIterator' || operation !== 'listShards') return
-    if (!params || !params.StreamName || !store) return
+    if (!operation || (operation !== 'getShardIterator' && operation !== 'listShards')) return
+    if (!params || !params.StreamName) return
 
     const streamName = params.StreamName
     storage.enterWith({ ...store, streamName })
