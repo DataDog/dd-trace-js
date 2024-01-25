@@ -8,6 +8,7 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
+const _ = require('lodash')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
@@ -904,6 +905,9 @@ class Config {
   // TODO: Report origin changes and errors to telemetry.
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
+  // for telemetry reporting, `name`s in `containers` need to be keys from:
+  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/
+  // tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
     const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
@@ -915,10 +919,10 @@ class Config {
         const origin = origins[i]
 
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (this._getConfigValue(name) === container[name] && this._existsPropertyName(name)) break
+          if (_.get(this, name) === container[name] && _.has(this, name)) break
 
           let value = container[name]
-          this._setConfigValue(name, value)
+          _.set(this, name, value)
 
           if (name === 'url' && value) value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
@@ -936,48 +940,6 @@ class Config {
     updateConfig(changes, this)
 
     return changes
-  }
-
-  _getConfigValue (name) {
-    const nameArr = name.split('.')
-    let val = this
-    for (const n in nameArr) {
-      if (val === undefined) return val
-      val = val[nameArr[n]]
-    }
-    return val
-  }
-
-  _setConfigValue (name, value) {
-    const nameArr = name.split('.')
-    let property = this
-    let i
-    for (i = 0; i < nameArr.length - 1; i++) {
-      const n = nameArr[i]
-      if (property.hasOwnProperty(n)) {
-        property = property[n]
-      } else {
-        property[n] = {}
-        property = property[n]
-      }
-    }
-    property[nameArr[i]] = value
-  }
-
-  _existsPropertyName (name) {
-    const nameArr = name.split('.')
-    let property = this
-    let i
-    for (i = 0; i < nameArr.length - 1; i++) {
-      const n = nameArr[i]
-      if (property.hasOwnProperty(n)) {
-        property = property[n]
-      } else {
-        return false
-      }
-    }
-    if (property.hasOwnProperty(nameArr[i])) return true
-    return false
   }
 }
 
