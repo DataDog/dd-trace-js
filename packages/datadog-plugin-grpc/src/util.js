@@ -1,6 +1,6 @@
 'use strict'
 
-const pick = require('lodash.pick')
+const { pick } = require('lodash')
 const log = require('../../dd-trace/src/log')
 
 module.exports = {

@@ -1,6 +1,6 @@
 'use strict'
 
-const pick = require('lodash.pick')
+const { pick } = require('lodash')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
