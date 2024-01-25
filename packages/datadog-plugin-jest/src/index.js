@@ -13,7 +13,8 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -36,6 +37,20 @@ const CHILD_MESSAGE_END = 2
 class JestPlugin extends CiPlugin {
   static get id () {
     return 'jest'
+  }
+
+  // The lists are the same for every test suite, so we can cache them
+  getUnskippableSuites (unskippableSuitesList) {
+    if (!this.unskippableSuites) {
+      this.unskippableSuites = JSON.parse(unskippableSuitesList)
+    }
+    return this.unskippableSuites
+  }
+  getForcedToRunSuites (forcedToRunSuitesList) {
+    if (!this.forcedToRunSuites) {
+      this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
+    }
+    return this.forcedToRunSuites
   }
 
   constructor (...args) {
@@ -107,6 +122,7 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddItrCorrelationId = this.itrCorrelationId
       })
     })
 
@@ -115,6 +131,7 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled
@@ -128,12 +145,21 @@ class JestPlugin extends CiPlugin {
       const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
 
       if (_ddUnskippable) {
-        this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
-        testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
-        if (_ddForcedToRun) {
-          this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
-          testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+        const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
+        if (unskippableSuites[testSuite]) {
+          this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+          testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         }
+        if (_ddForcedToRun) {
+          const forcedToRunSuites = this.getForcedToRunSuites(_ddForcedToRun)
+          if (forcedToRunSuites[testSuite]) {
+            this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+            testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
+          }
+        }
+      }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {

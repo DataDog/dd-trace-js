@@ -53,6 +53,7 @@ let isSuitesSkipped = false
 let skippedSuites = []
 const unskippableSuites = []
 let isForcedToRun = false
+let itrCorrelationId = ''
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -191,7 +192,12 @@ function mochaHook (Runner) {
         const isUnskippable = unskippableSuites.includes(suite.file)
         isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
         asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
+          testSuiteStartCh.publish({
+            testSuite: suite.file,
+            isUnskippable,
+            isForcedToRun,
+            itrCorrelationId
+          })
         })
       }
     })
@@ -395,11 +401,12 @@ addHook({
       }
     })
 
-    const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
+    const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
       if (err) {
         suitesToSkip = []
       } else {
         suitesToSkip = skippableSuites
+        itrCorrelationId = responseItrCorrelationId
       }
       // We remove the suites that we skip through ITR
       const filteredSuites = getFilteredSuites(runner.suite.suites)

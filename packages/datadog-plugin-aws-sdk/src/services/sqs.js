@@ -3,6 +3,8 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
+const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -19,20 +21,27 @@ class Sqs extends BaseAwsSdkPlugin {
       const { request, response } = obj
       const store = storage.getStore()
       const plugin = this
-      const maybeChildOf = this.responseExtract(request.params, request.operation, response)
-      if (maybeChildOf) {
+      const contextExtraction = this.responseExtract(request.params, request.operation, response)
+      let span
+      let parsedMessageAttributes
+      if (contextExtraction && contextExtraction.datadogContext) {
         obj.needsFinish = true
         const options = {
-          childOf: maybeChildOf,
+          childOf: contextExtraction.datadogContext,
           tags: Object.assign(
             {},
             this.requestTags.get(request) || {},
             { 'span.kind': 'server' }
           )
         }
-        const span = plugin.tracer.startSpan('aws.response', options)
+        parsedMessageAttributes = contextExtraction.parsedAttributes
+        span = plugin.tracer.startSpan('aws.response', options)
         this.enter(span, store)
       }
+      // extract DSM context after as we might not have a parent-child but may have a DSM context
+      this.responseExtractDSMContext(
+        request.operation, request.params, response, span ?? null, parsedMessageAttributes ?? null
+      )
     })
 
     this.addSub('apm:aws:response:finish:sqs', err => {
@@ -133,17 +142,67 @@ class Sqs extends BaseAwsSdkPlugin {
 
     const datadogAttribute = message.MessageAttributes._datadog
 
+    const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
+    if (parsedAttributes) {
+      return {
+        datadogContext: this.tracer.extract('text_map', parsedAttributes),
+        parsedAttributes: parsedAttributes
+      }
+    }
+  }
+
+  parseDatadogAttributes (attributes) {
     try {
-      if (datadogAttribute.StringValue) {
-        const textMap = datadogAttribute.StringValue
-        return this.tracer.extract('text_map', JSON.parse(textMap))
-      } else if (datadogAttribute.Type === 'Binary') {
-        const buffer = Buffer.from(datadogAttribute.Value, 'base64')
-        return this.tracer.extract('text_map', JSON.parse(buffer))
+      if (attributes.StringValue) {
+        const textMap = attributes.StringValue
+        return JSON.parse(textMap)
+      } else if (attributes.Type === 'Binary') {
+        const buffer = Buffer.from(attributes.Value, 'base64')
+        return JSON.parse(buffer)
       }
     } catch (e) {
       log.error(e)
     }
+  }
+
+  responseExtractDSMContext (operation, params, response, span, parsedAttributes) {
+    if (!this.config.dsmEnabled) return
+    if (operation !== 'receiveMessage') return
+    if (!response || !response.Messages || !response.Messages[0]) return
+
+    // we only want to set the payloadSize on the span if we have one message
+    span = response.Messages.length > 1 ? null : span
+
+    response.Messages.forEach(message => {
+      // we may have already parsed the message attributes when extracting trace context
+      if (!parsedAttributes) {
+        if (message.Body) {
+          try {
+            const body = JSON.parse(message.Body)
+
+            // SNS to SQS
+            if (body.Type === 'Notification') {
+              message = body
+            }
+          } catch (e) {
+            // SQS to SQS
+          }
+        }
+        if (message.MessageAttributes && message.MessageAttributes._datadog) {
+          parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
+        }
+      }
+      if (parsedAttributes && parsedAttributes[CONTEXT_PROPAGATION_KEY]) {
+        const payloadSize = getHeadersSize({
+          Body: message.Body,
+          MessageAttributes: message.MessageAttributes
+        })
+        const queue = params.QueueUrl.split('/').pop()
+        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes[CONTEXT_PROPAGATION_KEY]))
+        this.tracer
+          .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
+      }
+    })
   }
 
   requestInject (span, request) {
@@ -164,6 +223,20 @@ class Sqs extends BaseAwsSdkPlugin {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)
       }
+      if (this.config.dsmEnabled) {
+        const payloadSize = getHeadersSize({
+          Body: request.params.MessageBody,
+          MessageAttributes: request.params.MessageAttributes
+        })
+        const queue = request.params.QueueUrl.split('/').pop()
+        const dataStreamsContext = this.tracer
+          .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
+        if (dataStreamsContext) {
+          const pathwayCtx = encodePathwayContext(dataStreamsContext)
+          ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+        }
+      }
+      request.params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
     }
   }
 }

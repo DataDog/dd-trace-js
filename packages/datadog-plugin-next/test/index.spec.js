@@ -8,8 +8,13 @@ const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync, readdirSync } = require('fs')
 const { satisfies } = require('semver')
-const { DD_MAJOR } = require('../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
+
+const BUILD_COMMAND = NODE_MAJOR < 18
+  ? 'yarn exec next build' : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
+let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
+VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
 
 describe('Plugin', function () {
   let server
@@ -19,7 +24,7 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
+    withVersions('next', 'next', VERSIONS_TO_TEST, version => {
       const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
@@ -97,7 +102,7 @@ describe('Plugin', function () {
         execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
-        execSync('yarn exec next build', {
+        execSync(BUILD_COMMAND, {
           cwd,
           env: {
             ...process.env,

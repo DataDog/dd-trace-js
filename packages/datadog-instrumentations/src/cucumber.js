@@ -44,6 +44,7 @@ const patched = new WeakSet()
 let pickleByFile = {}
 const pickleResultByFile = {}
 let skippableSuites = []
+let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
 
@@ -102,7 +103,7 @@ function wrapRun (pl, isLatestVersion) {
         const testSuitePath = getTestSuitePath(testSuiteFullPath, process.cwd())
         isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
-        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun })
+        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
       }
 
       const testSourceLine = this.gherkinDocument &&
@@ -304,6 +305,7 @@ addHook({
       this.pickleIds = picklesToRun
 
       skippedSuites = Array.from(filteredPickles.skippedSuites)
+      itrCorrelationId = skippableResponse.itrCorrelationId
     }
 
     pickleByFile = getPickleByFile(this)

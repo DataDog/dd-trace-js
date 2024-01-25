@@ -11,6 +11,9 @@ const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
+const samplingContextsAvailable = process.platform !== 'win32'
+const oomMonitoringSupported = process.platform !== 'win32'
+
 describe('config', () => {
   let Config
   let env
@@ -48,7 +51,7 @@ describe('config', () => {
     expect(config.logger).to.be.an.instanceof(ConsoleLogger)
     expect(config.exporters[0]).to.be.an.instanceof(AgentExporter)
     expect(config.profilers[0]).to.be.an.instanceof(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
     expect(config.cpuProfilingEnabled).false
@@ -130,8 +133,10 @@ describe('config', () => {
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0',
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: '1'
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: '0'
+    }
+    if (samplingContextsAvailable) {
+      process.env.DD_PROFILING_EXPERIMENTAL_CPU_ENABLED = '1'
     }
     const options = {
       logger: nullLogger
@@ -142,9 +147,9 @@ describe('config', () => {
     expect(config.profilers).to.be.an('array')
     expect(config.profilers.length).to.equal(1)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[0].codeHotspotsEnabled()).true
+    expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
-    expect(config.cpuProfilingEnabled).true
+    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
 
   it('should support profiler config with DD_PROFILING_XXX_ENABLED', () => {
@@ -181,6 +186,10 @@ describe('config', () => {
   })
 
   it('should prioritize options over env variables', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'space',
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: '1'
@@ -202,6 +211,10 @@ describe('config', () => {
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
+    if (!samplingContextsAvailable) {
+      return
+    }
+
     process.env = {
       DD_PROFILING_PROFILERS: 'wall',
       DD_PROFILING_CODEHOTSPOTS_ENABLED: '0',
@@ -236,6 +249,46 @@ describe('config', () => {
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[0].endpointCollectionEnabled()).false
+  })
+
+  function optionOnlyWorksWithGivenCondition (property, name, condition) {
+    const options = {
+      [property]: true
+    }
+
+    if (condition) {
+      // should silently succeed
+      // eslint-disable-next-line no-new
+      new Config(options)
+    } else {
+      // should throw
+      // eslint-disable-next-line no-new
+      expect(() => { new Config(options) }).to.throw(`${name} not supported on `)
+    }
+  }
+
+  function optionOnlyWorksWithSamplingContexts (property, name) {
+    optionOnlyWorksWithGivenCondition(property, name, samplingContextsAvailable)
+  }
+
+  it('should only allow code hotspots on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('codeHotspotsEnabled', 'Code hotspots')
+  })
+
+  it('should only allow endpoint collection on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('endpointCollection', 'Endpoint collection')
+  })
+
+  it('should only allow CPU profiling on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('cpuProfilingEnabled', 'CPU profiling')
+  })
+
+  it('should only allow timeline view on supported platforms', () => {
+    optionOnlyWorksWithSamplingContexts('timelineEnabled', 'Timeline view')
+  })
+
+  it('should only allow OOM monitoring on supported platforms', () => {
+    optionOnlyWorksWithGivenCondition('oomMonitoring', 'OOM monitoring', oomMonitoringSupported)
   })
 
   it('should support tags', () => {
@@ -305,43 +358,49 @@ describe('config', () => {
   it('should enable OOM heap profiler by default and use process as default strategy', () => {
     const config = new Config()
 
-    expect(config.oomMonitoring).to.deep.equal({
-      enabled: true,
-      heapLimitExtensionSize: 0,
-      maxHeapExtensionCount: 0,
-      exportStrategies: ['process'],
-      exportCommand: [
-        process.execPath,
-        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-        'http://localhost:8126/',
-        `host:${config.host},service:node,snapshot:on_oom`,
-        'space'
-      ]
-    })
-  })
-
-  it('should support OOM heap profiler configuration', () => {
-    process.env = {
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
-      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
-      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
+    if (oomMonitoringSupported) {
+      expect(config.oomMonitoring).to.deep.equal({
+        enabled: oomMonitoringSupported,
+        heapLimitExtensionSize: 0,
+        maxHeapExtensionCount: 0,
+        exportStrategies: ['process'],
+        exportCommand: [
+          process.execPath,
+          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+          'http://localhost:8126/',
+          `host:${config.host},service:node,snapshot:on_oom`,
+          'space'
+        ]
+      })
+    } else {
+      expect(config.oomMonitoring.enabled).to.be.false
     }
-
-    const config = new Config({})
-
-    expect(config.oomMonitoring).to.deep.equal({
-      enabled: true,
-      heapLimitExtensionSize: 1000000,
-      maxHeapExtensionCount: 2,
-      exportStrategies: ['process', 'async'],
-      exportCommand: [
-        process.execPath,
-        path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-        'http://localhost:8126/',
-        `host:${config.host},service:node,snapshot:on_oom`,
-        'space'
-      ]
-    })
   })
+
+  if (oomMonitoringSupported) {
+    it('should support OOM heap profiler configuration', function () {
+      process.env = {
+        DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
+        DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '1000000',
+        DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '2',
+        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process'
+      }
+
+      const config = new Config({})
+
+      expect(config.oomMonitoring).to.deep.equal({
+        enabled: true,
+        heapLimitExtensionSize: 1000000,
+        maxHeapExtensionCount: 2,
+        exportStrategies: ['process', 'async'],
+        exportCommand: [
+          process.execPath,
+          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
+          'http://localhost:8126/',
+          `host:${config.host},service:node,snapshot:on_oom`,
+          'space'
+        ]
+      })
+    })
+  }
 })

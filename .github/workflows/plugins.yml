@@ -20,7 +20,7 @@ env:
 
 
 jobs:
-  aerospike-3:
+  aerospike-node-14:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:18.04
@@ -74,7 +74,7 @@ jobs:
       - if: always()
         uses: codecov/codecov-action@v3
 
-  aerospike-4:
+  aerospike-node-16:
     runs-on: ubuntu-latest
     services:
       aerospike:
@@ -84,7 +84,7 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '4.0.0 - 5.4.0'
+      PACKAGE_VERSION_RANGE: '>=4.0.0 <5.2.0'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -101,7 +101,7 @@ jobs:
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
       - name: Install dependencies and run tests 
-        if: env.MAJOR_VERSION != '5'
+        if: env.MAJOR_VERSION == '4'
         run: |
           yarn install --ignore-engines
           yarn test:plugins:ci
@@ -109,7 +109,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  aerospike-5:
+  aerospike-node-18-20:
     strategy:
       matrix:
         node-version: [18]
@@ -145,7 +145,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies and run tests 
-        if: env.MAJOR_VERSION == '5'
+        if: env.MAJOR_VERSION >= '5'
         run: |
           yarn install --ignore-engines
           yarn test:plugins:ci
@@ -241,6 +241,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
       SERVICES: localstack localstack-legacy
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -919,27 +920,18 @@ jobs:
 
   # TODO: fix performance issues and test more Node versions
   next:
-    strategy:
-      matrix:
-        node-version: [16]
-        range: ['>=9.5 <11.1', '>=11.1 <13.2']
-        include:
-          - node-version: 18
-            range: '>=13.2'
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
-      RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-      - run: yarn install --ignore-engines
-      - run: yarn config set ignore-engines true
-      - run: yarn test:plugins:ci --ignore-engines
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
