@@ -74,7 +74,7 @@ class ChildProcessPlugin extends TracingPlugin {
       return
     }
 
-    this.activeSpan.setTag('cmd.exit_code', `${exitCode}`)
+    this.activeSpan?.setTag('cmd.exit_code', `${exitCode}`)
     this.activeSpan?.finish()
   }
 
@@ -83,7 +83,7 @@ class ChildProcessPlugin extends TracingPlugin {
   }
 
   asyncEnd ({ result }) {
-    this.activeSpan.setTag('cmd.exit_code', `${result}`)
+    this.activeSpan?.setTag('cmd.exit_code', `${result}`)
     this.activeSpan?.finish()
   }
 }
