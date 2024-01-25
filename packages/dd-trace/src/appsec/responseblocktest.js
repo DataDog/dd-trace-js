@@ -1,6 +1,6 @@
 // TODO: turn me into integration tests please
 
-const tracer = require('./dd-trace-js').init({
+const tracer = require('../../../../').init({
   appsec: true
 })
 const http = require('http')
@@ -55,7 +55,7 @@ const handlers = {
     res.end('end')
   },
   stream (req, res) {
-    const stream = fs.createReadStream('./file', { encoding: 'utf8' })
+    const stream = fs.createReadStream(__dirname + '/file', { encoding: 'utf8' })
     stream.pipe(res, { end: false })
     stream.on('end', () => res.end('end'))
   },
@@ -81,7 +81,13 @@ const handlers = {
 }
 
 http.createServer((req, res) => {
-  handlers[req.url.slice(1)](req, res)
+  const handler = handlers[req.url.slice(1)]
+
+  if (handler) {
+    handler(req, res)
+  } else {
+    res.end('notfound')
+  }
 }).listen(1337)
 
 async function main () {
@@ -93,7 +99,7 @@ async function main () {
   //process.exit()
 }
 
-main()
+//main()
 
 function request (url) {
   return new Promise((resolve, reject) => {

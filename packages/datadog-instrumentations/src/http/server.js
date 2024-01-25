@@ -25,22 +25,54 @@ addHook({ name: 'https' }, http => {
 
 addHook({ name: 'http' }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
-  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapWriteHead)
+  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
-  shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWriteHead)
+  shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })
 
+function wrapWrite (write) {
+  return function wrappedWrite () {
+    if (this.finished || requestEndedSet.has(this)) {
+      return this
+    }
+
+    return write.apply(this, arguments)
+  }
+}
+
+function wrapEnd (end) {
+  return function () {
+    if (this.finished) return this
+
+    if (requestEndedSet.has(this)) {
+      return end.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+
+    // TODO: this doesn't support headers sent with res.writeHead()
+    const responseHeaders = this.getHeaders()
+
+    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
+
+    if (abortController.signal.aborted) {
+      requestEndedSet.add(this)
+      return
+    }
+
+    return end.apply(this, arguments)
+  }
+}
+
 function wrapWriteHead (writeHead) {
   return function (statusCode) {
-    if (this.finished) return
+    if (this.finished) return this
 
     if (requestEndedSet.has(this)) {
       return writeHead.apply(this, arguments)
     }
-
-    requestEndedSet.add(this)
 
     const abortController = new AbortController()
 
@@ -50,6 +82,7 @@ function wrapWriteHead (writeHead) {
     endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
 
     if (abortController.signal.aborted) {
+      requestEndedSet.add(this)
       return
     }
 
