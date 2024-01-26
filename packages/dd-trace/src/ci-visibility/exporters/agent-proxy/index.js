@@ -20,6 +20,7 @@ function getLatestEvpProxyVersion (err, agentInfo) {
       }
       return version > acc ? version : acc
     }
+    return acc
   }, 0)
 }
 
