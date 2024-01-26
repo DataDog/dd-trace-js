@@ -8,7 +8,9 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const _ = require('lodash')
+const get = require('../../utils/src/get')
+const has = require('../../utils/src/has')
+const set = require('../../utils/src/set')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
@@ -919,10 +921,10 @@ class Config {
         const origin = origins[i]
 
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (_.get(this, name) === container[name] && _.has(this, name)) break
+          if (get(this, name) === container[name] && has(this, name)) break
 
           let value = container[name]
-          _.set(this, name, value)
+          set(this, name, value)
 
           if (name === 'url' && value) value = value.toString()
           if (name === 'appsec.rules') value = JSON.stringify(value)
