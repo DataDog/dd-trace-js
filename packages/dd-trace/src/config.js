@@ -940,8 +940,6 @@ class Config {
 
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
-
-    return changes
   }
 }
 
