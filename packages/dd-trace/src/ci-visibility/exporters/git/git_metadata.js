@@ -60,7 +60,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, callback) {
+function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -73,7 +73,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/search_commits'
+    options.path = `${evpProxyPrefix}/api/v2/git/repository/search_commits`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
     delete options.headers['dd-api-key']
   }
@@ -122,7 +122,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
 /**
  * This function uploads a git packfile
  */
-function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, headCommit }, callback) {
+function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
 
   const pushedSha = JSON.stringify({
@@ -162,7 +162,7 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/packfile'
+    options.path = `${evpProxyPrefix}/api/v2/git/repository/packfile`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
     delete options.headers['dd-api-key']
   }
@@ -238,7 +238,7 @@ function generateAndUploadPackFiles ({
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
@@ -266,15 +266,34 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
-      return generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
+      return generateAndUploadPackFiles({
+        url,
+        isEvpProxy,
+        evpProxyPrefix,
+        commitsToUpload,
+        repositoryUrl,
+        headCommit
+      }, callback)
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()
-    getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(true))
+    getCommitsToUpload({
+      url,
+      repositoryUrl,
+      latestCommits,
+      isEvpProxy,
+      evpProxyPrefix
+    }, getOnFinishGetCommitsToUpload(true))
   }
 
-  getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(false))
+  getCommitsToUpload({
+    url,
+    repositoryUrl,
+    latestCommits,
+    isEvpProxy,
+    evpProxyPrefix
+  }, getOnFinishGetCommitsToUpload(false))
 }
 
 module.exports = {

@@ -6,7 +6,7 @@ const CoverageWriter = require('../agentless/coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
-const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\//
+const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 
 function getLatestEvpProxyVersion (err, agentInfo) {
   if (err) {
@@ -45,6 +45,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       const evpProxyPrefix = `${AGENT_EVP_PROXY_PATH_PREFIX}${latestEvpProxyVersion}`
       if (isEvpCompatible) {
         this._isUsingEvpProxy = true
+        this.evpProxyPrefix = evpProxyPrefix
         this._writer = new AgentlessWriter({
           url: this._url,
           tags,
