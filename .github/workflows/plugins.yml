@@ -999,7 +999,7 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v2
 
   paperplane:
     runs-on: ubuntu-latest
