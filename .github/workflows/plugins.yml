@@ -23,7 +23,7 @@ jobs:
   aerospike-node-14:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:22.04
+      image: ubuntu:18.04
     services:
       aerospike:
         image: aerospike:ce-5.3.0.16
@@ -72,7 +72,7 @@ jobs:
           yarn install --ignore-engines
           yarn test:plugins:ci
       - if: always()
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v2
 
   aerospike-node-16:
     runs-on: ubuntu-latest
