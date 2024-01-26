@@ -2,16 +2,10 @@
 
 const log = require('../log')
 
-let enabled
 let requestSampling
 
 function configure ({ apiSecurity }) {
-  enabled = apiSecurity.enabled
   setRequestSampling(apiSecurity.requestSampling)
-}
-
-function disable () {
-  enabled = false
 }
 
 function setRequestSampling (sampling) {
@@ -33,7 +27,7 @@ function parseRequestSampling (requestSampling) {
 }
 
 function sampleRequest () {
-  if (!enabled || !requestSampling) {
+  if (!requestSampling) {
     return false
   }
 
@@ -42,7 +36,6 @@ function sampleRequest () {
 
 module.exports = {
   configure,
-  disable,
   setRequestSampling,
   sampleRequest
 }

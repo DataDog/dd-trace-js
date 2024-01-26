@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/tap')
+// require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
@@ -112,7 +112,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
-    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', false)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
@@ -301,7 +300,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
-    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
@@ -756,7 +754,6 @@ describe('Config', () => {
           mode: 'safe'
         },
         apiSecurity: {
-          enabled: true,
           requestSampling: 1.0
         }
       },
@@ -808,7 +805,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
-    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -837,7 +833,6 @@ describe('Config', () => {
           mode: 'disabled'
         },
         apiSecurity: {
-          enabled: true,
           requestSampling: 1.0
         }
       },
@@ -856,7 +851,6 @@ describe('Config', () => {
             mode: 'safe'
           },
           apiSecurity: {
-            enabled: false,
             requestSampling: 0.5
           }
         }
@@ -879,7 +873,6 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
-        enabled: true,
         requestSampling: 1.0
       }
     })
@@ -1411,7 +1404,6 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
-          enabled: true,
           requestSampling: 5
         }
       }
@@ -1420,7 +1412,6 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
-          enabled: true,
           requestSampling: -5
         }
       }
@@ -1429,7 +1420,6 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
-          enabled: true,
           requestSampling: 0.1
         }
       }
