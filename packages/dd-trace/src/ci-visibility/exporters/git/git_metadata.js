@@ -187,6 +187,7 @@ function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, re
 function generateAndUploadPackFiles ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   commitsToUpload,
   repositoryUrl,
   headCommit
@@ -216,6 +217,7 @@ function generateAndUploadPackFiles ({
         packFileToUpload: packFilesToUpload[packFileIndex++],
         url,
         isEvpProxy,
+        evpProxyPrefix,
         repositoryUrl,
         headCommit
       },
@@ -228,6 +230,7 @@ function generateAndUploadPackFiles ({
       packFileToUpload: packFilesToUpload[packFileIndex++],
       url,
       isEvpProxy,
+      evpProxyPrefix,
       repositoryUrl,
       headCommit
     },
