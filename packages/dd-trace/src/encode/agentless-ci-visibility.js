@@ -2,7 +2,8 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
-const id = require('../../../dd-trace/src/id')
+const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const id = require('../../src/id')
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
@@ -46,7 +47,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSuite (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
+    let keysLength = TEST_SUITE_KEYS_LENGTH
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
+      keysLength++
+    }
+
+    this._encodeMapPrefix(bytes, keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -58,6 +65,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'test_suite_id')
     this._encodeId(bytes, content.span_id)
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
+    }
 
     this._encodeString(bytes, 'error')
     this._encodeNumber(bytes, content.error)
@@ -134,6 +147,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   _encodeEventContent (bytes, content) {
     let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
+
     if (content.meta.test_session_id) {
       totalKeysLength = totalKeysLength + 1
     }
@@ -198,6 +212,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
+    }
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
     }
 
     this._encodeString(bytes, 'meta')
