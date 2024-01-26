@@ -194,8 +194,8 @@ class Span {
   }
 
   addLink (context, attributes) {
-    if (!(context instanceof api.spanContext)) {
-      throw new Error('Span.addLink: first argument must be of type api.spanContext')
+    if (!(context instanceof SpanContext)) {
+      throw new Error('Span.addLink: first argument must be of type SpanContext')
     }
     // extract dd context
     const ddSpanContext = context._ddContext

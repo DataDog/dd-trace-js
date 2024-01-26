@@ -37,8 +37,10 @@ describe('format', () => {
   let spanContext
   let spanContext2
   let spanContext3
+  let TraceState
 
   beforeEach(() => {
+    TraceState = require('../src/opentracing/propagation/tracestate')
     spanContext = {
       _traceId: spanId,
       _spanId: spanId,
@@ -47,7 +49,8 @@ describe('format', () => {
       _metrics: {},
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
+        tags: {}
       },
       _name: 'operation'
     }
@@ -72,7 +75,8 @@ describe('format', () => {
       _metrics: {},
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
+        tags: {}
       },
       _name: 'operation'
     }
@@ -250,33 +254,218 @@ describe('format', () => {
       ]
 
       trace = format(span)
-
       expect(trace.links).to.deep.equal([`{"trace_id":"${spanContext2._traceId}","span_id":"${spanContext2._spanId}"}`,
         `{"trace_id":"${spanContext3._traceId}","span_id":"${spanContext3._spanId}"}`])
     })
 
     it('should drop span link attributes if they exceed the maximum length', () => {
       const spanLinkLength = sinon.stub()
-      spanLinkLength.onFirstCall().returns(25000)
-      spanLinkLength.onSecondCall().returns(0)
-      const spanLinkFlushAttributes = sinon.stub().callsFake((link) => {
+      spanLinkLength.onFirstCall().callsFake((link) => {
         link.entered = 0
+        return 25000
       })
-      const spanLinkToString = sinon.stub().callsFake((link) => {
-        return link.entered === 0 ? 'link' : 'wrong'
-      })
+      spanLinkLength.onSecondCall().returns(0)
       format = proxyquire('../src/format', {
-        './span_link_processor': { spanLinkLength, spanLinkFlushAttributes, spanLinkToString }
+        './span_link_processor': { spanLinkLength }
       })
 
       const link = {
-        context: spanContext2
-
+        context: spanContext2,
+        attributes: { foo: 'bar' }
       }
       span._links = [link]
       trace = format(span)
+      const encoded =
+        `{"trace_id":"${spanContext2._traceId.toString()}",` +
+         `"span_id":"${spanContext2._spanId.toString()}","dropped_attributes_count":"1"}`
 
-      expect(trace.links).to.deep.equal(['link'])
+      const spanLink = trace.links[0]
+      expect(spanLink.toString()).to.equal(encoded)
+    })
+
+    describe('flushAttributes()', () => {
+      it('flushes attributes correctly', () => {
+        const spanLinkLength = sinon.stub()
+        spanLinkLength.onFirstCall().returns(25000)
+        spanLinkLength.onSecondCall().returns(0)
+        format = proxyquire('../src/format', {
+          './span_link_processor': { spanLinkLength }
+        })
+
+        const link = {
+          context: spanContext2,
+          attributes: { foo: 'bar' }
+        }
+        span._links = [link]
+        trace = format(span)
+
+        const encoded =
+        `{"trace_id":"${spanContext2._traceId.toString()}",` +
+         `"span_id":"${spanContext2._spanId.toString()}","dropped_attributes_count":"1"}`
+
+        const spanLink = trace.links[0]
+        expect(spanLink.toString()).to.equal(encoded)
+        expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
+      })
+    })
+
+    it('creates a span link', () => {
+      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      spanContext2._tracestate = ts
+      spanContext2._trace = {
+        started: [],
+        finished: [],
+        origin: 'synthetics',
+        tags: {
+          '_dd.p.tid': '789'
+        }
+      }
+
+      spanContext._traceId = spanContext2._traceId
+
+      spanContext._sampling.priority = 0
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = JSON.parse(trace.links[0])
+      expect(spanLink).to.have.property('trace_id', '789' + spanContext._traceId.toString())
+      expect(spanLink).to.have.property('span_id', spanContext2._spanId.toString())
+      expect(spanLink).to.have.property('flags', 0)
+      expect(spanLink).to.have.property('tracestate', ts.toString())
+      expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
+      expect(spanLink).to.have.property('trace_id_high', '789')
+    })
+
+    it('will not use the span context if the link object specifies a different trace', () => {
+      const link = {
+        context: spanContext2
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = JSON.parse(trace.links[0])
+      expect(spanLink).to.have.property('trace_id', spanContext2._traceId.toString())
+      expect(spanLink).to.have.property('span_id', spanContext2._spanId.toString())
+      expect(spanLink).to.not.have.property('flags')
+      expect(spanLink).to.not.have.property('tracestate')
+      expect(spanLink).to.not.have.property('trace_id_high')
+      expect(spanLink).to.not.have.property('attributes')
+    })
+
+    it('sanitizes attributes', () => {
+      const attributes = {
+        foo: 'bar',
+        baz: 'qux'
+      }
+
+      const link = {
+        context: spanContext2,
+        attributes
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = JSON.parse(trace.links[0])
+      expect(spanLink.attributes).to.deep.equal(attributes)
+    })
+
+    it('sanitizes nested attributes', () => {
+      const attributes = {
+        foo: true,
+        bar: 'hi',
+        baz: 1,
+        qux: [1, 2, 3]
+      }
+
+      const link = {
+        context: spanContext2,
+        attributes
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = JSON.parse(trace.links[0])
+      expect(spanLink.attributes).to.deep.equal({
+        foo: 'true',
+        bar: 'hi',
+        baz: '1',
+        'qux.0': '1',
+        'qux.1': '2',
+        'qux.2': '3'
+      })
+    })
+
+    it('sanitizes invalid attributes', () => {
+      const attributes = {
+        foo: () => {},
+        bar: Symbol('bar'),
+        baz: 'valid'
+      }
+
+      const link = {
+        context: spanContext2,
+        attributes
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = JSON.parse(trace.links[0])
+      expect(spanLink.attributes).to.deep.equal({
+        baz: 'valid'
+      })
+      expect(spanLink).to.have.property('dropped_attributes_count', '2')
+    })
+
+    it('stringifies a simple span link', () => {
+      const encoded = `{"trace_id":"${spanContext2._traceId.toString()}",` +
+      `"span_id":"${spanContext2._spanId.toString()}"}`
+
+      const link = {
+        context: spanContext2
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = trace.links[0]
+      expect(spanLink).to.equal(encoded)
+      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
+    })
+
+    it('stringifies a complex span link', () => {
+      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+
+      spanContext2._tracestate = ts
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      spanContext._traceId = spanContext2._traceId
+      spanContext._trace.tags = {}
+      span._links = [link]
+      trace = format(span)
+      const spanLink = trace.links[0]
+
+      const encoded =
+      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
+      `"attributes":{"foo":"bar"},"flags":0,"tracestate":"${ts.toString()}"}`
+
+      expect(spanLink).to.equal(encoded)
+      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
+    })
+
+    it('stringifies droppedAttributesCount properly', () => {
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar', 'baz': {} }
+      }
+      span._links = [link]
+      trace = format(span)
+      const spanLink = trace.links[0]
+
+      const encoded =
+      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
+      `"dropped_attributes_count":"1","attributes":{"foo":"bar"}}`
+
+      expect(spanLink).to.equal(encoded)
+      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
     })
 
     it('should drop entire span link if it exceeds the maximum length', () => {
@@ -285,29 +474,29 @@ describe('format', () => {
       spanLinkLength.onSecondCall().returns(0)
       spanLinkLength.onThirdCall().returns(25000)
       spanLinkLength.onCall(4).returns(0)
-      const spanLinkFlushAttributes = sinon.stub().callsFake((link) => {
-        link.entered = 0
-      })
-      const spanLinkToString = sinon.stub().callsFake((link) => {
-        return link.entered === 0 ? 'link' : 'wrong'
-      })
+
       format = proxyquire('../src/format', {
-        './span_link_processor': { spanLinkLength, spanLinkFlushAttributes, spanLinkToString }
+        './span_link_processor': { spanLinkLength }
       })
 
       const link = {
-        context: spanContext2
+        context: spanContext2,
+        attributes: { foo: 'bar', 'baz': {} }
       }
 
       const linkToDrop = {
-        context: spanContext3
+        context: spanContext3,
+        attributes: { foo: 'bar', 'baz': {} }
       }
 
       span._links = [link, linkToDrop]
 
-      trace = format(span)
+      const encoded =
+      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
+      `"dropped_attributes_count":"1","attributes":{"foo":"bar"}}`
 
-      expect(trace.links).to.deep.equal(['link'])
+      expect(trace.links).to.have.lengthOf(1)
+      expect(trace.links[0]).to.equal(encoded)
     })
 
     it('should extract trace chunk tags', () => {

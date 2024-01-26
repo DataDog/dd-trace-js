@@ -5,7 +5,7 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
-const { handleSpanLinks } = require('./span_link_processor')
+const { formatLink, spanLinkLength, spanLinkToString } = require('./span_link_processor')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -68,13 +68,23 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
+// TODO: do we need to handle both otel and dd trace span links in this function or only dd trace span links?
 function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
-    for (const link of span._links) {
-      // link = { context, attributes }
-
-      handleSpanLinks(link, link.context, link.attributes, span.context())
+    for (let link of span._links) {
+      const { context, attributes } = link
+      link = formatLink(span.context(), context, attributes)
+      let linkString = spanLinkToString(link)
+      if ((Buffer.byteLength(links.join()) + spanLinkLength(link, linkString)) >= MAX_SPAN_LINKS_LENGTH) {
+        link.dropped_attributes_count += link.attributesCount
+        link.attributesCount = 0
+      }
+      // Update the string after possible flushing
+      linkString = spanLinkToString(link)
+      if ((Buffer.byteLength(links.join()) + spanLinkLength(link, linkString)) < MAX_SPAN_LINKS_LENGTH) {
+        links.push(linkString)
+      }
     }
   }
   trace.links = links
