@@ -321,50 +321,6 @@ describe('Plugin', () => {
             return agent.close({ ritmReset: false })
           })
 
-          it('Should set pathway hash tag on a span when producing', (done) => {
-            channel.assertQueue('testDSM', {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
-
-              let produceSpanMeta = {}
-              agent.use(traces => {
-                const span = traces[0][0]
-
-                if (span.resource.startsWith('basic.publish')) {
-                  produceSpanMeta = span.meta
-                }
-
-                expect(produceSpanMeta).to.include({
-                  'pathway.hash': expectedProducerHash
-                })
-              }, { timeoutMs: 10000 }).then(done, done)
-            })
-          })
-
-          it('Should set pathway hash tag on a span when consuming', (done) => {
-            channel.assertQueue('testDSM', {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.consume(ok.queue, () => {}, {}, (err, ok) => {
-                if (err) return done(err)
-
-                let consumeSpanMeta = {}
-                agent.use(traces => {
-                  const span = traces[0][0]
-
-                  if (span.resource.startsWith('basic.deliver')) {
-                    consumeSpanMeta = span.meta
-                  }
-
-                  expect(consumeSpanMeta).to.include({
-                    'pathway.hash': expectedConsumerHash
-                  })
-                }, { timeoutMs: 10000 }).then(done, done)
-              })
-            })
-          })
-
           it('Should emit DSM stats to the agent when sending a message', done => {
             agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
@@ -408,6 +364,50 @@ describe('Plugin', () => {
               channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
                 if (err) done(err)
+              })
+            })
+          })
+
+          it('Should set pathway hash tag on a span when producing', (done) => {
+            channel.assertQueue('testDSM', {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
+
+              let produceSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                if (span.resource.startsWith('basic.publish')) {
+                  produceSpanMeta = span.meta
+                }
+
+                expect(produceSpanMeta).to.include({
+                  'pathway.hash': expectedProducerHash
+                })
+              }, { timeoutMs: 10000 }).then(done, done)
+            })
+          })
+
+          it('Should set pathway hash tag on a span when consuming', (done) => {
+            channel.assertQueue('testDSM', {}, (err, ok) => {
+              if (err) return done(err)
+
+              channel.consume(ok.queue, () => {}, {}, (err, ok) => {
+                if (err) return done(err)
+
+                let consumeSpanMeta = {}
+                agent.use(traces => {
+                  const span = traces[0][0]
+
+                  if (span.resource.startsWith('basic.deliver')) {
+                    consumeSpanMeta = span.meta
+                  }
+
+                  expect(consumeSpanMeta).to.include({
+                    'pathway.hash': expectedConsumerHash
+                  })
+                }, { timeoutMs: 10000 }).then(done, done)
               })
             })
           })
