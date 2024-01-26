@@ -6,6 +6,7 @@ const CoverageWriter = require('../agentless/coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
+const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\//
 
 function getLatestEvpProxyVersion (err, agentInfo) {
   if (err) {
@@ -13,7 +14,7 @@ function getLatestEvpProxyVersion (err, agentInfo) {
   }
   return agentInfo.endpoints.reduce((acc, endpoint) => {
     if (endpoint.includes(AGENT_EVP_PROXY_PATH_PREFIX)) {
-      const version = Number(endpoint.replace(AGENT_EVP_PROXY_PATH_PREFIX, ''))
+      const version = Number(endpoint.replace(AGENT_EVP_PROXY_PATH_REGEX, '$1'))
       if (isNaN(version)) {
         return acc
       }
