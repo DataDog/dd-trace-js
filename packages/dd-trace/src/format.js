@@ -83,9 +83,9 @@ function extractSpanLinks (trace, span) {
       MAX_SPAN_LINKS_LENGTH) {
         formattedLink.dropped_attributes_count += formattedLink.attributesCount
         formattedLink.attributesCount = 0
+        formattedLinkString = spanLinkToString(formattedLink)
       }
       // Update the string after possible flushing
-      formattedLinkString = spanLinkToString(formattedLink)
       if ((Buffer.byteLength(linksArrayString) + spanLinkLength(formattedLink, formattedLinkString)) <
       MAX_SPAN_LINKS_LENGTH) {
         links.push(formattedLinkString)

@@ -7,22 +7,19 @@ const ALLOWED_SPAN_LINKS_KEY = [ 'trace_id', 'span_id', 'attributes',
   'dropped_attributes_count', 'tracestate', 'trace_id_high', 'flags']
 
 function sanitizeAttributes (formattedLink, attributes) {
-  let _attributesString = '{'
+  const sanitizedAttributes = {}
 
-  const addArrayorScalarAttributes = (key, maybeArray) => {
+  const addArrayOrScalarAttributes = (key, maybeArray) => {
     if (Array.isArray(maybeArray)) {
       for (const subkey in maybeArray) {
-        addArrayorScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
       }
     } else {
       const maybeScalar = maybeArray
       if (ALLOWED.includes(typeof maybeScalar)) {
         formattedLink.attributesCount++
-        if (_attributesString.length === 1) { // no attributes yet
-          _attributesString += `"${key}":"${maybeScalar}"}`
-        } else {
-          _attributesString = _attributesString.slice(0, -1) + `,"${key}":"${maybeScalar}"}`
-        }
+        // Wrap the value as a string if it's not already a string
+        sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
       } else {
         log.warn(`Dropping span link attribute.`)
         formattedLink.dropped_attributes_count++
@@ -30,14 +27,12 @@ function sanitizeAttributes (formattedLink, attributes) {
     }
   }
 
-  Object
-    .entries(attributes)
-    .forEach(entry => {
-      const [key, value] = entry
-      addArrayorScalarAttributes(key, value)
-    })
+  Object.entries(attributes).forEach(entry => {
+    const [key, value] = entry
+    addArrayOrScalarAttributes(key, value)
+  })
 
-  return `${_attributesString}`
+  return JSON.stringify(sanitizedAttributes)
 }
 
 function getTraceFlags (spanContext, linkContext, formattedLink) {

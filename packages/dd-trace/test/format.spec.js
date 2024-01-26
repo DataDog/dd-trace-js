@@ -356,6 +356,7 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
+      console.log(trace.links[0])
       const spanLink = JSON.parse(trace.links[0])
       expect(spanLink.attributes).to.deep.equal({
         foo: 'true',

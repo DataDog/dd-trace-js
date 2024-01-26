@@ -143,6 +143,11 @@ export declare interface TraceOptions extends Analyzable {
    * The type of request.
    */
   type?: string
+
+  /**
+   * An array of span links
+   */
+  links?: Array<{ context: SpanContext, attributes?: Object }>
 }
 
 /**
@@ -153,7 +158,7 @@ export declare interface TraceOptions extends Analyzable {
  * have children.
  */
 export declare interface Span extends opentracing.Span {
-  context (): SpanContext;
+context (): SpanContext;
 
   /**
    * Causally links another span to the current span

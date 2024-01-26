@@ -12,6 +12,7 @@ const DatadogSpan = require('../opentracing/span')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
+const log = require('../log')
 
 const SpanContext = require('./span_context')
 
@@ -145,8 +146,6 @@ class Span {
 
     this._hasStatus = false
 
-    this.links = links // store links here from OTel span
-
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
@@ -195,7 +194,7 @@ class Span {
 
   addLink (context, attributes) {
     if (!(context instanceof SpanContext)) {
-      throw new Error('Span.addLink: first argument must be of type SpanContext')
+      log.error('Span.addLink: first argument must be of type SpanContext')
     }
     // extract dd context
     const ddSpanContext = context._ddContext

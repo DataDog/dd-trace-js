@@ -82,7 +82,8 @@ class DatadogSpan {
 
     this._startTime = fields.startTime || this._getTime()
 
-    this._links = fields.links || []
+    this._links = []
+    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -93,6 +94,7 @@ class DatadogSpan {
 
       unfinishedRegistry.register(this, operationName, this)
     }
+
     spanleak.addSpan(this, operationName)
   }
 
@@ -154,7 +156,7 @@ class DatadogSpan {
 
   addLink (context, attributes) {
     if (!(context instanceof SpanContext)) {
-      throw new Error('Span.addLink: first argument must be of type SpanContext')
+      log.error('Span.addLink: first argument must be of type SpanContext')
     }
     this._links.push({ context, attributes })
   }
