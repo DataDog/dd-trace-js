@@ -36,7 +36,8 @@ describe('encode 0.5', () => {
         example: 1
       },
       start: 123123123123123120,
-      duration: 456456456456456456
+      duration: 456456456456456456,
+      links: []
     }]
   })
 

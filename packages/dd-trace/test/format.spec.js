@@ -31,8 +31,6 @@ const spanId3 = id('0264567812345678')
 describe('format', () => {
   let format
   let span
-  let span2
-  let span3
   let trace
   let spanContext
   let spanContext2
@@ -81,18 +79,6 @@ describe('format', () => {
       _name: 'operation'
     }
 
-    span2 = {
-      context: sinon.stub().returns(spanContext2),
-      tracer: sinon.stub().returns({
-        _service: 'test'
-      }),
-      setTag: sinon.stub(),
-      _startTime: 1500000000000.123456,
-      _duration: 100
-    }
-
-    spanContext2._trace.started.push(span2)
-
     spanContext3 = {
       _traceId: spanId3,
       _spanId: spanId3,
@@ -105,18 +91,6 @@ describe('format', () => {
       },
       _name: 'operation'
     }
-
-    span3 = {
-      context: sinon.stub().returns(spanContext3),
-      tracer: sinon.stub().returns({
-        _service: 'test'
-      }),
-      setTag: sinon.stub(),
-      _startTime: 1500000000000.123456,
-      _duration: 100
-    }
-
-    spanContext3._trace.started.push(span3)
 
     format = require('../src/format')
   })

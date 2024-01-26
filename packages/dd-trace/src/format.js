@@ -72,18 +72,23 @@ function setSingleSpanIngestionTags (span, options) {
 function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
-    for (let link of span._links) {
+    for (const link of span._links) {
       const { context, attributes } = link
-      link = formatLink(span.context(), context, attributes)
-      let linkString = spanLinkToString(link)
-      if ((Buffer.byteLength(links.join()) + spanLinkLength(link, linkString)) >= MAX_SPAN_LINKS_LENGTH) {
-        link.dropped_attributes_count += link.attributesCount
-        link.attributesCount = 0
+      const linksArrayString = links.join()
+
+      const formattedLink = formatLink(span.context(), context, attributes)
+      let formattedLinkString = spanLinkToString(formattedLink)
+
+      if ((Buffer.byteLength(linksArrayString) + spanLinkLength(formattedLink, formattedLinkString)) >=
+      MAX_SPAN_LINKS_LENGTH) {
+        formattedLink.dropped_attributes_count += formattedLink.attributesCount
+        formattedLink.attributesCount = 0
       }
       // Update the string after possible flushing
-      linkString = spanLinkToString(link)
-      if ((Buffer.byteLength(links.join()) + spanLinkLength(link, linkString)) < MAX_SPAN_LINKS_LENGTH) {
-        links.push(linkString)
+      formattedLinkString = spanLinkToString(formattedLink)
+      if ((Buffer.byteLength(linksArrayString) + spanLinkLength(formattedLink, formattedLinkString)) <
+      MAX_SPAN_LINKS_LENGTH) {
+        links.push(formattedLinkString)
       }
     }
   }

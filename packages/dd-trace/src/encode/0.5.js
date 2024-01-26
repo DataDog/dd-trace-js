@@ -34,6 +34,9 @@ class AgentEncoder extends BaseEncoder {
 
     for (let span of trace) {
       span = formatSpan(span)
+      if (span.links && span.links.length > 0) {
+        span.addTags({ '_dd.span_links': span.links })
+      }
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
@@ -47,8 +50,6 @@ class AgentEncoder extends BaseEncoder {
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
-      span._dd.span_links = span.span_links
-      this._encodeString(bytes, JSON.stringify(span._dd.span_links))
     }
   }
 
