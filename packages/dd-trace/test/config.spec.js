@@ -1285,9 +1285,6 @@ describe('Config', () => {
 
     config.configure({}, true)
 
-    // expect(updateConfig).to.be.calledOnce
-    // expect(updateConfig.getCall(0).args[0]).to.deep.include(
-
     expect(updateConfig).to.be.calledTwice
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
