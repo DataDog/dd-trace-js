@@ -225,8 +225,6 @@ function disable () {
 
   remoteConfig.disableWafUpdate()
 
-  apiSecuritySampler.disable()
-
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)
   if (incomingHttpRequestStart.hasSubscribers) incomingHttpRequestStart.unsubscribe(incomingHttpStartTranslator)
