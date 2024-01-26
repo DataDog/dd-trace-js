@@ -5,7 +5,6 @@ const { SQL_INJECTION } = require('../vulnerabilities')
 const { getRanges } = require('../taint-tracking/operations')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
-const { addVulnerability } = require('../vulnerability-reporter')
 const { getNodeModulesPaths } = require('../path-line')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('mysql', 'mysql2', 'sequelize', 'pg-pool', 'knex')
