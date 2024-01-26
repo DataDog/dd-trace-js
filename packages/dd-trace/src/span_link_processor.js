@@ -46,6 +46,7 @@ function getTraceFlags (spanContext, linkContext, formattedLink) {
     formattedLink.flags = spanContext._sampling.priority > 0 ? 1 : 0
   }
 
+  // take the linkContext's tracestate over the spanContext's if it exists
   if (linkContext?._tracestate) {
     formattedLink.flags = linkContext._sampling.priority > 0 ? 1 : 0
   }
