@@ -257,30 +257,28 @@ describe('format', () => {
       expect(spanLink.toString()).to.equal(encoded)
     })
 
-    describe('flushAttributes()', () => {
-      it('flushes attributes correctly', () => {
-        const spanLinkLength = sinon.stub()
-        spanLinkLength.onFirstCall().returns(25000)
-        spanLinkLength.onSecondCall().returns(0)
-        format = proxyquire('../src/format', {
-          './span_link_processor': { spanLinkLength }
-        })
+    it('flushes attributes correctly', () => {
+      const spanLinkLength = sinon.stub()
+      spanLinkLength.onFirstCall().returns(25000)
+      spanLinkLength.onSecondCall().returns(0)
+      format = proxyquire('../src/format', {
+        './span_link_processor': { spanLinkLength }
+      })
 
-        const link = {
-          context: spanContext2,
-          attributes: { foo: 'bar' }
-        }
-        span._links = [link]
-        trace = format(span)
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      span._links = [link]
+      trace = format(span)
 
-        const encoded =
+      const encoded =
         `{"trace_id":"${spanContext2._traceId.toString()}",` +
          `"span_id":"${spanContext2._spanId.toString()}","dropped_attributes_count":"1"}`
 
-        const spanLink = trace.links[0]
-        expect(spanLink.toString()).to.equal(encoded)
-        expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
-      })
+      const spanLink = trace.links[0]
+      expect(spanLink.toString()).to.equal(encoded)
+      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
     })
 
     it('creates a span link', () => {
