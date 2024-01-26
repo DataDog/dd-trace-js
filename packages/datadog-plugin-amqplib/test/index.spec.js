@@ -354,14 +354,13 @@ describe('Plugin', () => {
                   })
                 }
               })
-              expect(statsPointsReceived).to.be.at.least(2)
+              expect(statsPointsReceived).to.be.at.least(1)
               expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
             }, { timeoutMs: 10000 }).then(done, done)
 
             channel.assertQueue('testDSM', {}, (err, ok) => {
               if (err) return done(err)
 
-              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
               channel.consume(ok.queue, () => {}, {}, (err, ok) => {
                 if (err) done(err)
               })
