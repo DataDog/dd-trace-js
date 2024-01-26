@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-          ref: 'origin/khanayan123/enable-nodejs-span-link-tests'
+          ref: '177a3ed58a3401205049c5162b21a0e8365900f0'
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
