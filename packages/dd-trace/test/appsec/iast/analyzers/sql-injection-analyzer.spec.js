@@ -78,8 +78,8 @@ describe('sql-injection-analyzer', () => {
       },
       '../overhead-controller': { hasQuota: () => true }
     })
-    const replaceLocationFromSourceMap = sinon.stub()
-    ProxyAnalyzer.prototype._replaceLocationFromSourceMap = replaceLocationFromSourceMap
+    const reportEvidence = sinon.stub()
+    ProxyAnalyzer.prototype._reportEvidence = reportEvidence
 
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
@@ -95,11 +95,10 @@ describe('sql-injection-analyzer', () => {
         '../vulnerability-reporter': { addVulnerability }
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, dialect)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(replaceLocationFromSourceMap).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, {
-      type: 'SQL_INJECTION',
-      evidence: { dialect: dialect }
+    expect(reportEvidence).to.have.been.calledOnce
+    expect(reportEvidence).to.have.been.calledWithMatch(TAINTED_QUERY, {}, {
+      value: TAINTED_QUERY,
+      dialect
     })
   })
 
