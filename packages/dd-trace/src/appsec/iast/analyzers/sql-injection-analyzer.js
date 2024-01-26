@@ -80,8 +80,9 @@ class SqlInjectionAnalyzer extends InjectionAnalyzer {
     const evidence = this._getEvidence(value, context, dialect)
     const location = this._getLocation()
     if (!this._isExcluded(location)) {
+      const locationSourceMap = this._replaceLocationFromSourceMap(location)
       const spanId = context && context.rootSpan && context.rootSpan.context().toSpanId()
-      const vulnerability = this._createVulnerability(this._type, evidence, spanId, location)
+      const vulnerability = this._createVulnerability(this._type, evidence, spanId, locationSourceMap)
       addVulnerability(context, vulnerability)
     }
   }
