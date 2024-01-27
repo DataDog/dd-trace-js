@@ -529,6 +529,82 @@ describe('Plugin', () => {
             })
           })
 
+          describe('with validateStatus configuration', () => {
+            before(() => {
+              const config = {
+                client: {
+                  validateStatus: code => code < 5
+                },
+                server: false
+              }
+
+              return agent.load('grpc', config)
+                .then(() => {
+                  grpc = require(`../../../versions/${pkg}@${version}`).get()
+                })
+            })
+
+            after(() => {
+              return agent.close({ ritmReset: false })
+            })
+
+            it('should use supplied function for determining if response is not an error', async () => {
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(new Error('foobar'))
+              })
+
+              client.getUnary({ first: 'foobar' }, () => {})
+
+              return agent
+                .use(traces => {
+                  expect(traces[0][0]).to.not.have.property('error')
+                  expect(traces[0][0].meta).to.include({
+                    'grpc.method.name': 'getUnary',
+                    'grpc.method.service': 'TestService',
+                    'grpc.method.package': 'test',
+                    'grpc.method.path': '/test.TestService/getUnary',
+                    'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
+                    'span.kind': 'client',
+                    'component': 'grpc'
+                  })
+                  expect(traces[0][0].meta).to.not.have.property(ERROR_STACK)
+                  expect(traces[0][0].meta).to.not.have.property(ERROR_MESSAGE)
+                  expect(traces[0][0].meta).to.not.have.property(ERROR_TYPE)
+                  expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
+                })
+            })
+
+            it('should use supplied function for determining if response is not an error', async () => {
+              const definition = loader.loadSync(`${__dirname}/invalid.proto`)
+              const test = grpc.loadPackageDefinition(definition).test
+              const client = await buildClient({
+                getUnary: (_, callback) => callback(null)
+              }, test.TestService)
+
+              client.getUnary({ first: 'foobar' }, () => {})
+
+              return agent
+                .use(traces => {
+                  expect(traces[0][0]).to.have.property('error', 1)
+                  expect(traces[0][0].meta).to.include({
+                    [ERROR_TYPE]: 'Error',
+                    'grpc.method.name': 'getUnary',
+                    'grpc.method.service': 'TestService',
+                    'grpc.method.package': 'test',
+                    'grpc.method.path': '/test.TestService/getUnary',
+                    'grpc.method.kind': 'unary',
+                    'rpc.service': 'test.TestService',
+                    'span.kind': 'client',
+                    'component': 'grpc'
+                  })
+                  expect(traces[0][0].meta).to.have.property(ERROR_STACK)
+                  expect(traces[0][0].meta[ERROR_MESSAGE]).to.match(/^13 INTERNAL:.+$/m)
+                  expect(traces[0][0].metrics).to.have.property('grpc.status.code', 13)
+                })
+            })
+          })
+
           describe('with a metadata function', () => {
             before(() => {
               const config = {
