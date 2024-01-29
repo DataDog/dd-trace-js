@@ -250,4 +250,39 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(mockCoverageWriter.setUrl).to.have.been.calledWith(coverageUrl)
     })
   })
+
+  describe('_isGzipCompatible', () => {
+    it('should set _isGzipCompatible to true if the newest version is v4 or newer', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/', '/evp_proxy/v5']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.true
+      expect(scope.isDone()).to.be.true
+    })
+    it('should set _isGzipCompatible to false if the newest version is v3 or older', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.false
+      expect(scope.isDone()).to.be.true
+    })
+  })
 })
