@@ -96,23 +96,6 @@ function getProducts (config) {
   return products
 }
 
-function flatten (input, result = [], prefix = [], traversedObjects = null) {
-  traversedObjects = traversedObjects || new WeakSet()
-  if (traversedObjects.has(input)) {
-    return
-  }
-  traversedObjects.add(input)
-  for (const [key, value] of Object.entries(input)) {
-    if (typeof value === 'object' && value !== null) {
-      flatten(value, result, [...prefix, key], traversedObjects)
-    } else {
-      // TODO: add correct origin value
-      result.push({ name: [...prefix, key].join('.'), value, origin: 'code' })
-    }
-  }
-  return result
-}
-
 function getInstallSignature (config) {
   const { installSignature: sig } = config
   if (sig && (sig.id || sig.time || sig.type)) {
@@ -328,15 +311,7 @@ function updateConfig (changes, config) {
   const configuration = []
 
   for (const change of changes) {
-    if (change.name === 'url' && change.value) change.value = change.value.toString()
-    if (change.name === 'appsec.rules') change.value = JSON.stringify(change.value)
-    if (change.name === 'peerServiceMapping' || change.name === 'tags') {
-      change.value = formatMapForTelemetry(change.value)
-    }
-    if (change.name === 'headerTags') change.value = change.value.toString()
-    if (!names.hasOwnProperty(change.name)) continue
-
-    const name = names[change.name]
+    const name = names[change.name] || change.name
     const { origin, value } = change
     const entry = { name, origin, value }
 
@@ -345,10 +320,16 @@ function updateConfig (changes, config) {
     } else if (name === 'DD_TAGS') {
       entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
     }
+    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+    if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
+    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
+      entry.value = formatMapForTelemetry(entry.value)
+    }
+    if (entry.name === 'headerTags') entry.value = entry.value.toString()
 
     configuration.push(entry)
   }
-  if (!configWithOrigin) configWithOrigin = changes
+  if (!configWithOrigin) configWithOrigin = configuration
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
