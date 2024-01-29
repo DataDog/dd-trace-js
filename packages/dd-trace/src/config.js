@@ -443,6 +443,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       5 // seconds
     )
 
+    const DD_APPSEC_SCA_ENABLED = coalesce(
+      options.sca && (options.sca === true || options.sca.enabled === true),
+      process.env.DD_APPSEC_SCA_ENABLED,
+      false
+    )
+
     const iastOptions = options?.experimental?.iast
     const DD_IAST_ENABLED = coalesce(
       iastOptions &&
@@ -649,6 +655,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       enabled: DD_REMOTE_CONFIGURATION_ENABLED,
       pollInterval: DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     }
+
+    this.sca = {
+      enabled: isTrue(DD_APPSEC_SCA_ENABLED)
+    }
+
     this.iast = {
       enabled: isTrue(DD_IAST_ENABLED),
       requestSampling: DD_IAST_REQUEST_SAMPLING,

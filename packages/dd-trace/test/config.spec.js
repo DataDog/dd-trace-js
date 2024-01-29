@@ -116,6 +116,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
+    expect(config).to.have.nested.property('sca.enabled', false)
     expect(config).to.have.nested.property('iast.enabled', false)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
@@ -218,6 +219,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
+    process.env.DD_APPSEC_SCA_ENABLED = 'true'
     process.env.DD_IAST_ENABLED = 'true'
     process.env.DD_IAST_REQUEST_SAMPLING = '40'
     process.env.DD_IAST_MAX_CONCURRENT_REQUESTS = '3'
@@ -305,6 +307,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
+    expect(config).to.have.nested.property('sca.enabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 40)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 3)
@@ -456,6 +459,9 @@ describe('Config', () => {
       appsec: false,
       remoteConfig: {
         pollInterval: 42
+      },
+      sca: {
+        enabled: true
       },
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true
@@ -690,6 +696,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
+    process.env.DD_APPSEC_SCA_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
     process.env.DD_IAST_REDACTION_NAME_PATTERN = 'name_pattern_to_be_overriden_by_options'
@@ -763,6 +770,7 @@ describe('Config', () => {
       remoteConfig: {
         pollInterval: 42
       },
+      sca: true,
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false
     })
@@ -811,6 +819,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
+    expect(config).to.have.nested.property('sca.enabled', true)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
     expect(config).to.have.nested.property('iast.maxConcurrentRequests', 2)
