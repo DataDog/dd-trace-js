@@ -95,25 +95,20 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
-    const isGzip = res.headers['content-encoding'] === 'gzip'
     const chunks = []
-    let responseData = ''
 
     res.setTimeout(timeout)
 
     res.on('data', chunk => {
-      if (isGzip) {
-        chunks.push(chunk)
-      } else {
-        responseData += chunk
-      }
+      chunks.push(chunk)
     })
     res.on('end', () => {
       activeRequests--
+      const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
+        const isGzip = res.headers['content-encoding'] === 'gzip'
         if (isGzip) {
-          const buffer = Buffer.concat(chunks)
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error(`Could not gunzip response: ${err.message}`)
@@ -123,7 +118,7 @@ function request (data, options, callback) {
             }
           })
         } else {
-          callback(null, responseData, res.statusCode)
+          callback(null, buffer.toString(), res.statusCode)
         }
       } else {
         let errorMessage = ''
@@ -136,6 +131,7 @@ function request (data, options, callback) {
         } catch (e) {
           // ignore error
         }
+        const responseData = buffer.toString()
         if (responseData) {
           errorMessage += ` Response from the endpoint: "${responseData}"`
         }
