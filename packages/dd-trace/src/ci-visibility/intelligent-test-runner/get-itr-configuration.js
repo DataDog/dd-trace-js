@@ -14,6 +14,7 @@ const {
 function getItrConfiguration ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   env,
   service,
   repositoryUrl,
@@ -38,7 +39,7 @@ function getItrConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
