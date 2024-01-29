@@ -19,7 +19,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
-let configWithOrigin
+let configWithOrigin = []
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -127,7 +127,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: configWithOrigin || flatten(config)
+    configuration: configWithOrigin
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -300,10 +300,17 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+}
+
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
-  if (!configWithOrigin) configWithOrigin = changes
 
   // Hack to make system tests happy until we ship telemetry v2
   if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
@@ -321,6 +328,12 @@ function updateConfig (changes, config) {
   const configuration = []
 
   for (const change of changes) {
+    if (change.name === 'url' && change.value) change.value = change.value.toString()
+    if (change.name === 'appsec.rules') change.value = JSON.stringify(change.value)
+    if (change.name === 'peerServiceMapping' || change.name === 'tags') {
+      change.value = formatMapForTelemetry(change.value)
+    }
+    if (change.name === 'headerTags') change.value = change.value.toString()
     if (!names.hasOwnProperty(change.name)) continue
 
     const name = names[change.name]
@@ -335,6 +348,7 @@ function updateConfig (changes, config) {
 
     configuration.push(entry)
   }
+  if (!configWithOrigin) configWithOrigin = changes
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 

@@ -96,25 +96,7 @@ describe('telemetry', () => {
         appsec: { enabled: true },
         profiler: { version: tracerVersion, enabled: true }
       })
-      expect(payload).to.have.property('configuration').that.deep.equal([
-        { name: 'telemetry.enabled', value: true, origin: 'code' },
-        { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL, origin: 'code' },
-        { name: 'hostname', value: 'localhost', origin: 'code' },
-        { name: 'port', value: traceAgent.address().port, origin: 'code' },
-        { name: 'service', value: 'test service', origin: 'code' },
-        { name: 'version', value: '1.2.3-beta4', origin: 'code' },
-        { name: 'env', value: 'preprod', origin: 'code' },
-        { name: 'tags.runtime-id', value: '1a2b3c', origin: 'code' },
-        { name: 'circularObject.child.field', value: 'child_value', origin: 'code' },
-        { name: 'circularObject.field', value: 'parent_value', origin: 'code' },
-        { name: 'appsec.enabled', value: true, origin: 'code' },
-        { name: 'profiling.enabled', value: true, origin: 'code' },
-        { name: 'peerServiceMapping.service_1', value: 'remapped_service_1', origin: 'code' },
-        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'code' },
-        { name: 'installSignature.id', value: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', origin: 'code' },
-        { name: 'installSignature.type', value: 'k8s_single_step', origin: 'code' },
-        { name: 'installSignature.time', value: '1703188212', origin: 'code' }
-      ])
+      expect(payload).to.have.property('configuration').that.deep.equal([])
       expect(payload).to.have.property('install_signature').that.deep.equal({
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
         install_type: 'k8s_single_step',

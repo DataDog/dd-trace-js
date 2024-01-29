@@ -177,37 +177,43 @@ class Config {
       false
     )
 
-    this.appsecOpt = options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
+    options = this.options = {
+      ...options,
+      appsec: options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
+    }
 
-    if (typeof this.appsecOpt === 'boolean') {
-      this.appsecOpt = {
-        enabled: this.appsecOpt
+    if (typeof options.appsec === 'boolean') {
+      options.appsec = {
+        enabled: options.appsec
       }
-    } else if (this.appsecOpt == null) {
-      this.appsecOpt = {}
+    } else if (options.appsec == null) {
+      options.appsec = {}
     }
 
     const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(this.appsecOpt.blockedTemplateGraphql),
+      maybeFile(options.appsec.blockedTemplateGraphql),
       maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
     )
     const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
-      this.appsecOpt.eventTracking && this.appsecOpt.eventTracking.mode,
+      options.appsec.eventTracking && options.appsec.eventTracking.mode,
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
     const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
-      this.appsecOpt?.apiSecurity?.enabled,
+      options.appsec?.apiSecurity?.enabled,
       isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       false
     )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
-      this.appsecOpt?.apiSecurity?.requestSampling,
+      options.appsec?.apiSecurity?.requestSampling,
       parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
       0.1
     )
 
-    this.iastOptions = options?.experimental?.iast
+    options = this.options = {
+      ...options,
+      iastOptions: options?.experimental?.iast
+    }
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
     const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
@@ -253,8 +259,8 @@ class Config {
 
     defaultFlushInterval = inAWSLambda ? 0 : 2000
 
+    // TODO: refactor
     this.apiKey = DD_API_KEY
-    // TODO: reporting flushInterval in telemetry app-started config breaks tracing for some reason
     this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.tracePropagationStyle = {
@@ -275,14 +281,10 @@ class Config {
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
     }
-
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
-
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
-
     this.installSignature = {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
@@ -343,10 +345,10 @@ class Config {
       this._applyRemote(options)
     } else {
       this._applyOptions(options)
-      this._applyEnvironment()
-      this._applyCalculated()
     }
 
+    // TODO: test
+    this._applyCalculated()
     this._merge()
   }
 
@@ -478,8 +480,6 @@ class Config {
       DD_DATA_STREAMS_ENABLED,
       DD_OPENAI_LOGS_ENABLED,
       DD_CIVISIBILITY_AGENTLESS_URL,
-      DD_TRACE_AGENT_URL,
-      DD_TRACE_URL,
       DD_SITE,
       DD_AGENT_HOST,
       DD_TRACE_AGENT_HOSTNAME,
@@ -561,11 +561,7 @@ class Config {
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    if (DD_CIVISIBILITY_AGENTLESS_URL) {
-      this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
-    } else {
-      this._setValue(env, 'url', getAgentUrl(coalesce(DD_TRACE_AGENT_URL, DD_TRACE_URL, null), this.options))
-    }
+    if (DD_CIVISIBILITY_AGENTLESS_URL) this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
@@ -601,11 +597,13 @@ class Config {
       ))
     }
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
-    this._setBoolean(env, 'telemetry.enabled', coalesce(
-      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvirontment()
-    ))
+    if (this._getTraceExporter() !== 'datadog') {
+      this._setBoolean(env, 'telemetry.enabled', coalesce(
+        DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+        !this._isInServerlessEnvirontment()
+      ))
+    }
     this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
@@ -695,36 +693,36 @@ class Config {
     this._setString(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
-    this._setBoolean(opts, 'telemetry.logCollection', this.iastOptions &&
-    (this.iastOptions === true || this.iastOptions.enabled === true))
+    this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
+    (options.iastOptions === true || options.iastOptions.enabled === true))
     this._setString(opts, 'protocolVersion', options.protocolVersion)
-    this._setBoolean(opts, 'appsec.enabled', this.appsecOpt.enabled)
-    this._setString(opts, 'appsec.rules', this.appsecOpt.rules)
-    if (this.appsecOpt.rules) this._setBoolean(opts, 'appsec.customRulesProvided', !!this.appsecOpt.rules)
-    this._setValue(opts, 'appsec.rateLimit', maybeInt(this.appsecOpt.rateLimit))
-    this._setValue(opts, 'appsec.wafTimeout', maybeInt(this.appsecOpt.wafTimeout))
-    this._setString(opts, 'appsec.obfuscatorKeyRegex', this.appsecOpt.obfuscatorKeyRegex)
-    this._setString(opts, 'appsec.obfuscatorValueRegex', this.appsecOpt.obfuscatorValueRegex)
-    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(this.appsecOpt.blockedTemplateHtml))
-    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(this.appsecOpt.blockedTemplateJson))
+    this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
+    this._setString(opts, 'appsec.rules', options.appsec.rules)
+    if (options.appsec.rules) this._setBoolean(opts, 'appsec.customRulesProvided', !!options.appsec.rules)
+    this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
+    this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
+    this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
+    this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
+    this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
+    this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
     }
     this._setBoolean(opts, 'iast.enabled',
-      this.iastOptions && (this.iastOptions === true || this.iastOptions.enabled === true))
-    const iastRequestSampling = maybeInt(this.iastOptions?.requestSampling)
+      options.iastOptions && (options.iastOptions === true || options.iastOptions.enabled === true))
+    const iastRequestSampling = maybeInt(options.iastOptions?.requestSampling)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
     }
     this._setValue(opts, 'iast.maxConcurrentRequests',
-      maybeInt(this.iastOptions?.maxConcurrentRequests))
+      maybeInt(options.iastOptions?.maxConcurrentRequests))
     this._setValue(opts, 'iast.maxContextOperations',
-      maybeInt(this.iastOptions && this.iastOptions.maxContextOperations))
-    this._setBoolean(opts, 'iast.deduplicationEnabled', this.iastOptions && this.iastOptions.deduplicationEnabled)
-    this._setBoolean(opts, 'iast.redactionEnabled', this.iastOptions && this.iastOptions.redactionEnabled)
-    this._setString(opts, 'iast.telemetryVerbosity', this.iastOptions && this.iastOptions.telemetryVerbosity)
-    this._setString(opts, 'iast.redactionNamePattern', this.iastOptions?.redactionNamePattern)
-    this._setString(opts, 'iast.redactionValuePattern', this.iastOptions?.redactionValuePattern)
+      maybeInt(options.iastOptions && options.iastOptions.maxContextOperations))
+    this._setBoolean(opts, 'iast.deduplicationEnabled', options.iastOptions && options.iastOptions.deduplicationEnabled)
+    this._setBoolean(opts, 'iast.redactionEnabled', options.iastOptions && options.iastOptions.redactionEnabled)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iastOptions && options.iastOptions.telemetryVerbosity)
+    this._setString(opts, 'iast.redactionNamePattern', options.iastOptions?.redactionNamePattern)
+    this._setString(opts, 'iast.redactionValuePattern', options.iastOptions?.redactionValuePattern)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
@@ -733,7 +731,7 @@ class Config {
   _isCiVisibility () {
     return coalesce(
       this.options.isCiVisibility,
-      false
+      this._defaults['isCiVisibility']
     )
   }
 
@@ -821,6 +819,10 @@ class Config {
   _applyCalculated () {
     const calc = this._calculated = {}
 
+    if (!process.env.DD_CIVISIBILITY_AGENTLESS_URL) {
+      this._setValue(calc, 'url',
+        getAgentUrl(coalesce(process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL, null), this.options))
+    }
     if (this._getTraceExporter() === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
     }
@@ -909,8 +911,8 @@ class Config {
   // TODO: Deeply merge configurations.
   // TODO: Move change tracking to telemetry.
   // for telemetry reporting, `name`s in `containers` need to be keys from:
-  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/
-  // tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
+  // eslint-disable-next-line
+  // https://github.com/DataDog/dd-go/blob/prod/trace/apps/tracer-telemetry-intake/telemetry-payload/static/config_norm_rules.json
   _merge () {
     const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
     const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
@@ -924,13 +926,8 @@ class Config {
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
           if (get(this, name) === container[name] && has(this, name)) break
 
-          let value = container[name]
+          const value = container[name]
           set(this, name, value)
-
-          if (name === 'url' && value) value = value.toString()
-          if (name === 'appsec.rules') value = JSON.stringify(value)
-          if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
-          if (name === 'headerTags') value = value.toString()
 
           changes.push({ name, value, origin })
 
@@ -973,14 +970,6 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
-}
-
-function formatMapForTelemetry (map) {
-  // format from an object to a string map in order for
-  // telemetry intake to accept the configuration
-  return map
-    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
-    : ''
 }
 
 module.exports = Config
