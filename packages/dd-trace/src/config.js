@@ -50,10 +50,6 @@ function safeJsonParse (input) {
   }
 }
 
-let inAWSLambda
-let isGCPFunction
-let isAzureFunctionConsumptionPlan
-let inServerlessEnvironment
 const namingVersions = ['v0', 'v1']
 const defaultNamingVersion = 'v0'
 
@@ -142,10 +138,8 @@ class Config {
       process.env.DD_API_KEY
     )
 
-    inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
-    isGCPFunction = getIsGCPFunction()
-    isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-    inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
@@ -356,6 +350,13 @@ class Config {
     this._merge()
   }
 
+  _isInServerlessEnvirontment () {
+    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
+    const isGCPFunction = getIsGCPFunction()
+    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
+    return inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
+  }
+
   _applyDefaults () {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
@@ -456,7 +457,7 @@ class Config {
     return coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !inServerlessEnvironment
+      !this._isInServerlessEnvirontment()
     )
   }
 
@@ -603,7 +604,7 @@ class Config {
     this._setBoolean(env, 'telemetry.enabled', coalesce(
       DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !inServerlessEnvironment
+      !this._isInServerlessEnvirontment()
     ))
     this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
@@ -623,7 +624,7 @@ class Config {
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
       DD_REMOTE_CONFIGURATION_ENABLED && isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
-      !inServerlessEnvironment
+      !this._isInServerlessEnvirontment()
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
