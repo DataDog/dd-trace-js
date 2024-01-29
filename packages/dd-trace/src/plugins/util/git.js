@@ -272,8 +272,6 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
-  require('fs').writeFileSync(process.cwd() + '/logs.txt', 'get git metadata\n', { flag: 'a+' })
-  console.log('get git metadata')
   const {
     commitSHA,
     branch,
