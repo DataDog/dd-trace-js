@@ -329,7 +329,7 @@ function updateConfig (changes, config) {
 
     configuration.push(entry)
   }
-  if (!configWithOrigin) configWithOrigin = configuration
+  if (!configWithOrigin.length) configWithOrigin = configuration
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
