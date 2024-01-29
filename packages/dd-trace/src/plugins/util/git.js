@@ -26,6 +26,7 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS
 } = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const { storage } = require('../../../../datadog-core')
 
 const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
 
@@ -36,6 +37,9 @@ function sanitizedExec (
   durationMetric,
   errorMetric
 ) {
+  const store = storage.getStore()
+  storage.enterWith({ noop: true })
+
   let startTime
   if (operationMetric) {
     incrementCountMetric(operationMetric.name, operationMetric.tags)
@@ -55,6 +59,8 @@ function sanitizedExec (
     }
     log.error(e)
     return ''
+  } finally {
+    storage.enterWith(store)
   }
 }
 
@@ -266,6 +272,8 @@ function generatePackFilesForCommits (commitsToUpload) {
 
 // If there is ciMetadata, it takes precedence.
 function getGitMetadata (ciMetadata) {
+  require('fs').writeFileSync(process.cwd() + '/logs.txt', 'get git metadata\n', { flag: 'a+' })
+  console.log('get git metadata')
   const {
     commitSHA,
     branch,
