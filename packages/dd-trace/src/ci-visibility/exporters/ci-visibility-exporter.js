@@ -108,6 +108,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
+        evpProxyPrefix: this.evpProxyPrefix,
         custom: getTestConfigurationTags(this._config.tags),
         ...testConfiguration
       }
@@ -134,6 +135,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
+        evpProxyPrefix: this.evpProxyPrefix,
         custom: getTestConfigurationTags(this._config.tags),
         ...testConfiguration
       }
@@ -172,14 +174,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return
       }
-      sendGitMetadataRequest(this._getApiUrl(), !!this._isUsingEvpProxy, repositoryUrl, (err) => {
-        if (err) {
-          log.error(`Error uploading git metadata: ${err.message}`)
-        } else {
-          log.debug('Successfully uploaded git metadata')
+      sendGitMetadataRequest(
+        this._getApiUrl(),
+        { isEvpProxy: !!this._isUsingEvpProxy, evpProxyPrefix: this.evpProxyPrefix },
+        repositoryUrl,
+        (err) => {
+          if (err) {
+            log.error(`Error uploading git metadata: ${err.message}`)
+          } else {
+            log.debug('Successfully uploaded git metadata')
+          }
+          this._resolveGit(err)
         }
-        this._resolveGit(err)
-      })
+      )
     })
   }
 
