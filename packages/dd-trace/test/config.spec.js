@@ -1,6 +1,6 @@
 'use strict'
 
-// require('./setup/tap')
+require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
@@ -112,6 +112,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
@@ -229,7 +230,7 @@ describe('Config', () => {
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
-    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+    process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
@@ -300,6 +301,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
@@ -686,7 +688,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML_PATH // json and html here
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
-    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
@@ -754,6 +756,7 @@ describe('Config', () => {
           mode: 'safe'
         },
         apiSecurity: {
+          enabled: true,
           requestSampling: 1.0
         }
       },
@@ -805,6 +808,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', BLOCKED_TEMPLATE_GRAPHQL)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -833,6 +837,7 @@ describe('Config', () => {
           mode: 'disabled'
         },
         apiSecurity: {
+          enabled: true,
           requestSampling: 1.0
         }
       },
@@ -851,6 +856,7 @@ describe('Config', () => {
             mode: 'safe'
           },
           apiSecurity: {
+            enabled: false,
             requestSampling: 0.5
           }
         }
@@ -873,6 +879,7 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
+        enabled: true,
         requestSampling: 1.0
       }
     })
@@ -1404,6 +1411,7 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
+          enabled: true,
           requestSampling: 5
         }
       }
@@ -1412,6 +1420,7 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
+          enabled: true,
           requestSampling: -5
         }
       }
@@ -1420,6 +1429,7 @@ describe('Config', () => {
     expect(new Config({
       appsec: {
         apiSecurity: {
+          enabled: true,
           requestSampling: 0.1
         }
       }

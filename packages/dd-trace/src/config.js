@@ -421,7 +421,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
-
+    const DD_API_SECURITY_ENABLED = coalesce(
+      appsec?.apiSecurity?.enabled,
+      process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
+      true
+    )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
       appsec?.apiSecurity?.requestSampling,
       parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
@@ -637,6 +641,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
       },
       apiSecurity: {
+        enabled: DD_API_SECURITY_ENABLED,
         // Coerce value between 0 and 1
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }

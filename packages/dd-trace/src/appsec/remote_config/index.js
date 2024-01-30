@@ -22,7 +22,9 @@ function enable (config) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_ACTIVATION, true)
     }
 
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
+    if (config.appsec.apiSecurity?.enabled) {
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
+    }
 
     rc.on('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
