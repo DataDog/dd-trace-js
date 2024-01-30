@@ -44,6 +44,7 @@ if (isJestWorker) {
 if (shouldInit) {
   tracer.init(options)
   tracer.use('fs', false)
+  tracer.use('child_process', false)
 }
 
 module.exports = tracer
