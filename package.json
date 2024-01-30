@@ -90,7 +90,6 @@
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
-    "node-abort-controller": "^3.1.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",
     "pprof-format": "^2.0.7",

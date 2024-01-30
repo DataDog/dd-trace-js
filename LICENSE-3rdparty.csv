@@ -20,7 +20,6 @@ require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributor
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
-require,node-abort-controller,MIT,Copyright (c) 2019 Steve Faulkner
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,pprof-format,MIT,Copyright 2022 Stephen Belanger
