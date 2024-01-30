@@ -201,7 +201,7 @@ moduleType.forEach(({
       })
     })
 
-    it.only('can run and report tests', (done) => {
+    it('can run and report tests', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -301,9 +301,6 @@ moduleType.forEach(({
           stdio: 'pipe'
         }
       )
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
