@@ -480,7 +480,6 @@ class Config {
       DD_DBM_PROPAGATION_MODE,
       DD_DATA_STREAMS_ENABLED,
       DD_OPENAI_LOGS_ENABLED,
-      DD_CIVISIBILITY_AGENTLESS_URL,
       DD_SITE,
       DD_AGENT_HOST,
       DD_TRACE_AGENT_HOSTNAME,
@@ -562,12 +561,6 @@ class Config {
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    if (DD_CIVISIBILITY_AGENTLESS_URL) {
-      this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
-    } else {
-      this._setValue(env, 'url',
-        getAgentUrl(coalesce(process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL, null), this.options))
-    }
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
@@ -669,7 +662,6 @@ class Config {
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
     this._setBoolean(opts, 'dsmEnabled', options.dsmEnabled)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
-    if (options.url) this._setValue(opts, 'url', getAgentUrl(options.url, options))
     this._setString(opts, 'site', options.site)
     this._setString(opts, 'hostname', options.hostname)
     if (options.port) this._setString(opts, 'port', String(options.port))
@@ -737,7 +729,7 @@ class Config {
   _isCiVisibility () {
     return coalesce(
       this.options.isCiVisibility,
-      false // this._defaults['isCiVisibility']
+      this._defaults['isCiVisibility']
     )
   }
 
@@ -754,14 +746,8 @@ class Config {
 
   _getHostname () {
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
-    const DD_TRACE_AGENT_URL = coalesce(
-      this.options.url,
-      process.env.DD_TRACE_AGENT_URL,
-      process.env.DD_TRACE_URL,
-      null
-    )
     const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(DD_TRACE_AGENT_URL, this.options)
+      : getAgentUrl(this._getTraceAgentUrl(), this.options)
     const DD_AGENT_HOST = coalesce(
       this.options.hostname,
       process.env.DD_AGENT_HOST,
@@ -821,13 +807,23 @@ class Config {
     )
   }
 
+  _getTraceAgentUrl () {
+    return coalesce(
+      this.options.url,
+      process.env.DD_TRACE_AGENT_URL,
+      process.env.DD_TRACE_URL,
+      null
+    )
+  }
+
   // currently does not support dynamic/remote config
   _applyCalculated () {
     const calc = this._calculated = {}
 
-    if (!process.env.DD_CIVISIBILITY_AGENTLESS_URL) {
-      this._setValue(calc, 'url',
-        getAgentUrl(coalesce(process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL, null), this.options))
+    if (process.env.DD_CIVISIBILITY_AGENTLESS_URL) {
+      this._setValue(calc, 'url', new URL(process.env.DD_CIVISIBILITY_AGENTLESS_URL))
+    } else {
+      this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this.options))
     }
     if (this._getTraceExporter() === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
