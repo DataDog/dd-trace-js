@@ -5,7 +5,6 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
-const log = require('./log')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -65,33 +64,6 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
   addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
-}
-
-function sanitizeAttributes (formattedLink, attributes = {}) {
-  const sanitizedAttributes = {}
-
-  const addArrayOrScalarAttributes = (key, maybeArray) => {
-    if (Array.isArray(maybeArray)) {
-      for (const subkey in maybeArray) {
-        addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
-      }
-    } else {
-      const maybeScalar = maybeArray
-      if (ALLOWED.includes(typeof maybeScalar)) {
-        // Wrap the value as a string if it's not already a string
-        sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
-      } else {
-        log.warn(`Dropping span link attribute. It is not of an allowed type`)
-      }
-    }
-  }
-
-  Object.entries(attributes).forEach(entry => {
-    const [key, value] = entry
-    addArrayOrScalarAttributes(key, value)
-  })
-
-  return sanitizedAttributes
 }
 
 // TODO: do we need to handle both otel and dd trace span links in this function or only dd trace span links?
