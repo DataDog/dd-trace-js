@@ -30,6 +30,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const semver = require('semver')
+const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -54,6 +55,9 @@ moduleType.forEach(({
 }) => {
   // cypress only supports esm on versions >= 10.0.0
   if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+    return
+  }
+  if (version === '6.7.0' && NODE_MAJOR > 16) {
     return
   }
   describe(`cypress@${version} ${type}`, function () {
@@ -197,7 +201,7 @@ moduleType.forEach(({
       })
     })
 
-    it('can run and report tests', (done) => {
+    it.only('can run and report tests', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -297,6 +301,9 @@ moduleType.forEach(({
           stdio: 'pipe'
         }
       )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {

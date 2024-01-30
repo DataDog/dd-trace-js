@@ -53,7 +53,10 @@ jobs:
   integration-cypress:
     strategy:
       matrix:
-        version: [18, latest]
+        # Important: This is outside the minimum supported version of dd-trace-js
+        # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
+        # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
+        version: [16, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
     runs-on: ubuntu-latest
