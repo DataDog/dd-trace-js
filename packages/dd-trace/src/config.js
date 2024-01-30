@@ -562,7 +562,12 @@ class Config {
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
     this._setBoolean(env, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
-    if (DD_CIVISIBILITY_AGENTLESS_URL) this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      this._setValue(env, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
+    } else {
+      this._setValue(env, 'url',
+        getAgentUrl(coalesce(process.env.DD_TRACE_AGENT_URL, process.env.DD_TRACE_URL, null), this.options))
+    }
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
@@ -732,7 +737,7 @@ class Config {
   _isCiVisibility () {
     return coalesce(
       this.options.isCiVisibility,
-      false // ._defaults['isCiVisibility']
+      false // this._defaults['isCiVisibility']
     )
   }
 
