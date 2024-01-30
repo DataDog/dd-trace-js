@@ -75,6 +75,10 @@ describe('AppSec Rule Manager', () => {
 
   describe('updateWafFromRC', () => {
     describe('ASM_DATA', () => {
+      beforeEach(() => {
+        loadRules(config.appsec)
+      })
+
       it('should call update with modified rules', () => {
         const rulesData = {
           rules_data: [{
@@ -299,7 +303,13 @@ describe('AppSec Rule Manager', () => {
               'category': 'attack_attempt',
               'confidence': '1'
             },
-            'conditions': []
+            'conditions': [{
+              'parameters': {
+                'inputs': [{ 'address': 'http.client_ip' }],
+                'data': 'blocked_ips'
+              },
+              'operator': 'ip_match'
+            }]
           }]
         }
 
@@ -313,6 +323,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
         expect(waf.update).to.have.been.calledOnceWithExactly(testRules)
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
       })
 
       it('should maintain previously added exclusions and rules_overrides', () => {
@@ -332,7 +343,13 @@ describe('AppSec Rule Manager', () => {
               'category': 'attack_attempt',
               'confidence': '1'
             },
-            'conditions': []
+            'conditions': [{
+              'parameters': {
+                'inputs': [{ 'address': 'http.client_ip' }],
+                'data': 'blocked_ips'
+              },
+              'operator': 'ip_match'
+            }]
           }]
         }
 
@@ -351,6 +368,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
         expect(waf.update).to.have.been.calledWithExactly({ ...testRules, ...asm })
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
       })
 
       it('should support hotswapping ruleset in same batch', () => {
@@ -424,7 +442,11 @@ describe('AppSec Rule Manager', () => {
     })
 
     describe('ASM', () => {
-      it('should apply both rules_override and exclusions', () => {
+      beforeEach(() => {
+        loadRules(config.appsec)
+      })
+
+      it('should apply rules_override, exclusions, custom_rules, processor_override and custom_scanners', () => {
         const asm = {
           'exclusions': [{
             ekey: 'eValue'
@@ -434,6 +456,12 @@ describe('AppSec Rule Manager', () => {
           }],
           'custom_rules': [{
             piKey: 'piValue'
+          }],
+          'processor_override': [{
+            poKey: 'poValue'
+          }],
+          'custom_scanners': [{
+            csKey: 'csValue'
           }]
         }
 
@@ -448,6 +476,56 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
+        expect(toApply[0].apply_error).to.equal(undefined)
+      })
+
+      it('should apply processor_override', () => {
+        const asm = {
+          'processor_override': [{
+            poKey: 'poValue'
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+
+        // processor_override value is not a valid data, waf update could fail,
+        // but it should fill apply_state
+        expect(toApply[0].apply_state).to.not.equal(undefined)
+      })
+
+      it('should apply custom_scanners', () => {
+        const asm = {
+          'custom_scanners': [{
+            csKey: 'csValue'
+          }]
+        }
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asm
+          }
+        ]
+
+        updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
+
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+
+        // custom_scanners value is not a valid data, waf update could fail,
+        // but it should fill apply_state
+        expect(toApply[0].apply_state).to.not.equal(undefined)
       })
 
       it('should apply blocking actions', () => {
@@ -546,6 +624,8 @@ describe('AppSec Rule Manager', () => {
           'exclusions': asm['exclusions'],
           'rules_override': asm['rules_override']
         })
+        expect(toApply[0].apply_state).to.equal(ACKNOWLEDGED)
+        expect(toApply[0].apply_error).to.equal(undefined)
       })
     })
   })

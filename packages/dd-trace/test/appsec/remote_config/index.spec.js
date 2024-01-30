@@ -282,6 +282,10 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
 
         expect(rc.on).to.have.been.calledWith('ASM_DATA')
         expect(rc.on).to.have.been.calledWith('ASM_DD')
@@ -310,6 +314,10 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
 
         expect(rc.on).to.have.been.calledWith('ASM_DATA')
         expect(rc.on).to.have.been.calledWith('ASM_DD')
@@ -340,6 +348,10 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, true)
       })
     })
 
@@ -365,6 +377,10 @@ describe('Remote Config index', () => {
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_PROCESSOR_OVERRIDES, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_DATA_SCANNERS, false)
 
         expect(rc.off).to.have.been.calledWith('ASM_DATA')
         expect(rc.off).to.have.been.calledWith('ASM_DD')
