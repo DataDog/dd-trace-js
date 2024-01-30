@@ -8,9 +8,9 @@ const log = require('./log')
 const pkg = require('./pkg')
 const coalesce = require('koalas')
 const tagger = require('./tagger')
-const get = require('../../utils/src/get')
-const has = require('../../utils/src/has')
-const set = require('../../utils/src/set')
+const get = require('../../datadog-core/src/utils/src/get')
+const has = require('../../datadog-core/src/utils/src/has')
+const set = require('../../datadog-core/src/utils/src/set')
 const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
@@ -111,6 +111,7 @@ class Config {
       process.env.DD_TRACE_DEBUG,
       false
     ))
+    this.configWithOrigin = []
     this.logger = options.logger
     this.logLevel = coalesce(
       options.logLevel,
@@ -935,6 +936,7 @@ class Config {
         }
       }
     }
+    if (!this.configWithOrigin.length) this.configWithOrigin = changes
 
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)

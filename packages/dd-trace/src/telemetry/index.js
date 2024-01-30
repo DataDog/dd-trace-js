@@ -19,7 +19,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
-let configWithOrigin = []
+// let configWithOrigin = []
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -110,7 +110,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: configWithOrigin
+    configuration: config.configWithOrigin
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -313,7 +313,7 @@ function updateConfig (changes, config) {
   for (const change of changes) {
     const name = names[change.name] || change.name
     const { origin, value } = change
-    const entry = { name, origin, value }
+    const entry = { name, value, origin }
 
     if (Array.isArray(value)) {
       entry.value = value.join(',')
@@ -325,11 +325,10 @@ function updateConfig (changes, config) {
     if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
       entry.value = formatMapForTelemetry(entry.value)
     }
-    if (entry.name === 'headerTags') entry.value = entry.value.toString()
 
     configuration.push(entry)
   }
-  if (!configWithOrigin.length) configWithOrigin = configuration
+  // if (!configWithOrigin.length) configWithOrigin = configuration
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 
