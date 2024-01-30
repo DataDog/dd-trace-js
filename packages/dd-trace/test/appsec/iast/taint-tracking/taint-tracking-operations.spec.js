@@ -23,6 +23,7 @@ function getExpectedMethods () {
 describe('IAST TaintTracking Operations', () => {
   let taintTrackingOperations
   let taintTrackingImpl
+  let operationsTaintObject
   let taintedUtilsMock
   const taintedUtils = {
     createTransaction: id => id,
@@ -51,14 +52,19 @@ describe('IAST TaintTracking Operations', () => {
 
   beforeEach(() => {
     taintedUtilsMock = sinon.spy(taintedUtils)
+    operationsTaintObject = proxyquire('../../../../src/appsec/iast/taint-tracking/operations-taint-object', {
+      '@datadog/native-iast-taint-tracking': taintedUtilsMock
+    })
     taintTrackingImpl = proxyquire('../../../../src/appsec/iast/taint-tracking/taint-tracking-impl', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
+      './operations-taint-object': operationsTaintObject,
       '../../../../../datadog-core': datadogCore
     })
     taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
       '@datadog/native-iast-taint-tracking': taintedUtilsMock,
       '../../../../../datadog-core': datadogCore,
       './taint-tracking-impl': taintTrackingImpl,
+      './operations-taint-object': operationsTaintObject,
       '../telemetry': iastTelemetry
     })
   })
@@ -186,6 +192,9 @@ describe('IAST TaintTracking Operations', () => {
     })
 
     it('Should taint object keys when taintingKeys is true', () => {
+      delete require.cache[require.resolve('../../../../src/appsec/iast/taint-tracking/operations-taint-object')]
+      delete require.cache[require.resolve('../../../../src/appsec/iast/taint-tracking/operations')]
+
       const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
       const iastContext = {}
       const transactionId = 'id'
@@ -238,11 +247,14 @@ describe('IAST TaintTracking Operations', () => {
       }
 
       const logSpy = sinon.spy(iastLogStub)
-      const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
+      const operationsTaintObject = proxyquire('../../../../src/appsec/iast/taint-tracking/operations-taint-object', {
         '@datadog/native-iast-taint-tracking': taintedUtils,
+        '../iast-log': logSpy
+      })
+      const taintTrackingOperations = proxyquire('../../../../src/appsec/iast/taint-tracking/operations', {
         '../../../../../datadog-core': datadogCore,
-        '../iast-log': logSpy,
-        './taint-tracking-impl': taintTrackingImpl
+        './taint-tracking-impl': taintTrackingImpl,
+        './operations-taint-object': operationsTaintObject
       })
 
       taintTrackingOperations.createTransaction(transactionId, iastContext)

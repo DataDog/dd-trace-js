@@ -8,6 +8,7 @@ const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
 const { JSON_VALUE } = require('./source-types')
+const { taintObject } = require('./operations-taint-object')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
 
@@ -94,7 +95,7 @@ function csiMethodsDefaults (names, excluded, getContext) {
   return impl
 }
 
-function csiMethodsOverrides (getContext, taintObject) {
+function csiMethodsOverrides (getContext) {
   return {
     plusOperator: function (res, op1, op2) {
       try {
@@ -150,9 +151,9 @@ function csiMethodsOverrides (getContext, taintObject) {
   }
 }
 
-function createImplWith (getContext, taintObject) {
+function createImplWith (getContext) {
   const methodNames = Object.keys(TaintTrackingNoop)
-  const overrides = csiMethodsOverrides(getContext, taintObject)
+  const overrides = csiMethodsOverrides(getContext)
 
   // impls could be cached but at the moment there is only one invocation to getTaintTrackingImpl
   return {
@@ -161,17 +162,17 @@ function createImplWith (getContext, taintObject) {
   }
 }
 
-function getTaintTrackingImpl (telemetryVerbosity, taintObject = noop, dummy = false) {
+function getTaintTrackingImpl (telemetryVerbosity, dummy = false) {
   if (dummy) return TaintTrackingNoop
 
   // with Verbosity.DEBUG every invocation of a TaintedUtils method increases the EXECUTED_PROPAGATION metric
   return isDebugAllowed(telemetryVerbosity)
-    ? createImplWith(getContextDebug, taintObject)
-    : createImplWith(getContextDefault, taintObject)
+    ? createImplWith(getContextDebug)
+    : createImplWith(getContextDefault)
 }
 
 function getTaintTrackingNoop () {
-  return getTaintTrackingImpl(null, noop, true)
+  return getTaintTrackingImpl(null, true)
 }
 
 module.exports = {
