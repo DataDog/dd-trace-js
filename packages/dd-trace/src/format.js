@@ -79,7 +79,7 @@ function extractSpanLinks (trace, span) {
         span_id: context._spanId,
         flags: context?._sampling?.priority ? (context._sampling.priority > 0 ? '80000000' : '00000000') : undefined,
         tracestate: context?._tracestate ? context._tracestate.toString() : undefined,
-        traceID_high: context?._trace.tags['_dd.p.tid'] ? context._trace.tags['_dd.p.tid'] : undefined,
+        traceID_high: context?._trace?.tags['_dd.p.tid'] ? context._trace.tags['_dd.p.tid'] : undefined,
         attributes: attributes && Object.keys(attributes).length > 0 ? attributes : undefined
       }
 
