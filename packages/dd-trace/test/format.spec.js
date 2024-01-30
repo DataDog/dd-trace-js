@@ -67,35 +67,16 @@ describe('format', () => {
     spanContext._trace.started.push(span)
 
     spanContext2 = {
+      ...spanContext,
       _traceId: spanId2,
       _spanId: spanId2,
-      _parentId: spanId2,
-      _tags: {},
-      _metrics: {},
-      _sampling: {},
-      _trace: {
-        started: [],
-        tags: {}
-      },
-      _name: 'operation',
-      toTraceId: sinon.stub().returns(spanId2.toString(10)),
-      toSpanId: sinon.stub().returns(spanId2.toString(10))
+      _parentId: spanId2
     }
-
     spanContext3 = {
+      ...spanContext,
       _traceId: spanId3,
       _spanId: spanId3,
-      _parentId: spanId3,
-      _tags: {},
-      _metrics: {},
-      _sampling: {},
-      _trace: {
-        started: [],
-        tags: {}
-      },
-      _name: 'operation',
-      toTraceId: sinon.stub().returns(spanId3.toString(10)),
-      toSpanId: sinon.stub().returns(spanId3.toString(10))
+      _parentId: spanId3
     }
 
     format = require('../src/format')
