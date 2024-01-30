@@ -69,9 +69,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         item.apply_error = 'Multiple ruleset received in ASM_DD'
       } else {
         if (file && file.rules && file.rules.length) {
-          const { version, metadata, rules } = file
+          const { version, metadata, rules, processors, scanners } = file
 
-          newRuleset = { version, metadata, rules }
+          newRuleset = { version, metadata, rules, processors, scanners }
           newRulesetId = id
         }
 
