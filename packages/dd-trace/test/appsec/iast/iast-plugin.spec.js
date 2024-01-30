@@ -247,10 +247,26 @@ describe('IAST Plugin', () => {
         expect(getTelemetryHandler).to.be.calledOnceWith(iastPlugin.pluginSubs[1])
       })
 
-      it('should register an pluginSubscription and increment a sink metric when a sink module is loaded', () => {
+      it('should register a pluginSubscription and increment a sink metric when a sink module is loaded', () => {
         iastPlugin.addSub({
           moduleName: 'sink',
           channelName: 'datadog:sink:start',
+          tag: 'injection',
+          tagKey: VULNERABILITY_TYPE
+        }, handler)
+        iastPlugin.configure(true)
+
+        const metric = getInstrumentedMetric(VULNERABILITY_TYPE)
+        const metricAdd = sinon.stub(metric, 'add')
+
+        loadChannel.publish({ name: 'sink' })
+
+        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+      })
+
+      it('should register and increment a sink metric when a sink module is loaded using a tracingChannel', () => {
+        iastPlugin.addSub({
+          channelName: 'tracing:datadog:sink:start',
           tag: 'injection',
           tagKey: VULNERABILITY_TYPE
         }, handler)
