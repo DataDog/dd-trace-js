@@ -300,6 +300,33 @@ describe('AppSec Rule Manager', () => {
               'confidence': '1'
             },
             'conditions': []
+          }],
+          processors: [{
+            id: 'test-processor-id',
+            generator: 'test-generator',
+            evaluate: false,
+            output: true
+          }],
+          scanners: [{
+            id: 'test-scanner-id',
+            name: 'Test name',
+            key: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex'
+              }
+            },
+            value: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex-2'
+              }
+            },
+            tags: {
+              type: 'card',
+              card_type: 'test',
+              category: 'payment'
+            }
           }]
         }
 
@@ -333,6 +360,33 @@ describe('AppSec Rule Manager', () => {
               'confidence': '1'
             },
             'conditions': []
+          }],
+          processors: [{
+            id: 'test-processor-id',
+            generator: 'test-generator',
+            evaluate: false,
+            output: true
+          }],
+          scanners: [{
+            id: 'test-scanner-id',
+            name: 'Test name',
+            key: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex'
+              }
+            },
+            value: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex-2'
+              }
+            },
+            tags: {
+              type: 'card',
+              card_type: 'test',
+              category: 'payment'
+            }
           }]
         }
 
