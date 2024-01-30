@@ -2,6 +2,7 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { storage } = require('../../datadog-core')
+const { getAmqpMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 
 class RheaConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'rhea' }
@@ -19,7 +20,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
 
-    this.startSpan({
+    const span = this.startSpan({
       childOf,
       resource: name,
       type: 'worker',
@@ -29,6 +30,15 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         'amqp.link.role': 'receiver'
       }
     })
+
+    if (this.config.dsmEnabled && msgObj.message) {
+      const payloadSize = getAmqpMessageSize(
+        { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }
+      )
+      this.tracer.decodeDataStreamsContext(msgObj.message.delivery_annotations[CONTEXT_PROPAGATION_KEY])
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
+    }
   }
 }
 

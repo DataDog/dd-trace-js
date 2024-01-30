@@ -3,7 +3,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, dsmStatsExist } = require('./spec_helpers')
+const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', () => {
@@ -321,7 +321,7 @@ describe('Sns', () => {
             }
           })
           expect(statsPointsReceived).to.be.at.least(1)
-          expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }).then(done, done)
 
         sns.subscribe(subParams, () => {
@@ -341,7 +341,7 @@ describe('Sns', () => {
             }
           })
           expect(statsPointsReceived).to.be.at.least(2)
-          expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+          expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
         }).then(done, done)
 
         sns.subscribe(subParams, () => {
