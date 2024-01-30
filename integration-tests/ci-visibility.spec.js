@@ -685,18 +685,18 @@ testFrameworks.forEach(({
       })
       it('can report code coverage', (done) => {
         let testOutput
-        const itrConfigRequestPromise = receiver.payloadReceived(
+        const libraryConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/libraries/tests/services/setting'
         )
         const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
         const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
         Promise.all([
-          itrConfigRequestPromise,
+          libraryConfigRequestPromise,
           codeCovRequestPromise,
           eventsRequestPromise
-        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
-          assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
+        ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
+          assert.propertyVal(libraryConfigRequest.headers, 'dd-api-key', '1')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
@@ -1294,19 +1294,19 @@ testFrameworks.forEach(({
       })
       it('can report code coverage', (done) => {
         let testOutput
-        const itrConfigRequestPromise = receiver.payloadReceived(
+        const libraryConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
         )
         const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
         const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
 
         Promise.all([
-          itrConfigRequestPromise,
+          libraryConfigRequestPromise,
           codeCovRequestPromise,
           eventsRequestPromise
-        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
-          assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
-          assert.propertyVal(itrConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
+        ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
+          assert.notProperty(libraryConfigRequest.headers, 'dd-api-key')
+          assert.propertyVal(libraryConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.notProperty(codeCovRequest.headers, 'dd-api-key')
