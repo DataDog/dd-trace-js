@@ -424,6 +424,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     const DD_API_SECURITY_ENABLED = coalesce(
       appsec?.apiSecurity?.enabled,
       process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
+      process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       true
     )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(

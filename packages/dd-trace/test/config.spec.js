@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/tap')
+// require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
@@ -1170,6 +1170,31 @@ describe('Config', () => {
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
     expect(config.appsec.blockedTemplateGraphql).to.be.undefined
+  })
+
+  it('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.true
+  })
+
+  it('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.false
+  })
+
+  it('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.true
   })
 
   context('auto configuration w/ unix domain sockets', () => {
