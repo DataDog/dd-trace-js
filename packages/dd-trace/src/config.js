@@ -732,7 +732,7 @@ class Config {
   _isCiVisibility () {
     return coalesce(
       this.options.isCiVisibility,
-      this._defaults['isCiVisibility']
+      false // ._defaults['isCiVisibility']
     )
   }
 
