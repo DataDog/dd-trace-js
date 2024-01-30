@@ -93,7 +93,7 @@ class AgentEncoder {
       if (span.links && span.links.length > 0) {
         bytes.buffer[bytesPosition]++
         this._encodeString(bytes, 'span_links')
-        this._encodeArray(bytes, span.links)
+        this._encodeSpanLinks(bytes, span.links)
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -118,6 +118,36 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+    }
+  }
+
+  _encodeSpanLinks (bytes, links) {
+    this._encodeArrayPrefix(bytes, links)
+
+    for (const link of links) {
+      // exclude dropped_attributes_count and attributes_count for now
+      const linkPropertyCount = Object.keys(link).length - 2
+      this._encodeMapPrefix(bytes, linkPropertyCount)
+      this._encodeString(bytes, 'trace_id')
+      this._encodeId(bytes, link.trace_id)
+      this._encodeString(bytes, 'span_id')
+      this._encodeId(bytes, link.span_id)
+      if (link.trace_id_high) {
+        this._encodeString(bytes, 'traceID_high')
+        this._encodeLong(bytes, link.trace_id_high)
+      }
+      if (link.attributes) {
+        this._encodeString(bytes, 'attributes')
+        this._encodeMap(bytes, link.attributes)
+      }
+      if (link.tracestate) {
+        this._encodeString(bytes, 'tracestate')
+        this._encodeString(bytes, link.tracestate)
+      }
+      if (link.flags) {
+        this._encodeString(bytes, 'flags')
+        this._encodeInteger(bytes, link.flags)
+      }
     }
   }
 

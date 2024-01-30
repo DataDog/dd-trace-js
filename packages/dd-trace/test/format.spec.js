@@ -6,7 +6,6 @@ const constants = require('../src/constants')
 const tags = require('../../../ext/tags')
 const id = require('../src/id')
 const { getExtraServices } = require('../src/service-naming/extra-services')
-const proxyquire = require('proxyquire')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const MEASURED = tags.MEASURED
@@ -50,7 +49,9 @@ describe('format', () => {
         started: [],
         tags: {}
       },
-      _name: 'operation'
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId),
+      toSpanId: sinon.stub().returns(spanId)
     }
 
     span = {
@@ -76,7 +77,9 @@ describe('format', () => {
         started: [],
         tags: {}
       },
-      _name: 'operation'
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId2.toString(10)),
+      toSpanId: sinon.stub().returns(spanId2.toString(10))
     }
 
     spanContext3 = {
@@ -87,9 +90,12 @@ describe('format', () => {
       _metrics: {},
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
+        tags: {}
       },
-      _name: 'operation'
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId3.toString(10)),
+      toSpanId: sinon.stub().returns(spanId3.toString(10))
     }
 
     format = require('../src/format')
@@ -228,57 +234,18 @@ describe('format', () => {
       ]
 
       trace = format(span)
-      expect(trace.links).to.deep.equal([`{"trace_id":"${spanContext2._traceId}","span_id":"${spanContext2._spanId}"}`,
-        `{"trace_id":"${spanContext3._traceId}","span_id":"${spanContext3._spanId}"}`])
-    })
 
-    it('should drop span link attributes if they exceed the maximum length', () => {
-      const spanLinkLength = sinon.stub()
-      spanLinkLength.onFirstCall().callsFake((link) => {
-        link.entered = 0
-        return 25000
-      })
-      spanLinkLength.onSecondCall().returns(0)
-      format = proxyquire('../src/format', {
-        './span_link_processor': { spanLinkLength }
-      })
-
-      const link = {
-        context: spanContext2,
-        attributes: { foo: 'bar' }
-      }
-      span._links = [link]
-      trace = format(span)
-      const encoded =
-        `{"trace_id":"${spanContext2._traceId.toString()}",` +
-         `"span_id":"${spanContext2._spanId.toString()}","dropped_attributes_count":"1"}`
-
-      const spanLink = trace.links[0]
-      expect(spanLink.toString()).to.equal(encoded)
-    })
-
-    it('flushes attributes correctly', () => {
-      const spanLinkLength = sinon.stub()
-      spanLinkLength.onFirstCall().returns(25000)
-      spanLinkLength.onSecondCall().returns(0)
-      format = proxyquire('../src/format', {
-        './span_link_processor': { spanLinkLength }
-      })
-
-      const link = {
-        context: spanContext2,
-        attributes: { foo: 'bar' }
-      }
-      span._links = [link]
-      trace = format(span)
-
-      const encoded =
-        `{"trace_id":"${spanContext2._traceId.toString()}",` +
-         `"span_id":"${spanContext2._spanId.toString()}","dropped_attributes_count":"1"}`
-
-      const spanLink = trace.links[0]
-      expect(spanLink.toString()).to.equal(encoded)
-      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
+      expect(trace.links).to.deep.equal([{
+        trace_id: spanId2,
+        span_id: spanId2,
+        dropped_attributes_count: 0,
+        attributesCount: 0
+      }, {
+        trace_id: spanId3,
+        span_id: spanId3,
+        dropped_attributes_count: 0,
+        attributesCount: 0
+      }])
     })
 
     it('creates a span link', () => {
@@ -302,13 +269,15 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      const spanLink = JSON.parse(trace.links[0])
-      expect(spanLink).to.have.property('trace_id', '789' + spanContext._traceId.toString())
-      expect(spanLink).to.have.property('span_id', spanContext2._spanId.toString())
-      expect(spanLink).to.have.property('flags', 0)
-      expect(spanLink).to.have.property('tracestate', ts.toString())
-      expect(spanLink.attributes).to.deep.equal({ foo: 'bar' })
-      expect(spanLink).to.have.property('trace_id_high', '789')
+      expect(trace.links).to.deep.equal([{
+        trace_id: spanId2,
+        span_id: spanId2,
+        dropped_attributes_count: 0,
+        attributesCount: 1,
+        attributes: { foo: 'bar' },
+        tracestate: ts.toString(),
+        trace_id_high: '789'
+      }])
     })
 
     it('will not use the span context if the link object specifies a different trace', () => {
@@ -317,9 +286,9 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      const spanLink = JSON.parse(trace.links[0])
-      expect(spanLink).to.have.property('trace_id', spanContext2._traceId.toString())
-      expect(spanLink).to.have.property('span_id', spanContext2._spanId.toString())
+      const spanLink = trace.links[0]
+      expect(spanLink).to.have.property('trace_id', spanId2)
+      expect(spanLink).to.have.property('span_id', spanId2)
       expect(spanLink).to.not.have.property('flags')
       expect(spanLink).to.not.have.property('tracestate')
       expect(spanLink).to.not.have.property('trace_id_high')
@@ -338,7 +307,7 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      const spanLink = JSON.parse(trace.links[0])
+      const spanLink = trace.links[0]
       expect(spanLink.attributes).to.deep.equal(attributes)
     })
 
@@ -356,8 +325,7 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      console.log(trace.links[0])
-      const spanLink = JSON.parse(trace.links[0])
+      const spanLink = trace.links[0]
       expect(spanLink.attributes).to.deep.equal({
         foo: 'true',
         bar: 'hi',
@@ -381,95 +349,11 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      const spanLink = JSON.parse(trace.links[0])
+      const spanLink = trace.links[0]
       expect(spanLink.attributes).to.deep.equal({
         baz: 'valid'
       })
-      expect(spanLink).to.have.property('dropped_attributes_count', '2')
-    })
-
-    it('stringifies a simple span link', () => {
-      const encoded = `{"trace_id":"${spanContext2._traceId.toString()}",` +
-      `"span_id":"${spanContext2._spanId.toString()}"}`
-
-      const link = {
-        context: spanContext2
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-      expect(spanLink).to.equal(encoded)
-      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
-    })
-
-    it('stringifies a complex span link', () => {
-      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
-
-      spanContext2._tracestate = ts
-      const link = {
-        context: spanContext2,
-        attributes: { foo: 'bar' }
-      }
-      spanContext._traceId = spanContext2._traceId
-      spanContext._trace.tags = {}
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-
-      const encoded =
-      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
-      `"attributes":{"foo":"bar"},"flags":0,"tracestate":"${ts.toString()}"}`
-
-      expect(spanLink).to.equal(encoded)
-      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
-    })
-
-    it('stringifies droppedAttributesCount properly', () => {
-      const link = {
-        context: spanContext2,
-        attributes: { foo: 'bar', 'baz': {} }
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-
-      const encoded =
-      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
-      `"dropped_attributes_count":"1","attributes":{"foo":"bar"}}`
-
-      expect(spanLink).to.equal(encoded)
-      expect(spanLink.length).to.equal(Buffer.byteLength(encoded))
-    })
-
-    it('should drop entire span link if it exceeds the maximum length', () => {
-      const spanLinkLength = sinon.stub()
-      spanLinkLength.onFirstCall().returns(25000)
-      spanLinkLength.onSecondCall().returns(0)
-      spanLinkLength.onThirdCall().returns(25000)
-      spanLinkLength.onCall(4).returns(0)
-
-      format = proxyquire('../src/format', {
-        './span_link_processor': { spanLinkLength }
-      })
-
-      const link = {
-        context: spanContext2,
-        attributes: { foo: 'bar', 'baz': {} }
-      }
-
-      const linkToDrop = {
-        context: spanContext3,
-        attributes: { foo: 'bar', 'baz': {} }
-      }
-
-      span._links = [link, linkToDrop]
-
-      const encoded =
-      `{"trace_id":"${spanContext2._traceId.toString()}","span_id":"${spanContext2._spanId.toString()}",` +
-      `"dropped_attributes_count":"1","attributes":{"foo":"bar"}}`
-
-      expect(trace.links).to.have.lengthOf(1)
-      expect(trace.links[0]).to.equal(encoded)
+      expect(spanLink).to.have.property('dropped_attributes_count', 2)
     })
 
     it('should extract trace chunk tags', () => {

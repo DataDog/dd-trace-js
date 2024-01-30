@@ -65,6 +65,50 @@ describe('encode 0.5', () => {
     expect(stringMap[trace[0][11]]).to.equal('') // unset
   })
 
+  it('should encode span links', () => {
+    const ts = 'dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'
+    data[0].links = [{
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('1234abcd1234abcd'),
+      dropped_attributes_count: 0,
+      attributesCount: 1,
+      attributes: { foo: 'bar' },
+      trace_id_high: '789',
+      tracestate: ts,
+      flags: '0'
+    }]
+
+    const encodedLink = '[{"trace_id":00000000000000001234abcd1234abcd,"span_id":1234abcd1234abcd,' +
+    '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":0}]'
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
+    const stringMap = decoded[0]
+    const trace = decoded[1][0]
+
+    expect(trace).to.be.instanceof(Array)
+    expect(trace[0]).to.be.instanceof(Array)
+    expect(stringMap[trace[0][0]]).to.equal(data[0].service)
+    expect(stringMap[trace[0][1]]).to.equal(data[0].name)
+    expect(stringMap[trace[0][2]]).to.equal(data[0].resource)
+    expect(stringMap).to.include('_dd.span_links')
+    expect(stringMap).to.include(encodedLink)
+    expect(trace[0][3].toString(16)).to.equal(data[0].trace_id.toString())
+    expect(trace[0][4].toString(16)).to.equal(data[0].span_id.toString())
+    expect(trace[0][5].toString(16)).to.equal(data[0].parent_id.toString())
+    expect(trace[0][6].toNumber()).to.equal(data[0].start)
+    expect(trace[0][7].toNumber()).to.equal(data[0].duration)
+    expect(trace[0][8]).to.equal(0)
+    expect(trace[0][9]).to.deep.equal({
+      [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
+      [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink)
+    })
+    expect(trace[0][10]).to.deep.equal({ [stringMap.indexOf('example')]: 1 })
+    expect(stringMap[trace[0][11]]).to.equal('') // unset
+  })
+
   it('should truncate long IDs', () => {
     data[0].trace_id = id('ffffffffffffffff1234abcd1234abcd')
     data[0].span_id = id('ffffffffffffffff1234abcd1234abcd')

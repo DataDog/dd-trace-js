@@ -10,6 +10,27 @@ function formatSpan (span) {
   return normalizeSpan(truncateSpan(span, false))
 }
 
+function spanLinkToString (formattedLink) {
+  let encoded = `{`
+  // zero padded hex is done in accordance with RFC
+  for (const [key, value] of Object.entries(formattedLink)) {
+    if (key === 'dropped_attributes_count' || key === 'attributesCount' || key === 'trace_id_high') continue
+    else if (key === 'trace_id') {
+      const traceIdHex = value.toString(16).toLowerCase()
+      const zeroPaddedHex = ('00000000000000000000000000000000' + traceIdHex).slice(-32)
+      encoded += `"${key}":${zeroPaddedHex},`
+    } else if (key === 'span_id') {
+      const spanIdHex = value.toString(16).toLowerCase()
+      const zeroPaddedHex = ('0000000000000000' + spanIdHex).slice(-16)
+      encoded += `"${key}":${zeroPaddedHex},`
+    } else if (key === 'attributes') encoded += `"${key}":${JSON.stringify(value)},`
+    else if (key === 'flags') encoded += `"${key}":${value},`
+    else encoded += `"${key}":"${value}",`
+  }
+
+  return encoded.slice(0, -1) + '}' + ','
+}
+
 class AgentEncoder extends BaseEncoder {
   makePayload () {
     const prefixSize = 1
@@ -34,9 +55,6 @@ class AgentEncoder extends BaseEncoder {
 
     for (let span of trace) {
       span = formatSpan(span)
-      if (span.links && span.links.length > 0) {
-        span.addTags({ '_dd.span_links': span.links })
-      }
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
       this._encodeString(bytes, span.service)
       this._encodeString(bytes, span.name)
@@ -47,10 +65,24 @@ class AgentEncoder extends BaseEncoder {
       this._encodeLong(bytes, span.start || 0)
       this._encodeLong(bytes, span.duration || 0)
       this._encodeInteger(bytes, span.error)
+      if (span.links && span.links.length > 0) {
+        span.links = this._formatSpanLinks(span)
+        span.meta['_dd.span_links'] = span.links
+      }
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
     }
+  }
+
+  _formatSpanLinks (span) {
+    let links = '['
+    for (const link of span.links) {
+      links += spanLinkToString(link)
+    }
+
+    links = (links.length > 1 ? links.slice(0, -1) : links) + ']'
+    return links
   }
 
   _encodeString (bytes, value = '') {

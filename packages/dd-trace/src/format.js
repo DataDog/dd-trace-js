@@ -5,7 +5,8 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
-const { formatLink, spanLinkLength, spanLinkToString } = require('./span_link_processor')
+const log = require('./log')
+const ALLOWED = ['string', 'number', 'boolean']
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -23,7 +24,6 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
-const MAX_SPAN_LINKS_LENGTH = 25000
 
 const map = {
   'operation.name': 'name',
@@ -68,28 +68,70 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
+function sanitizeAttributes (formattedLink, attributes = {}) {
+  const sanitizedAttributes = {}
+
+  const addArrayOrScalarAttributes = (key, maybeArray) => {
+    if (Array.isArray(maybeArray)) {
+      for (const subkey in maybeArray) {
+        addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+      }
+    } else {
+      const maybeScalar = maybeArray
+      if (ALLOWED.includes(typeof maybeScalar)) {
+        formattedLink.attributesCount++
+        // Wrap the value as a string if it's not already a string
+        sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
+      } else {
+        log.warn(`Dropping span link attribute.`)
+        formattedLink.dropped_attributes_count++
+      }
+    }
+  }
+
+  Object.entries(attributes).forEach(entry => {
+    const [key, value] = entry
+    addArrayOrScalarAttributes(key, value)
+  })
+
+  return sanitizedAttributes
+}
+
 // TODO: do we need to handle both otel and dd trace span links in this function or only dd trace span links?
+// TODO: confirm whether we need to implement dropped_attributes_count
 function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
       const { context, attributes } = link
-      const linksArrayString = links.join()
 
-      const formattedLink = formatLink(span.context(), context, attributes)
-      let formattedLinkString = spanLinkToString(formattedLink)
+      const formattedLink = {
+        trace_id: context._traceId,
+        span_id: context._spanId,
+        dropped_attributes_count: 0,
+        attributesCount: 0
+      }
 
-      if ((Buffer.byteLength(linksArrayString) + spanLinkLength(formattedLink, formattedLinkString)) >=
-      MAX_SPAN_LINKS_LENGTH) {
-        formattedLink.dropped_attributes_count += formattedLink.attributesCount
-        formattedLink.attributesCount = 0
-        formattedLinkString = spanLinkToString(formattedLink)
+      if (context?._sampling?.priority) {
+        // If flags is set, the high bit (bit 31) must be set
+        formattedLink.flags = context._sampling.priority > 0
+          ? '80000001' : '00000000'
       }
-      // Update the string after possible flushing
-      if ((Buffer.byteLength(linksArrayString) + spanLinkLength(formattedLink, formattedLinkString)) <
-      MAX_SPAN_LINKS_LENGTH) {
-        links.push(formattedLinkString)
+
+      if (context?._tracestate) {
+        formattedLink.tracestate = context._tracestate.toString()
       }
+
+      if (context?._trace.tags['_dd.p.tid']) {
+        formattedLink.trace_id_high = context._trace.tags['_dd.p.tid']
+      }
+
+      const sanitizedAttributes = sanitizeAttributes(formattedLink, attributes)
+      if (Object.keys(sanitizedAttributes).length > 0) {
+        formattedLink.attributes = sanitizedAttributes
+      }
+
+      links.push(formattedLink)
     }
   }
   trace.links = links
