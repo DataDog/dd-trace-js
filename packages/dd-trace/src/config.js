@@ -927,8 +927,13 @@ class Config {
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
           if (get(this, name) === container[name] && has(this, name)) break
 
-          const value = container[name]
+          let value = container[name]
           set(this, name, value)
+
+          if (name === 'url' && value) value = value.toString()
+          if (name === 'appsec.rules') value = JSON.stringify(value)
+          if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
+          if (name === 'headerTags') value = value.toString()
 
           changes.push({ name, value, origin })
 
@@ -941,6 +946,14 @@ class Config {
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
+}
+
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
 }
 
 function maybeInt (number) {

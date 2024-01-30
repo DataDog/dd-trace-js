@@ -283,13 +283,13 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
-function formatMapForTelemetry (map) {
-  // format from an object to a string map in order for
-  // telemetry intake to accept the configuration
-  return map
-    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
-    : ''
-}
+// function formatMapForTelemetry (map) {
+//   // format from an object to a string map in order for
+//   // telemetry intake to accept the configuration
+//   return map
+//     ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+//     : ''
+// }
 
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
@@ -320,11 +320,11 @@ function updateConfig (changes, config) {
     } else if (name === 'DD_TAGS') {
       entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
     }
-    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
-    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
-      entry.value = formatMapForTelemetry(entry.value)
-    }
+    // if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+    // if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
+    // if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
+    //   entry.value = formatMapForTelemetry(entry.value)
+    // }
 
     configuration.push(entry)
   }
