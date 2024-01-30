@@ -33,10 +33,10 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
+  extractSpanLinks(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
-  extractSpanLinks(formatted, span)
 
   return formatted
 }
