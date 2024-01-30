@@ -6,7 +6,7 @@ const path = require('path')
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { newTaintedString, isTainted, getRanges } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { expect } = require('chai')
 
@@ -89,13 +89,24 @@ describe('TaintTracking', () => {
         const iastContext = iastContextFunctions.getIastContext(store)
 
         const json = '{"command":"ls -la"}'
-        const jsonTainted = newTaintedString(iastContext, json, 'param', 'Request')
+        const jsonTainted = newTaintedString(iastContext, json, 'param', 'request.type')
 
         const propFnInstrumented = require(instrumentedFunctionsFile)['jsonParseStr']
         const propFnOriginal = propagationFunctions['jsonParseStr']
 
         const result = propFnInstrumented(jsonTainted)
         expect(isTainted(iastContext, result.command)).to.be.true
+        expect(getRanges(iastContext, result.command)).to.be.deep
+          .eq([{
+            start: 0,
+            end: 6,
+            iinfo: {
+              parameterName: 'command',
+              parameterValue: 'ls -la',
+              type: 'request.type'
+            },
+            secureMarks: 0
+          }])
 
         const resultOrig = propFnOriginal(jsonTainted)
         expect(result).deep.eq(resultOrig)

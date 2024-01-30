@@ -73,20 +73,16 @@ function taintObject (iastContext, object, type, keyTainting, keyType) {
           const tainted = TaintedUtils.newTaintedString(transactionId, value, property, type)
           if (!parent) {
             result = tainted
+          } else if (keyTainting && key) {
+            const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
+            parent[taintedProperty] = tainted
           } else {
-            if (keyTainting && key) {
-              const taintedProperty = TaintedUtils.newTaintedString(transactionId, key, property, keyType)
-              parent[taintedProperty] = tainted
-            } else {
-              parent[key] = tainted
-            }
+            parent[key] = tainted
           }
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
 
-          const keys = Object.keys(value)
-          for (let i = 0; i < keys.length; i++) {
-            const key = keys[i]
+          for (const key of Object.keys(value)) {
             queue.push({ parent: value, property: property ? `${property}.${key}` : key, value: value[key], key })
           }
 

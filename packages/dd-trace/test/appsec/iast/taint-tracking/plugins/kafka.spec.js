@@ -56,8 +56,8 @@ describe('Kafka consumer plugin', () => {
 
     expect(newTaintedObject).to.be.calledTwice
 
-    expect(newTaintedObject.firstCall).to.be.calledWith(iastContext, message.key, 'key', KAFKA_MESSAGE_KEY)
-    expect(newTaintedObject.secondCall).to.be.calledWith(iastContext, message.value, 'value', KAFKA_MESSAGE_VALUE)
+    expect(newTaintedObject.firstCall).to.be.calledWith(iastContext, message.key, undefined, KAFKA_MESSAGE_KEY)
+    expect(newTaintedObject.secondCall).to.be.calledWith(iastContext, message.value, undefined, KAFKA_MESSAGE_VALUE)
   })
 
   it('should taint key Buffer.toString method', () => {
@@ -70,7 +70,7 @@ describe('Kafka consumer plugin', () => {
 
     const keyStr = message.key.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, keyStr, 'key', KAFKA_MESSAGE_KEY)
+    expect(newTaintedString).to.be.calledOnceWith(iastContext, keyStr, undefined, KAFKA_MESSAGE_KEY)
   })
 
   it('should taint value Buffer.toString method', () => {
@@ -83,7 +83,7 @@ describe('Kafka consumer plugin', () => {
 
     const valueStr = message.value.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, valueStr, 'value', KAFKA_MESSAGE_VALUE)
+    expect(newTaintedString).to.be.calledOnceWith(iastContext, valueStr, undefined, KAFKA_MESSAGE_VALUE)
   })
 
   it('should not fail with an unknown kafka message', () => {

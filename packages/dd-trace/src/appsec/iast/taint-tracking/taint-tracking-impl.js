@@ -127,10 +127,21 @@ function csiMethodsOverrides (getContext, taintObject) {
 
     parse: function (res, fn, target, json) {
       if (fn === JSON.parse) {
-        const iastContext = getContext()
-        const transactionId = getTransactionId(iastContext)
-        if (transactionId && TaintedUtils.isTainted(transactionId, json)) {
-          res = taintObject(iastContext, res, JSON_VALUE)
+        try {
+          const iastContext = getContext()
+          const transactionId = getTransactionId(iastContext)
+          if (transactionId) {
+            const ranges = TaintedUtils.getRanges(transactionId, json)
+
+            // TODO: first version.
+            // here we are losing the original source because taintObject always creates a new tainted
+            if (ranges?.length > 0) {
+              const range = ranges.find(range => range.iinfo?.type)
+              res = taintObject(iastContext, res, range?.iinfo.type || JSON_VALUE)
+            }
+          }
+        } catch (e) {
+          iastLog.error(e)
         }
       }
 

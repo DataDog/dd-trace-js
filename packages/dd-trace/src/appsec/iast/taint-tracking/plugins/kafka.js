@@ -14,10 +14,10 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
     )
   }
 
-  getToStringWrap (toString, iastContext, name, type) {
+  getToStringWrap (toString, iastContext, type) {
     return function () {
       const res = toString.apply(this, arguments)
-      return newTaintedString(iastContext, res, name, type)
+      return newTaintedString(iastContext, res, undefined, type)
     }
   }
 
@@ -29,16 +29,16 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
 
       if (key && typeof key === 'object') {
         shimmer.wrap(key, 'toString',
-          toString => this.getToStringWrap(toString, iastContext, 'key', KAFKA_MESSAGE_KEY))
+          toString => this.getToStringWrap(toString, iastContext, KAFKA_MESSAGE_KEY))
 
-        newTaintedObject(iastContext, key, 'key', KAFKA_MESSAGE_KEY)
+        newTaintedObject(iastContext, key, undefined, KAFKA_MESSAGE_KEY)
       }
 
       if (value && typeof value === 'object') {
         shimmer.wrap(value, 'toString',
-          toString => this.getToStringWrap(toString, iastContext, 'value', KAFKA_MESSAGE_VALUE))
+          toString => this.getToStringWrap(toString, iastContext, KAFKA_MESSAGE_VALUE))
 
-        newTaintedObject(iastContext, value, 'value', KAFKA_MESSAGE_VALUE)
+        newTaintedObject(iastContext, value, undefined, KAFKA_MESSAGE_VALUE)
       }
     }
   }
