@@ -53,7 +53,7 @@ jobs:
   integration-cypress:
     strategy:
       matrix:
-        version: [16, latest]
+        version: [18, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
     runs-on: ubuntu-latest
