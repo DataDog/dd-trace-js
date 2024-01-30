@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-          ref: '466641c52ace46d7f2da28d739643de1f0c7abbb'
+          ref: '32b046e7ce04937ae2c55ab438ebae99703cbc90'
       - uses: actions/setup-python@v4
         with:
           python-version: '3.9'
