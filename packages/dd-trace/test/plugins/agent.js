@@ -38,6 +38,24 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
+function dsmStatsExist (agent, expectedHash) {
+  const dsmStats = agent.getDsmStats()
+  let hashFound = false
+  if (dsmStats.length !== 0) {
+    dsmStats.forEach((statsTimeBucket) => {
+      statsTimeBucket.Stats.forEach((statsBucket) => {
+        statsBucket.Stats.forEach((stats) => {
+          if (stats.Hash.toString() === expectedHash) {
+            hashFound = true
+            return hashFound
+          }
+        })
+      })
+    })
+  }
+  return hashFound
+}
+
 function addEnvironmentVariablesToHeaders (headers) {
   // get all environment variables that start with "DD_"
   const ddEnvVars = new Map(
@@ -245,7 +263,6 @@ module.exports = {
     // DSM Checkpoint endpoint
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
-      // if (useTestAgent) res.redirect('http://127.0.0.1:9126/v0.1/pipeline_stats')
       dsmStats.push(req.body)
       statsHandlers.forEach(({ handler, spanResourceMatch }) => {
         handler(dsmStats)
@@ -275,6 +292,7 @@ module.exports = {
 
     server.on('close', () => {
       tracer = null
+      dsmStats = []
     })
 
     tracer.init(Object.assign({}, {
@@ -391,5 +409,6 @@ module.exports = {
 
   tracer,
   testedPlugins,
-  getDsmStats
+  getDsmStats,
+  dsmStatsExist
 }

@@ -166,6 +166,7 @@ jobs:
     env:
       PLUGINS: amqp10|rhea
       SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
