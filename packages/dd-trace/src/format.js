@@ -6,7 +6,6 @@ const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 const log = require('./log')
-const ALLOWED = ['string', 'number', 'boolean']
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -79,12 +78,10 @@ function sanitizeAttributes (formattedLink, attributes = {}) {
     } else {
       const maybeScalar = maybeArray
       if (ALLOWED.includes(typeof maybeScalar)) {
-        formattedLink.attributesCount++
         // Wrap the value as a string if it's not already a string
         sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
       } else {
-        log.warn(`Dropping span link attribute.`)
-        formattedLink.dropped_attributes_count++
+        log.warn(`Dropping span link attribute. It is not of an allowed type`)
       }
     }
   }
@@ -107,9 +104,7 @@ function extractSpanLinks (trace, span) {
 
       const formattedLink = {
         trace_id: context._traceId,
-        span_id: context._spanId,
-        dropped_attributes_count: 0,
-        attributesCount: 0
+        span_id: context._spanId
       }
 
       if (context?._sampling?.priority) {
@@ -126,9 +121,8 @@ function extractSpanLinks (trace, span) {
         formattedLink.trace_id_high = context._trace.tags['_dd.p.tid']
       }
 
-      const sanitizedAttributes = sanitizeAttributes(formattedLink, attributes)
-      if (Object.keys(sanitizedAttributes).length > 0) {
-        formattedLink.attributes = sanitizedAttributes
+      if (attributes && Object.keys(attributes).length > 0) {
+        formattedLink.attributes = attributes
       }
 
       links.push(formattedLink)

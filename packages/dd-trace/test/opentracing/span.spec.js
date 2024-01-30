@@ -226,6 +226,55 @@ describe('Span', () => {
       expect(span).to.have.property('_links')
       expect(span._links).to.have.lengthOf(1)
     })
+
+    it('sanitizes attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const attributes = {
+        foo: 'bar',
+        baz: 'qux'
+      }
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal(attributes)
+    })
+
+    it('sanitizes nested attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const attributes = {
+        foo: true,
+        bar: 'hi',
+        baz: 1,
+        qux: [1, 2, 3]
+      }
+
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal({
+        foo: 'true',
+        bar: 'hi',
+        baz: '1',
+        'qux.0': '1',
+        'qux.1': '2',
+        'qux.2': '3'
+      })
+    })
+
+    it('sanitizes invalid attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const attributes = {
+        foo: () => {},
+        bar: Symbol('bar'),
+        baz: 'valid'
+      }
+
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal({
+        baz: 'valid'
+      })
+    })
   })
 
   describe('getBaggageItem', () => {

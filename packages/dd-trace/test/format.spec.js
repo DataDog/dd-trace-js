@@ -237,14 +237,10 @@ describe('format', () => {
 
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
-        span_id: spanId2,
-        dropped_attributes_count: 0,
-        attributesCount: 0
+        span_id: spanId2
       }, {
         trace_id: spanId3,
-        span_id: spanId3,
-        dropped_attributes_count: 0,
-        attributesCount: 0
+        span_id: spanId3
       }])
     })
 
@@ -272,8 +268,6 @@ describe('format', () => {
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
         span_id: spanId2,
-        dropped_attributes_count: 0,
-        attributesCount: 1,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
         trace_id_high: '789'
@@ -293,67 +287,6 @@ describe('format', () => {
       expect(spanLink).to.not.have.property('tracestate')
       expect(spanLink).to.not.have.property('trace_id_high')
       expect(spanLink).to.not.have.property('attributes')
-    })
-
-    it('sanitizes attributes', () => {
-      const attributes = {
-        foo: 'bar',
-        baz: 'qux'
-      }
-
-      const link = {
-        context: spanContext2,
-        attributes
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-      expect(spanLink.attributes).to.deep.equal(attributes)
-    })
-
-    it('sanitizes nested attributes', () => {
-      const attributes = {
-        foo: true,
-        bar: 'hi',
-        baz: 1,
-        qux: [1, 2, 3]
-      }
-
-      const link = {
-        context: spanContext2,
-        attributes
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-      expect(spanLink.attributes).to.deep.equal({
-        foo: 'true',
-        bar: 'hi',
-        baz: '1',
-        'qux.0': '1',
-        'qux.1': '2',
-        'qux.2': '3'
-      })
-    })
-
-    it('sanitizes invalid attributes', () => {
-      const attributes = {
-        foo: () => {},
-        bar: Symbol('bar'),
-        baz: 'valid'
-      }
-
-      const link = {
-        context: spanContext2,
-        attributes
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-      expect(spanLink.attributes).to.deep.equal({
-        baz: 'valid'
-      })
-      expect(spanLink).to.have.property('dropped_attributes_count', 2)
     })
 
     it('should extract trace chunk tags', () => {

@@ -70,16 +70,14 @@ describe('encode 0.5', () => {
     data[0].links = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
-      dropped_attributes_count: 0,
-      attributesCount: 1,
       attributes: { foo: 'bar' },
       trace_id_high: '789',
       tracestate: ts,
-      flags: '0'
+      flags: '1'
     }]
 
     const encodedLink = '[{"trace_id":00000000000000001234abcd1234abcd,"span_id":1234abcd1234abcd,' +
-    '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":0}]'
+    '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]'
 
     encoder.encode(data)
 

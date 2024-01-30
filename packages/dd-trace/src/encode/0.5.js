@@ -14,18 +14,15 @@ function spanLinkToString (formattedLink) {
   let encoded = `{`
   // zero padded hex is done in accordance with RFC
   for (const [key, value] of Object.entries(formattedLink)) {
-    if (key === 'dropped_attributes_count' || key === 'attributesCount' || key === 'trace_id_high') continue
+    if (key === 'trace_id_high') continue
     else if (key === 'trace_id') {
-      const traceIdHex = value.toString(16).toLowerCase()
-      const zeroPaddedHex = ('00000000000000000000000000000000' + traceIdHex).slice(-32)
-      encoded += `"${key}":${zeroPaddedHex},`
+      encoded += `"${key}":${value.toString(16).padStart(32, '0')},`
     } else if (key === 'span_id') {
-      const spanIdHex = value.toString(16).toLowerCase()
-      const zeroPaddedHex = ('0000000000000000' + spanIdHex).slice(-16)
-      encoded += `"${key}":${zeroPaddedHex},`
+      encoded += `"${key}":${value.toString(16).padStart(16, '0')},`
     } else if (key === 'attributes') encoded += `"${key}":${JSON.stringify(value)},`
-    else if (key === 'flags') encoded += `"${key}":${value},`
-    else encoded += `"${key}":"${value}",`
+    else if (key === 'flags') {
+      encoded += value[0] === '0' ? `"${key}":${0},` : `"${key}":${1},`
+    } else encoded += `"${key}":"${value}",`
   }
 
   return encoded.slice(0, -1) + '}' + ','
