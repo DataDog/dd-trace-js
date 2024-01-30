@@ -193,9 +193,6 @@ class Span {
   }
 
   addLink (context, attributes) {
-    if (!(context._ddContext)) {
-      log.error('Span.addLink: first argument must be of type otel.SpanContext')
-    }
     // extract dd context
     const ddSpanContext = context._ddContext
     this._ddSpan.addLink(ddSpanContext, attributes)

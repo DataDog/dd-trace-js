@@ -155,9 +155,6 @@ class DatadogSpan {
   logEvent () {}
 
   addLink (context, attributes) {
-    if (!(context instanceof SpanContext)) {
-      log.error('Span.addLink: first argument must be of type SpanContext')
-    }
     this._links.push({ context, attributes })
   }
 
