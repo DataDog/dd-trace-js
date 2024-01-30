@@ -190,10 +190,8 @@ describe('encode', () => {
     data[0].links = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
-      dropped_attributes_count: 0,
-      attributesCount: 1,
       attributes: { foo: 'bar' },
-      trace_id_high: '789',
+      traceID_high: '789',
       tracestate: ts,
       flags: '0'
     }]

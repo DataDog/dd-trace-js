@@ -125,16 +125,14 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, links)
 
     for (const link of links) {
-      // exclude dropped_attributes_count and attributes_count for now
-      const linkPropertyCount = Object.keys(link).length - 2
-      this._encodeMapPrefix(bytes, linkPropertyCount)
+      this._encodeMapPrefix(bytes, Object.keys(link).length)
       this._encodeString(bytes, 'trace_id')
       this._encodeId(bytes, link.trace_id)
       this._encodeString(bytes, 'span_id')
       this._encodeId(bytes, link.span_id)
-      if (link.trace_id_high) {
+      if (link.traceID_high) {
         this._encodeString(bytes, 'traceID_high')
-        this._encodeLong(bytes, link.trace_id_high)
+        this._encodeLong(bytes, link.traceID_high)
       }
       if (link.attributes) {
         this._encodeString(bytes, 'attributes')
@@ -148,14 +146,6 @@ class AgentEncoder {
         this._encodeString(bytes, 'flags')
         this._encodeInteger(bytes, link.flags)
       }
-    }
-  }
-
-  _encodeArray (bytes, value) {
-    this._encodeArrayPrefix(bytes, value.length)
-
-    for (const item of value) {
-      this._encodeValue(bytes, item)
     }
   }
 

@@ -237,10 +237,18 @@ describe('format', () => {
 
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
-        span_id: spanId2
+        span_id: spanId2,
+        tracestate: undefined,
+        traceID_high: undefined,
+        flags: undefined,
+        attributes: undefined
       }, {
         trace_id: spanId3,
-        span_id: spanId3
+        span_id: spanId3,
+        tracestate: undefined,
+        traceID_high: undefined,
+        flags: undefined,
+        attributes: undefined
       }])
     })
 
@@ -270,23 +278,9 @@ describe('format', () => {
         span_id: spanId2,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        trace_id_high: '789'
+        traceID_high: '789',
+        flags: undefined
       }])
-    })
-
-    it('will not use the span context if the link object specifies a different trace', () => {
-      const link = {
-        context: spanContext2
-      }
-      span._links = [link]
-      trace = format(span)
-      const spanLink = trace.links[0]
-      expect(spanLink).to.have.property('trace_id', spanId2)
-      expect(spanLink).to.have.property('span_id', spanId2)
-      expect(spanLink).to.not.have.property('flags')
-      expect(spanLink).to.not.have.property('tracestate')
-      expect(spanLink).to.not.have.property('trace_id_high')
-      expect(spanLink).to.not.have.property('attributes')
     })
 
     it('should extract trace chunk tags', () => {

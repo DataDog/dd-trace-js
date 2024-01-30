@@ -71,7 +71,7 @@ describe('encode 0.5', () => {
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
       attributes: { foo: 'bar' },
-      trace_id_high: '789',
+      traceID_high: '789',
       tracestate: ts,
       flags: '1'
     }]
