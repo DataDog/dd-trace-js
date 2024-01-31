@@ -275,10 +275,18 @@ describe('Plugin', () => {
             await consumer.run({ eachMessage: () => {} })
             await sendMessages(kafka, testTopic, messages)
 
-            expect(spy).to.have.been.calledOnceWith({
-              testTopic,
-              message: messages[0]
-            }, afterStart.name)
+            expect(spy).to.have.been.calledOnce
+
+            const channelMsg = spy.firstCall.args[0]
+            expect(channelMsg).to.not.undefined
+            expect(channelMsg.topic).to.eq(testTopic)
+            expect(channelMsg.message.key).to.not.undefined
+            expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
+            expect(channelMsg.message.value).to.not.undefined
+            expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+
+            const name = spy.firstCall.args[1]
+            expect(name).to.eq(afterStart.name)
           })
 
           it('should publish on beforeFinish channel', async () => {
