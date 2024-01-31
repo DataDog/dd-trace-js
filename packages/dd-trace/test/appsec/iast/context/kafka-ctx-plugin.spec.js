@@ -4,8 +4,8 @@ const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
 const IastContextPlugin = require('../../../../src/appsec/iast/context/context-plugin')
 
-const consumerStartCh = dc.channel('dd-trace:kafkajs:consumer:start')
-const consumerFinishCh = dc.channel('dd-trace:kafkajs:consumer:finish')
+const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
+const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
 describe('KafkaContextPlugin', () => {
   const message = { key: 'key', value: 'value' }
@@ -28,14 +28,14 @@ describe('KafkaContextPlugin', () => {
     sinon.restore()
   })
 
-  it('should start iast context on dd-trace:kafkajs:consumer:start', () => {
-    consumerStartCh.publish({ message })
+  it('should start iast context on dd-trace:kafkajs:consumer:afterStart', () => {
+    afterStartCh.publish({ message })
 
     expect(startContext).to.be.calledOnce
   })
 
-  it('should finish iast context on dd-trace:kafkajs:consumer:finish', () => {
-    consumerFinishCh.publish()
+  it('should finish iast context on dd-trace:kafkajs:consumer:beforeFinish', () => {
+    beforeFinishCh.publish()
 
     expect(finishContext).to.be.calledOnce
   })

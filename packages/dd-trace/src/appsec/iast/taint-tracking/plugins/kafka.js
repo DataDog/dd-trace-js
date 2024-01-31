@@ -9,7 +9,7 @@ const { SourceIastPlugin } = require('../../iast-plugin')
 
 class KafkaConsumerIastPlugin extends SourceIastPlugin {
   onConfigure () {
-    this.addSub({ channelName: 'dd-trace:kafkajs:consumer:start', tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE] },
+    this.addSub({ channelName: 'dd-trace:kafkajs:consumer:afterStart', tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE] },
       ({ message }) => this.taintKafkaMessage(message)
     )
   }

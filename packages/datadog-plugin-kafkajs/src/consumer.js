@@ -4,8 +4,8 @@ const dc = require('dc-polyfill')
 const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 
-const kafkaConsumerStartCh = dc.channel('dd-trace:kafkajs:consumer:start')
-const kafkaConsumerFinishCh = dc.channel('dd-trace:kafkajs:consumer:finish')
+const aferStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
+const beforeFinishCh = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
 class KafkajsConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
@@ -84,14 +84,14 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], span, payloadSize)
     }
 
-    if (kafkaConsumerStartCh.hasSubscribers) {
-      kafkaConsumerStartCh.publish({ topic, partition, message, groupId })
+    if (aferStartCh.hasSubscribers) {
+      aferStartCh.publish({ topic, partition, message, groupId })
     }
   }
 
   finish () {
-    if (kafkaConsumerFinishCh.hasSubscribers) {
-      kafkaConsumerFinishCh.publish()
+    if (beforeFinishCh.hasSubscribers) {
+      beforeFinishCh.publish()
     }
 
     super.finish()

@@ -39,9 +39,9 @@ describe('Kafka consumer plugin', () => {
 
   afterEach(sinon.restore)
 
-  it('should subscribe to dd-trace:kafkajs:consumer:start channel', () => {
+  it('should subscribe to dd-trace:kafkajs:consumer:afterStart channel', () => {
     expect(addSub).to.be.calledOnceWith({
-      channelName: 'dd-trace:kafkajs:consumer:start',
+      channelName: 'dd-trace:kafkajs:consumer:afterStart',
       tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE]
     })
   })
