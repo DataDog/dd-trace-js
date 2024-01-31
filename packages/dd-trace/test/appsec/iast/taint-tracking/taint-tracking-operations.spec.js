@@ -316,7 +316,7 @@ describe('IAST TaintTracking Operations', () => {
       taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
       taintTrackingOperations.removeTransaction(iastContext)
 
-      expect(requestTaintedAdd).to.be.calledOnceWith(5, null, iastContext)
+      expect(requestTaintedAdd).to.be.calledOnceWith(iastContext, 5)
     })
   })
 
@@ -382,7 +382,7 @@ describe('IAST TaintTracking Operations', () => {
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).to.be.called
 
-      expect(executedPropagationIncrease).to.be.calledOnceWith(null, context)
+      expect(executedPropagationIncrease).to.be.calledOnceWith(context)
     })
   })
 

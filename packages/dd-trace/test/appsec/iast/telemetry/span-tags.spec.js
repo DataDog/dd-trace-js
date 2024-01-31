@@ -5,8 +5,7 @@ const { EXECUTED_SINK, EXECUTED_SOURCE, REQUEST_TAINTED } = require('../../../..
 const { addMetricsToSpan } = require('../../../../src/appsec/iast/telemetry/span-tags')
 const {
   getNamespaceFromContext,
-  initRequestNamespace,
-  globalNamespace
+  initRequestNamespace
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 describe('Telemetry Span tags', () => {
@@ -19,15 +18,13 @@ describe('Telemetry Span tags', () => {
     }
     context = {}
     initRequestNamespace(context)
-
-    globalNamespace.metrics.clear()
   })
 
   afterEach(sinon.restore)
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics', () => {
-    EXECUTED_SOURCE.add(42, 'source.type.1', context)
-    EXECUTED_SINK.add(3, 'sink_type_1', context)
+    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
+    EXECUTED_SINK.add(context, 3, EXECUTED_SINK.formatTags('sink_type_1'))
 
     const { metrics } = getNamespaceFromContext(context).toJSON()
 
@@ -40,10 +37,10 @@ describe('Telemetry Span tags', () => {
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics flattened', () => {
     // a request metric with no context it behaves like a global metric
-    EXECUTED_SOURCE.add(42, 'source.type.1')
-    EXECUTED_SOURCE.add(32, 'source.type.1')
+    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
+    EXECUTED_SOURCE.add(context, 32, EXECUTED_SOURCE.formatTags('source.type.1'))
 
-    const { metrics } = globalNamespace.toJSON()
+    const { metrics } = getNamespaceFromContext(context).toJSON()
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
@@ -52,12 +49,12 @@ describe('Telemetry Span tags', () => {
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for different tagged metrics', () => {
     // a request metric with no context it behaves like a global metric
-    EXECUTED_SOURCE.add(42, 'source.type.1')
-    EXECUTED_SOURCE.add(32, 'source.type.1')
+    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
+    EXECUTED_SOURCE.add(context, 32, EXECUTED_SOURCE.formatTags('source.type.1'))
 
-    EXECUTED_SOURCE.add(2, 'source.type.2')
+    EXECUTED_SOURCE.add(context, 2, EXECUTED_SOURCE.formatTags('source.type.2'))
 
-    const { metrics } = globalNamespace.toJSON()
+    const { metrics } = getNamespaceFromContext(context).toJSON()
 
     addMetricsToSpan(rootSpan, metrics.series, tagPrefix)
 
@@ -67,7 +64,7 @@ describe('Telemetry Span tags', () => {
   })
 
   it('should add span tags with tag name like \'tagPrefix.metricName\' for not tagged metrics', () => {
-    REQUEST_TAINTED.add(42, null, context)
+    REQUEST_TAINTED.add(context, 42)
 
     const { metrics } = getNamespaceFromContext(context).toJSON()
 

@@ -20,11 +20,17 @@ const instrumentations = require('../../../../datadog-instrumentations/src/helpe
  * - tagKey can be only SOURCE_TYPE (Source) or VULNERABILITY_TYPE (Sink)
  */
 class IastPluginSubscription {
-  constructor (moduleName, channelName, tag, tagKey = TagKey.VULNERABILITY_TYPE) {
+  constructor (moduleName, channelName, tagValue, tagKey = TagKey.VULNERABILITY_TYPE) {
     this.moduleName = moduleName
     this.channelName = channelName
-    this.tag = tag
+    this.tagValue = tagValue
     this.tagKey = tagKey
+
+    if (tagValue) {
+      tagValue = !Array.isArray(tagValue) ? [tagValue] : tagValue
+      this.tags = tagValue.map(value => [`${this.tagKey}:${value.toLowerCase()}`])
+    }
+
     this.executedMetric = getExecutedMetric(this.tagKey)
     this.instrumentedMetric = getInstrumentedMetric(this.tagKey)
     this.moduleInstrumented = false
@@ -34,11 +40,11 @@ class IastPluginSubscription {
     if (this.moduleInstrumented) return
 
     this.moduleInstrumented = true
-    this.instrumentedMetric.inc(this.tag)
+    this.instrumentedMetric.inc(undefined, this.tags)
   }
 
   increaseExecuted (iastContext) {
-    this.executedMetric.inc(this.tag, iastContext)
+    this.executedMetric.inc(iastContext, this.tags)
   }
 
   matchesModuleInstrumented (name) {
@@ -79,7 +85,7 @@ class IastPlugin extends Plugin {
   _execHandlerAndIncMetric ({ handler, metric, tag, iastContext = getIastContext(storage.getStore()) }) {
     try {
       const result = handler()
-      iastTelemetry.isEnabled() && metric.inc(tag, iastContext)
+      iastTelemetry.isEnabled() && metric.inc(iastContext, tag)
       return result
     } catch (e) {
       iastLog.errorAndPublish(e)

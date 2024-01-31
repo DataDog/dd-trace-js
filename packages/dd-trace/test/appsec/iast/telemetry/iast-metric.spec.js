@@ -35,7 +35,7 @@ describe('Metrics', () => {
   it('should increase by one the metric value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST')
 
-    metric.inc(undefined, context)
+    metric.inc(context)
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, undefined)
     expect(inc).to.be.calledOnceWith(1)
@@ -44,7 +44,7 @@ describe('Metrics', () => {
   it('should add by 42 the metric value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(42, undefined, context)
+    metric.add(context, 42, undefined)
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, undefined)
     expect(inc).to.be.calledOnceWith(42)
@@ -53,7 +53,7 @@ describe('Metrics', () => {
   it('should increase by one the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.inc('tag1', context)
+    metric.inc(context, metric.formatTags('tag1'))
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(1)
@@ -62,7 +62,7 @@ describe('Metrics', () => {
   it('should add by 42 the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(42, 'tag1', context)
+    metric.add(context, 42, metric.formatTags('tag1'))
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(42)
@@ -71,7 +71,7 @@ describe('Metrics', () => {
   it('should add by 42 the each metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(42, ['tag1', 'tag2'], context)
+    metric.add(context, 42, metric.formatTags('tag1', 'tag2'))
 
     expect(reqNamespace.count).to.be.calledTwice
     expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])

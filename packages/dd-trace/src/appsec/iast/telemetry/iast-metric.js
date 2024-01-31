@@ -24,32 +24,72 @@ class IastMetric {
     this.name = name
     this.scope = scope
     this.tagKey = tagKey
+
+    this.metricsByNamespace = new WeakMap()
   }
 
   getNamespace (context) {
-    return getNamespaceFromContext(context) || globalNamespace
+    let namespace = globalNamespace
+
+    if (this.scope === Scope.REQUEST) {
+      namespace = getNamespaceFromContext(context) || globalNamespace
+    }
+    return namespace
   }
 
-  getTag (tagValue) {
-    return tagValue ? [`${this.tagKey}:${tagValue}`] : undefined
+  formatTags (...tags) {
+    return tags.map(tagValue => [`${this.tagKey}:${tagValue.toLowerCase()}`])
   }
 
-  addValue (value, tagValue, context) {
-    this.getNamespace(context)
-      .count(this.name, this.getTag(tagValue))
-      .inc(value)
+  getMetricsInNamespace (namespace) {
+    let metrics = this.metricsByNamespace.get(namespace)
+    if (!metrics) {
+      metrics = new Map()
+      this.metricsByNamespace.set(namespace, metrics)
+    }
+    return metrics
   }
 
-  add (value, tagValue, context) {
-    if (Array.isArray(tagValue)) {
-      tagValue.forEach(tag => this.addValue(value, tag, context))
+  getMetric (context, tags, type = 'count') {
+    const namespace = this.getNamespace(context)
+    const metrics = this.getMetricsInNamespace(namespace)
+
+    let metric = metrics.get(tags)
+    if (!metric) {
+      metric = namespace[type](this.name, tags ? [...tags] : tags)
+      metrics.set(tags, metric)
+    }
+
+    return metric
+  }
+
+  // tags should be an array of [tagKey:tagValue]
+  add (context, value, tags) {
+    if (Array.isArray(tags)) {
+      tags.forEach(tag => this.getMetric(context, tag).inc(value))
     } else {
-      this.addValue(value, tagValue, context)
+      this.getMetric(context, tags).inc(value)
     }
   }
 
-  inc (tagValue, context) {
-    this.add(1, tagValue, context)
+  inc (context, tags) {
+    this.add(context, 1, tags)
+  }
+}
+
+class NoTaggedIastMetric extends IastMetric {
+  constructor (name, scope) {
+    super(name, scope)
+
+    this.tags = []
+  }
+
+  add (context, value) {
+    this.getMetric(context, this.tags).inc(value)
+  }
+
+  inc (context) {
+    this.add(context, 1)
   }
 }
 
@@ -61,21 +101,21 @@ function getInstrumentedMetric (tagKey) {
   return tagKey === TagKey.VULNERABILITY_TYPE ? INSTRUMENTED_SINK : INSTRUMENTED_SOURCE
 }
 
-const INSTRUMENTED_PROPAGATION = new IastMetric('instrumented.propagation', Scope.GLOBAL)
+const INSTRUMENTED_PROPAGATION = new NoTaggedIastMetric('instrumented.propagation', Scope.GLOBAL)
 const INSTRUMENTED_SOURCE = new IastMetric('instrumented.source', Scope.GLOBAL, TagKey.SOURCE_TYPE)
 const INSTRUMENTED_SINK = new IastMetric('instrumented.sink', Scope.GLOBAL, TagKey.VULNERABILITY_TYPE)
 
 const EXECUTED_SOURCE = new IastMetric('executed.source', Scope.REQUEST, TagKey.SOURCE_TYPE)
 const EXECUTED_SINK = new IastMetric('executed.sink', Scope.REQUEST, TagKey.VULNERABILITY_TYPE)
 
-const REQUEST_TAINTED = new IastMetric('request.tainted', Scope.REQUEST)
+const REQUEST_TAINTED = new NoTaggedIastMetric('request.tainted', Scope.REQUEST)
 
 // DEBUG using metrics
-const EXECUTED_PROPAGATION = new IastMetric('executed.propagation', Scope.REQUEST)
-const EXECUTED_TAINTED = new IastMetric('executed.tainted', Scope.REQUEST)
+const EXECUTED_PROPAGATION = new NoTaggedIastMetric('executed.propagation', Scope.REQUEST)
+const EXECUTED_TAINTED = new NoTaggedIastMetric('executed.tainted', Scope.REQUEST)
 
 // DEBUG using distribution endpoint
-const INSTRUMENTATION_TIME = new IastMetric('instrumentation.time', Scope.GLOBAL)
+const INSTRUMENTATION_TIME = new NoTaggedIastMetric('instrumentation.time', Scope.GLOBAL)
 
 module.exports = {
   INSTRUMENTED_PROPAGATION,

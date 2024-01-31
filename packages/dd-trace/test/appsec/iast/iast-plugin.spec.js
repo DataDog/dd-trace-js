@@ -184,6 +184,9 @@ describe('IAST Plugin', () => {
   })
 
   describe('with appsec telemetry enabled', () => {
+    const vulnTags = [[`${VULNERABILITY_TYPE}:injection`]]
+    const sourceTags = [[`${SOURCE_TYPE}:http.source`]]
+
     let iastTelemetry
 
     beforeEach(() => {
@@ -229,6 +232,8 @@ describe('IAST Plugin', () => {
     })
 
     describe('addSub', () => {
+      const context = undefined
+
       it('should call _getTelemetryHandler with correct metrics', () => {
         const wrapHandler = sinon.stub()
         iastPlugin._wrapHandler = wrapHandler
@@ -261,7 +266,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, vulnTags)
       })
 
       it('should register and increment a sink metric when a sink module is loaded using a tracingChannel', () => {
@@ -277,7 +282,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, vulnTags)
       })
 
       it('should register an pluginSubscription and increment a source metric when a source module is loaded', () => {
@@ -294,7 +299,7 @@ describe('IAST Plugin', () => {
 
         loadChannel.publish({ name: 'source' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'http.source')
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, sourceTags)
       })
 
       it('should increment a sink metric when event is received', () => {
@@ -312,7 +317,7 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, vulnTags)
       })
 
       it('should increment a source metric when event is received', () => {
@@ -330,7 +335,7 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'http.source')
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, sourceTags)
       })
 
       it('should increment a source metric when event is received for every tag', () => {
@@ -348,7 +353,9 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, [ 'http.source', 'http.source2', 'http.source3' ])
+        expect(metricAdd).to.be.calledOnceWith(undefined, 1, [
+          [`${SOURCE_TYPE}:http.source`], [`${SOURCE_TYPE}:http.source2`], [`${SOURCE_TYPE}:http.source3`]
+        ])
       })
     })
 
@@ -387,7 +394,7 @@ describe('IAST Plugin', () => {
         })
 
         expect(handler).to.be.calledOnce
-        expect(metric.inc).to.be.calledOnceWithExactly(tag, iastContext)
+        expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tag)
       })
     })
   })

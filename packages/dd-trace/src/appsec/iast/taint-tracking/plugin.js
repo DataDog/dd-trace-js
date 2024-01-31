@@ -14,6 +14,7 @@ const {
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
 } = require('./source-types')
+const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
 
 class TaintTrackingPlugin extends SourceIastPlugin {
   constructor () {
@@ -85,7 +86,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintHeaders (headers, iastContext) {
     this.execSource({
       handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME),
-      tag: [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME],
+      tag: EXECUTED_SOURCE.formatTags(HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME),
       iastContext
     })
   }
@@ -95,7 +96,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       handler: function () {
         req.url = newTaintedString(iastContext, req.url, HTTP_REQUEST_URI, HTTP_REQUEST_URI)
       },
-      tag: [HTTP_REQUEST_URI],
+      tag: EXECUTED_SOURCE.formatTags(HTTP_REQUEST_URI),
       iastContext
     })
   }
