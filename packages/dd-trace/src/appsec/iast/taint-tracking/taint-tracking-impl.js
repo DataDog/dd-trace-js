@@ -7,10 +7,11 @@ const iastContextFunctions = require('../iast-context')
 const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
-const { JSON_VALUE } = require('./source-types')
 const { taintObject } = require('./operations-taint-object')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
+
+const JSON_VALUE = 'json.value'
 
 function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
