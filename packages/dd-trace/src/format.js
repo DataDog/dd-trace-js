@@ -76,13 +76,12 @@ function extractSpanLinks (trace, span) {
 
       const formattedLink = {
         trace_id: context._traceId,
-        span_id: context._spanId,
-        flags: context?._sampling?.priority ? (context._sampling.priority > 0 ? '80000000' : '00000000') : undefined,
-        tracestate: context?._tracestate ? context._tracestate.toString() : undefined,
-        traceID_high: context?._trace?.tags['_dd.p.tid'] ? context._trace.tags['_dd.p.tid'] : undefined,
-        attributes: attributes && Object.keys(attributes).length > 0 ? attributes : undefined
+        span_id: context._spanId
       }
-
+      if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? '80000000' : '00000000'
+      if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
+      if (context?._trace?.tags['_dd.p.tid']) formattedLink.trace_id_high = context._trace.tags['_dd.p.tid']
+      if (attributes && Object.keys(attributes).length > 0) formattedLink.attributes = attributes
       links.push(formattedLink)
     }
   }

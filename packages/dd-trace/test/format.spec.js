@@ -218,18 +218,10 @@ describe('format', () => {
 
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
-        span_id: spanId2,
-        tracestate: undefined,
-        traceID_high: undefined,
-        flags: undefined,
-        attributes: undefined
+        span_id: spanId2
       }, {
         trace_id: spanId3,
-        span_id: spanId3,
-        tracestate: undefined,
-        traceID_high: undefined,
-        flags: undefined,
-        attributes: undefined
+        span_id: spanId3
       }])
     })
 
@@ -254,13 +246,13 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
+      console.log(44, trace.links)
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
         span_id: spanId2,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        traceID_high: '789',
-        flags: undefined
+        trace_id_high: '789'
       }])
     })
 

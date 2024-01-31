@@ -14,7 +14,7 @@ function spanLinkToString (formattedLink) {
   let encoded = `{`
   // zero padded hex is done in accordance with RFC
   for (const [key, value] of Object.entries(formattedLink)) {
-    if (key === 'traceID_high') continue
+    if (key === 'trace_id_high') continue
     else if (key === 'trace_id') {
       encoded += `"${key}":${value.toString(16).padStart(32, '0')},`
     } else if (key === 'span_id') {

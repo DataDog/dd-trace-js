@@ -130,9 +130,9 @@ class AgentEncoder {
       this._encodeId(bytes, link.trace_id)
       this._encodeString(bytes, 'span_id')
       this._encodeId(bytes, link.span_id)
-      if (link.traceID_high) {
-        this._encodeString(bytes, 'traceID_high')
-        this._encodeLong(bytes, link.traceID_high)
+      if (link.trace_id_high) {
+        this._encodeString(bytes, 'trace_id_high')
+        this._encodeLong(bytes, link.trace_id_high)
       }
       if (link.attributes) {
         this._encodeString(bytes, 'attributes')
