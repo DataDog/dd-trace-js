@@ -16,7 +16,7 @@ function initRequestNamespace (context) {
 }
 
 function getNamespaceFromContext (context) {
-  return context && context[DD_IAST_METRICS_NAMESPACE]
+  return context?.[DD_IAST_METRICS_NAMESPACE]
 }
 
 function finalizeRequestNamespace (context, rootSpan) {
@@ -53,18 +53,7 @@ function getTagsObject (tags) {
   }
 }
 
-class IastNamespace extends Namespace {
-  constructor () {
-    super('iast')
-  }
-
-  reset () {
-    this.metrics.clear()
-    this.distributions.clear()
-  }
-}
-
-const globalNamespace = new IastNamespace()
+const globalNamespace = new Namespace('iast')
 
 module.exports = {
   initRequestNamespace,

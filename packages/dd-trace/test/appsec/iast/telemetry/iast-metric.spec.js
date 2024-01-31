@@ -55,7 +55,7 @@ describe('Metrics', () => {
 
     metric.inc('tag1', context)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, { tagKey: 'tag1' })
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(1)
   })
 
@@ -64,7 +64,7 @@ describe('Metrics', () => {
 
     metric.add(42, 'tag1', context)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, { tagKey: 'tag1' })
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(42)
   })
 
@@ -74,8 +74,8 @@ describe('Metrics', () => {
     metric.add(42, ['tag1', 'tag2'], context)
 
     expect(reqNamespace.count).to.be.calledTwice
-    expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, { tagKey: 'tag1' }])
-    expect(reqNamespace.count.secondCall.args).to.be.deep.equals([metric.name, { tagKey: 'tag2' }])
+    expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])
+    expect(reqNamespace.count.secondCall.args).to.be.deep.equals([metric.name, ['tagKey:tag2']])
   })
 
   it('getExecutedMetric should return a metric depending on tag', () => {

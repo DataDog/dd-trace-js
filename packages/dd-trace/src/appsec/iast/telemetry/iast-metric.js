@@ -31,7 +31,7 @@ class IastMetric {
   }
 
   getTag (tagValue) {
-    return tagValue ? { [this.tagKey]: tagValue } : undefined
+    return tagValue ? [`${this.tagKey}:${tagValue}`] : undefined
   }
 
   addValue (value, tagValue, context) {
