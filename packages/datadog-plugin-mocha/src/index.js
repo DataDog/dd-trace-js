@@ -222,7 +222,6 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
       }
-      // TODO: inspect why this
       this.libraryConfig = null
       this.tracer._exporter.flush()
     })
