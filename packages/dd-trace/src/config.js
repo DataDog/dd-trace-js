@@ -838,7 +838,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
-    this._setBoolean(opts, 'tracing', options.tracing_enabled) // tracing_enabled?
+    this._setBoolean(opts, 'tracing', options.tracing_enabled)
   }
 
   _setBoolean (obj, name, value) {
