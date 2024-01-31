@@ -509,9 +509,7 @@ class Config {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_PEER_SERVICE_MAPPING,
       DD_TRACE_STARTUP_LOGS,
-      DD_TRACE_TELEMETRY_ENABLED,
       DD_TELEMETRY_LOG_COLLECTION_ENABLED,
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_DEBUG,
       DD_TELEMETRY_METRICS_ENABLED,
@@ -563,7 +561,7 @@ class Config {
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     this._setString(env, 'site', DD_SITE)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
-    if (DD_TRACE_AGENT_PORT) this._setValue(env, 'port', String(DD_TRACE_AGENT_PORT))
+    this._setString(env, 'port', String(DD_TRACE_AGENT_PORT))
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
@@ -574,7 +572,7 @@ class Config {
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
-    if (DD_DOGSTATSD_PORT) this._setString(env, 'dogstatsd.port', String(DD_DOGSTATSD_PORT))
+    this._setString(env, 'dogstatsd.port', String(DD_DOGSTATSD_PORT))
     this._setString(env, 'dogstatsd.hostname', DD_DOGSTATSD_HOSTNAME)
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
@@ -596,13 +594,6 @@ class Config {
       ))
     }
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
-    if (this._getTraceExporter() !== 'datadog') {
-      this._setBoolean(env, 'telemetry.enabled', coalesce(
-        DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-        !this._isInServerlessEnvirontment()
-      ))
-    }
     this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
@@ -820,13 +811,25 @@ class Config {
   _applyCalculated () {
     const calc = this._calculated = {}
 
-    if (process.env.DD_CIVISIBILITY_AGENTLESS_URL) {
-      this._setValue(calc, 'url', new URL(process.env.DD_CIVISIBILITY_AGENTLESS_URL))
+    const {
+      DD_CIVISIBILITY_AGENTLESS_URL,
+      DD_TRACE_TELEMETRY_ENABLED,
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED
+    } = process.env
+
+    if (DD_CIVISIBILITY_AGENTLESS_URL) {
+      this._setValue(calc, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     } else {
       this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this.options))
     }
     if (this._getTraceExporter() === 'datadog') {
       this._setBoolean(calc, 'telemetry.enabled', false)
+    } else {
+      this._setBoolean(calc, 'telemetry.enabled', coalesce(
+        DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+        !this._isInServerlessEnvirontment()
+      ))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setString(calc, 'spanComputePeerService', this._getSpanComputePeerService())
