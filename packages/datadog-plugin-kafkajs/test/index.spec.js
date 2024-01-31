@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -261,6 +262,37 @@ describe('Plugin', () => {
             runResult
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
+          })
+
+          it('should publish on afterStart channel', async () => {
+            const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+            })
+            afterStart.subscribe(spy)
+
+            await consumer.run({ eachMessage: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+
+            expect(spy).to.have.been.calledOnceWith({
+              testTopic,
+              message: messages[0]
+            }, afterStart.name)
+          })
+
+          it('should publish on beforeFinish channel', async () => {
+            const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+            })
+            beforeFinish.subscribe(spy)
+
+            await consumer.run({ eachMessage: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+
+            expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
           })
 
           withNamingSchema(
