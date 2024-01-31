@@ -78,22 +78,6 @@ describe('IastContextPlugin', () => {
 
       expect(startContext).to.be.calledOnce
     })
-
-    it('should call handler provided when event is published', () => {
-      const handler = sinon.stub()
-
-      plugin.startCtxOn(channelName, tag, handler)
-
-      const isRequestAcquired = true
-      const iastContext = {}
-      const store = {}
-      sinon.stub(plugin, 'startContext').returns({ isRequestAcquired, iastContext, store })
-
-      const message = {}
-      addSub.firstCall.args[1](message)
-
-      expect(handler).to.be.calledOnceWith(message, isRequestAcquired, iastContext, store)
-    })
   })
 
   describe('finishCtxOn', () => {
@@ -113,18 +97,6 @@ describe('IastContextPlugin', () => {
       addSub.firstCall.args[1]()
 
       expect(startContext).to.be.calledOnce
-    })
-
-    it('should call handler provided when event is published', () => {
-      const handler = sinon.stub()
-
-      plugin.finishCtxOn(channelName, handler)
-
-      sinon.stub(plugin, 'finishContext')
-
-      addSub.firstCall.args[1]()
-
-      expect(handler).to.be.calledOnce
     })
   })
 

@@ -10,13 +10,8 @@ const vulnerabilityReporter = require('../vulnerability-reporter')
 const { TagKey } = require('../telemetry/iast-metric')
 
 class IastContextPlugin extends IastPlugin {
-  startCtxOn (channelName, tag, handler) {
-    super.addSub(channelName, (message) => {
-      const { isRequestAcquired, iastContext, store } = this.startContext()
-      if (handler) {
-        handler(message, isRequestAcquired, iastContext, store)
-      }
-    })
+  startCtxOn (channelName, tag) {
+    super.addSub(channelName, (message) => this.startContext())
 
     this._getAndRegisterSubscription({
       channelName,
@@ -25,14 +20,8 @@ class IastContextPlugin extends IastPlugin {
     })
   }
 
-  finishCtxOn (channelName, handler) {
-    super.addSub(channelName, (message) => {
-      this.finishContext()
-
-      if (handler) {
-        handler(message)
-      }
-    })
+  finishCtxOn (channelName) {
+    super.addSub(channelName, (message) => this.finishContext())
   }
 
   getRootSpan (store, topContext) {
