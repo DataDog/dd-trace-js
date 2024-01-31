@@ -109,10 +109,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_TRACING_ENABLED = coalesce(
-      process.env.DD_TRACING_ENABLED,
-      true
-    )
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
