@@ -16,12 +16,12 @@ function spanLinkToString (formattedLink) {
   for (const [key, value] of Object.entries(formattedLink)) {
     if (key === 'trace_id_high') continue
     else if (key === 'trace_id') {
-      encoded += `"${key}":${value.toString(16).padStart(32, '0')},`
+      encoded += `"${key}":"${value.toString(16).padStart(32, '0')}",`
     } else if (key === 'span_id') {
-      encoded += `"${key}":${value.toString(16).padStart(16, '0')},`
+      encoded += `"${key}":"${value.toString(16).padStart(16, '0')}",`
     } else if (key === 'attributes') encoded += `"${key}":${JSON.stringify(value)},`
     else if (key === 'flags') {
-      encoded += value[0] === '0' ? `"${key}":${0},` : `"${key}":${1},`
+      encoded += value === 0 ? `"${key}":${0},` : `"${key}":${1},`
     } else encoded += `"${key}":"${value}",`
   }
 

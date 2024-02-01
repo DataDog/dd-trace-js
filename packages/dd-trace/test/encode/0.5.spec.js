@@ -73,10 +73,10 @@ describe('encode 0.5', () => {
       attributes: { foo: 'bar' },
       trace_id_high: '789',
       tracestate: ts,
-      flags: '1'
+      flags: (1 | 2147483648)
     }]
 
-    const encodedLink = '[{"trace_id":00000000000000001234abcd1234abcd,"span_id":1234abcd1234abcd,' +
+    const encodedLink = '[{"trace_id":"00000000000000001234abcd1234abcd","span_id":"1234abcd1234abcd",' +
     '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]'
 
     encoder.encode(data)
@@ -113,7 +113,7 @@ describe('encode 0.5', () => {
       span_id: id('1234abcd1234abcd')
     }]
 
-    const encodedLink = '[{"trace_id":00000000000000001234abcd1234abcd,"span_id":1234abcd1234abcd}]'
+    const encodedLink = '[{"trace_id":"00000000000000001234abcd1234abcd","span_id":"1234abcd1234abcd"}]'
 
     encoder.encode(data)
 
