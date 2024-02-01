@@ -1633,10 +1633,10 @@ crypto-randomuuid@^1.0.0:
 csstype@^3.0.2:
   version "3.1.2"
 
-dc-polyfill@^0.1.2:
-  version "0.1.2"
-  resolved "https://registry.npmjs.org/dc-polyfill/-/dc-polyfill-0.1.2.tgz"
-  integrity sha1-maLxIHWTF7mXaZmqcVGDocRLEyc=sha512-AJ4TWwkeOKF7+Wj301wdyK8L0D9SE8Fr7+eMein8UP8+Iyb1xuL3rXWXavsTEM1+vOqDLciYho4cpsvNY0RDGQ==
+dc-polyfill@^0.1.3:
+  version "0.1.3"
+  resolved "https://registry.npmjs.org/dc-polyfill/-/dc-polyfill-0.1.3.tgz"
+  integrity sha512-Wyk5n/5KUj3GfVKV2jtDbtChC/Ff9fjKsBcg4ZtYW1yQe3DXNHcGURvmoxhqQdfOQ9TwyMjnfyv1lyYcOkFkFA==
 
 debug@^2.6.9:
   version "2.6.9"
