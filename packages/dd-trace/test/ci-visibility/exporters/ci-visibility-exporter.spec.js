@@ -650,7 +650,7 @@ describe('CI Visibility Exporter', () => {
           done()
         })
       })
-      it('should not accept gzip if the exporter is gzip compatible', (done) => {
+      it('should not accept gzip if the exporter is gzip incompatible', (done) => {
         let requestHeaders = {}
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
