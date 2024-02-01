@@ -79,7 +79,7 @@ function extractSpanLinks (trace, span) {
         trace_id: context._traceId,
         span_id: context._spanId
       }
-      if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? '80000000' : '00000000'
+      if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
       if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
       if (context?._trace?.tags['_dd.p.tid']) {
         formattedLink.trace_id_high = parseInt(context._trace.tags['_dd.p.tid'], 16)
