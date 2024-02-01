@@ -41,7 +41,7 @@ describe('IAST metric namespaces', () => {
     expect(rootSpan.addTags).to.be.called
 
     const tag = rootSpan.addTags.getCalls()[0].args[0]
-    expect(tag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
+    expect(tag).to.have.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
     expect(tag[`${TAG_PREFIX}.${REQUEST_TAINTED}`]).to.be.eq(10)
 
     expect(context[DD_IAST_METRICS_NAMESPACE]).to.be.undefined
@@ -58,11 +58,11 @@ describe('IAST metric namespaces', () => {
 
     const calls = rootSpan.addTags.getCalls()
     const reqTaintedTag = calls[0].args[0]
-    expect(reqTaintedTag).to.has.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
+    expect(reqTaintedTag).to.have.property(`${TAG_PREFIX}.${REQUEST_TAINTED}`)
     expect(reqTaintedTag[`${TAG_PREFIX}.${REQUEST_TAINTED}`]).to.be.eq(15)
 
     const execSinkTag = calls[1].args[0]
-    expect(execSinkTag).to.has.property(`${TAG_PREFIX}.${EXECUTED_SINK}`)
+    expect(execSinkTag).to.have.property(`${TAG_PREFIX}.${EXECUTED_SINK}`)
     expect(execSinkTag[`${TAG_PREFIX}.${EXECUTED_SINK}`]).to.be.eq(1)
   })
 
