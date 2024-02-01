@@ -42,7 +42,7 @@ class MochaPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+      if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
       const testSuiteSpan = this._testSuites.get(suiteFile)
@@ -98,7 +98,7 @@ class MochaPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      if (this.itrConfig?.isCodeCoverageEnabled) {
+      if (this.libraryConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
       if (itrCorrelationId) {
@@ -192,7 +192,7 @@ class MochaPlugin extends CiPlugin {
       error
     }) => {
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -222,7 +222,7 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
       }
-      this.itrConfig = null
+      this.libraryConfig = null
       this.tracer._exporter.flush()
     })
   }

@@ -285,23 +285,23 @@ versions.forEach(version => {
             })
             it('can report code coverage', (done) => {
               let testOutput
-              const itrConfigRequestPromise = receiver.payloadReceived(
+              const libraryConfigRequestPromise = receiver.payloadReceived(
                 ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
               )
               const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
               const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
 
               Promise.all([
-                itrConfigRequestPromise,
+                libraryConfigRequestPromise,
                 codeCovRequestPromise,
                 eventsRequestPromise
-              ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
+              ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
                 const [coveragePayload] = codeCovRequest.payload
                 if (isAgentless) {
-                  assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
+                  assert.propertyVal(libraryConfigRequest.headers, 'dd-api-key', '1')
                   assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
                 } else {
-                  assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
+                  assert.notProperty(libraryConfigRequest.headers, 'dd-api-key')
                   assert.notProperty(codeCovRequest.headers, 'dd-api-key', '1')
                 }
 
