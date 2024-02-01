@@ -16,7 +16,7 @@ const testSuiteStartCh = channel('ci:cucumber:test-suite:start')
 const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
 const testSuiteCodeCoverageCh = channel('ci:cucumber:test-suite:code-coverage')
 
-const itrConfigurationCh = channel('ci:cucumber:itr-configuration')
+const libraryConfigurationCh = channel('ci:cucumber:library-configuration')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
@@ -272,7 +272,7 @@ addHook({
     })
 
     asyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone })
     })
 
     await configPromise

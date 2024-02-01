@@ -119,14 +119,14 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getItrConfig (tracer, testConfiguration) {
+function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
 
-    tracer._tracer._exporter.getItrConfiguration(testConfiguration, (err, itrConfig) => {
-      resolve({ err, itrConfig })
+    tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
+      resolve({ err, libraryConfig })
     })
   })
 }
@@ -136,7 +136,7 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
     return Promise.resolve({ skippableTests: [] })
   }
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
     tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
@@ -284,12 +284,12 @@ module.exports = (on, config) => {
   }
 
   on('before:run', (details) => {
-    return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
+    return getLibraryConfiguration(tracer, testConfiguration).then(({ err, libraryConfig }) => {
       if (err) {
         log.error(err)
       } else {
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
       }
 
       return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration)
