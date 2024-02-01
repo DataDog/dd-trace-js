@@ -81,7 +81,9 @@ function extractSpanLinks (trace, span) {
       }
       if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? '80000000' : '00000000'
       if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-      if (context?._trace?.tags['_dd.p.tid']) formattedLink.trace_id_high = parseInt(context._trace.tags['_dd.p.tid'])
+      if (context?._trace?.tags['_dd.p.tid']) {
+        formattedLink.trace_id_high = parseInt(context._trace.tags['_dd.p.tid'], 16)
+      }
       if (attributes && Object.keys(attributes).length > 0) formattedLink.attributes = attributes
       links.push(formattedLink)
     }

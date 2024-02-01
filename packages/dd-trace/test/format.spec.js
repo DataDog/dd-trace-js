@@ -233,7 +233,7 @@ describe('format', () => {
         finished: [],
         origin: 'synthetics',
         tags: {
-          '_dd.p.tid': '789'
+          '_dd.p.tid': '0000000000000010'
         }
       }
 
@@ -251,7 +251,7 @@ describe('format', () => {
         span_id: spanId2,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        trace_id_high: 789
+        trace_id_high: 16
       }])
     })
 
