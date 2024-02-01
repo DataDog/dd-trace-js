@@ -2,6 +2,7 @@
 
 const csiMethods = [
   { src: 'concat' },
+  { src: 'parse' },
   { src: 'plusOperator', operator: true },
   { src: 'random' },
   { src: 'replace' },
@@ -10,8 +11,7 @@ const csiMethods = [
   { src: 'substring' },
   { src: 'trim' },
   { src: 'trimEnd' },
-  { src: 'trimStart', dst: 'trim' },
-  { src: 'parse' }
+  { src: 'trimStart', dst: 'trim' }
 ]
 
 module.exports = {
