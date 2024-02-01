@@ -37,7 +37,7 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const jestLibraryConfigurationCh = channel('ci:jest:library-configuration')
+const libraryConfigurationCh = channel('ci:jest:library-configuration')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -234,12 +234,12 @@ function cliWrapper (cli, jestVersion) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
-    if (!jestLibraryConfigurationCh.hasSubscribers) {
+    if (!libraryConfigurationCh.hasSubscribers) {
       return runCLI.apply(this, arguments)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestLibraryConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone })
     })
 
     try {
