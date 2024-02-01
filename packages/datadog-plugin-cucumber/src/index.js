@@ -47,7 +47,7 @@ class CucumberPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites
     }) => {
-      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
@@ -71,7 +71,7 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
 
-      this.itrConfig = null
+      this.libraryConfig = null
       this.tracer._exporter.flush()
     })
 
@@ -102,7 +102,7 @@ class CucumberPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      if (this.itrConfig?.isCodeCoverageEnabled) {
+      if (this.libraryConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
     })
@@ -114,7 +114,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.itrConfig?.isCodeCoverageEnabled) {
+      if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
       if (!coverageFiles.length) {
