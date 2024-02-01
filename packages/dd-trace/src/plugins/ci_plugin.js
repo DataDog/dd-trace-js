@@ -36,17 +36,17 @@ module.exports = class CiPlugin extends Plugin {
 
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
-      if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+      if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
+      this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
           log.error(`Intelligent Test Runner configuration could not be fetched. ${err.message}`)
         } else {
-          this.itrConfig = itrConfig
+          this.libraryConfig = libraryConfig
         }
-        onDone({ err, itrConfig })
+        onDone({ err, libraryConfig })
       })
     })
 
