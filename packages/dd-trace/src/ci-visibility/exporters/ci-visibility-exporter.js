@@ -5,6 +5,7 @@ const URL = require('url').URL
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
+const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 
@@ -79,6 +80,13 @@ class CiVisibilityExporter extends AgentInfoExporter {
       this._libraryConfig?.isSuitesSkippingEnabled)
   }
 
+  shouldRequestKnownTests () {
+    return !!(
+      this._config.isEarlyFlakeDetectionEnabled &&
+      this._itrConfig?.isEarlyFlakeDetectionEnabled
+    )
+  }
+
   shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
@@ -115,6 +123,29 @@ class CiVisibilityExporter extends AgentInfoExporter {
     })
   }
 
+  getKnownTests (testConfiguration, callback) {
+    if (!this.shouldRequestKnownTests()) {
+      return callback(null, undefined)
+    }
+    this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
+      if (!canUseCiVisProtocol) {
+        return callback(
+          new Error('Known tests can not be requested because CI Visibility protocol can not be used')
+        )
+      }
+      const configuration = {
+        url: this._getApiUrl(),
+        env: this._config.env,
+        service: this._config.service,
+        isEvpProxy: !!this._isUsingEvpProxy,
+        evpProxyPrefix: this.evpProxyPrefix,
+        custom: getTestConfigurationTags(this._config.tags),
+        ...testConfiguration
+      }
+      getKnownTestsRequest(configuration, callback)
+    })
+  }
+
   /**
    * We can't request library configuration until we know whether we can use the
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
@@ -144,7 +175,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._libraryConfig = libraryConfig
+        this._libraryConfig = this.getConfiguration(libraryConfig)
 
         if (err) {
           callback(err, {})
@@ -155,8 +186,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
               return callback(gitUploadError, {})
             }
             getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-              this._libraryConfig = finalLibraryConfig
-              callback(err, finalLibraryConfig)
+              this._libraryConfig = this.getConfiguration(finalLibraryConfig)
+              callback(err, this._libraryConfig)
             })
           })
         } else {
@@ -164,6 +195,24 @@ class CiVisibilityExporter extends AgentInfoExporter {
         }
       })
     })
+  }
+
+  // Takes into account potential kill switches
+  getConfiguration (remoteConfiguration) {
+    const {
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isItrEnabled,
+      requireGit,
+      isEarlyFlakeDetectionEnabled
+    } = remoteConfiguration
+    return {
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isItrEnabled,
+      requireGit,
+      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled
+    }
   }
 
   sendGitMetadata (repositoryUrl) {

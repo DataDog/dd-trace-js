@@ -545,4 +545,82 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('getKnownTests', () => {
+    context('if early flake detection is disabled', () => {
+      it('should resolve immediately to undefined', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200)
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: false })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          expect(err).to.be.null
+          expect(knownTests).to.eql(undefined)
+          expect(scope.isDone()).not.to.be.true
+          done()
+        })
+      })
+    })
+    context('if early flake detection is enabled but can not use CI Visibility protocol', () => {
+      it('should raise an error', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200)
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
+        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          expect(err.message).to.include(
+            'Known tests can not be requested because CI Visibility protocol can not be used'
+          )
+          expect(scope.isDone()).not.to.be.true
+          done()
+        })
+      })
+    })
+    context('if early flake detection is enabled and can use CI Vis Protocol', () => {
+      it('should request known tests', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                test_full_names: ['suite1.test1', 'suite2.test2']
+              }
+            }
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          expect(err).to.be.null
+          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+      it('should return an error if the request fails', (done) => {
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(500)
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          expect(err).not.to.be.null
+          expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+    })
+  })
 })

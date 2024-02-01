@@ -94,7 +94,14 @@ function getLibraryConfiguration ({
           }
         } = JSON.parse(res)
 
-        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
+        const settings = {
+          isCodeCoverageEnabled,
+          isSuitesSkippingEnabled,
+          isItrEnabled,
+          requireGit,
+          // TODO: change to backend response
+          isEarlyFlakeDetectionEnabled: false
+        }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
