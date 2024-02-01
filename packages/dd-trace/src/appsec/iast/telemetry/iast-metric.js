@@ -24,8 +24,6 @@ class IastMetric {
     this.name = name
     this.scope = scope
     this.tagKey = tagKey
-
-    this.metricsByNamespace = new WeakMap()
   }
 
   getNamespace (context) {
@@ -52,7 +50,7 @@ class IastMetric {
 
   getMetric (context, tags, type = 'count') {
     const namespace = this.getNamespace(context)
-    const metrics = this.getMetricsInNamespace(namespace)
+    const metrics = namespace.getIastMetrics(this.name)
 
     let metric = metrics.get(tags)
     if (!metric) {
@@ -66,7 +64,9 @@ class IastMetric {
   // tags should be an array of [tagKey:tagValue]
   add (context, value, tags) {
     if (Array.isArray(tags)) {
-      tags.forEach(tag => this.getMetric(context, tag).inc(value))
+      for (const tag of tags) {
+        this.getMetric(context, tag).inc(value)
+      }
     } else {
       this.getMetric(context, tags).inc(value)
     }

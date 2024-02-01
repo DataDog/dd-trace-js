@@ -1,7 +1,7 @@
 'use strict'
 
 const log = require('../../../log')
-const { Namespace, manager } = require('../../../telemetry/metrics')
+const { Namespace } = require('../../../telemetry/metrics')
 const { addMetricsToSpan, filterTags } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
 
@@ -10,7 +10,7 @@ const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 function initRequestNamespace (context) {
   if (!context) return
 
-  const namespace = new Namespace('iast')
+  const namespace = new IastNamespace('iast')
   context[DD_IAST_METRICS_NAMESPACE] = namespace
   return namespace
 }
@@ -53,7 +53,24 @@ function getTagsObject (tags) {
   }
 }
 
-const globalNamespace = manager.namespace('iast')
+class IastNamespace extends Namespace {
+  constructor (namespace) {
+    super(namespace)
+
+    this.iastMetrics = new Map()
+  }
+
+  getIastMetrics (name) {
+    let metrics = this.iastMetrics.get(name)
+    if (!metrics) {
+      metrics = new Map()
+      this.iastMetrics.set(name, metrics)
+    }
+    return metrics
+  }
+}
+
+const globalNamespace = new IastNamespace('iast')
 
 module.exports = {
   initRequestNamespace,

@@ -69,6 +69,7 @@ describe('Telemetry', () => {
 
         expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
+        expect(telemetryMetrics.manager.set).to.not.be.called
       })
 
       it('should enable telemetry if telemetry.metrics is true', () => {
@@ -79,6 +80,7 @@ describe('Telemetry', () => {
 
         expect(iastTelemetry.enabled).to.be.true
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.INFORMATION)
+        expect(telemetryMetrics.manager.set).to.be.calledOnce
       })
 
       it('should not enable telemetry if telemetry.metrics is false', () => {
@@ -89,6 +91,7 @@ describe('Telemetry', () => {
 
         expect(iastTelemetry.enabled).to.be.false
         expect(iastTelemetry.verbosity).to.be.equal(Verbosity.OFF)
+        expect(telemetryMetrics.manager.set).to.not.be.called
       })
     })
 
@@ -98,6 +101,7 @@ describe('Telemetry', () => {
 
         iastTelemetry.stop()
         expect(iastTelemetry.enabled).to.be.false
+        expect(telemetryMetrics.manager.delete).to.be.calledOnce
       })
     })
 

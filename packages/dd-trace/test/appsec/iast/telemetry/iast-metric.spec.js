@@ -18,8 +18,10 @@ describe('Metrics', () => {
     inc = sinon.stub()
     const metricMock = { inc }
 
+    const metrics = new Map()
     reqNamespace = {
-      count: sinon.stub().returns(metricMock)
+      count: sinon.stub().returns(metricMock),
+      getIastMetrics: () => metrics
     }
 
     const metric = proxyquire('../../../../src/appsec/iast/telemetry/iast-metric', {
@@ -37,16 +39,16 @@ describe('Metrics', () => {
 
     metric.inc(context)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, undefined)
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
     expect(inc).to.be.calledOnceWith(1)
   })
 
   it('should add by 42 the metric value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(context, 42, undefined)
+    metric.add(context, 42)
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, undefined)
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
     expect(inc).to.be.calledOnceWith(42)
   })
 

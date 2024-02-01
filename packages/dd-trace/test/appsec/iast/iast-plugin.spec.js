@@ -232,8 +232,6 @@ describe('IAST Plugin', () => {
     })
 
     describe('addSub', () => {
-      const context = undefined
-
       it('should call _getTelemetryHandler with correct metrics', () => {
         const wrapHandler = sinon.stub()
         iastPlugin._wrapHandler = wrapHandler
