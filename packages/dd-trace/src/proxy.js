@@ -61,10 +61,8 @@ class Tracer extends NoopProxy {
             config.configure(conf.lib_config, true)
           }
 
-          if (config.tracing) {
-            this._tracer.configure(config)
-            this._pluginManager.configure(config)
-          }
+          this._tracer.configure(config)
+          this._pluginManager.configure(config)
         })
       }
 

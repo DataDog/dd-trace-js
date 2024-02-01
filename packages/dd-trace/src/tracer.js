@@ -27,146 +27,132 @@ class DatadogTracer extends Tracer {
   }
 
   configure ({ env, sampler }) {
-    if (this._tracingEnabled) this._prioritySampler.configure(env, sampler)
+    this._prioritySampler.configure(env, sampler)
   }
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags, span, payloadSize = 0) {
-    if (this._tracingEnabled) {
-      const ctx = this._dataStreamsProcessor.setCheckpoint(
-        edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
-      )
-      DataStreamsContext.setDataStreamsContext(ctx)
-      return ctx
-    }
+    const ctx = this._dataStreamsProcessor.setCheckpoint(
+      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
+    )
+    DataStreamsContext.setDataStreamsContext(ctx)
+    return ctx
   }
 
   decodeDataStreamsContext (data) {
-    if (this._tracingEnabled) {
-      const ctx = decodePathwayContext(data)
-      // we erase the previous context everytime we decode a new one
-      DataStreamsContext.setDataStreamsContext(ctx)
-      return ctx
-    }
+    const ctx = decodePathwayContext(data)
+    // we erase the previous context everytime we decode a new one
+    DataStreamsContext.setDataStreamsContext(ctx)
+    return ctx
   }
 
   setOffset (offsetData) {
-    if (this._tracingEnabled) return this._dataStreamsProcessor.setOffset(offsetData)
+    return this._dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {
-    if (this._tracingEnabled) {
-      options = Object.assign({
-        childOf: this.scope().active()
-      }, options)
+    options = Object.assign({
+      childOf: this.scope().active()
+    }, options)
 
-      if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
-        return fn(null, () => {})
+    if (!options.childOf && options.orphanable === false && DD_MAJOR < 4) {
+      return fn(null, () => {})
+    }
+
+    const span = this.startSpan(name, options)
+
+    addTags(span, options)
+
+    try {
+      if (this._tracingEnabled && fn.length > 1) {
+        return this.scope().activate(span, () => fn(span, err => {
+          addError(span, err)
+          span.finish()
+        }))
       }
 
-      const span = this.startSpan(name, options)
+      const result = this._tracingEnabled ? this.scope().activate(span, () => fn(span)) : undefined
 
-      addTags(span, options)
-
-      try {
-        if (fn.length > 1) {
-          return this.scope().activate(span, () => fn(span, err => {
+      if (result && typeof result.then === 'function') {
+        return result.then(
+          value => {
+            span.finish()
+            return value
+          },
+          err => {
             addError(span, err)
             span.finish()
-          }))
-        }
-
-        const result = this.scope().activate(span, () => fn(span))
-
-        if (result && typeof result.then === 'function') {
-          return result.then(
-            value => {
-              span.finish()
-              return value
-            },
-            err => {
-              addError(span, err)
-              span.finish()
-              throw err
-            }
-          )
-        } else {
-          span.finish()
-        }
-
-        return result
-      } catch (e) {
-        addError(span, e)
+            throw err
+          }
+        )
+      } else {
         span.finish()
-        throw e
       }
+
+      return result
+    } catch (e) {
+      addError(span, e)
+      span.finish()
+      throw e
     }
   }
 
   wrap (name, options, fn) {
     const tracer = this
 
-    if (this._tracingEnabled) {
-      return function () {
-        const store = storage.getStore()
+    return function () {
+      const store = storage.getStore()
 
-        if (store && store.noop) return fn.apply(this, arguments)
+      if (store && store.noop) return fn.apply(this, arguments)
 
-        let optionsObj = options
-        if (typeof optionsObj === 'function' && typeof fn === 'function') {
-          optionsObj = optionsObj.apply(this, arguments)
-        }
+      let optionsObj = options
+      if (typeof optionsObj === 'function' && typeof fn === 'function') {
+        optionsObj = optionsObj.apply(this, arguments)
+      }
 
-        if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
+      if (optionsObj && optionsObj.orphanable === false && !tracer.scope().active() && DD_MAJOR < 4) {
+        return fn.apply(this, arguments)
+      }
+
+      const lastArgId = arguments.length - 1
+      const cb = arguments[lastArgId]
+
+      if (typeof cb === 'function') {
+        const scopeBoundCb = tracer.scope().bind(cb)
+        return tracer.trace(name, optionsObj, (span, done) => {
+          arguments[lastArgId] = function (err) {
+            done(err)
+            return scopeBoundCb.apply(this, arguments)
+          }
+
           return fn.apply(this, arguments)
-        }
-
-        const lastArgId = arguments.length - 1
-        const cb = arguments[lastArgId]
-
-        if (typeof cb === 'function') {
-          const scopeBoundCb = tracer.scope().bind(cb)
-          return tracer.trace(name, optionsObj, (span, done) => {
-            arguments[lastArgId] = function (err) {
-              done(err)
-              return scopeBoundCb.apply(this, arguments)
-            }
-
-            return fn.apply(this, arguments)
-          })
-        } else {
-          return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
-        }
+        })
+      } else {
+        return tracer.trace(name, optionsObj, () => fn.apply(this, arguments))
       }
     }
   }
 
   setUrl (url) {
-    if (this._tracingEnabled) {
-      this._exporter.setUrl(url)
-      this._dataStreamsProcessor.setUrl(url)
-    }
+    this._exporter.setUrl(url)
+    this._dataStreamsProcessor.setUrl(url)
   }
 
   scope () {
-    if (this._tracingEnabled) {
-      return this._scope
-    }
+    return this._scope
   }
 
   getRumData () {
-    if (this._tracingEnabled) {
-      if (!this._enableGetRumData) {
-        return ''
-      }
-      const span = this.scope().active().context()
-      const traceId = span.toTraceId()
-      const traceTime = Date.now()
-      return `\
+    if (!this._enableGetRumData) {
+      return ''
+    }
+    const span = this.scope().active().context()
+    const traceId = span.toTraceId()
+    const traceTime = Date.now()
+    return `\
 <meta name="dd-trace-id" content="${traceId}" />\
 <meta name="dd-trace-time" content="${traceTime}" />`
-    }
   }
 }
 
