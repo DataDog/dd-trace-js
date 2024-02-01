@@ -9,9 +9,9 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
   getErrorTypeFromStatusCode
-} = require('../../ci-visibility/telemetry')
+} = require('../telemetry')
 
-function getItrConfiguration ({
+function getLibraryConfiguration ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -117,4 +117,4 @@ function getItrConfiguration ({
   })
 }
 
-module.exports = { getItrConfiguration }
+module.exports = { getLibraryConfiguration }
