@@ -5,6 +5,7 @@ const tags = require('../../../ext/tags')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
+const Uint64 = require('int64-buffer').Uint64BE
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -80,7 +81,7 @@ function extractSpanLinks (trace, span) {
       }
       if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? '80000000' : '00000000'
       if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-      if (context?._trace?.tags['_dd.p.tid']) formattedLink.trace_id_high = context._trace.tags['_dd.p.tid']
+      if (context?._trace?.tags['_dd.p.tid']) formattedLink.trace_id_high = parseInt(context._trace.tags['_dd.p.tid'])
       if (attributes && Object.keys(attributes).length > 0) formattedLink.attributes = attributes
       links.push(formattedLink)
     }

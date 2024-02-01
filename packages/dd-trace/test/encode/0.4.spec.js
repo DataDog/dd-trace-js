@@ -191,7 +191,7 @@ describe('encode', () => {
       trace_id: id('1234abcd1234abcd'),
       span_id: id('1234abcd1234abcd'),
       attributes: { foo: 'bar' },
-      trace_id_high: '789',
+      trace_id_high: parseInt('0000000000000010', 16),
       tracestate: ts,
       flags: '0'
     }]
@@ -201,7 +201,6 @@ describe('encode', () => {
     const decoded = msgpack.decode(buffer, { codec })
     const trace = decoded[0]
     const spanLinks = trace[0].span_links
-
     expect(trace).to.be.instanceof(Array)
     expect(trace[0]).to.be.instanceof(Object)
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
@@ -210,7 +209,7 @@ describe('encode', () => {
     expect(spanLinks[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(spanLinks[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(spanLinks[0].attributes).to.deep.equal({ foo: 'bar' })
-    expect(spanLinks[0].trace_id_high.toString(10)).to.equal('789')
+    expect(spanLinks[0].trace_id_high.toString(10)).to.equal('16')
     expect(spanLinks[0].tracestate).to.deep.equal(ts)
     expect(spanLinks[0].flags.toString(10)).to.equal('0')
     expect(trace[0].start.toNumber()).to.equal(123)

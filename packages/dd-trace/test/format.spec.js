@@ -246,13 +246,12 @@ describe('format', () => {
       }
       span._links = [link]
       trace = format(span)
-      console.log(44, trace.links)
       expect(trace.links).to.deep.equal([{
         trace_id: spanId2,
         span_id: spanId2,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        trace_id_high: '789'
+        trace_id_high: 789
       }])
     })
 
