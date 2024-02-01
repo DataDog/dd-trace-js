@@ -169,7 +169,8 @@ describe('CI Visibility Exporter', () => {
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
-            isSuitesSkippingEnabled: true
+            isSuitesSkippingEnabled: true,
+            isEarlyFlakeDetectionEnabled: false
           })
           expect(err).not.to.exist
           expect(scope.isDone()).to.be.true
@@ -574,7 +575,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
-        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err) => {
           expect(err.message).to.include(
             'Known tests can not be requested because CI Visibility protocol can not be used'
@@ -599,7 +600,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
@@ -614,7 +615,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        ciVisibilityExporter._itrConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err) => {
           expect(err).not.to.be.null
           expect(scope.isDone()).to.be.true

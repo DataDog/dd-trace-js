@@ -83,7 +83,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   shouldRequestKnownTests () {
     return !!(
       this._config.isEarlyFlakeDetectionEnabled &&
-      this._itrConfig?.isEarlyFlakeDetectionEnabled
+      this._libraryConfig?.isEarlyFlakeDetectionEnabled
     )
   }
 
@@ -125,7 +125,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   getKnownTests (testConfiguration, callback) {
     if (!this.shouldRequestKnownTests()) {
-      return callback(null, undefined)
+      return callback(null)
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
@@ -199,6 +199,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   // Takes into account potential kill switches
   getConfiguration (remoteConfiguration) {
+    if (!remoteConfiguration) {
+      return {}
+    }
     const {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
