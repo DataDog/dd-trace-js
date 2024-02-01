@@ -4,6 +4,7 @@ require('../../../../dd-trace/test/setup/tap')
 
 const cp = require('child_process')
 const fs = require('fs')
+const zlib = require('zlib')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const nock = require('nock')
@@ -619,6 +620,60 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getKnownTests({}, (err) => {
           expect(err).not.to.be.null
           expect(scope.isDone()).to.be.true
+          done()
+        })
+      })
+      it('should accept gzip if the exporter is gzip compatible', (done) => {
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return zlib.gzipSync(JSON.stringify({
+              data: { attributes: { test_full_names: ['suite1.test1', 'suite2.test2'] } }
+            }))
+          }, {
+            'content-encoding': 'gzip'
+          })
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+        ciVisibilityExporter._isGzipCompatible = true
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          expect(err).to.be.null
+          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).to.equal('gzip')
+          done()
+        })
+      })
+      it('should not accept gzip if the exporter is gzip compatible', (done) => {
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return JSON.stringify({
+              data: { attributes: { test_full_names: ['suite1.test1', 'suite2.test2'] } }
+            })
+          })
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port, isEarlyFlakeDetectionEnabled: true })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
+
+        ciVisibilityExporter._isGzipCompatible = false
+
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          expect(err).to.be.null
+          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
           done()
         })
       })

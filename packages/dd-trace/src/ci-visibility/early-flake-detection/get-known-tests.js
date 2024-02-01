@@ -6,6 +6,7 @@ function getKnownTests ({
   url,
   isEvpProxy,
   evpProxyPrefix,
+  isGzipCompatible,
   env,
   service,
   repositoryUrl,
@@ -21,11 +22,14 @@ function getKnownTests ({
     path: '/api/v2/ci/libraries/tests',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'accept-encoding': 'gzip'
+      'Content-Type': 'application/json'
     },
     timeout: 20000,
     url
+  }
+
+  if (isGzipCompatible) {
+    options.headers['accept-encoding'] = 'gzip'
   }
 
   if (isEvpProxy) {
