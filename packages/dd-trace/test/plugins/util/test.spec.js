@@ -79,9 +79,13 @@ describe('getCodeOwnersFileEntries', () => {
   })
   it('returns null if CODEOWNERS can not be found', () => {
     const rootDir = path.join(__dirname, '__not_found__')
+    // We have to change the working directory,
+    // otherwise it will find the CODEOWNERS file in the root of dd-trace-js
+    const oldCwd = process.cwd()
+    process.chdir(path.join(__dirname))
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
-
     expect(codeOwnersFileEntries).to.equal(null)
+    process.chdir(oldCwd)
   })
   it('tries both input rootDir and process.cwd()', () => {
     const rootDir = path.join(__dirname, '__not_found__')
