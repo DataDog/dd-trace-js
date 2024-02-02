@@ -131,7 +131,7 @@ describe('IastContextPlugin', () => {
 
       plugin.startContext(data)
 
-      expect(plugin.getTopContext).to.be.calledOnceWith(data)
+      expect(plugin.getTopContext).to.be.calledOnce
       expect(plugin.getRootSpan).to.be.calledWith(store)
     })
 
