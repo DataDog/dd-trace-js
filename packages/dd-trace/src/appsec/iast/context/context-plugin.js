@@ -24,7 +24,7 @@ class IastContextPlugin extends IastPlugin {
     super.addSub(channelName, (message) => this.finishContext())
   }
 
-  getRootSpan (store, topContext) {
+  getRootSpan (store) {
     return store?.span
   }
 
@@ -34,10 +34,6 @@ class IastContextPlugin extends IastPlugin {
 
   newIastContext (rootSpan, data) {
     return { rootSpan }
-  }
-
-  canCreateContext (data) {
-    return true
   }
 
   addIastEnabledTag (isRequestAcquired, rootSpan) {
@@ -51,24 +47,19 @@ class IastContextPlugin extends IastPlugin {
   startContext (data) {
     let isRequestAcquired = false
     let iastContext
-    let store
 
-    if (this.canCreateContext(data)) {
-      store = storage.getStore()
-      if (store) {
-        const topContext = this.getTopContext(data)
-        if (topContext) {
-          const rootSpan = this.getRootSpan(store, topContext)
+    const store = storage.getStore()
+    if (store) {
+      const topContext = this.getTopContext(data)
+      const rootSpan = this.getRootSpan(store)
 
-          isRequestAcquired = overheadController.acquireRequest(rootSpan)
-          if (isRequestAcquired) {
-            iastContext = iastContextFunctions.saveIastContext(store, topContext, this.newIastContext(rootSpan, data))
-            createTransaction(rootSpan.context().toSpanId(), iastContext)
-            overheadController.initializeRequestContext(iastContext)
-          }
-          this.addIastEnabledTag(isRequestAcquired, rootSpan)
-        }
+      isRequestAcquired = overheadController.acquireRequest(rootSpan)
+      if (isRequestAcquired) {
+        iastContext = iastContextFunctions.saveIastContext(store, topContext, this.newIastContext(rootSpan))
+        createTransaction(rootSpan.context().toSpanId(), iastContext)
+        overheadController.initializeRequestContext(iastContext)
       }
+      this.addIastEnabledTag(isRequestAcquired, rootSpan)
     }
 
     return {

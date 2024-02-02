@@ -126,15 +126,13 @@ describe('IastContextPlugin', () => {
     it('should obtain needed info from data before starting iast context', () => {
       const data = {}
 
-      sinon.stub(plugin, 'canCreateContext').returns(true)
       sinon.stub(plugin, 'getTopContext').returns(topContext)
       sinon.stub(plugin, 'getRootSpan').returns(rootSpan)
 
       plugin.startContext(data)
 
-      expect(plugin.canCreateContext).to.be.calledOnceWith(data)
       expect(plugin.getTopContext).to.be.calledOnceWith(data)
-      expect(plugin.getRootSpan).to.be.calledWith(store, topContext)
+      expect(plugin.getRootSpan).to.be.calledWith(store)
     })
 
     it('should call overheadController before starting iast context', () => {
@@ -181,7 +179,7 @@ describe('IastContextPlugin', () => {
         const data = {}
         plugin.startContext(data)
 
-        expect(newIastContext).to.be.calledOnceWith(rootSpan, data)
+        expect(newIastContext).to.be.calledOnceWith(rootSpan)
         expect(saveIastContext).to.be.calledOnceWith(store, topContext, context)
       })
 
