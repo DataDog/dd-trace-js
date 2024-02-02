@@ -38,7 +38,7 @@ const mochaCommonOptions = {
 
 const jestCommonOptions = {
   name: 'jest',
-  dependencies: ['jest', 'chai', 'jest-jasmine2'],
+  dependencies: ['jest', 'chai@v4', 'jest-jasmine2'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
     'ci-visibility/test/sum.js',
@@ -51,7 +51,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.js',
-    dependencies: ['mocha', 'chai', 'nyc'],
+    dependencies: ['mocha', 'chai@v4', 'nyc'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -64,7 +64,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.mjs',
-    dependencies: ['mocha', 'chai', 'nyc', '@istanbuljs/esm-loader-hook'],
+    dependencies: ['mocha', 'chai@v4', 'nyc', '@istanbuljs/esm-loader-hook'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.mjs',
       'ci-visibility/test/sum.js',
@@ -446,6 +446,51 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+      it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false
+        })
+
+        receiver.assertPayloadReceived(({ payload }) => {
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.notProperty(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT)
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DISABLE_CODE_COVERAGE: '1'
+            },
+            stdio: 'inherit'
+          }
+        )
+      })
+      it('reports total code coverage % even when ITR is disabled', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false
+        })
+
+        receiver.assertPayloadReceived(({ payload }) => {
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+      })
     }
 
     it('can run tests and report spans', (done) => {
@@ -640,18 +685,18 @@ testFrameworks.forEach(({
       })
       it('can report code coverage', (done) => {
         let testOutput
-        const itrConfigRequestPromise = receiver.payloadReceived(
+        const libraryConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/libraries/tests/services/setting'
         )
         const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
         const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
 
         Promise.all([
-          itrConfigRequestPromise,
+          libraryConfigRequestPromise,
           codeCovRequestPromise,
           eventsRequestPromise
-        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
-          assert.propertyVal(itrConfigRequest.headers, 'dd-api-key', '1')
+        ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
+          assert.propertyVal(libraryConfigRequest.headers, 'dd-api-key', '1')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.propertyVal(codeCovRequest.headers, 'dd-api-key', '1')
@@ -703,6 +748,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -720,6 +766,7 @@ testFrameworks.forEach(({
           assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testSession.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
           assert.propertyVal(testSession.meta, TEST_ITR_SKIPPING_ENABLED, 'false')
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
           const testModule = payload.events.find(event => event.type === 'test_module_end').content
           assert.propertyVal(testModule.meta, TEST_ITR_TESTS_SKIPPED, 'false')
           assert.propertyVal(testModule.meta, TEST_CODE_COVERAGE_ENABLED, 'false')
@@ -879,6 +926,7 @@ testFrameworks.forEach(({
       })
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })
@@ -936,7 +984,7 @@ testFrameworks.forEach(({
             const events = payloads.flatMap(({ payload }) => payload.events)
             const suites = events.filter(event => event.type === 'test_suite_end')
 
-            assert.equal(suites.length, 2)
+            assert.equal(suites.length, 3)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             const testModule = events.find(event => event.type === 'test_module_end').content
@@ -945,12 +993,19 @@ testFrameworks.forEach(({
             assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
             assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
 
+            const passedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-run.js'
+            )
             const skippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
             )
             const forcedToRunSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
             )
+            // It does not mark as unskippable if there is no docblock
+            assert.propertyVal(passedSuite.content.meta, TEST_STATUS, 'pass')
+            assert.notProperty(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+            assert.notProperty(passedSuite.content.meta, TEST_ITR_FORCED_RUN)
 
             assert.propertyVal(skippedSuite.content.meta, TEST_STATUS, 'skip')
             assert.notProperty(skippedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
@@ -964,6 +1019,7 @@ testFrameworks.forEach(({
         let TESTS_TO_RUN = 'unskippable-test/test-'
         if (name === 'mocha') {
           TESTS_TO_RUN = JSON.stringify([
+            './unskippable-test/test-to-run.js',
             './unskippable-test/test-to-skip.js',
             './unskippable-test/test-unskippable.js'
           ])
@@ -1002,7 +1058,7 @@ testFrameworks.forEach(({
             const events = payloads.flatMap(({ payload }) => payload.events)
             const suites = events.filter(event => event.type === 'test_suite_end')
 
-            assert.equal(suites.length, 2)
+            assert.equal(suites.length, 3)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             const testModule = events.find(event => event.type === 'test_module_end').content
@@ -1011,12 +1067,20 @@ testFrameworks.forEach(({
             assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
             assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
 
+            const passedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-run.js'
+            )
             const skippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-to-skip.js'
             ).content
             const nonSkippedSuite = suites.find(
               event => event.content.resource === 'test_suite.ci-visibility/unskippable-test/test-unskippable.js'
             ).content
+
+            // It does not mark as unskippable if there is no docblock
+            assert.propertyVal(passedSuite.content.meta, TEST_STATUS, 'pass')
+            assert.notProperty(passedSuite.content.meta, TEST_ITR_UNSKIPPABLE)
+            assert.notProperty(passedSuite.content.meta, TEST_ITR_FORCED_RUN)
 
             assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
 
@@ -1029,6 +1093,7 @@ testFrameworks.forEach(({
         let TESTS_TO_RUN = 'unskippable-test/test-'
         if (name === 'mocha') {
           TESTS_TO_RUN = JSON.stringify([
+            './unskippable-test/test-to-run.js',
             './unskippable-test/test-to-skip.js',
             './unskippable-test/test-unskippable.js'
           ])
@@ -1072,6 +1137,31 @@ testFrameworks.forEach(({
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           }, 25000)
 
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('reports itr_correlation_id in test suites', (done) => {
+        const itrCorrelationId = '4321'
+        receiver.setItrCorrelationId(itrCorrelationId)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            testSuites.forEach(testSuite => {
+              assert.equal(testSuite.itr_correlation_id, itrCorrelationId)
+            })
+          }, 25000)
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
@@ -1204,19 +1294,19 @@ testFrameworks.forEach(({
       })
       it('can report code coverage', (done) => {
         let testOutput
-        const itrConfigRequestPromise = receiver.payloadReceived(
+        const libraryConfigRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
         )
         const codeCovRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcov')
         const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle')
 
         Promise.all([
-          itrConfigRequestPromise,
+          libraryConfigRequestPromise,
           codeCovRequestPromise,
           eventsRequestPromise
-        ]).then(([itrConfigRequest, codeCovRequest, eventsRequest]) => {
-          assert.notProperty(itrConfigRequest.headers, 'dd-api-key')
-          assert.propertyVal(itrConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
+        ]).then(([libraryConfigRequest, codeCovRequest, eventsRequest]) => {
+          assert.notProperty(libraryConfigRequest.headers, 'dd-api-key')
+          assert.propertyVal(libraryConfigRequest.headers, 'x-datadog-evp-subdomain', 'api')
 
           const [coveragePayload] = codeCovRequest.payload
           assert.notProperty(codeCovRequest.headers, 'dd-api-key')
@@ -1268,6 +1358,7 @@ testFrameworks.forEach(({
       })
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
+          itr_enabled: false,
           code_coverage: false,
           tests_skipping: false
         })
@@ -1282,6 +1373,8 @@ testFrameworks.forEach(({
           assert.propertyVal(headers, 'x-datadog-evp-subdomain', 'citestcycle-intake')
           const eventTypes = payload.events.map(event => event.type)
           assert.includeMembers(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.exists(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         childProcess = exec(
@@ -1479,6 +1572,7 @@ testFrameworks.forEach(({
         }, ({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle').then(() => done()).catch(done)
 
         receiver.setSettings({
+          itr_enabled: true,
           code_coverage: true,
           tests_skipping: false
         })
@@ -1519,6 +1613,31 @@ testFrameworks.forEach(({
             assert.propertyVal(testModule.meta, TEST_ITR_SKIPPING_ENABLED, 'true')
           }, 25000)
 
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: getCiVisEvpProxyConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('reports itr_correlation_id in test suites', (done) => {
+        const itrCorrelationId = '4321'
+        receiver.setItrCorrelationId(itrCorrelationId)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            testSuites.forEach(testSuite => {
+              assert.equal(testSuite.itr_correlation_id, itrCorrelationId)
+            })
+          }, 25000)
         childProcess = exec(
           runTestsWithCoverageCommand,
           {

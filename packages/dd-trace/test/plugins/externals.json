@@ -59,6 +59,16 @@
       "versions": ["1.20.1"]
     }
   ],
+  "mquery": [
+    {
+      "name": "mquery",
+      "versions": [">=5.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["5", ">=6"]
+    }
+  ],
   "fastify": [
     {
       "name": "fastify",
@@ -97,6 +107,42 @@
     {
       "name": "graphql",
       "versions": ["^15.2.0"]
+    }
+  ],
+  "apollo-server-core": [
+    {
+      "name": "fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "apollo-server-fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "apollo-server-express",
+      "versions": [">=3"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^15.2.0"]
+    }
+  ],
+  "apollo-server": [
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "@apollo/server",
+      "versions": [">=4"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^16.6.0"]
     }
   ],
   "grpc": [

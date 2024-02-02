@@ -23,12 +23,37 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
+const {
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_ITR_FORCED_TO_RUN,
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_ITR_UNSKIPPABLE,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  incrementCountMetric,
+  distributionMetric
+} = require('../../dd-trace/src/ci-visibility/telemetry')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
+const {
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_PROVIDER_NAME
+} = require('../../dd-trace/src/plugins/util/tags')
+const {
+  OS_VERSION,
+  OS_PLATFORM,
+  OS_ARCHITECTURE,
+  RUNTIME_NAME,
+  RUNTIME_VERSION
+} = require('../../dd-trace/src/plugins/util/env')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -94,14 +119,14 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getItrConfig (tracer, testConfiguration) {
+function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
 
-    tracer._tracer._exporter.getItrConfiguration(testConfiguration, (err, itrConfig) => {
-      resolve({ err, itrConfig })
+    tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
+      resolve({ err, libraryConfig })
     })
   })
 }
@@ -111,13 +136,14 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
     return Promise.resolve({ skippableTests: [] })
   }
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests) => {
+    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
       resolve({
         err,
-        skippableTests
+        skippableTests,
+        correlationId
       })
     })
   })
@@ -152,15 +178,18 @@ module.exports = (on, config) => {
   const testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   const {
-    'git.repository_url': repositoryUrl,
-    'git.commit.sha': sha,
-    'os.version': osVersion,
-    'os.platform': osPlatform,
-    'os.architecture': osArchitecture,
-    'runtime.name': runtimeName,
-    'runtime.version': runtimeVersion,
-    'git.branch': branch
+    [GIT_REPOSITORY_URL]: repositoryUrl,
+    [GIT_COMMIT_SHA]: sha,
+    [OS_VERSION]: osVersion,
+    [OS_PLATFORM]: osPlatform,
+    [OS_ARCHITECTURE]: osArchitecture,
+    [RUNTIME_NAME]: runtimeName,
+    [RUNTIME_VERSION]: runtimeVersion,
+    [GIT_BRANCH]: branch,
+    [CI_PROVIDER_NAME]: ciProviderName
   } = testEnvironmentMetadata
+
+  const isUnsupportedCIProvider = !ciProviderName
 
   const finishedTestsByFile = {}
 
@@ -188,9 +217,19 @@ module.exports = (on, config) => {
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
+  let itrCorrelationId = ''
   const unskippableSuites = []
   let hasForcedToRunSuites = false
   let hasUnskippableSuites = false
+
+  function ciVisEvent (name, testLevel, tags = {}) {
+    incrementCountMetric(name, {
+      testLevel,
+      testFramework: 'cypress',
+      isUnsupportedCIProvider,
+      ...tags
+    })
+  }
 
   function getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
     const testSuiteTags = {
@@ -220,13 +259,17 @@ module.exports = (on, config) => {
 
     if (isUnskippable) {
       hasUnskippableSuites = true
+      incrementCountMetric(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
     }
 
     if (isForcedToRun) {
       hasForcedToRunSuites = true
+      incrementCountMetric(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
     }
+
+    ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
     return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
@@ -241,56 +284,62 @@ module.exports = (on, config) => {
   }
 
   on('before:run', (details) => {
-    return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
+    return getLibraryConfiguration(tracer, testConfiguration).then(({ err, libraryConfig }) => {
       if (err) {
         log.error(err)
       } else {
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
       }
 
-      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
-        if (err) {
-          log.error(err)
-        } else {
-          testsToSkip = skippableTests || []
-        }
-
-        // `details.specs` are test files
-        details.specs.forEach(({ absolute, relative }) => {
-          const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-          if (isUnskippableSuite) {
-            unskippableSuites.push(relative)
+      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration)
+        .then(({ err, skippableTests, correlationId }) => {
+          if (err) {
+            log.error(err)
+          } else {
+            testsToSkip = skippableTests || []
+            itrCorrelationId = correlationId
           }
+
+          // `details.specs` are test files
+          details.specs.forEach(({ absolute, relative }) => {
+            const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+            if (isUnskippableSuite) {
+              unskippableSuites.push(relative)
+            }
+          })
+
+          const childOf = getTestParentSpan(tracer)
+          rootDir = getRootDir(details)
+
+          command = getCypressCommand(details)
+          frameworkVersion = getCypressVersion(details)
+
+          const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+          const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+
+          testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
+            childOf,
+            tags: {
+              [COMPONENT]: TEST_FRAMEWORK_NAME,
+              ...testEnvironmentMetadata,
+              ...testSessionSpanMetadata
+            }
+          })
+          ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
+          testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+            childOf: testSessionSpan,
+            tags: {
+              [COMPONENT]: TEST_FRAMEWORK_NAME,
+              ...testEnvironmentMetadata,
+              ...testModuleSpanMetadata
+            }
+          })
+          ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
+
+          return details
         })
-
-        const childOf = getTestParentSpan(tracer)
-        rootDir = getRootDir(details)
-
-        command = getCypressCommand(details)
-        frameworkVersion = getCypressVersion(details)
-
-        const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-        const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-
-        testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
-          childOf,
-          tags: {
-            [COMPONENT]: TEST_FRAMEWORK_NAME,
-            ...testEnvironmentMetadata,
-            ...testSessionSpanMetadata
-          }
-        })
-        testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-          childOf: testSessionSpan,
-          tags: {
-            [COMPONENT]: TEST_FRAMEWORK_NAME,
-            ...testEnvironmentMetadata,
-            ...testModuleSpanMetadata
-          }
-        })
-        return details
-      })
     })
   })
   on('after:spec', (spec, { tests, stats }) => {
@@ -314,6 +363,9 @@ module.exports = (on, config) => {
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
       }
+      if (itrCorrelationId) {
+        skippedTestSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
       skippedTestSpan.finish()
     })
 
@@ -335,6 +387,9 @@ module.exports = (on, config) => {
         finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
         finishedTest.testSpan.setTag('error', latestError)
       }
+      if (itrCorrelationId) {
+        finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })
 
@@ -347,6 +402,7 @@ module.exports = (on, config) => {
       }
       testSuiteSpan.finish()
       testSuiteSpan = null
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
   })
 
@@ -371,7 +427,9 @@ module.exports = (on, config) => {
       )
 
       testModuleSpan.finish()
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       testSessionSpan.finish()
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
 
       finishAllTraceSpans(testSessionSpan)
     }
@@ -383,10 +441,12 @@ module.exports = (on, config) => {
       }
       if (exporter.flush) {
         exporter.flush(() => {
+          appClosingTelemetry()
           resolve(null)
         })
       } else if (exporter._writer) {
         exporter._writer.flush(() => {
+          appClosingTelemetry()
           resolve(null)
         })
       }
@@ -406,6 +466,7 @@ module.exports = (on, config) => {
           ...testSuiteSpanMetadata
         }
       })
+      ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       return null
     },
     'dd:beforeEach': (test) => {
@@ -435,6 +496,10 @@ module.exports = (on, config) => {
         if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
           const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, rootDir))
+          if (!relativeCoverageFiles.length) {
+            incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
+          distributionMetric(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
           const { _traceId, _spanId } = testSuiteSpan.context()
           const formattedCoverage = {
             sessionId: _traceId,
@@ -470,6 +535,7 @@ module.exports = (on, config) => {
         // test spans are finished at after:spec
       }
       activeSpan = null
+      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
       return null
     },
     'dd:addTags': (tags) => {

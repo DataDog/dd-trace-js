@@ -1,10 +1,20 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SETTINGS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
+  getErrorTypeFromStatusCode
+} = require('../telemetry')
 
-function getItrConfiguration ({
+function getLibraryConfiguration ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   env,
   service,
   repositoryUrl,
@@ -29,7 +39,7 @@ function getItrConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
@@ -62,33 +72,44 @@ function getItrConfiguration ({
     }
   })
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
+
+  const startTime = Date.now()
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { errorType })
       done(err)
     } else {
       try {
         const {
           data: {
-            attributes
+            attributes: {
+              code_coverage: isCodeCoverageEnabled,
+              tests_skipping: isSuitesSkippingEnabled,
+              itr_enabled: isItrEnabled,
+              require_git: requireGit
+            }
           }
         } = JSON.parse(res)
 
-        let isCodeCoverageEnabled = attributes.code_coverage
-        let isSuitesSkippingEnabled = attributes.tests_skipping
-        const { require_git: requireGit } = attributes
+        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
 
-        log.debug(() => `Remote settings: ${JSON.stringify({ isCodeCoverageEnabled, isSuitesSkippingEnabled })}`)
+        log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
-          isCodeCoverageEnabled = true
+          settings.isCodeCoverageEnabled = true
           log.debug(() => 'Dangerously set code coverage to true')
         }
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
-          isSuitesSkippingEnabled = true
+          settings.isSuitesSkippingEnabled = true
           log.debug(() => 'Dangerously set test skipping to true')
         }
 
-        done(null, { isCodeCoverageEnabled, isSuitesSkippingEnabled, requireGit })
+        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
+
+        done(null, settings)
       } catch (err) {
         done(err)
       }
@@ -96,4 +117,4 @@ function getItrConfiguration ({
   })
 }
 
-module.exports = { getItrConfiguration }
+module.exports = { getLibraryConfiguration }

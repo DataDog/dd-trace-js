@@ -8,8 +8,8 @@ const dataBuffer = Buffer.from(JSON.stringify({
   from: 'Aaron Stuyvenberg'
 }))
 
-function getTestData (kinesis, input, cb) {
-  getTestRecord(kinesis, input, (err, data) => {
+function getTestData (kinesis, streamName, input, cb) {
+  getTestRecord(kinesis, streamName, input, (err, data) => {
     if (err) return cb(err)
 
     const dataBuffer = Buffer.from(data.Records[0].Data).toString()
@@ -22,12 +22,12 @@ function getTestData (kinesis, input, cb) {
   })
 }
 
-function getTestRecord (kinesis, { ShardId, SequenceNumber }, cb) {
+function getTestRecord (kinesis, streamName, { ShardId, SequenceNumber }, cb) {
   kinesis.getShardIterator({
     ShardId,
     ShardIteratorType: 'AT_SEQUENCE_NUMBER',
     StartingSequenceNumber: SequenceNumber,
-    StreamName: 'MyStream'
+    StreamName: streamName
   }, (err, { ShardIterator } = {}) => {
     if (err) return cb(err)
 
@@ -37,32 +37,34 @@ function getTestRecord (kinesis, { ShardId, SequenceNumber }, cb) {
   })
 }
 
-function putTestRecord (kinesis, data, cb) {
+function putTestRecord (kinesis, streamName, data, cb) {
   kinesis.putRecord({
     PartitionKey: id().toString(),
     Data: data,
-    StreamName: 'MyStream'
+    StreamName: streamName
   }, cb)
 }
 
-function waitForActiveStream (kinesis, cb) {
+function waitForActiveStream (kinesis, streamName, cb) {
   kinesis.describeStream({
-    StreamName: 'MyStream'
+    StreamName: streamName
   }, (err, data) => {
-    if (err) return waitForActiveStream(kinesis, cb)
+    if (err) {
+      return waitForActiveStream(kinesis, streamName, cb)
+    }
     if (data.StreamDescription.StreamStatus !== 'ACTIVE') {
-      return waitForActiveStream(kinesis, cb)
+      return waitForActiveStream(kinesis, streamName, cb)
     }
 
     cb()
   })
 }
 
-function waitForDeletedStream (kinesis, cb) {
+function waitForDeletedStream (kinesis, streamName, cb) {
   kinesis.describeStream({
-    StreamName: 'MyStream'
+    StreamName: streamName
   }, (err, data) => {
-    if (!err) return waitForDeletedStream(kinesis, cb)
+    if (!err) return waitForDeletedStream(kinesis, streamName, cb)
     cb()
   })
 }

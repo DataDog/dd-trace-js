@@ -10,6 +10,7 @@ const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
+const spanleak = require('./spanleak')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -35,6 +36,19 @@ class Tracer extends NoopProxy {
         setInterval(() => {
           this.dogstatsd.flush()
         }, 10 * 1000).unref()
+
+        process.once('beforeExit', () => {
+          this.dogstatsd.flush()
+        })
+      }
+
+      if (config.spanLeakDebug > 0) {
+        if (config.spanLeakDebug === spanleak.MODES.LOG) {
+          spanleak.enableLogging()
+        } else if (config.spanLeakDebug === spanleak.MODES.GC_AND_LOG) {
+          spanleak.enableGarbageCollection()
+        }
+        spanleak.startScrubber()
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {

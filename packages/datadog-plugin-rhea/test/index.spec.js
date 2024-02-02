@@ -8,8 +8,10 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let tracer
 
-  describe('rhea', () => {
-    before(() => agent.load('rhea'))
+  describe('rhea', function () {
+    before(() => {
+      agent.load('rhea')
+    })
     after(() => agent.close({ ritmReset: false }))
 
     withVersions('rhea', 'rhea', version => {
@@ -44,6 +46,84 @@ describe('Plugin', () => {
             })
             connection.open_sender('amq.topic')
             connection.open_receiver('amq.topic')
+          })
+
+          const expectedProducerHash = '15837999642856815456'
+          const expectedConsumerHash = '18403970455318595370'
+
+          it('Should set pathway hash tag on a span when producing', (done) => {
+            let produceSpanMeta = {}
+            agent.use(traces => {
+              const span = traces[0][0]
+
+              if (span.meta['span.kind'] === 'producer') {
+                produceSpanMeta = span.meta
+              }
+
+              expect(produceSpanMeta).to.include({
+                'pathway.hash': expectedProducerHash
+              })
+            }, { timeoutMs: 2000 }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+          })
+
+          it('Should set pathway hash tag on a span when consuming', (done) => {
+            context.sender.send({ body: 'hello from DSM' })
+
+            container.once('message', msg => {
+              let consumeSpanMeta = {}
+              agent.use(traces => {
+                const span = traces[0][0]
+
+                if (span.meta['span.kind'] === 'consumer') {
+                  consumeSpanMeta = span.meta
+                }
+
+                expect(consumeSpanMeta).to.include({
+                  'pathway.hash': expectedConsumerHash
+                })
+              }, { timeoutMs: 2000 }).then(done, done)
+            })
+          })
+
+          it('Should emit DSM stats to the agent when sending a message', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 1 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              }, { timeoutMs: 2000 })
+              expect(statsPointsReceived).to.be.at.least(1)
+              expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+          })
+
+          it('Should emit DSM stats to the agent when receiving a message', done => {
+            agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              // we should have 2 dsm stats points
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              expect(statsPointsReceived).to.be.at.least(2)
+              expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            }, { timeoutMs: 2000 }).then(done, done)
+
+            context.sender.send({ body: 'hello from DSM' })
+            container.once('message', msg => {
+              msg.delivery.accept()
+            })
           })
 
           describe('sending a message', () => {
@@ -203,6 +283,51 @@ describe('Plugin', () => {
               .then(done, done)
             context.sender.send({ body: 'Hello World!' })
           })
+        })
+      })
+
+      describe('connection cleanup', () => {
+        let container
+        let context
+        let spy
+        let rheaInstumentation
+
+        beforeEach(() => agent.reload('rhea'))
+
+        beforeEach(done => {
+          rheaInstumentation = require('../../datadog-instrumentations/src/rhea')
+          spy = sinon.spy(rheaInstumentation, 'beforeFinish')
+          container = require(`../../../versions/rhea@${version}`).get()
+
+          container.once('sendable', _context => {
+            context = _context
+            done()
+          })
+          const connection = container.connect({
+            username: 'admin',
+            password: 'admin',
+            host: 'localhost',
+            port: 5673
+          })
+          connection.open_sender('amq.topic')
+          connection.open_receiver('amq.topic')
+        })
+
+        it('should automatically instrument', (done) => {
+          agent.use(traces => {
+            const beforeFinishContext = rheaInstumentation.contexts.get(spy.firstCall.firstArg)
+            expect(spy).to.have.been.called
+            expect(beforeFinishContext).to.have.property('connection')
+            expect(beforeFinishContext.connection).to.have.property(rheaInstumentation.inFlightDeliveries)
+            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries]).to.be.instanceof(Set)
+            expect(beforeFinishContext.connection[rheaInstumentation.inFlightDeliveries].size).to.equal(0)
+          })
+            .then(done, done)
+          context.sender.send({ body: 'Hello World!' })
+        })
+
+        afterEach(() => {
+          spy.restore()
         })
       })
 

@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 require('./core')
 
 const os = require('os')
@@ -12,6 +14,8 @@ const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
+const mochaVersion = require('mocha/package.json').version
+console.log('MOCHA VERSION', mochaVersion)
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -84,23 +88,25 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it(`should conform to the naming schema`, done => {
-          agent
-            .use(traces => {
-              const span = selectSpan(traces)
-              const expectedOpName = typeof opName === 'function'
-                ? opName()
-                : opName
-              const expectedServiceName = typeof serviceName === 'function'
-                ? serviceName()
-                : serviceName
+        it(`should conform to the naming schema`, () => {
+          return new Promise((resolve, reject) => {
+            agent
+              .use(traces => {
+                const span = selectSpan(traces)
+                const expectedOpName = typeof opName === 'function'
+                  ? opName()
+                  : opName
+                const expectedServiceName = typeof serviceName === 'function'
+                  ? serviceName()
+                  : serviceName
 
-              expect(span).to.have.property('name', expectedOpName)
-              expect(span).to.have.property('service', expectedServiceName)
-            })
-            .then(done)
-            .catch(done)
-          spanProducerFn(done)
+                expect(span).to.have.property('name', expectedOpName)
+                expect(span).to.have.property('service', expectedServiceName)
+              })
+              .then(resolve)
+              .catch(reject)
+            spanProducerFn(reject)
+          })
         })
       })
     })
@@ -244,6 +250,7 @@ function withVersions (plugin, modules, range, cb) {
           })
 
           after(() => {
+            console.log('MOCHA AFTER', moduleVersionDidFail, v.version)
             if (moduleVersionDidFail) {
               if (!packageVersionFailures[moduleName]) {
                 packageVersionFailures[moduleName] = new Set()

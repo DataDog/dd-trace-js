@@ -29,9 +29,10 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'accept-encoding',
   'accept-language',
   'host',
-  'user-agent',
   'forwarded',
+  'user-agent',
   'via',
+  'x-amzn-trace-id',
 
   ...ipHeaderList,
   ...contentHeaderList
@@ -151,10 +152,8 @@ function reportSchemas (derivatives) {
 
   const tags = {}
   for (const [address, value] of Object.entries(derivatives)) {
-    if (address.startsWith('_dd.appsec.s.req')) {
-      const gzippedValue = zlib.gzipSync(JSON.stringify(value))
-      tags[address] = gzippedValue.toString('base64')
-    }
+    const gzippedValue = zlib.gzipSync(JSON.stringify(value))
+    tags[address] = gzippedValue.toString('base64')
   }
 
   rootSpan.addTags(tags)

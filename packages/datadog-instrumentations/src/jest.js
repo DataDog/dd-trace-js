@@ -37,13 +37,14 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
+const libraryConfigurationCh = channel('ci:jest:library-configuration')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
 let skippableSuites = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
+let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
 let hasUnskippableSuites = false
@@ -233,19 +234,19 @@ function cliWrapper (cli, jestVersion) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
-    if (!jestItrConfigurationCh.hasSubscribers) {
+    if (!libraryConfigurationCh.hasSubscribers) {
       return runCLI.apply(this, arguments)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestItrConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone })
     })
 
     try {
-      const { err, itrConfig } = await configurationPromise
+      const { err, libraryConfig } = await configurationPromise
       if (!err) {
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
       }
     } catch (err) {
       log.error(err)
@@ -289,11 +290,14 @@ function cliWrapper (cli, jestVersion) {
     } = result
 
     let testCodeCoverageLinesTotal
-    try {
-      const { pct, total } = coverageMap.getCoverageSummary().lines
-      testCodeCoverageLinesTotal = total !== 0 ? pct : 0
-    } catch (e) {
-      // ignore errors
+
+    if (isUserCodeCoverageEnabled) {
+      try {
+        const { pct, total } = coverageMap.getCoverageSummary().lines
+        testCodeCoverageLinesTotal = total !== 0 ? pct : 0
+      } catch (e) {
+        // ignore errors
+      }
     }
     let status, error
 
@@ -399,7 +403,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           const coverageFiles = getCoveredFilenamesFromCoverage(environment.global.__coverage__)
             .map(filename => getTestSuitePath(filename, environment.rootDir))
           asyncResource.runInAsyncScope(() => {
-            testSuiteCodeCoverageCh.publish([...coverageFiles, environment.testSuite])
+            testSuiteCodeCoverageCh.publish({ coverageFiles, testSuite: environment.testSuite })
           })
         }
         testSuiteFinishCh.publish({ status, errorMessage })
@@ -435,6 +439,8 @@ function configureTestEnvironment (readConfigsResult) {
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
   })
+
+  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 
   if (isCodeCoverageEnabled) {
     const globalConfig = {
@@ -489,6 +495,9 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddForcedToRun,
+      _ddUnskippable,
+      _ddItrCorrelationId,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

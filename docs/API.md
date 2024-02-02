@@ -8,7 +8,7 @@ The module exported by this library is an instance of the [Tracer](./interfaces/
 
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
-APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
+APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
 
 Built-in plugins can be configured individually:
 
@@ -192,7 +192,7 @@ Errors passed to the callback will automatically be added to the span.
 
 <h4 id="promise">Promise</h4>
 
-For promises, the span will be finished afer the promise has been either resolved or rejected.
+For promises, the span will be finished after the promise has been either resolved or rejected.
 
 ```javascript
 function handle () {
@@ -260,7 +260,7 @@ This method returns the active span from the current scope.
 <h4>scope.activate(span, fn)</h4>
 
 This method activates the provided span in a new scope available in the
-provided function. Any asynchronous context created from whithin that function
+provided function. Any asynchronous context created from within that function
 will also have the same scope.
 
 ```javascript
@@ -342,7 +342,7 @@ const opentracing = require('opentracing')
 opentracing.initGlobalTracer(tracer)
 ```
 
-The following tags are available to override Datadog specific options:
+The following tags are available to override Datadog-specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.
@@ -359,7 +359,7 @@ const tracerProvider = new tracer.TracerProvider()
 tracerProvider.register()
 ```
 
-The following attributes are available to override Datadog specific options:
+The following attributes are available to override Datadog-specific options:
 
 * `service.name`: The service name to be used for this span. The service name from the tracer will be used if this is not provided.
 * `resource.name`: The resource name to be used for this span. The operation name will be used if this is not provided.

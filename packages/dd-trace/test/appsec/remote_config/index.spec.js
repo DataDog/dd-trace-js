@@ -9,6 +9,7 @@ let RemoteConfigManager
 let RuleManager
 let appsec
 let remoteConfig
+let apiSecuritySampler
 
 describe('Remote Config index', () => {
   beforeEach(() => {
@@ -30,6 +31,11 @@ describe('Remote Config index', () => {
       updateWafFromRC: sinon.stub()
     }
 
+    apiSecuritySampler = {
+      configure: sinon.stub(),
+      setRequestSampling: sinon.stub()
+    }
+
     appsec = {
       enable: sinon.spy(),
       disable: sinon.spy()
@@ -38,6 +44,7 @@ describe('Remote Config index', () => {
     remoteConfig = proxyquire('../src/appsec/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
+      '../api_security_sampler': apiSecuritySampler,
       '..': appsec
     })
   })
@@ -49,19 +56,52 @@ describe('Remote Config index', () => {
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.have.been.calledOnceWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities).to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.on).to.have.been.calledWith('ASM_FEATURES')
+      expect(rc.on.firstCall.args[1]).to.be.a('function')
+    })
+
+    it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
+      config.appsec = { enabled: true }
+
+      remoteConfig.enable(config)
+
+      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
+      expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
       expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
       expect(rc.on.firstCall.args[1]).to.be.a('function')
     })
 
-    it('should not listen to remote config when appsec is explicitly configured', () => {
+    it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
       config.appsec = { enabled: false }
 
       remoteConfig.enable(config)
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
-      expect(rc.updateCapabilities).to.not.have.been.called
+      expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION, true)
       expect(rc.on).to.not.have.been.called
+    })
+
+    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=undefined and appSecurity.enabled=true', () => {
+      config.appsec = { enabled: undefined, apiSecurity: { enabled: true } }
+
+      remoteConfig.enable(config)
+
+      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
+    })
+
+    it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=true and appSecurity.enabled=true', () => {
+      config.appsec = { enabled: true, apiSecurity: { enabled: true } }
+
+      remoteConfig.enable(config)
+
+      expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
+      expect(rc.updateCapabilities)
+        .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     })
 
     describe('ASM_FEATURES remote config listener', () => {
@@ -100,6 +140,106 @@ describe('Remote Config index', () => {
         expect(appsec.disable).to.not.have.been.called
       })
     })
+
+    describe('API Security Request Sampling', () => {
+      describe('OneClick', () => {
+        let listener
+
+        beforeEach(() => {
+          config = {
+            appsec: {
+              enabled: undefined,
+              apiSecurity: {
+                requestSampling: 0.1
+              }
+            }
+          }
+
+          remoteConfig.enable(config)
+
+          listener = rc.on.firstCall.args[1]
+        })
+
+        it('should update apiSecuritySampler config', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: 0.5
+            }
+          })
+
+          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+        })
+
+        it('should update apiSecuritySampler config and disable it', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: 0
+            }
+          })
+
+          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0)
+        })
+
+        it('should not update apiSecuritySampler config with values greater than 1', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: 5
+            }
+          })
+
+          expect(apiSecuritySampler.configure).to.not.be.called
+        })
+
+        it('should not update apiSecuritySampler config with values less than 0', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: -0.4
+            }
+          })
+
+          expect(apiSecuritySampler.configure).to.not.be.called
+        })
+
+        it('should not update apiSecuritySampler config with incorrect values', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: 'not_a_number'
+            }
+          })
+
+          expect(apiSecuritySampler.configure).to.not.be.called
+        })
+      })
+
+      describe('Enabled', () => {
+        let listener
+
+        beforeEach(() => {
+          config = {
+            appsec: {
+              enabled: true,
+              apiSecurity: {
+                requestSampling: 0.1
+              }
+            }
+          }
+
+          remoteConfig.enable(config)
+
+          listener = rc.on.firstCall.args[1]
+        })
+
+        it('should update config apiSecurity.requestSampling property value', () => {
+          listener('apply', {
+            api_security: {
+              request_sample_rate: 0.5
+            }
+          })
+
+          expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+        })
+      })
+    })
   })
 
   describe('enableWafUpdate', () => {
@@ -117,8 +257,8 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities).to.not.have.been.called
-        expect(rc.on).to.not.have.been.called
+        expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
+        expect(rc.on).to.have.been.called
       })
 
       it('should enable when using default rules', () => {
@@ -126,29 +266,27 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(8)
-        expect(rc.updateCapabilities.getCall(0))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(1))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(2))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities.getCall(3))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities.getCall(4))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(5))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities.getCall(6))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities.getCall(7))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-        expect(rc.on.callCount).to.be.equal(4)
-        expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
-        expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
-        expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.on).to.have.been.calledWith('ASM_DATA')
+        expect(rc.on).to.have.been.calledWith('ASM_DD')
+        expect(rc.on).to.have.been.calledWith('ASM')
+        expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec is manually enabled', () => {
@@ -156,29 +294,27 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(8)
-        expect(rc.updateCapabilities.getCall(0))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(1))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(2))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities.getCall(3))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities.getCall(4))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(5))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities.getCall(6))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities.getCall(7))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-        expect(rc.on.callCount).to.be.equal(4)
-        expect(rc.on.getCall(0)).to.have.been.calledWith('ASM_DATA')
-        expect(rc.on.getCall(1)).to.have.been.calledWith('ASM_DD')
-        expect(rc.on.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.on.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.on).to.have.been.calledWith('ASM_DATA')
+        expect(rc.on).to.have.been.calledWith('ASM_DD')
+        expect(rc.on).to.have.been.calledWith('ASM')
+        expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
       it('should activate if appsec enabled is not defined', () => {
@@ -186,24 +322,23 @@ describe('Remote Config index', () => {
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(9)
-        expect(rc.updateCapabilities.getCall(0))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-        expect(rc.updateCapabilities.getCall(1))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(2))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(3))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, true)
-        expect(rc.updateCapabilities.getCall(4))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
-        expect(rc.updateCapabilities.getCall(5))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
-        expect(rc.updateCapabilities.getCall(6))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
-        expect(rc.updateCapabilities.getCall(7))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
-        expect(rc.updateCapabilities.getCall(8))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
       })
     })
@@ -214,29 +349,27 @@ describe('Remote Config index', () => {
         rc.updateCapabilities.resetHistory()
         remoteConfig.disableWafUpdate()
 
-        expect(rc.updateCapabilities.callCount).to.be.equal(8)
-        expect(rc.updateCapabilities.getCall(0))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_IP_BLOCKING, false)
-        expect(rc.updateCapabilities.getCall(1))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_USER_BLOCKING, false)
-        expect(rc.updateCapabilities.getCall(2))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_DD_RULES, false)
-        expect(rc.updateCapabilities.getCall(3))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
-        expect(rc.updateCapabilities.getCall(4))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
-        expect(rc.updateCapabilities.getCall(5))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
-        expect(rc.updateCapabilities.getCall(6))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
-        expect(rc.updateCapabilities.getCall(7))
+        expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
 
-        expect(rc.off.callCount).to.be.equal(4)
-        expect(rc.off.getCall(0)).to.have.been.calledWith('ASM_DATA')
-        expect(rc.off.getCall(1)).to.have.been.calledWith('ASM_DD')
-        expect(rc.off.getCall(2)).to.have.been.calledWith('ASM')
-        expect(rc.off.getCall(3)).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
+        expect(rc.off).to.have.been.calledWith('ASM_DATA')
+        expect(rc.off).to.have.been.calledWith('ASM_DD')
+        expect(rc.off).to.have.been.calledWith('ASM')
+        expect(rc.off).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
     })
   })
