@@ -285,7 +285,6 @@ function stop () {
 
   telemetryStopChannel.publish(getTelemetryData())
 
-  console.log('hey hey hey hey hey')
   config = undefined
 }
 
