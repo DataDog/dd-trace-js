@@ -107,6 +107,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
         env: this._config.env,
         service: this._config.service,
         isEvpProxy: !!this._isUsingEvpProxy,
+        isGzipCompatible: this._isGzipCompatible,
         evpProxyPrefix: this.evpProxyPrefix,
         custom: getTestConfigurationTags(this._config.tags),
         ...testConfiguration
