@@ -26,6 +26,14 @@ const { version: ddTraceVersion } = require('../../../package.json')
 const testTimeout = 60000
 
 describe('Plugin', function () {
+  let oldTelemetryEnabledValue
+  before(() => {
+    oldTelemetryEnabledValue = process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+  })
+  after(() => {
+    process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = oldTelemetryEnabledValue
+  })
   let cypressExecutable
   let appPort
   let agentListenPort
