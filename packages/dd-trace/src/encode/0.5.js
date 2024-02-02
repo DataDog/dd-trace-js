@@ -25,7 +25,7 @@ function spanLinkToString (formattedLink) {
     } else if (key === 'attributes') encoded += `"${key}":${JSON.stringify(value)},`
     else if (key === 'flags') {
       encoded += value === 0 ? `"${key}":${0},` : `"${key}":${1},`
-    } else encoded += `"${key}":"${value}",`
+    } else if (key === 'tracestate') encoded += `"${key}":"${value}",`
   }
 
   return encoded.slice(0, -1) + '}' + ','
