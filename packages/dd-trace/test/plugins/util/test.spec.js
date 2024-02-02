@@ -79,9 +79,30 @@ describe('getCodeOwnersFileEntries', () => {
   })
   it('returns null if CODEOWNERS can not be found', () => {
     const rootDir = path.join(__dirname, '__not_found__')
+    // We have to change the working directory,
+    // otherwise it will find the CODEOWNERS file in the root of dd-trace-js
+    const oldCwd = process.cwd()
+    process.chdir(path.join(__dirname))
+    const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
+    expect(codeOwnersFileEntries).to.equal(null)
+    process.chdir(oldCwd)
+  })
+  it('tries both input rootDir and process.cwd()', () => {
+    const rootDir = path.join(__dirname, '__not_found__')
+    const oldCwd = process.cwd()
+
+    process.chdir(path.join(__dirname, '__test__'))
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
 
-    expect(codeOwnersFileEntries).to.equal(null)
+    expect(codeOwnersFileEntries[0]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/test.spec.js',
+      owners: ['@datadog-ci-app']
+    })
+    expect(codeOwnersFileEntries[1]).to.eql({
+      pattern: 'packages/dd-trace/test/plugins/util/*',
+      owners: ['@datadog-dd-trace-js']
+    })
+    process.chdir(oldCwd)
   })
 })
 
