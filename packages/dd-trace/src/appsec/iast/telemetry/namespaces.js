@@ -10,7 +10,7 @@ const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 function initRequestNamespace (context) {
   if (!context) return
 
-  const namespace = new IastNamespace('iast')
+  const namespace = new IastNamespace()
   context[DD_IAST_METRICS_NAMESPACE] = namespace
   return namespace
 }
@@ -54,8 +54,8 @@ function getTagsObject (tags) {
 }
 
 class IastNamespace extends Namespace {
-  constructor (namespace) {
-    super(namespace)
+  constructor () {
+    super('iast')
 
     this.iastMetrics = new Map()
   }
@@ -70,7 +70,7 @@ class IastNamespace extends Namespace {
   }
 }
 
-const globalNamespace = new IastNamespace('iast')
+const globalNamespace = new IastNamespace()
 
 module.exports = {
   initRequestNamespace,

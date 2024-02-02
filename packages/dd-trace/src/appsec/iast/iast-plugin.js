@@ -23,16 +23,14 @@ class IastPluginSubscription {
   constructor (moduleName, channelName, tagValue, tagKey = TagKey.VULNERABILITY_TYPE) {
     this.moduleName = moduleName
     this.channelName = channelName
-    this.tagValue = tagValue
-    this.tagKey = tagKey
 
     if (tagValue) {
       tagValue = !Array.isArray(tagValue) ? [tagValue] : tagValue
-      this.tags = tagValue.map(value => [`${this.tagKey}:${value.toLowerCase()}`])
+      this.tags = tagValue.map(value => [`${tagKey}:${value.toLowerCase()}`])
     }
 
-    this.executedMetric = getExecutedMetric(this.tagKey)
-    this.instrumentedMetric = getInstrumentedMetric(this.tagKey)
+    this.executedMetric = getExecutedMetric(tagKey)
+    this.instrumentedMetric = getInstrumentedMetric(tagKey)
     this.moduleInstrumented = false
   }
 
