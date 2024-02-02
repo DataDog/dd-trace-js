@@ -80,10 +80,10 @@ class IastPlugin extends Plugin {
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tag, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
     try {
       const result = handler()
-      iastTelemetry.isEnabled() && metric.inc(iastContext, tag)
+      iastTelemetry.isEnabled() && metric.inc(iastContext, tags)
       return result
     } catch (e) {
       iastLog.errorAndPublish(e)

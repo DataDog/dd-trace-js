@@ -382,17 +382,17 @@ describe('IAST Plugin', () => {
         const metric = {
           inc: sinon.spy()
         }
-        const tag = 'tag1'
+        const tags = 'tag1'
         const iastContext = {}
         iastPlugin._execHandlerAndIncMetric({
           handler,
           metric,
-          tag,
+          tags,
           iastContext
         })
 
         expect(handler).to.be.calledOnce
-        expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tag)
+        expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tags)
       })
     })
   })
