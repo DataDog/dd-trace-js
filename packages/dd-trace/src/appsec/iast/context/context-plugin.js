@@ -28,11 +28,11 @@ class IastContextPlugin extends IastPlugin {
     return store?.span
   }
 
-  getTopContext (data) {
+  getTopContext () {
     return {}
   }
 
-  newIastContext (rootSpan, data) {
+  newIastContext (rootSpan) {
     return { rootSpan }
   }
 
@@ -44,13 +44,13 @@ class IastContextPlugin extends IastPlugin {
     }
   }
 
-  startContext (data) {
+  startContext () {
     let isRequestAcquired = false
     let iastContext
 
     const store = storage.getStore()
     if (store) {
-      const topContext = this.getTopContext(data)
+      const topContext = this.getTopContext()
       const rootSpan = this.getRootSpan(store)
 
       isRequestAcquired = overheadController.acquireRequest(rootSpan)
@@ -69,10 +69,10 @@ class IastContextPlugin extends IastPlugin {
     }
   }
 
-  finishContext (data) {
+  finishContext () {
     const store = storage.getStore()
     if (store) {
-      const topContext = this.getTopContext(data)
+      const topContext = this.getTopContext()
       const iastContext = iastContextFunctions.getIastContext(store, topContext)
       const rootSpan = iastContext?.rootSpan
       if (iastContext && rootSpan) {
