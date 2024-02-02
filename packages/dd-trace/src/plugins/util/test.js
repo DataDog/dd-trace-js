@@ -488,7 +488,7 @@ function getCallSites () {
   Error.prepareStackTrace = function (_, v8StackTrace) {
     return v8StackTrace
   }
-  //Error.captureStackTrace(dummy)
+  Error.captureStackTrace(dummy)
 
   const v8StackTrace = dummy.stack
   Error.prepareStackTrace = v8Handler
