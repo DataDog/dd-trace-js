@@ -297,8 +297,10 @@ function getCodeOwnersFileEntries (rootDir) {
   let usedRootDir = rootDir
   let isTriedCwd = false
 
-  if (!usedRootDir) {
-    usedRootDir = process.cwd()
+  const processCwd = process.cwd()
+
+  if (!usedRootDir || usedRootDir === processCwd) {
+    usedRootDir = processCwd
     isTriedCwd = true
   }
 
@@ -306,7 +308,7 @@ function getCodeOwnersFileEntries (rootDir) {
 
   // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
   if (!codeOwnersContent && !isTriedCwd) {
-    codeOwnersContent = readCodeOwners(process.cwd())
+    codeOwnersContent = readCodeOwners(processCwd)
   }
 
   if (!codeOwnersContent) {
