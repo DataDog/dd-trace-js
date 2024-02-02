@@ -72,8 +72,7 @@ function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
-      const { context, attributes } = link
-
+      const context = link.context._ddContext ? link.context._ddContext : link.context
       const formattedLink = {
         trace_id: context._traceId,
         span_id: context._spanId
@@ -83,7 +82,7 @@ function extractSpanLinks (trace, span) {
       if (context?._trace?.tags['_dd.p.tid']) {
         formattedLink.trace_id_high = id(context._trace.tags['_dd.p.tid'])
       }
-      if (attributes && Object.keys(attributes).length > 0) formattedLink.attributes = attributes
+      if (link.attributes && Object.keys(link.attributes).length > 0) formattedLink.attributes = link.attributes
       links.push(formattedLink)
     }
   }
