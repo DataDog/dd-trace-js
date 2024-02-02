@@ -287,15 +287,25 @@ addHook({
 
   Object.defineProperty(request.NextRequest.prototype, 'nextUrl', nextUrlDescriptor)
 
-  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json', 'formData'], function (originalMethod) {
+  shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
-      let body = await originalMethod.apply(this, arguments)
-
-      if (typeof body.entries === 'function') {
-        body = Object.fromEntries(body.entries())
-      }
+      const body = await originalMethod.apply(this, arguments)
 
       bodyParsedChannel.publish({ body })
+
+      return body
+    }
+  })
+
+  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+    return async function wrappedFormData () {
+      const body = await originalFormData.apply(this, arguments)
+
+      let normalizedBody = body
+      if (typeof body.entries === 'function') {
+        normalizedBody = Object.fromEntries(body.entries())
+      }
+      bodyParsedChannel.publish({ body: normalizedBody })
 
       return body
     }
