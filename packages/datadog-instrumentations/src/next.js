@@ -290,9 +290,23 @@ addHook({
   shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
-      bodyParsedChannel.publish({
-        body
-      })
+
+      bodyParsedChannel.publish({ body })
+
+      return body
+    }
+  })
+
+  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+    return async function wrappedFormData () {
+      const body = await originalFormData.apply(this, arguments)
+
+      let normalizedBody = body
+      if (typeof body.entries === 'function') {
+        normalizedBody = Object.fromEntries(body.entries())
+      }
+      bodyParsedChannel.publish({ body: normalizedBody })
+
       return body
     }
   })
