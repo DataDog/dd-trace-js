@@ -187,6 +187,24 @@ describe('telemetry', () => {
       clearTimeout()
     })
   })
+
+  it('should not send app-closing if telemetry is not enabled', () => {
+    const sendDataStub = sinon.stub()
+    const notEnabledTelemetry = proxyquire('../../src/telemetry', {
+      './send-data': {
+        sendData: sendDataStub
+      }
+    })
+    notEnabledTelemetry.start({
+      telemetry: { enabled: false, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
+      appsec: { enabled: false },
+      profiling: { enabled: false }
+    }, {
+      _pluginsByName: pluginsByName
+    })
+    notEnabledTelemetry.appClosing()
+    expect(sendDataStub.called).to.be.false
+  })
 })
 
 describe('telemetry app-heartbeat', () => {
