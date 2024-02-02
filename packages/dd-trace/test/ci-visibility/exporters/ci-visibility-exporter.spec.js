@@ -4,6 +4,7 @@ require('../../../../dd-trace/test/setup/tap')
 
 const cp = require('child_process')
 const fs = require('fs')
+const zlib = require('zlib')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const nock = require('nock')
@@ -79,8 +80,8 @@ describe('CI Visibility Exporter', () => {
     })
   })
 
-  describe('getItrConfiguration', () => {
-    it('should upload git metadata when getItrConfiguration is called, regardless of ITR config', (done) => {
+  describe('getLibraryConfiguration', () => {
+    it('should upload git metadata when getLibraryConfiguration is called, regardless of ITR config', (done) => {
       const scope = nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')
         .reply(200, JSON.stringify({
@@ -90,20 +91,22 @@ describe('CI Visibility Exporter', () => {
         .reply(202, '')
 
       const ciVisibilityExporter = new CiVisibilityExporter({ port, isGitUploadEnabled: true })
-      ciVisibilityExporter.getItrConfiguration({}, () => {
-        expect(scope.isDone()).not.to.be.true
+      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+      ciVisibilityExporter.getLibraryConfiguration({}, () => {})
+      ciVisibilityExporter._gitUploadPromise.then(() => {
+        expect(scope.isDone()).to.be.true
         done()
       })
     })
-    context('if ITR is not enabled', () => {
-      it('should resolve immediately if ITR is not enabled', (done) => {
+    context('if ITR is disabled', () => {
+      it('should resolve immediately and not request settings', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/libraries/tests/services/setting')
           .reply(200)
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
-        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
-          expect(itrConfig).to.eql({})
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          expect(libraryConfig).to.eql({})
           expect(err).to.be.null
           expect(scope.isDone()).not.to.be.true
           done()
@@ -137,7 +140,7 @@ describe('CI Visibility Exporter', () => {
           }
         })
 
-        ciVisibilityExporter.getItrConfiguration({}, () => {
+        ciVisibilityExporter.getLibraryConfiguration({}, () => {
           expect(scope.isDone()).to.be.true
           expect(customConfig).to.eql({
             'my_custom_config': 'my_custom_config_value'
@@ -162,8 +165,8 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
 
-        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
-          expect(itrConfig).to.eql({
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          expect(libraryConfig).to.eql({
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
@@ -192,7 +195,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
         expect(ciVisibilityExporter.shouldRequestSkippableSuites()).to.be.false
 
-        ciVisibilityExporter.getItrConfiguration({}, () => {
+        ciVisibilityExporter.getLibraryConfiguration({}, () => {
           expect(ciVisibilityExporter.shouldRequestSkippableSuites()).to.be.true
           done()
         })
@@ -227,12 +230,12 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestItrConfiguration()).to.be.true
-        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           expect(scope.isDone()).to.be.true
           expect(err).to.be.null
           // the second request returns require_git: false
-          expect(itrConfig.requireGit).to.be.false
+          expect(libraryConfig.requireGit).to.be.false
           expect(hasUploadedGit).to.be.true
           done()
         })
@@ -269,12 +272,12 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestItrConfiguration()).to.be.true
-        ciVisibilityExporter.getItrConfiguration({}, (err, itrConfig) => {
+        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           expect(scope.isDone()).to.be.true
           expect(err).to.be.null
           // the second request returns require_git: false
-          expect(itrConfig.requireGit).to.be.false
+          expect(libraryConfig.requireGit).to.be.false
           done()
         })
         ciVisibilityExporter._resolveGit()
@@ -352,7 +355,7 @@ describe('CI Visibility Exporter', () => {
           }
         })
 
-        ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, () => {
@@ -393,7 +396,7 @@ describe('CI Visibility Exporter', () => {
           isGitUploadEnabled: true
         })
 
-        ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
@@ -413,7 +416,7 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
 
-        ciVisibilityExporter._itrConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
 
         ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
@@ -423,6 +426,104 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveGit(new Error('could not upload git metadata'))
+      })
+    })
+    context('if ITR is enabled and the exporter can use gzip', () => {
+      it('should request the API with gzip', (done) => {
+        nock(`http://localhost:${port}`)
+          .post('/api/v2/git/repository/search_commits')
+          .reply(200, JSON.stringify({
+            data: []
+          }))
+          .post('/api/v2/git/repository/packfile')
+          .reply(202, '')
+
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return zlib.gzipSync(
+              JSON.stringify({
+                meta: {
+                  correlation_id: '1234'
+                },
+                data: [{
+                  type: 'suite',
+                  attributes: {
+                    suite: 'ci-visibility/test/ci-visibility-test.js'
+                  }
+                }]
+              })
+            )
+          }, {
+            'content-encoding': 'gzip'
+          })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true,
+          isGitUploadEnabled: true
+        })
+        ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._isGzipCompatible = true
+
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
+          expect(err).to.be.null
+          expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).to.equal('gzip')
+          done()
+        })
+        ciVisibilityExporter.sendGitMetadata()
+      })
+    })
+    context('if ITR is enabled and the exporter can not use gzip', () => {
+      it('should request the API without gzip', (done) => {
+        nock(`http://localhost:${port}`)
+          .post('/api/v2/git/repository/search_commits')
+          .reply(200, JSON.stringify({
+            data: []
+          }))
+          .post('/api/v2/git/repository/packfile')
+          .reply(202, '')
+
+        let requestHeaders = {}
+        const scope = nock(`http://localhost:${port}`)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, function () {
+            requestHeaders = this.req.headers
+
+            return JSON.stringify({
+              meta: {
+                correlation_id: '1234'
+              },
+              data: [{
+                type: 'suite',
+                attributes: {
+                  suite: 'ci-visibility/test/ci-visibility-test.js'
+                }
+              }]
+            })
+          })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          port,
+          isIntelligentTestRunnerEnabled: true,
+          isGitUploadEnabled: true
+        })
+        ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._isGzipCompatible = false
+
+        ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites) => {
+          expect(err).to.be.null
+          expect(skippableSuites).to.eql(['ci-visibility/test/ci-visibility-test.js'])
+          expect(scope.isDone()).to.be.true
+          expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
+          done()
+        })
+        ciVisibilityExporter.sendGitMetadata()
       })
     })
   })

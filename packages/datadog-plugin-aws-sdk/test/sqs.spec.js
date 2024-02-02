@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup, dsmStatsExist } = require('./spec_helpers')
+const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 
 const queueName = 'SQS_QUEUE_NAME'
@@ -409,7 +409,7 @@ describe('Plugin', () => {
               }
             })
             expect(statsPointsReceived).to.be.at.least(1)
-            expect(dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
           }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {})
@@ -427,7 +427,7 @@ describe('Plugin', () => {
               }
             })
             expect(statsPointsReceived).to.be.at.least(2)
-            expect(dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
+            expect(agent.dsmStatsExist(agent, expectedConsumerHash)).to.equal(true)
           }).then(done, done)
 
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {

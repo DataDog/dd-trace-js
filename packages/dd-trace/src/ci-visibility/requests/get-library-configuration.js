@@ -9,11 +9,12 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
   getErrorTypeFromStatusCode
-} = require('../../ci-visibility/telemetry')
+} = require('../telemetry')
 
-function getItrConfiguration ({
+function getLibraryConfiguration ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   env,
   service,
   repositoryUrl,
@@ -38,7 +39,7 @@ function getItrConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
@@ -116,4 +117,4 @@ function getItrConfiguration ({
   })
 }
 
-module.exports = { getItrConfiguration }
+module.exports = { getLibraryConfiguration }
