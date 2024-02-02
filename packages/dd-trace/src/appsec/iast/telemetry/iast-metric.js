@@ -39,15 +39,6 @@ class IastMetric {
     return tags.map(tagValue => [`${this.tagKey}:${tagValue.toLowerCase()}`])
   }
 
-  getMetricsInNamespace (namespace) {
-    let metrics = this.metricsByNamespace.get(namespace)
-    if (!metrics) {
-      metrics = new Map()
-      this.metricsByNamespace.set(namespace, metrics)
-    }
-    return metrics
-  }
-
   getMetric (context, tags, type = 'count') {
     const namespace = this.getNamespace(context)
     const metrics = namespace.getIastMetrics(this.name)
