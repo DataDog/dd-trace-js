@@ -251,7 +251,7 @@ describe('format', () => {
         span_id: spanId2,
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),
-        trace_id_high: 16
+        trace_id_high: id('10')
       }])
     })
 

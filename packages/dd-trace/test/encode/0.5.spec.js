@@ -66,7 +66,7 @@ describe('encode 0.5', () => {
   })
 
   it('should encode span links', () => {
-    const traceIdHigh = 789
+    const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
     const ts = 'dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'
     data[0].links = [{
