@@ -12,7 +12,6 @@ const DatadogSpan = require('../opentracing/span')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
 const kinds = require('../../../../ext/kinds')
-const log = require('../log')
 
 const SpanContext = require('./span_context')
 

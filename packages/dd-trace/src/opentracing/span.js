@@ -95,7 +95,6 @@ class DatadogSpan {
 
       unfinishedRegistry.register(this, operationName, this)
     }
-
     spanleak.addSpan(this, operationName)
   }
 
