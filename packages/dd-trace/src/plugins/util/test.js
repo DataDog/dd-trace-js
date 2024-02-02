@@ -281,16 +281,34 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   '.gitlab/CODEOWNERS'
 ]
 
-function getCodeOwnersFileEntries (rootDir = process.cwd()) {
-  let codeOwnersContent
-
-  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+function readCodeOwners (rootDir) {
+  for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
-      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+      return fs.readFileSync(path.join(rootDir, location)).toString()
     } catch (e) {
       // retry with next path
     }
-  })
+  }
+  return ''
+}
+
+function getCodeOwnersFileEntries (rootDir) {
+  let codeOwnersContent
+  let usedRootDir = rootDir
+  let isTriedCwd = false
+
+  if (!usedRootDir) {
+    usedRootDir = process.cwd()
+    isTriedCwd = true
+  }
+
+  codeOwnersContent = readCodeOwners(usedRootDir)
+
+  // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
+  if (!codeOwnersContent && !isTriedCwd) {
+    codeOwnersContent = readCodeOwners(process.cwd())
+  }
+
   if (!codeOwnersContent) {
     return null
   }

@@ -45,7 +45,8 @@ const {
   GIT_REPOSITORY_URL,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
-  CI_PROVIDER_NAME
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -186,7 +187,8 @@ module.exports = (on, config) => {
     [RUNTIME_NAME]: runtimeName,
     [RUNTIME_VERSION]: runtimeVersion,
     [GIT_BRANCH]: branch,
-    [CI_PROVIDER_NAME]: ciProviderName
+    [CI_PROVIDER_NAME]: ciProviderName,
+    [CI_WORKSPACE_PATH]: repositoryRoot
   } = testEnvironmentMetadata
 
   const isUnsupportedCIProvider = !ciProviderName
@@ -205,7 +207,7 @@ module.exports = (on, config) => {
     testLevel: 'test'
   }
 
-  const codeOwnersEntries = getCodeOwnersFileEntries()
+  const codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
   let activeSpan = null
   let testSessionSpan = null
