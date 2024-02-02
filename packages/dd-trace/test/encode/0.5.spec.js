@@ -66,18 +66,23 @@ describe('encode 0.5', () => {
   })
 
   it('should encode span links', () => {
+    const traceIdHigh = 789
+    const traceId = id('1234abcd1234abcd')
     const ts = 'dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'
     data[0].links = [{
-      trace_id: id('1234abcd1234abcd'),
+      trace_id: traceId,
       span_id: id('1234abcd1234abcd'),
       attributes: { foo: 'bar' },
-      trace_id_high: '789',
+      trace_id_high: traceIdHigh,
       tracestate: ts,
       flags: (1 | 2147483648)
     }]
 
-    const encodedLink = '[{"trace_id":"00000000000000001234abcd1234abcd","span_id":"1234abcd1234abcd",' +
-    '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]'
+    const rootTid = traceIdHigh.toString(16).padStart(16, '0')
+    const rootT64 = traceId.toString(16).padStart(16, '0')
+
+    const encodedLink = `[{"trace_id":"${rootTid}${rootT64}","span_id":"1234abcd1234abcd",` +
+    `"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]`
 
     encoder.encode(data)
 
