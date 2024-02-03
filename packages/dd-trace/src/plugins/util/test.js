@@ -479,15 +479,16 @@ function getTestLineStart (err, testSuitePath) {
 
 // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L1
 function getCallSites () {
+  console.log('hey')
   const oldLimit = Error.stackTraceLimit
   Error.stackTraceLimit = Infinity
 
   const dummy = {}
 
   const v8Handler = Error.prepareStackTrace
-  Error.prepareStackTrace = function (_, v8StackTrace) {
-    return v8StackTrace
-  }
+  // Error.prepareStackTrace = function (_, v8StackTrace) {
+  //   return v8StackTrace
+  // }
   Error.captureStackTrace(dummy)
 
   const v8StackTrace = dummy.stack
