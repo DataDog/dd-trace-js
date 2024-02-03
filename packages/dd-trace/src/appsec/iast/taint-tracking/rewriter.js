@@ -107,10 +107,11 @@ function enableRewriter (telemetryVerbosity) {
   try {
     const rewriter = getRewriter(telemetryVerbosity)
     if (rewriter) {
-      const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
-      if (!pstDescriptor || pstDescriptor.configurable) {
-        Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
-      }
+      // TODO: Remove comments before merging
+      // const pstDescriptor = Object.getOwnPropertyDescriptor(global.Error, 'prepareStackTrace')
+      // if (!pstDescriptor || pstDescriptor.configurable) {
+      //   Object.defineProperty(global.Error, 'prepareStackTrace', getPrepareStackTraceAccessor())
+      // }
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
   } catch (e) {
