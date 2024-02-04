@@ -223,8 +223,10 @@ function onResponseEnd ({ req, res, abortController, statusCode, responseHeaders
   delete responseHeaders['set-cookie']
 
   const results = waf.run({
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
-    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
+    persistent: {
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
+    }
   }, req)
 
   handleResults(results, req, res, rootSpan, abortController)
