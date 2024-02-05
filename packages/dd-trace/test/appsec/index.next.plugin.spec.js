@@ -155,6 +155,25 @@ describe('test suite', () => {
       })
     }
 
+    function getFindBodyThreatMethod (done) {
+      return function findBodyThreat (traces) {
+        let attackFound = false
+
+        traces.forEach(trace => {
+          trace.forEach(span => {
+            if (span.meta['_dd.appsec.json']) {
+              attackFound = true
+            }
+          })
+        })
+
+        if (attackFound) {
+          agent.unsubscribe(findBodyThreat)
+          done()
+        }
+      }
+    }
+
     tests.forEach(({ appName, serverPath }) => {
       describe(`should detect threats in ${appName}`, () => {
         initApp(appName)
@@ -164,22 +183,7 @@ describe('test suite', () => {
         it('in request body', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           agent.subscribe(findBodyThreat)
           axios
@@ -188,27 +192,26 @@ describe('test suite', () => {
             }).catch(e => { done(e) })
         })
 
+        it('in form data body', function (done) {
+          this.timeout(5000)
+
+          const findBodyThreat = getFindBodyThreatMethod(done)
+
+          agent.subscribe(findBodyThreat)
+
+          axios
+            .post(`http://127.0.0.1:${port}/api/test-formdata`, new URLSearchParams({
+              key: 'testattack'
+            })).catch(e => {
+              done(e)
+            })
+        })
+
         if (appName === 'app-dir') {
           it('in request body with .text() function', function (done) {
             this.timeout(5000)
 
-            function findBodyThreat (traces) {
-              let attackFound = false
-
-              traces.forEach(trace => {
-                trace.forEach(span => {
-                  if (span.meta['_dd.appsec.json']) {
-                    attackFound = true
-                  }
-                })
-              })
-
-              if (attackFound) {
-                agent.unsubscribe(findBodyThreat)
-                done()
-              }
-            }
-
+            const findBodyThreat = getFindBodyThreatMethod(done)
             agent.subscribe(findBodyThreat)
             axios
               .post(`http://127.0.0.1:${port}/api/test-text`, {
@@ -222,20 +225,7 @@ describe('test suite', () => {
         it('in request query', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param=testattack`)
@@ -247,20 +237,7 @@ describe('test suite', () => {
         it('in request query with array params, attack in the second  item', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param[]=safe&param[]=testattack`)
@@ -272,20 +249,7 @@ describe('test suite', () => {
         it('in request query with array params, threat in the first item', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param[]=testattack&param[]=safe`)
