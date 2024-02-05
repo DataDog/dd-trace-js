@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('crypto-randomuuid')
+const { randomUUID: uuid } = require('crypto')
 const URL = require('url').URL
 const log = require('./log')
 const pkg = require('./pkg')

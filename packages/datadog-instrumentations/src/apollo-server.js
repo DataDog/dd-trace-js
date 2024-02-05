@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller')
 const dc = require('dc-polyfill')
 
 const { addHook } = require('./helpers/instrument')

@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller')
 const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')

@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const {
   channel,
   addHook
