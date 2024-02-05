@@ -160,13 +160,12 @@ describe('telemetry', () => {
     })
   })
 
-  // TODO: make this work regardless of the test runner
-  // it.skip('should send app-closing', () => {
-  //   process.emit('beforeExit')
-  //   return testSeq(5, 'app-closing', payload => {
-  //     expect(payload).to.deep.equal({})
-  //   })
-  // })
+  it('should send app-closing', () => {
+    telemetry.appClosing()
+    return testSeq(5, 'app-closing', payload => {
+      expect(payload).to.deep.equal({})
+    })
+  })
 
   it('should do nothing when not enabled', (done) => {
     telemetry.stop()
