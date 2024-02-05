@@ -24,7 +24,8 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -361,6 +362,9 @@ module.exports = (on, config) => {
         cypressTestName === test.name && spec.relative === test.suite
       )
       const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
+      if (spec.absolute && repositoryRoot) {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      }
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
@@ -493,7 +497,7 @@ module.exports = (on, config) => {
       return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}
     },
     'dd:afterEach': ({ test, coverage }) => {
-      const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
+      const { state, error, isRUMActive, testSourceLine, testSuite, testName, testSourceFileAbsolute } = test
       if (activeSpan) {
         if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -522,6 +526,11 @@ module.exports = (on, config) => {
         }
         if (testSourceLine) {
           activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
+        }
+        if (testSourceFileAbsolute) {
+          activeSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(testSourceFileAbsolute, repositoryRoot))
+        } else {
+          activeSpan.setTag(TEST_SOURCE_FILE, testSuite)
         }
         const finishedTest = {
           testName,

@@ -35,6 +35,7 @@ afterEach(() => {
     }
     try {
       testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+      testInfo.testSourceFileAbsolute = Cypress.mocha.getRunner().currentRunnable.invocationDetails.absoluteFile
     } catch (e) {}
 
     if (win.DD_RUM) {
