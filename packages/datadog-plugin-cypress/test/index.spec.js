@@ -17,6 +17,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   CI_APP_ORIGIN,
   TEST_FRAMEWORK_VERSION,
+  TEST_CODE_OWNERS,
   LIBRARY_VERSION
 } = require('../../dd-trace/src/plugins/util/test')
 
@@ -56,7 +57,7 @@ describe('Plugin', function () {
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
-          // quiet: true,
+          quiet: true,
           headless: true
         })
         agent.use(traces => {
@@ -83,6 +84,7 @@ describe('Plugin', function () {
             [LIBRARY_VERSION]: ddTraceVersion,
             [COMPONENT]: 'cypress'
           })
+          expect(passedTestSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
           expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
 
