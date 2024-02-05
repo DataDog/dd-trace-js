@@ -245,7 +245,7 @@ function extendedHeartbeat (config) {
 }
 
 function start (aConfig, thePluginManager) {
-  if (!aConfig.telemetry || !aConfig.telemetry.enabled) {
+  if (!aConfig.telemetry.enabled) {
     return
   }
   config = aConfig
