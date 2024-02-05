@@ -224,7 +224,7 @@ describe('AVM OSS', () => {
 
     telemetry.start({
       telemetry: { enabled: false },
-      sca: { enabled: true },
+      sca: { enabled: true }
     })
 
     expect(logSpy.warn).to.have.been.calledOnceWith('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
