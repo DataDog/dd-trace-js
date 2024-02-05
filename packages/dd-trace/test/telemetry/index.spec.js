@@ -160,6 +160,7 @@ describe('telemetry', () => {
     })
   })
 
+  // TODO: test it's called on beforeExit instead of calling directly
   it('should send app-closing', () => {
     telemetry.appClosing()
     return testSeq(5, 'app-closing', payload => {
