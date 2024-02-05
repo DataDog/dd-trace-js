@@ -160,13 +160,13 @@ describe('telemetry', () => {
     })
   })
 
-  // TODO: make this work regardless of the test runner
-  // it.skip('should send app-closing', () => {
-  //   process.emit('beforeExit')
-  //   return testSeq(5, 'app-closing', payload => {
-  //     expect(payload).to.deep.equal({})
-  //   })
-  // })
+  // TODO: test it's called on beforeExit instead of calling directly
+  it('should send app-closing', () => {
+    telemetry.appClosing()
+    return testSeq(5, 'app-closing', payload => {
+      expect(payload).to.deep.equal({})
+    })
+  })
 
   it('should do nothing when not enabled', (done) => {
     telemetry.stop()
@@ -186,6 +186,24 @@ describe('telemetry', () => {
       }, 10)
       clearTimeout()
     })
+  })
+
+  it('should not send app-closing if telemetry is not enabled', () => {
+    const sendDataStub = sinon.stub()
+    const notEnabledTelemetry = proxyquire('../../src/telemetry', {
+      './send-data': {
+        sendData: sendDataStub
+      }
+    })
+    notEnabledTelemetry.start({
+      telemetry: { enabled: false, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
+      appsec: { enabled: false },
+      profiling: { enabled: false }
+    }, {
+      _pluginsByName: pluginsByName
+    })
+    notEnabledTelemetry.appClosing()
+    expect(sendDataStub.called).to.be.false
   })
 })
 
