@@ -14,7 +14,8 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -139,7 +140,8 @@ class CucumberPlugin extends CiPlugin {
     this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
-      const testSpan = this.startTestSpan(testName, testSuite, testSourceLine)
+      const testSourceFile = getTestSuitePath(fullTestSuite, this.repositoryRoot)
+      const testSpan = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
 
       this.enter(testSpan, store)
     })
@@ -191,12 +193,15 @@ class CucumberPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite, testSourceLine) {
+  startTestSpan (testName, testSuite, testSourceFile, testSourceLine) {
     return super.startTestSpan(
       testName,
       testSuite,
       this.testSuiteSpan,
-      { [TEST_SOURCE_START]: testSourceLine }
+      {
+        [TEST_SOURCE_START]: testSourceLine,
+        [TEST_SOURCE_FILE]: testSourceFile
+      }
     )
   }
 }

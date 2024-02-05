@@ -15,7 +15,8 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -243,6 +244,14 @@ class MochaPlugin extends CiPlugin {
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
+
+    const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+
+    if (testSourceFile) {
+      extraTags[TEST_SOURCE_FILE] = testSourceFile
+    } else {
+      extraTags[TEST_SOURCE_FILE] = testSuite
+    }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }

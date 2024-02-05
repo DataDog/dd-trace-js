@@ -14,7 +14,9 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE,
+  getTestSuitePath
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -286,7 +288,15 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
-    const { suite, name, runner, testParameters, frameworkVersion, testStartLine } = test
+    const {
+      suite,
+      name,
+      runner,
+      testParameters,
+      frameworkVersion,
+      testStartLine,
+      testFileFullPath
+    } = test
 
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
@@ -295,6 +305,12 @@ class JestPlugin extends CiPlugin {
     }
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
+    }
+    if (testFileFullPath) {
+      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testFileFullPath, this.repositoryRoot)
+    } else {
+      // If for whatever we don't have the full path, we'll set the source file to the suite name
+      extraTags[TEST_SOURCE_FILE] = suite
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)
