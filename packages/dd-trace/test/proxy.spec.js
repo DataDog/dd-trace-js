@@ -365,6 +365,7 @@ describe('TracerProxy', () => {
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
+          './telemetry': telemetry,
           './appsec/remote_config': remoteConfig
         })
 

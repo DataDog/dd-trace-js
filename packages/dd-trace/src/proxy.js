@@ -91,18 +91,17 @@ class Tracer extends NoopProxy {
       if (config.tracing) {
         // dirty require for now so zero appsec code is executed unless explicitly enabled
         if (config.appsec.enabled) {
-          require('./appsec').enable(config)
-        }
+          require('./appsec').enable(config) // disable -> configure? toggle
+        } // disable waf?
 
-        this._tracer = new DatadogTracer(config)
-        this.appsec = new AppsecSdk(this._tracer, config)
+        this._tracer = new DatadogTracer(config) // if already set, dont initialize again
+        this.appsec = new AppsecSdk(this._tracer, config) // utils no root span
 
         if (config.iast.enabled) {
-          require('./appsec/iast').enable(config, this._tracer)
+          require('./appsec/iast').enable(config, this._tracer) // disable
         }
 
         this._pluginManager.configure(config)
-        //
         setStartupLogPluginManager(this._pluginManager)
 
         if (config.isManualApiEnabled) {
