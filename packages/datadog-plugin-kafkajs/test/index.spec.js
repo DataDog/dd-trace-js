@@ -264,7 +264,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          it('should publish on afterStart channel', async () => {
+          it('should publish on afterStart channel', (done) => {
             const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
 
             const spy = sinon.spy(() => {
@@ -272,24 +272,27 @@ describe('Plugin', () => {
             })
             afterStart.subscribe(spy)
 
-            await consumer.run({ eachMessage: () => {} })
-            await sendMessages(kafka, testTopic, messages)
+            consumer.run({
+              eachMessage: () => {
+                expect(spy).to.have.been.calledOnce
 
-            expect(spy).to.have.been.calledOnce
+                const channelMsg = spy.firstCall.args[0]
+                expect(channelMsg).to.not.undefined
+                expect(channelMsg.topic).to.eq(testTopic)
+                expect(channelMsg.message.key).to.not.undefined
+                expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
+                expect(channelMsg.message.value).to.not.undefined
+                expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
 
-            const channelMsg = spy.firstCall.args[0]
-            expect(channelMsg).to.not.undefined
-            expect(channelMsg.topic).to.eq(testTopic)
-            expect(channelMsg.message.key).to.not.undefined
-            expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
-            expect(channelMsg.message.value).to.not.undefined
-            expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+                const name = spy.firstCall.args[1]
+                expect(name).to.eq(afterStart.name)
 
-            const name = spy.firstCall.args[1]
-            expect(name).to.eq(afterStart.name)
+                done()
+              }
+            }).then(() => sendMessages(kafka, testTopic, messages))
           })
 
-          it('should publish on beforeFinish channel', async () => {
+          it('should publish on beforeFinish channel', (done) => {
             const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
 
             const spy = sinon.spy(() => {
@@ -297,10 +300,14 @@ describe('Plugin', () => {
             })
             beforeFinish.subscribe(spy)
 
-            await consumer.run({ eachMessage: () => {} })
-            await sendMessages(kafka, testTopic, messages)
-
-            expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+            consumer.run({
+              eachMessage: () => {
+                setImmediate(() => {
+                  expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+                  done()
+                })
+              }
+            }).then(() => sendMessages(kafka, testTopic, messages))
           })
 
           withNamingSchema(
