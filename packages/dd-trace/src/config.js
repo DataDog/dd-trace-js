@@ -172,6 +172,11 @@ class Config {
       false
     )
 
+    const DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      true
+    )
+
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       false
@@ -666,6 +671,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
     this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
+    this.isEarlyFlakeDetectionEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED)
 
     this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
