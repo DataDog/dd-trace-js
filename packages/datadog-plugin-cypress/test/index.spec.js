@@ -57,10 +57,11 @@ describe('Plugin', function () {
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
-          quiet: true,
+          // quiet: true,
           headless: true
         })
         agent.use(traces => {
+          console.log('traces', traces)
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
           expect(passedTestSpan.name).to.equal('cypress.test')
