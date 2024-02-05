@@ -22,7 +22,6 @@ class DatadogTracer extends Tracer {
     super(config)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._scope = new Scope()
-    this._tracingEnabled = config.tracing
     setStartupLogConfig(config)
   }
 
@@ -65,14 +64,14 @@ class DatadogTracer extends Tracer {
     addTags(span, options)
 
     try {
-      if (this._tracingEnabled && fn.length > 1) {
+      if (fn.length > 1) {
         return this.scope().activate(span, () => fn(span, err => {
           addError(span, err)
           span.finish()
         }))
       }
 
-      const result = this._tracingEnabled ? this.scope().activate(span, () => fn(span)) : undefined
+      const result = this.scope().activate(span, () => fn(span))
 
       if (result && typeof result.then === 'function') {
         return result.then(
