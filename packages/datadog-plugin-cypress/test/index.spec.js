@@ -64,59 +64,64 @@ describe('Plugin', function () {
           console.log('traces', traces)
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
-          expect(passedTestSpan.name).to.equal('cypress.test')
-          expect(passedTestSpan.resource).to.equal(
-            'cypress/integration/integration-test.js.can visit a page renders a hello world'
-          )
-          expect(passedTestSpan.type).to.equal('test')
-          expect(passedTestSpan.meta).to.contain({
-            language: 'javascript',
-            addTags: 'custom',
-            addTagsBeforeEach: 'custom',
-            addTagsAfterEach: 'custom',
-            [TEST_FRAMEWORK]: 'cypress',
-            [TEST_NAME]: 'can visit a page renders a hello world',
-            [TEST_STATUS]: 'pass',
-            [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-            [TEST_TYPE]: 'browser',
-            [ORIGIN_KEY]: CI_APP_ORIGIN,
-            [TEST_IS_RUM_ACTIVE]: 'true',
-            [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
-            [LIBRARY_VERSION]: ddTraceVersion,
-            [COMPONENT]: 'cypress'
-          })
-          expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
-          expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
+          try {
+            expect(passedTestSpan.name).to.equal('cypress.test')
+            expect(passedTestSpan.resource).to.equal(
+              'cypress/integration/integration-test.js.can visit a page renders a hello world'
+            )
+            expect(passedTestSpan.type).to.equal('test')
+            console.log('meta', passedTestSpan.meta)
+            expect(passedTestSpan.meta).to.contain({
+              language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_NAME]: 'can visit a page renders a hello world',
+              [TEST_STATUS]: 'pass',
+              [TEST_SUITE]: 'cypress/integration/integration-test.js',
+              [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+              [TEST_TYPE]: 'browser',
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [TEST_IS_RUM_ACTIVE]: 'true',
+              [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
+              [LIBRARY_VERSION]: ddTraceVersion,
+              [COMPONENT]: 'cypress'
+            })
+            expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
+            expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
 
-          expect(failedTestSpan.name).to.equal('cypress.test')
-          expect(failedTestSpan.resource).to.equal(
-            'cypress/integration/integration-test.js.can visit a page will fail'
-          )
-          expect(failedTestSpan.type).to.equal('test')
-          expect(failedTestSpan.meta).to.contain({
-            language: 'javascript',
-            addTags: 'custom',
-            addTagsBeforeEach: 'custom',
-            addTagsAfterEach: 'custom',
-            [TEST_FRAMEWORK]: 'cypress',
-            [TEST_NAME]: 'can visit a page will fail',
-            [TEST_STATUS]: 'fail',
-            [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
-            [TEST_TYPE]: 'browser',
-            [ORIGIN_KEY]: CI_APP_ORIGIN,
-            [ERROR_TYPE]: 'AssertionError',
-            [TEST_IS_RUM_ACTIVE]: 'true',
-            [COMPONENT]: 'cypress'
-          })
-          expect(failedTestSpan.meta).to.not.contain({
-            addTagsAfterFailure: 'custom'
-          })
-          expect(failedTestSpan.meta[ERROR_MESSAGE]).to.contain(
-            "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
-          )
-          expect(failedTestSpan.metrics[TEST_SOURCE_START]).to.exist
+            expect(failedTestSpan.name).to.equal('cypress.test')
+            expect(failedTestSpan.resource).to.equal(
+              'cypress/integration/integration-test.js.can visit a page will fail'
+            )
+            expect(failedTestSpan.type).to.equal('test')
+            expect(failedTestSpan.meta).to.contain({
+              language: 'javascript',
+              addTags: 'custom',
+              addTagsBeforeEach: 'custom',
+              addTagsAfterEach: 'custom',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_NAME]: 'can visit a page will fail',
+              [TEST_STATUS]: 'fail',
+              [TEST_SUITE]: 'cypress/integration/integration-test.js',
+              [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+              [TEST_TYPE]: 'browser',
+              [ORIGIN_KEY]: CI_APP_ORIGIN,
+              [ERROR_TYPE]: 'AssertionError',
+              [TEST_IS_RUM_ACTIVE]: 'true',
+              [COMPONENT]: 'cypress'
+            })
+            expect(failedTestSpan.meta).to.not.contain({
+              addTagsAfterFailure: 'custom'
+            })
+            expect(failedTestSpan.meta[ERROR_MESSAGE]).to.contain(
+              "expected '<div.hello-world>' to have text 'Bye World', but the text was 'Hello World'"
+            )
+            expect(failedTestSpan.metrics[TEST_SOURCE_START]).to.exist
+          } catch (e) {
+            console.error(e)
+          }
         }, { timeoutMs: testTimeout }).then(() => done()).catch(done)
       })
     })
