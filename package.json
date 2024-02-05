@@ -78,7 +78,7 @@
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
-    "dc-polyfill": "^0.1.2",
+    "dc-polyfill": "0.1.4",
     "ignore": "^5.2.4",
     "import-in-the-middle": "^1.7.3",
     "int64-buffer": "^0.1.9",
