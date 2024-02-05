@@ -42,6 +42,7 @@ describe('SpanProcessor', () => {
       sample: sinon.stub()
     }
     config = {
+      tracing: true,
       flushMinSpans: 3,
       stats: {
         enabled: false
