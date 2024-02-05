@@ -81,10 +81,10 @@ describe('Plugin', function () {
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [TEST_IS_RUM_ACTIVE]: 'true',
-            [TEST_CODE_OWNERS]: JSON.stringify(['@datadog']),
             [LIBRARY_VERSION]: ddTraceVersion,
             [COMPONENT]: 'cypress'
           })
+          expect(passedTestSpan.meta[TEST_CODE_OWNERS]).to.contain('@DataDog')
           expect(passedTestSpan.meta[TEST_FRAMEWORK_VERSION]).not.to.be.undefined
           expect(passedTestSpan.metrics[TEST_SOURCE_START]).to.exist
 
