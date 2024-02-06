@@ -16,11 +16,13 @@
     "es2020": true
   },
   "rules": {
-    "quote-props": [2, "consistent-as-needed"],
+    "quote-props": 0,
     "max-len": [2, 120, 2],
     "no-var": 2,
     "no-console": 2,
     "prefer-const": 2,
+    "array-bracket-spacing": [2, "always"],
+    "handle-callback-err": 0,
     "object-curly-spacing": [2, "always"],
     "import/no-extraneous-dependencies": 2,
     "standard/no-callback-literal": 0,
