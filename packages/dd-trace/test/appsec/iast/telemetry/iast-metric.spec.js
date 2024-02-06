@@ -110,6 +110,13 @@ describe('Metrics', () => {
       expect(noTagged.tags).to.be.deep.eq([])
     })
 
+    it('should increment in 1 the metric', () => {
+      const noTagged = new NoTaggedIastMetric('notagged', 'scope')
+      noTagged.inc()
+
+      expect(inc).to.be.calledOnceWith(1)
+    })
+
     it('should reuse previous metric when calling add multiple times', () => {
       const noTagged = new NoTaggedIastMetric('notagged')
 
