@@ -19,6 +19,7 @@ class Tracer extends NoopProxy {
     this._initialized = false
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
+    this._tracingInitialized = false
   }
 
   init (options) {
@@ -64,6 +65,8 @@ class Tracer extends NoopProxy {
 
           this._tracer.configure(config)
           this._pluginManager.configure(config)
+
+          this._enableOrDisableTracing(config)
         })
       }
 
@@ -88,22 +91,10 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
+      this._enableOrDisableTracing(config)
+
       if (config.tracing) {
-        // dirty require for now so zero appsec code is executed unless explicitly enabled
-        if (config.appsec.enabled) {
-          require('./appsec').enable(config) // disable -> configure? toggle
-        } // disable waf?
-
-        this._tracer = new DatadogTracer(config) // if already set, dont initialize again
-        this.appsec = new AppsecSdk(this._tracer, config) // utils no root span
-
-        if (config.iast.enabled) {
-          require('./appsec/iast').enable(config, this._tracer) // disable
-        }
-
-        this._pluginManager.configure(config)
         setStartupLogPluginManager(this._pluginManager)
-
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
@@ -115,6 +106,28 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  _enableOrDisableTracing (config) { // TODO: add test
+    if (config.tracing) {
+      // dirty require for now so zero appsec code is executed unless explicitly enabled
+      if (config.appsec.enabled) {
+        require('./appsec').enable(config)
+      }
+      if (!this._tracingInitialized) {
+        this._tracer = new DatadogTracer(config)
+        this.appsec = new AppsecSdk(this._tracer, config)
+        this._tracingInitialized = true
+      }
+      if (config.iast.enabled) {
+        require('./appsec/iast').enable(config, this._tracer) // disable
+      }
+      this._pluginManager.configure(config)
+    } else {
+      require('./appsec').disable()
+      require('./appsec/iast').disable()
+      this._pluginManager.configure(config)
+    }
   }
 
   profilerStarted () {

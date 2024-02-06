@@ -31,7 +31,7 @@ class SpanProcessor {
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (!tracing) {
+    if (!tracing) { // TODO: add test
       this._erase(trace, active)
       return
     }
