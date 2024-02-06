@@ -654,6 +654,66 @@ testFrameworks.forEach(({
               }).catch(done)
             })
           })
+          it('retries flaky tests', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test/occasionally-failing-test will be considered new
+            receiver.setKnownTests([])
+
+            const NUM_RETRIES_EFD = 5
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                }
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                const retriedTests = tests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+                // all but one has been retried
+                assert.equal(
+                  tests.length - 1,
+                  retriedTests.length
+                )
+                assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                // Out of NUM_RETRIES_EFD + 1 total runs, half will be passing and half will be failing,
+                // based on the global counter in the test file
+                const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                assert.equal(passingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+                assert.equal(failingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: { ...envVars, TESTS_TO_RUN: 'test/occasionally-failing-test' },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
         })
       })
     }

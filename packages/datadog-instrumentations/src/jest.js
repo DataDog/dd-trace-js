@@ -213,7 +213,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(testName, 0)
             // Add tests to be retried to the list of tests to run
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
-              this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+              if (this.global.test) {
+                this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+              } else {
+                log.error('Early flake detection could not retry test because global.test is undefined')
+              }
             }
           }
         }
