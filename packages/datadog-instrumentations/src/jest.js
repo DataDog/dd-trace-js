@@ -54,7 +54,7 @@ let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 
-const EFD_STRING = "Retried by Datadog's Early Flake Detection: "
+const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -68,6 +68,7 @@ const specStatusToTestStatus = {
 
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
+const retriedTestsToNumAttempts = new Map()
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -96,12 +97,12 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
-function getEfdTestName (testName) {
-  return `${EFD_STRING}${testName}`
+function getEfdTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
 }
 
 function removeEfdTestName (testName) {
-  return testName.replace(EFD_STRING, '')
+  return testName.replace(/Retried by Datadog's Early Flake Detection \(#\d+\): /g, '')
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -142,18 +143,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         .map(test => test.replace(`jest.${this.testSuite}.`, ''))
     }
 
-    // Function that retries a test by copying it and adding it to list of tests to run
-    retryTest (runningTest, event) {
-      const numEfdRetry = runningTest._ddNumRetry ?? 0
-      // We copy the test to run it again
-      const originalName = runningTest._ddOriginalName ?? event.test.name
-      runningTest.parent.children.push({
-        ...runningTest,
-        name: getEfdTestName(originalName),
-        _ddNumRetry: numEfdRetry + 1,
-        // We modify the test to let the user know that it's a Early Flake Detection retry
-        _ddOriginalName: originalName
-      })
+    // Add the `add_test` event we don't have the test object yet, so
+    // we use its describe block to get the full name
+    getTestNameFromAddTestEvent (event, state) {
+      const { testName } = event
+      const { currentDescribeBlock } = state
+      const describeSuffix = getJestTestName(currentDescribeBlock)
+      return removeEfdTestName(`${describeSuffix} ${testName}`)
     }
 
     async handleTestEvent (event, state) {
@@ -179,7 +175,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'test_start') {
         let isNewTest = false
         let numEfdRetry = null
-        const { currentlyRunningTest } = state
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
         // Async resource for this test is created here
         // It is used later on by the test_done handler
@@ -188,8 +183,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const testName = getJestTestName(event.test)
 
         if (this.isEarlyFlakeDetectionEnabled) {
-          isNewTest = !this.knownTestsForThisSuite?.includes(testName)
-          numEfdRetry = currentlyRunningTest?._ddNumRetry ?? 0
+          const originalTestName = removeEfdTestName(testName)
+          isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          if (isNewTest) {
+            numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
+            retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
+          }
         }
 
         asyncResource.runInAsyncScope(() => {
@@ -205,10 +204,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })
-        if (isNewTest) {
-          const shouldBeRetried = numEfdRetry < earlyFlakeDetectionNumRetries
-          if (shouldBeRetried) {
-            this.retryTest(currentlyRunningTest, event)
+      }
+      if (event.name === 'add_test') {
+        if (this.isEarlyFlakeDetectionEnabled) {
+          const testName = this.getTestNameFromAddTestEvent(event, state)
+          const isNew = !this.knownTestsForThisSuite?.includes(testName)
+          if (isNew && !retriedTestsToNumAttempts.has(testName)) {
+            retriedTestsToNumAttempts.set(testName, 0)
+            // Add tests to be retried to the list of tests to run
+            for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+              this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+            }
           }
         }
       }
