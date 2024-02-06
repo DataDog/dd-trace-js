@@ -158,7 +158,7 @@ export declare interface TraceOptions extends Analyzable {
  * have children.
  */
 export declare interface Span extends opentracing.Span {
-context (): SpanContext;
+  context (): SpanContext;
 
   /**
    * Causally links another span to the current span

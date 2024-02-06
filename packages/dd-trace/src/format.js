@@ -66,27 +66,31 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
 }
 
-// TODO: do we need to handle both otel and dd trace span links in this function or only dd trace span links?
-// TODO: confirm whether we need to implement dropped_attributes_count
 function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
-      const context = link.context._ddContext ? link.context._ddContext : link.context
-      const formattedLink = {
-        trace_id: context._traceId,
-        span_id: context._spanId
+      const { context, attributes } = link
+      const formattedLink = {}
+
+      const rootTid = context?._trace?.tags['_dd.p.tid']
+        ? context._trace.tags['_dd.p.tid'] : '0000000000000000'
+      const traceIdValue = context._traceId.toString(16).padStart(16, '0')
+
+      formattedLink.trace_id = `${rootTid}${traceIdValue}`
+      formattedLink.span_id = context._spanId.toString(16).padStart(16, '0')
+
+      if (attributes && Object.keys(attributes).length > 0) {
+        formattedLink.attributes = JSON.stringify(attributes)
       }
-      if (context?._sampling?.priority) formattedLink.flags = context._sampling.priority > 0 ? (1 | 2147483648) : 0
+      if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
       if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-      if (context?._trace?.tags['_dd.p.tid']) {
-        formattedLink.trace_id_high = id(context._trace.tags['_dd.p.tid'])
-      }
-      if (link.attributes && Object.keys(link.attributes).length > 0) formattedLink.attributes = link.attributes
+
       links.push(formattedLink)
     }
   }
-  trace.links = links
+  if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+  delete trace.links
 }
 
 function extractTags (trace, span) {

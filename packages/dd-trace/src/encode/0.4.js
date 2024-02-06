@@ -90,12 +90,6 @@ class AgentEncoder {
         this._encodeString(bytes, span.type)
       }
 
-      if (span.links && span.links.length > 0) {
-        bytes.buffer[bytesPosition]++
-        this._encodeString(bytes, 'span_links')
-        this._encodeSpanLinks(bytes, span.links)
-      }
-
       this._encodeString(bytes, 'trace_id')
       this._encodeId(bytes, span.trace_id)
       this._encodeString(bytes, 'span_id')

@@ -155,7 +155,7 @@ class DatadogSpan {
   logEvent () {}
 
   addLink (context, attributes) {
-    this._links.push({ context, attributes: this._sanitizeAttributes(attributes) })
+    this._links.push({ context: context, attributes: this._sanitizeAttributes(attributes) })
   }
 
   finish (finishTime) {

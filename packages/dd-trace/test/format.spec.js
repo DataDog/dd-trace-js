@@ -215,43 +215,47 @@ describe('format', () => {
       ]
 
       trace = format(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
-      expect(trace.links).to.deep.equal([{
-        trace_id: spanId2,
-        span_id: spanId2
+      expect(trace).to.not.have.property('links')
+      expect(spanLinks).to.deep.equal([{
+        trace_id: spanId2.toString(16).padStart(32, '0'),
+        span_id: spanId2.toString(16).padStart(16, '0')
       }, {
-        trace_id: spanId3,
-        span_id: spanId3
+        trace_id: spanId3.toString(16).padStart(32, '0'),
+        span_id: spanId3.toString(16).padStart(16, '0')
       }])
     })
 
     it('creates a span link', () => {
       const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      const traceIdHigh = '0000000000000010'
       spanContext2._tracestate = ts
       spanContext2._trace = {
         started: [],
         finished: [],
         origin: 'synthetics',
         tags: {
-          '_dd.p.tid': '0000000000000010'
+          '_dd.p.tid': traceIdHigh
         }
       }
 
-      spanContext._traceId = spanContext2._traceId
-
-      spanContext._sampling.priority = 0
+      spanContext2._sampling.priority = 0
       const link = {
         context: spanContext2,
         attributes: { foo: 'bar' }
       }
       span._links = [link]
+
       trace = format(span)
-      expect(trace.links).to.deep.equal([{
-        trace_id: spanId2,
-        span_id: spanId2,
-        attributes: { foo: 'bar' },
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+      expect(trace).to.not.have.property('links')
+      expect(spanLinks).to.deep.equal([{
+        trace_id: `${traceIdHigh}${spanId2.toString(16).padStart(16, '0')}`,
+        span_id: spanId2.toString(16).padStart(16, '0'),
+        attributes: JSON.stringify({ foo: 'bar' }),
         tracestate: ts.toString(),
-        trace_id_high: id('10')
+        flags: 0
       }])
     })
 

@@ -68,21 +68,14 @@ describe('encode 0.5', () => {
   it('should encode span links', () => {
     const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
-    const ts = 'dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'
-    data[0].links = [{
-      trace_id: traceId,
-      span_id: id('1234abcd1234abcd'),
-      attributes: { foo: 'bar' },
-      trace_id_high: traceIdHigh,
-      tracestate: ts,
-      flags: (1 | 2147483648)
-    }]
-
     const rootTid = traceIdHigh.toString(16).padStart(16, '0')
     const rootT64 = traceId.toString(16).padStart(16, '0')
+    const traceIdVal = `${rootTid}${rootT64}`
 
-    const encodedLink = `[{"trace_id":"${rootTid}${rootT64}","span_id":"1234abcd1234abcd",` +
+    const encodedLink = `[{"trace_id":"${traceIdVal}","span_id":"1234abcd1234abcd",` +
     `"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]`
+
+    data[0].meta['_dd.span_links'] = encodedLink
 
     encoder.encode(data)
 
@@ -113,12 +106,10 @@ describe('encode 0.5', () => {
   })
 
   it('should encode span link with just span and trace id', () => {
-    data[0].links = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd')
-    }]
-
-    const encodedLink = '[{"trace_id":"00000000000000001234abcd1234abcd","span_id":"1234abcd1234abcd"}]'
+    const traceId = '00000000000000001234abcd1234abcd'
+    const spanId = '1234abcd1234abcd'
+    const encodedLink = `[{"trace_id":"${traceId}","span_id":"${spanId}"}]`
+    data[0].meta['_dd.span_links'] = encodedLink
 
     encoder.encode(data)
 

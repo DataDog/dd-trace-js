@@ -186,62 +186,53 @@ describe('encode', () => {
   })
 
   it('should encode spanLinks', () => {
-    const ts = 'dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar'
-    data[0].links = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd'),
-      attributes: { foo: 'bar' },
-      trace_id_high: id('10'),
-      tracestate: ts,
-      flags: '0'
-    }]
+    const traceIdHigh = id('10')
+    const traceId = id('1234abcd1234abcd')
+    const rootTid = traceIdHigh.toString(16).padStart(16, '0')
+    const rootT64 = traceId.toString(16).padStart(16, '0')
+    const traceIdVal = `${rootTid}${rootT64}`
+
+    const encodedLink = `[{"trace_id":"${traceIdVal}","span_id":"1234abcd1234abcd",` +
+    `"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]`
+
+    data[0].meta['_dd.span_links'] = encodedLink
+
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer, { codec })
     const trace = decoded[0]
-    const spanLinks = trace[0].span_links
     expect(trace).to.be.instanceof(Array)
     expect(trace[0]).to.be.instanceof(Object)
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(spanLinks[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
-    expect(spanLinks[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
-    expect(spanLinks[0].attributes).to.deep.equal({ foo: 'bar' })
-    expect(spanLinks[0].trace_id_high.toString(10)).to.equal('16')
-    expect(spanLinks[0].tracestate).to.deep.equal(ts)
-    expect(spanLinks[0].flags.toString(10)).to.equal('0')
     expect(trace[0].start.toNumber()).to.equal(123)
     expect(trace[0].duration.toNumber()).to.equal(456)
     expect(trace[0].name).to.equal(data[0].name)
-    expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
+    expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
   })
 
   it('should encode spanLinks with just span and trace id', () => {
-    data[0].links = [{
-      trace_id: id('1234abcd1234abcd'),
-      span_id: id('1234abcd1234abcd')
-    }]
+    const traceId = '00000000000000001234abcd1234abcd'
+    const spanId = '1234abcd1234abcd'
+    const encodedLink = `[{"trace_id":"${traceId}","span_id":"${spanId}"}]`
+    data[0].meta['_dd.span_links'] = encodedLink
     encoder.encode(data)
 
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer, { codec })
     const trace = decoded[0]
-    const spanLinks = trace[0].span_links
-
     expect(trace).to.be.instanceof(Array)
     expect(trace[0]).to.be.instanceof(Object)
     expect(trace[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
     expect(trace[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].parent_id.toString(16)).to.equal(data[0].parent_id.toString())
-    expect(spanLinks[0].trace_id.toString(16)).to.equal(data[0].trace_id.toString())
-    expect(spanLinks[0].span_id.toString(16)).to.equal(data[0].span_id.toString())
     expect(trace[0].start.toNumber()).to.equal(123)
     expect(trace[0].duration.toNumber()).to.equal(456)
     expect(trace[0].name).to.equal(data[0].name)
-    expect(trace[0].meta).to.deep.equal({ bar: 'baz' })
+    expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
   })
 })
