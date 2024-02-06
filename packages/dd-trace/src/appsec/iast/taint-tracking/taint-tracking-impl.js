@@ -17,9 +17,9 @@ function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
-  plusOperator: noop,
   concat: noop,
   parse: noop,
+  plusOperator: noop,
   random: noop,
   replace: noop,
   slice: noop,
