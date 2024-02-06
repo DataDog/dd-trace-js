@@ -24,7 +24,10 @@ const {
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -62,35 +65,14 @@ const testFrameworks = [
     type: 'commonJS'
   },
   {
-    ...mochaCommonOptions,
-    testFile: 'ci-visibility/run-mocha.mjs',
-    dependencies: ['mocha', 'chai@v4', 'nyc', '@istanbuljs/esm-loader-hook'],
-    expectedCoverageFiles: [
-      'ci-visibility/run-mocha.mjs',
-      'ci-visibility/test/sum.js',
-      'ci-visibility/test/ci-visibility-test.js',
-      'ci-visibility/test/ci-visibility-test-2.js'
-    ],
-    runTestsWithCoverageCommand:
-      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
-      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
-      `--loader=${hookFile} ./ci-visibility/run-mocha.mjs`,
-    type: 'esm'
-  },
-  {
     ...jestCommonOptions,
     testFile: 'ci-visibility/run-jest.js',
     runTestsWithCoverageCommand: 'node ./ci-visibility/run-jest.js',
     type: 'commonJS'
-  },
-  {
-    ...jestCommonOptions,
-    testFile: 'ci-visibility/run-jest.mjs',
-    runTestsWithCoverageCommand: `node --loader=${hookFile} ./ci-visibility/run-jest.mjs`,
-    type: 'esm'
   }
 ]
 
+// TODO: add ESM tests
 testFrameworks.forEach(({
   name,
   dependencies,
@@ -101,16 +83,6 @@ testFrameworks.forEach(({
   runTestsWithCoverageCommand,
   type
 }) => {
-  // temporary fix for failing esm tests on the CI, skip for now for the release and comeback to solve the issue
-  if (type === 'esm') {
-    return
-  }
-
-  // to avoid this error: @istanbuljs/esm-loader-hook@0.2.0: The engine "node"
-  // is incompatible with this module. Expected version ">=16.12.0". Got "14.21.3"
-  // if (type === 'esm' && name === 'mocha' && semver.satisfies(process.version, '<16.12.0')) {
-  //   return
-  // }
   describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
@@ -490,6 +462,199 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+      })
+
+      const reportingOptions = ['agentless', 'evp proxy']
+
+      reportingOptions.forEach(reportingOption => {
+        context(`early flake detection when reporting by ${reportingOption}`, () => {
+          it('retries new tests', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+            receiver.setKnownTests([
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
+            ])
+            const NUM_RETRIES_EFD = 3
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                }
+              }
+            })
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const newTests = tests.filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+                )
+                newTests.forEach(test => {
+                  assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                })
+                const retriedTests = newTests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+                // all but one has been retried
+                assert.equal(
+                  newTests.length - 1,
+                  retriedTests.length
+                )
+                assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: { ...envVars, TESTS_TO_RUN: 'test/ci-visibility-test' },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+          it('handles parameterized tests as a single unit', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test-early-flake-detection/test-parameterized.js will be considered new
+            receiver.setKnownTests([
+              'ci-visibility/test-early-flake-detection/test.js.ci visibility can report tests'
+            ])
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': 3
+                }
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+                const newTests = tests.filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/test-parameterized.js'
+                )
+                newTests.forEach(test => {
+                  assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                })
+                // Each parameter is repeated independently
+                const testsForFirstParameter = tests.filter(test => test.resource ===
+                  'ci-visibility/test-early-flake-detection/test-parameterized.js.parameterized test parameter 1'
+                )
+
+                const testsForSecondParameter = tests.filter(test => test.resource ===
+                  'ci-visibility/test-early-flake-detection/test-parameterized.js.parameterized test parameter 2'
+                )
+
+                assert.equal(testsForFirstParameter.length, testsForSecondParameter.length)
+
+                // all but one have been retried
+                assert.equal(
+                  testsForFirstParameter.length - 1,
+                  testsForFirstParameter.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true').length
+                )
+
+                assert.equal(
+                  testsForSecondParameter.length - 1,
+                  testsForSecondParameter.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true').length
+                )
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/test' },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+          it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+            receiver.setKnownTests([
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests'
+            ])
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': 3
+                }
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const newTests = tests.filter(test =>
+                  test.meta[TEST_SUITE] === 'true'
+                )
+                // new tests are not detected
+                assert.equal(newTests.length, 0)
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  TESTS_TO_RUN: 'test/ci-visibility-test',
+                  DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+                },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+        })
       })
     }
 
