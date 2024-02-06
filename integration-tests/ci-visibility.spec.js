@@ -704,7 +704,7 @@ testFrameworks.forEach(({
               runTestsWithCoverageCommand,
               {
                 cwd,
-                env: { ...envVars, TESTS_TO_RUN: 'test/occasionally-failing-test' },
+                env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test' },
                 stdio: 'inherit'
               }
             )
