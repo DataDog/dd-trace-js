@@ -151,7 +151,8 @@ class Span {
     this.kind = kind
     this._spanProcessor.onStart(this, context)
 
-    this.links && this.links.forEach(link => this.addLink(link.context, link.attributes))
+    this.links &&
+      this.links.forEach(link => { return { context: link.context._ddContext, attributes: link.attributes } })
   }
 
   get parentSpanId () {
