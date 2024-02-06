@@ -10,6 +10,7 @@ const {
   INSTRUMENTED_SINK,
   INSTRUMENTED_SOURCE
 } = require('../../../../src/appsec/iast/telemetry/iast-metric')
+const { globalNamespace } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 describe('Metrics', () => {
   let IastMetric, reqNamespace, inc, context
@@ -18,21 +19,22 @@ describe('Metrics', () => {
     inc = sinon.stub()
     const metricMock = { inc }
 
-    const metrics = new Map()
     reqNamespace = {
-      count: sinon.stub().returns(metricMock),
-      getIastMetrics: () => metrics
+      count: sinon.stub(globalNamespace, 'count').returns(metricMock)
     }
 
     const metric = proxyquire('../../../../src/appsec/iast/telemetry/iast-metric', {
       './namespaces': {
-        getNamespaceFromContext: () => reqNamespace
+        getNamespaceFromContext: () => globalNamespace
       }
     })
     IastMetric = metric.IastMetric
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => {
+    globalNamespace.iastMetrics.clear()
+    sinon.restore()
+  })
 
   it('should increase by one the metric value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST')
@@ -55,7 +57,7 @@ describe('Metrics', () => {
   it('should increase by one the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.inc(context, metric.formatTags('tag1'))
+    metric.inc(context, ['tagKey:tag1'])
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(1)
@@ -64,7 +66,7 @@ describe('Metrics', () => {
   it('should add by 42 the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(context, 42, metric.formatTags('tag1'))
+    metric.add(context, 42, ['tagKey:tag1'])
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
     expect(inc).to.be.calledOnceWith(42)
@@ -73,7 +75,7 @@ describe('Metrics', () => {
   it('should add by 42 the each metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(context, 42, metric.formatTags('tag1', 'tag2'))
+    metric.formatTags('tag1', 'tag2').forEach(tag => metric.add(context, 42, tag))
 
     expect(reqNamespace.count).to.be.calledTwice
     expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])

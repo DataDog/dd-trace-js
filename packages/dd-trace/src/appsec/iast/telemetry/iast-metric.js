@@ -19,6 +19,19 @@ const TagKey = {
   PROPAGATION_TYPE: 'propagation_type'
 }
 
+function formatTags (tags, tagKey) {
+  return tags.map(tagValue => tagValue ? [`${tagKey}:${tagValue.toLowerCase()}`] : undefined)
+}
+
+function getNamespace (scope, context) {
+  let namespace = globalNamespace
+
+  if (scope === Scope.REQUEST) {
+    namespace = getNamespaceFromContext(context) || globalNamespace
+  }
+  return namespace
+}
+
 class IastMetric {
   constructor (name, scope, tagKey) {
     this.name = name
@@ -26,41 +39,14 @@ class IastMetric {
     this.tagKey = tagKey
   }
 
-  getNamespace (context) {
-    let namespace = globalNamespace
-
-    if (this.scope === Scope.REQUEST) {
-      namespace = getNamespaceFromContext(context) || globalNamespace
-    }
-    return namespace
-  }
-
   formatTags (...tags) {
-    return tags.map(tagValue => [`${this.tagKey}:${tagValue.toLowerCase()}`])
+    return formatTags(tags, this.tagKey)
   }
 
-  getMetric (context, tags, type = 'count') {
-    const namespace = this.getNamespace(context)
-    const metrics = namespace.getIastMetrics(this.name)
-
-    let metric = metrics.get(tags)
-    if (!metric) {
-      metric = namespace[type](this.name, tags ? [...tags] : tags)
-      metrics.set(tags, metric)
-    }
-
-    return metric
-  }
-
-  // tags should be an array of [tagKey:tagValue]
+  // tags should be an array [tagKey:tagValue]
   add (context, value, tags) {
-    if (Array.isArray(tags)) {
-      for (const tag of tags) {
-        this.getMetric(context, tag).inc(value)
-      }
-    } else {
-      this.getMetric(context, tags).inc(value)
-    }
+    const namespace = getNamespace(this.scope, context)
+    namespace.getMetric(this.name, tags).inc(value)
   }
 
   inc (context, tags) {
@@ -76,7 +62,8 @@ class NoTaggedIastMetric extends IastMetric {
   }
 
   add (context, value) {
-    this.getMetric(context, this.tags).inc(value)
+    const namespace = getNamespace(this.scope, context)
+    namespace.getMetric(this.name, this.tags).inc(value)
   }
 
   inc (context) {
@@ -128,5 +115,7 @@ module.exports = {
   IastMetric,
 
   getExecutedMetric,
-  getInstrumentedMetric
+  getInstrumentedMetric,
+
+  formatTags
 }

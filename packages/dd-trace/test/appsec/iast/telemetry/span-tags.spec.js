@@ -23,8 +23,8 @@ describe('Telemetry Span tags', () => {
   afterEach(sinon.restore)
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics', () => {
-    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
-    EXECUTED_SINK.add(context, 3, EXECUTED_SINK.formatTags('sink_type_1'))
+    EXECUTED_SOURCE.add(context, 42, ['source.type.1'])
+    EXECUTED_SINK.add(context, 3, ['sink_type_1'])
 
     const { metrics } = getNamespaceFromContext(context).toJSON()
 
@@ -37,8 +37,8 @@ describe('Telemetry Span tags', () => {
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for tagged metrics flattened', () => {
     // a request metric with no context it behaves like a global metric
-    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
-    EXECUTED_SOURCE.add(context, 32, EXECUTED_SOURCE.formatTags('source.type.1'))
+    EXECUTED_SOURCE.add(context, 42, ['source.type.1'])
+    EXECUTED_SOURCE.add(context, 32, ['source.type.1'])
 
     const { metrics } = getNamespaceFromContext(context).toJSON()
 
@@ -49,10 +49,10 @@ describe('Telemetry Span tags', () => {
 
   it('should add span tags with tag name like \'tagPrefix.metricName.tagKey\' for different tagged metrics', () => {
     // a request metric with no context it behaves like a global metric
-    EXECUTED_SOURCE.add(context, 42, EXECUTED_SOURCE.formatTags('source.type.1'))
-    EXECUTED_SOURCE.add(context, 32, EXECUTED_SOURCE.formatTags('source.type.1'))
+    EXECUTED_SOURCE.add(context, 42, ['source.type.1'])
+    EXECUTED_SOURCE.add(context, 32, ['source.type.1'])
 
-    EXECUTED_SOURCE.add(context, 2, EXECUTED_SOURCE.formatTags('source.type.2'))
+    EXECUTED_SOURCE.add(context, 2, ['source.type.2'])
 
     const { metrics } = getNamespaceFromContext(context).toJSON()
 

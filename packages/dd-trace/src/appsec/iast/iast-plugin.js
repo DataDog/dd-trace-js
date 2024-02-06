@@ -5,7 +5,8 @@ const { channel } = require('dc-polyfill')
 const iastLog = require('./iast-log')
 const Plugin = require('../../plugins/plugin')
 const iastTelemetry = require('./telemetry')
-const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE } = require('./telemetry/iast-metric')
+const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, formatTags } =
+  require('./telemetry/iast-metric')
 const { storage } = require('../../../../datadog-core')
 const { getIastContext } = require('./iast-context')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
@@ -20,14 +21,12 @@ const instrumentations = require('../../../../datadog-instrumentations/src/helpe
  * - tagKey can be only SOURCE_TYPE (Source) or VULNERABILITY_TYPE (Sink)
  */
 class IastPluginSubscription {
-  constructor (moduleName, channelName, tagValue, tagKey = TagKey.VULNERABILITY_TYPE) {
+  constructor (moduleName, channelName, tagValues, tagKey = TagKey.VULNERABILITY_TYPE) {
     this.moduleName = moduleName
     this.channelName = channelName
 
-    if (tagValue) {
-      tagValue = !Array.isArray(tagValue) ? [tagValue] : tagValue
-      this.tags = tagValue.map(value => [`${tagKey}:${value.toLowerCase()}`])
-    }
+    tagValues = Array.isArray(tagValues) ? tagValues : [tagValues]
+    this.tags = formatTags(tagValues, tagKey)
 
     this.executedMetric = getExecutedMetric(tagKey)
     this.instrumentedMetric = getInstrumentedMetric(tagKey)
@@ -38,11 +37,11 @@ class IastPluginSubscription {
     if (this.moduleInstrumented) return
 
     this.moduleInstrumented = true
-    this.instrumentedMetric.inc(undefined, this.tags)
+    this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
   }
 
   increaseExecuted (iastContext) {
-    this.executedMetric.inc(iastContext, this.tags)
+    this.tags.forEach(tag => this.executedMetric.inc(iastContext, tag))
   }
 
   matchesModuleInstrumented (name) {
@@ -83,7 +82,13 @@ class IastPlugin extends Plugin {
   _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
     try {
       const result = handler()
-      iastTelemetry.isEnabled() && metric.inc(iastContext, tags)
+      if (iastTelemetry.isEnabled()) {
+        if (Array.isArray(tags)) {
+          tags.forEach(tag => metric.inc(iastContext, tag))
+        } else {
+          metric.inc(iastContext, tags)
+        }
+      }
       return result
     } catch (e) {
       iastLog.errorAndPublish(e)

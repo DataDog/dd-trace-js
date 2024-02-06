@@ -68,6 +68,18 @@ class IastNamespace extends Namespace {
     }
     return metrics
   }
+
+  getMetric (name, tags, type = 'count') {
+    const metrics = this.getIastMetrics(name)
+
+    let metric = metrics.get(tags)
+    if (!metric) {
+      metric = this[type](name, Array.isArray(tags) ? [...tags] : tags)
+      metrics.set(tags, metric)
+    }
+
+    return metric
+  }
 }
 
 const globalNamespace = new IastNamespace()

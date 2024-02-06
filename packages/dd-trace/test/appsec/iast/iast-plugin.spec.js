@@ -184,8 +184,8 @@ describe('IAST Plugin', () => {
   })
 
   describe('with appsec telemetry enabled', () => {
-    const vulnTags = [[`${VULNERABILITY_TYPE}:injection`]]
-    const sourceTags = [[`${SOURCE_TYPE}:http.source`]]
+    const vulnTags = [`${VULNERABILITY_TYPE}:injection`]
+    const sourceTags = [`${SOURCE_TYPE}:http.source`]
 
     let iastTelemetry
 
@@ -351,9 +351,10 @@ describe('IAST Plugin', () => {
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(undefined, 1, [
-          [`${SOURCE_TYPE}:http.source`], [`${SOURCE_TYPE}:http.source2`], [`${SOURCE_TYPE}:http.source3`]
-        ])
+        expect(metricAdd).to.be.calledThrice
+        expect(metricAdd.firstCall).to.be.calledWith(undefined, 1, [`${SOURCE_TYPE}:http.source`])
+        expect(metricAdd.secondCall).to.be.calledWith(undefined, 1, [`${SOURCE_TYPE}:http.source2`])
+        expect(metricAdd.thirdCall).to.be.calledWith(undefined, 1, [`${SOURCE_TYPE}:http.source3`])
       })
     })
 
