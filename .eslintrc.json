@@ -21,7 +21,7 @@
     "no-var": 2,
     "no-console": 2,
     "prefer-const": 2,
-    "array-bracket-spacing": [2, "always"],
+    "array-bracket-spacing": [2, "never"],
     "handle-callback-err": 0,
     "object-curly-spacing": [2, "always"],
     "import/no-extraneous-dependencies": 2,
