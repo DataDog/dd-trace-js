@@ -91,7 +91,7 @@ function enableTaintOperations (telemetryVerbosity) {
     onRemoveTransaction = onRemoveTransactionInformationTelemetry
   }
 
-  global._ddiast = getTaintTrackingImpl(telemetryVerbosity, false)
+  global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
 }
 
 function disableTaintOperations () {

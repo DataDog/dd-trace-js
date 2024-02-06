@@ -24,7 +24,7 @@ class KafkaConsumerIastPlugin extends SourceIastPlugin {
   taintKafkaMessage (message) {
     const iastContext = getIastContext(storage.getStore())
 
-    if (iastContext) {
+    if (iastContext && message) {
       const { key, value } = message
 
       if (key && typeof key === 'object') {
