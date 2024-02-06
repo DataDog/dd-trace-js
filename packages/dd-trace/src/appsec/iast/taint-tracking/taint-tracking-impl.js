@@ -19,14 +19,14 @@ function noop (res) { return res }
 const TaintTrackingNoop = {
   plusOperator: noop,
   concat: noop,
+  parse: noop,
   random: noop,
   replace: noop,
   slice: noop,
   substr: noop,
   substring: noop,
   trim: noop,
-  trimEnd: noop,
-  parse: noop
+  trimEnd: noop
 }
 
 function getTransactionId (iastContext) {
