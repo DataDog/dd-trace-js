@@ -31,10 +31,7 @@ class SpanProcessor {
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (!tracing) { // TODO: add test
-      this._erase(trace, active)
-      return
-    }
+    if (!tracing) this._erase(trace, active) // TODO: add test
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
