@@ -13,7 +13,8 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -121,6 +122,7 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddItrCorrelationId = this.itrCorrelationId
       })
     })
 
@@ -129,6 +131,7 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
         _ddTestCodeCoverageEnabled
@@ -154,6 +157,9 @@ class JestPlugin extends CiPlugin {
             testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
           }
         }
+      }
+      if (itrCorrelationId) {
+        testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -217,7 +223,7 @@ class JestPlugin extends CiPlugin {
     })
 
     /**
-     * This can't use `this.itrConfig` like `ci:mocha:test-suite:code-coverage`
+     * This can't use `this.libraryConfig` like `ci:mocha:test-suite:code-coverage`
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */

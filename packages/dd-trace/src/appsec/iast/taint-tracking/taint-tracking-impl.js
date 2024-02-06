@@ -1,5 +1,6 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
@@ -7,12 +8,15 @@ const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
 
+const mathRandomCallCh = dc.channel('datadog:random:call')
+
 function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
   plusOperator: noop,
   concat: noop,
+  random: noop,
   replace: noop,
   slice: noop,
   substr: noop,
@@ -110,7 +114,14 @@ function csiMethodsOverrides (getContext) {
       getContext,
       String.prototype.trim,
       String.prototype.trimStart
-    )
+    ),
+
+    random: function (res, fn) {
+      if (mathRandomCallCh.hasSubscribers) {
+        mathRandomCallCh.publish({ fn })
+      }
+      return res
+    }
   }
 }
 

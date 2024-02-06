@@ -97,11 +97,15 @@ class Config {
     // depending on those (code hotspots and endpoint collection) need to default
     // to false on Windows.
     const samplingContextsAvailable = process.platform !== 'win32'
-    function checkOptionAllowed (option, description) {
-      if (option && !samplingContextsAvailable) {
+    function checkOptionAllowed (option, description, condition) {
+      if (option && !condition) {
         throw new Error(`${description} not supported on ${process.platform}.`)
       }
     }
+    function checkOptionWithSamplingContextAllowed (option, description) {
+      checkOptionAllowed(option, description, samplingContextsAvailable)
+    }
+
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
@@ -110,7 +114,7 @@ class Config {
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
-    checkOptionAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
+    checkOptionWithSamplingContextAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
 
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
@@ -127,8 +131,13 @@ class Config {
       new AgentExporter(this)
     ], this)
 
+    // OOM monitoring does not work well on Windows, so it is disabled by default.
+    const oomMonitoringSupported = process.platform !== 'win32'
+
     const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, true))
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, oomMonitoringSupported))
+    checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
+
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
@@ -158,17 +167,17 @@ class Config {
       DD_PROFILING_TIMELINE_ENABLED,
       DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
     logExperimentalVarDeprecation('TIMELINE_ENABLED')
-    checkOptionAllowed(this.timelineEnabled, 'Timeline view')
+    checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
-    checkOptionAllowed(this.codeHotspotsEnabled, 'Code hotspots')
+    checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
-    checkOptionAllowed(this.cpuProfilingEnabled, 'CPU profiling')
+    checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
   }

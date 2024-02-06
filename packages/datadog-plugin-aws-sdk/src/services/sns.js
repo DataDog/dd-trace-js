@@ -1,4 +1,6 @@
 'use strict'
+const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
@@ -11,6 +13,7 @@ class Sns extends BaseAwsSdkPlugin {
 
     if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
+
     // Split the ARN into its parts
     // ex.'arn:aws:sns:us-east-1:123456789012:my-topic'
     const arnParts = TopicArn.split(':')
@@ -72,10 +75,25 @@ class Sns extends BaseAwsSdkPlugin {
     }
     const ddInfo = {}
     this.tracer.inject(span, 'text_map', ddInfo)
+    // add ddInfo before checking DSM so we can include DD attributes in payload size
     params.MessageAttributes._datadog = {
       DataType: 'Binary',
-      BinaryValue: Buffer.from(JSON.stringify(ddInfo)) // BINARY types are automatically base64 encoded
+      BinaryValue: ddInfo
     }
+    if (this.config.dsmEnabled) {
+      const payloadSize = getHeadersSize({
+        Message: params.Message,
+        MessageAttributes: params.MessageAttributes
+      })
+      const dataStreamsContext = this.tracer
+        .setCheckpoint(['direction:out', `topic:${params.TopicArn}`, 'type:sns'], span, payloadSize)
+      if (dataStreamsContext) {
+        const pathwayCtx = encodePathwayContext(dataStreamsContext)
+        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+      }
+    }
+    // BINARY types are automatically base64 encoded
+    params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
   }
 }
 
