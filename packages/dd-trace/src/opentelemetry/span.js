@@ -149,7 +149,6 @@ class Span {
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
-    this.links = links
     this._spanProcessor.onStart(this, context)
   }
 
