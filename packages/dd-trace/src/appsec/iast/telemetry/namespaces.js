@@ -90,5 +90,7 @@ module.exports = {
   finalizeRequestNamespace,
   globalNamespace,
 
-  DD_IAST_METRICS_NAMESPACE
+  DD_IAST_METRICS_NAMESPACE,
+
+  IastNamespace
 }

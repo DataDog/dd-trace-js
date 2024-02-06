@@ -13,7 +13,7 @@ const {
 const { globalNamespace } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 describe('Metrics', () => {
-  let IastMetric, reqNamespace, inc, context
+  let IastMetric, NoTaggedIastMetric, reqNamespace, inc, context
   beforeEach(() => {
     context = {}
     inc = sinon.stub()
@@ -29,6 +29,7 @@ describe('Metrics', () => {
       }
     })
     IastMetric = metric.IastMetric
+    NoTaggedIastMetric = metric.NoTaggedIastMetric
   })
 
   afterEach(() => {
@@ -57,22 +58,22 @@ describe('Metrics', () => {
   it('should increase by one the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.inc(context, ['tagKey:tag1'])
+    metric.inc(context, 'tagKey:tag1')
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
     expect(inc).to.be.calledOnceWith(1)
   })
 
   it('should add by 42 the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.add(context, 42, ['tagKey:tag1'])
+    metric.add(context, 42, 'tagKey:tag1')
 
-    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, ['tagKey:tag1'])
+    expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
     expect(inc).to.be.calledOnceWith(42)
   })
 
-  it('should add by 42 the each metric tag value', () => {
+  it('should format tags according with its tagKey', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
     metric.formatTags('tag1', 'tag2').forEach(tag => metric.add(context, 42, tag))
@@ -98,5 +99,24 @@ describe('Metrics', () => {
 
     metric = getInstrumentedMetric(TagKey.SOURCE_TYPE)
     expect(metric).to.be.equal(INSTRUMENTED_SOURCE)
+  })
+
+  describe('NoTaggedIastMetric', () => {
+    it('should define an empty array as its tags', () => {
+      const noTagged = new NoTaggedIastMetric('notagged', 'scope')
+
+      expect(noTagged.name).to.be.eq('notagged')
+      expect(noTagged.scope).to.be.eq('scope')
+      expect(noTagged.tags).to.be.deep.eq([])
+    })
+
+    it('should reuse previous metric when calling add multiple times', () => {
+      const noTagged = new NoTaggedIastMetric('notagged')
+
+      noTagged.add(undefined, 42)
+      noTagged.add(undefined, 42)
+
+      expect(reqNamespace.count).to.be.calledOnceWith('notagged')
+    })
   })
 })

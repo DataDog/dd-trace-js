@@ -112,6 +112,7 @@ module.exports = {
   TagKey,
 
   IastMetric,
+  NoTaggedIastMetric,
 
   getExecutedMetric,
   getInstrumentedMetric,

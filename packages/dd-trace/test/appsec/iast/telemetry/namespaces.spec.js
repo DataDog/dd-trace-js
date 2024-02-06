@@ -4,7 +4,9 @@ const {
   initRequestNamespace,
   finalizeRequestNamespace,
   DD_IAST_METRICS_NAMESPACE,
-  globalNamespace
+  globalNamespace,
+
+  IastNamespace
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 const REQUEST_TAINTED = 'request.tainted'
@@ -84,5 +86,85 @@ describe('IAST metric namespaces', () => {
 
     expect(globalNamespace.count.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
     expect(metric.inc.secondCall.args[0]).to.equal(1)
+  })
+})
+
+describe('IastNamespace', () => {
+  describe('getIastMetric', () => {
+    it('should create an IastMetric map with metric name as its key', () => {
+      const namespace = new IastNamespace()
+
+      const metrics = namespace.getIastMetrics('metric.name')
+
+      expect(metrics).to.not.undefined
+      expect(metrics instanceof Map).to.be.true
+    })
+
+    it('should reuse the same map if created before', () => {
+      const namespace = new IastNamespace()
+
+      expect(namespace.getIastMetrics('metric.name')).to.be.eq(namespace.getIastMetrics('metric.name'))
+    })
+  })
+
+  describe('getMetric', () => {
+    it('should register a new count type metric and store it in the map', () => {
+      const namespace = new IastNamespace()
+
+      const metric = namespace.getMetric('metric.name', ['key:tag1'])
+
+      expect(metric).to.not.be.undefined
+      expect(metric.metric).to.be.eq('metric.name')
+      expect(metric.namespace).to.be.eq('iast')
+      expect(metric.type).to.be.eq('count')
+      expect(metric.tags).to.be.deep.eq(['key:tag1', `version:${process.version}`])
+    })
+
+    it('should register a new distribution type metric and store it in the map', () => {
+      const namespace = new IastNamespace()
+
+      const metric = namespace.getMetric('metric.name', ['key:tag1'], 'distribution')
+
+      expect(metric).to.not.be.undefined
+      expect(metric.metric).to.be.eq('metric.name')
+      expect(metric.namespace).to.be.eq('iast')
+      expect(metric.type).to.be.eq('distribution')
+      expect(metric.tags).to.be.deep.eq(['key:tag1', `version:${process.version}`])
+    })
+
+    it('should not add the version tags to the tags array', () => {
+      const namespace = new IastNamespace()
+
+      const tags = ['key:tag1']
+      const metric = namespace.getMetric('metric.name', tags)
+
+      expect(tags).to.be.deep.eq(['key:tag1'])
+      expect(metric.tags).to.be.deep.eq(['key:tag1', `version:${process.version}`])
+    })
+
+    it('should not create a previously created metric', () => {
+      const namespace = new IastNamespace()
+
+      const metric = {}
+      const count = sinon.stub(namespace, 'count').returns(metric)
+
+      namespace.getMetric('metric.name', 'key:tag1')
+      namespace.getMetric('metric.name', 'key:tag1')
+
+      expect(count).to.be.calledOnceWith('metric.name', 'key:tag1')
+    })
+
+    it('should reuse a previously created metric', () => {
+      const namespace = new IastNamespace()
+
+      const metric = namespace.getMetric('metric.name', ['key:tag1'])
+
+      metric.track(42)
+
+      const metric2 = namespace.getMetric('metric.name', ['key:tag1'])
+
+      expect(metric2).to.be.eq(metric)
+      expect(metric2.points[0][1]).to.be.eq(42)
+    })
   })
 })
