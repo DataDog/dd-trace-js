@@ -16,6 +16,7 @@
     "es2020": true
   },
   "rules": {
+    "quote-props": [2, "consistent-as-needed"],
     "max-len": [2, 120, 2],
     "no-var": 2,
     "no-console": 2,
