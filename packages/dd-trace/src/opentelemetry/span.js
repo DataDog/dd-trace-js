@@ -150,6 +150,8 @@ class Span {
     this.startTime = hrStartTime
     this.kind = kind
     this._spanProcessor.onStart(this, context)
+
+    this.links && this.links.forEach(link => this.addLink(link.context, link.attributes))
   }
 
   get parentSpanId () {
