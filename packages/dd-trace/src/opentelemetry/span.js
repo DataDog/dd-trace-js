@@ -149,9 +149,8 @@ class Span {
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
+    this.links = links
     this._spanProcessor.onStart(this, context)
-
-    this.links && this.links.forEach(link => this.addLink(link.context, link.attributes))
   }
 
   get parentSpanId () {
@@ -196,9 +195,7 @@ class Span {
   addLink (context, attributes) {
     // extract dd context
     const ddSpanContext = context._ddContext
-    console.log(66, ddSpanContext, attributes)
     this._ddSpan.addLink(ddSpanContext, attributes)
-    console.log(88, this._ddSpan._links)
     return this
   }
 
