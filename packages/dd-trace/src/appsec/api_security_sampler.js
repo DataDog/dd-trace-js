@@ -39,10 +39,6 @@ function sampleRequest (req) {
     return false
   }
 
-  if (sampledRequests.has(req)) {
-    return true
-  }
-
   const shouldSample = Math.random() <= requestSampling
 
   if (shouldSample) {

@@ -30,7 +30,7 @@ withVersions('express', 'express', version => {
       })
 
       app.post('/', (req, res) => {
-        res.end('DONE')
+        res.json({ resKey: 'resValue' })
       })
 
       getPort().then(newPort => {
@@ -99,17 +99,19 @@ withVersions('express', 'express', version => {
       it('should get the schema', async () => {
         appsec.enable(config)
 
-        const expectedSchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
+        const expectedRequestBodySchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
+        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'resKey': [8] }])).toString('base64')
         const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
           expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedSchema)
+          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
         })
 
         expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.equal('DONE')
+        expect(res.data).to.be.deep.equal({ resKey: 'resValue' })
       })
 
       it('should not get the schema', async () => {
@@ -121,10 +123,11 @@ withVersions('express', 'express', version => {
         await agent.use((traces) => {
           const span = traces[0][0]
           expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.req.body')
+          expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
         })
 
         expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.equal('DONE')
+        expect(res.data).to.be.deep.equal({ resKey: 'resValue' })
       })
     })
   })

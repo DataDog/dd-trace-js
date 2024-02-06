@@ -203,7 +203,6 @@ function onResponseBody ({ req, body }) {
   // we don't support blocking at this point, so no results needed
   waf.run({
     persistent: {
-      [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true },
       [addresses.HTTP_OUTGOING_BODY]: body
     }
   }, req)
