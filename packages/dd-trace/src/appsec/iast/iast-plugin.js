@@ -30,14 +30,16 @@ class IastPluginSubscription {
 
     this.executedMetric = getExecutedMetric(tagKey)
     this.instrumentedMetric = getInstrumentedMetric(tagKey)
+
     this.moduleInstrumented = false
   }
 
   increaseInstrumented () {
-    if (this.moduleInstrumented) return
+    if (!this.moduleInstrumented) {
+      this.moduleInstrumented = true
 
-    this.moduleInstrumented = true
-    this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+      this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+    }
   }
 
   increaseExecuted (iastContext) {

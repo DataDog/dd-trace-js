@@ -43,7 +43,6 @@ class IastMetric {
     return formatTags(tags, this.tagKey)
   }
 
-  // tags should be an array [tagKey:tagValue]
   add (context, value, tags) {
     const namespace = getNamespace(this.scope, context)
     namespace.getMetric(this.name, tags).inc(value)
