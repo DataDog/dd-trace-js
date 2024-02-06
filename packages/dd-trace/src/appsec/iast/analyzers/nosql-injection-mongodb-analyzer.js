@@ -9,7 +9,7 @@ const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
 
-const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose')
+const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 
 function iterateObjectStrings (target, fn, levelKeys = [], depth = 50, visited = new Set()) {
@@ -37,34 +37,39 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.configureSanitizers()
 
-    this.addSub('datadog:mongodb:collection:filter:start', ({ filters }) => {
+    const onStart = ({ filters }) => {
       const store = storage.getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
         filters.forEach(filter => {
           this.analyze({ filter }, store)
         })
       }
-    })
 
-    this.addSub('datadog:mongoose:model:filter:start', ({ filters }) => {
-      const store = storage.getStore()
-      if (!store) return
+      return store
+    }
 
-      if (filters?.length) {
-        filters.forEach(filter => {
-          this.analyze({ filter }, store)
-        })
+    const onStartAndEnterWithStore = (message) => {
+      const store = onStart(message || {})
+      if (store) {
+        storage.enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
+    }
 
-      storage.enterWith({ ...store, nosqlAnalyzed: true, mongooseParentStore: store })
-    })
-
-    this.addSub('datadog:mongoose:model:filter:finish', () => {
+    const onFinish = () => {
       const store = storage.getStore()
-      if (store?.mongooseParentStore) {
-        storage.enterWith(store.mongooseParentStore)
+      if (store?.nosqlParentStore) {
+        storage.enterWith(store.nosqlParentStore)
       }
-    })
+    }
+
+    this.addSub('datadog:mongodb:collection:filter:start', onStart)
+
+    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
+    this.addSub('datadog:mongoose:model:filter:finish', onFinish)
+
+    this.addSub('datadog:mquery:filter:prepare', onStart)
+    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
+    this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
   }
 
   configureSanitizers () {

@@ -23,7 +23,8 @@ const {
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -44,7 +45,8 @@ const {
   GIT_REPOSITORY_URL,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
-  CI_PROVIDER_NAME
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -118,14 +120,14 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getItrConfig (tracer, testConfiguration) {
+function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
 
-    tracer._tracer._exporter.getItrConfiguration(testConfiguration, (err, itrConfig) => {
-      resolve({ err, itrConfig })
+    tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
+      resolve({ err, libraryConfig })
     })
   })
 }
@@ -135,13 +137,14 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
     return Promise.resolve({ skippableTests: [] })
   }
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests) => {
+    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
       resolve({
         err,
-        skippableTests
+        skippableTests,
+        correlationId
       })
     })
   })
@@ -184,7 +187,8 @@ module.exports = (on, config) => {
     [RUNTIME_NAME]: runtimeName,
     [RUNTIME_VERSION]: runtimeVersion,
     [GIT_BRANCH]: branch,
-    [CI_PROVIDER_NAME]: ciProviderName
+    [CI_PROVIDER_NAME]: ciProviderName,
+    [CI_WORKSPACE_PATH]: repositoryRoot
   } = testEnvironmentMetadata
 
   const isUnsupportedCIProvider = !ciProviderName
@@ -203,7 +207,7 @@ module.exports = (on, config) => {
     testLevel: 'test'
   }
 
-  const codeOwnersEntries = getCodeOwnersFileEntries()
+  const codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
   let activeSpan = null
   let testSessionSpan = null
@@ -215,6 +219,7 @@ module.exports = (on, config) => {
   let isSuitesSkippingEnabled = false
   let isCodeCoverageEnabled = false
   let testsToSkip = []
+  let itrCorrelationId = ''
   const unskippableSuites = []
   let hasForcedToRunSuites = false
   let hasUnskippableSuites = false
@@ -281,60 +286,62 @@ module.exports = (on, config) => {
   }
 
   on('before:run', (details) => {
-    return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
+    return getLibraryConfiguration(tracer, testConfiguration).then(({ err, libraryConfig }) => {
       if (err) {
         log.error(err)
       } else {
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
       }
 
-      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration).then(({ err, skippableTests }) => {
-        if (err) {
-          log.error(err)
-        } else {
-          testsToSkip = skippableTests || []
-        }
-
-        // `details.specs` are test files
-        details.specs.forEach(({ absolute, relative }) => {
-          const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-          if (isUnskippableSuite) {
-            unskippableSuites.push(relative)
+      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration)
+        .then(({ err, skippableTests, correlationId }) => {
+          if (err) {
+            log.error(err)
+          } else {
+            testsToSkip = skippableTests || []
+            itrCorrelationId = correlationId
           }
+
+          // `details.specs` are test files
+          details.specs.forEach(({ absolute, relative }) => {
+            const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+            if (isUnskippableSuite) {
+              unskippableSuites.push(relative)
+            }
+          })
+
+          const childOf = getTestParentSpan(tracer)
+          rootDir = getRootDir(details)
+
+          command = getCypressCommand(details)
+          frameworkVersion = getCypressVersion(details)
+
+          const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+          const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
+
+          testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
+            childOf,
+            tags: {
+              [COMPONENT]: TEST_FRAMEWORK_NAME,
+              ...testEnvironmentMetadata,
+              ...testSessionSpanMetadata
+            }
+          })
+          ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
+          testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+            childOf: testSessionSpan,
+            tags: {
+              [COMPONENT]: TEST_FRAMEWORK_NAME,
+              ...testEnvironmentMetadata,
+              ...testModuleSpanMetadata
+            }
+          })
+          ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
+
+          return details
         })
-
-        const childOf = getTestParentSpan(tracer)
-        rootDir = getRootDir(details)
-
-        command = getCypressCommand(details)
-        frameworkVersion = getCypressVersion(details)
-
-        const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-        const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-
-        testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
-          childOf,
-          tags: {
-            [COMPONENT]: TEST_FRAMEWORK_NAME,
-            ...testEnvironmentMetadata,
-            ...testSessionSpanMetadata
-          }
-        })
-        ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
-
-        testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-          childOf: testSessionSpan,
-          tags: {
-            [COMPONENT]: TEST_FRAMEWORK_NAME,
-            ...testEnvironmentMetadata,
-            ...testModuleSpanMetadata
-          }
-        })
-        ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
-
-        return details
-      })
     })
   })
   on('after:spec', (spec, { tests, stats }) => {
@@ -358,6 +365,9 @@ module.exports = (on, config) => {
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
       }
+      if (itrCorrelationId) {
+        skippedTestSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
       skippedTestSpan.finish()
     })
 
@@ -378,6 +388,9 @@ module.exports = (on, config) => {
       if (cypressTestStatus !== finishedTest.testStatus) {
         finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
         finishedTest.testSpan.setTag('error', latestError)
+      }
+      if (itrCorrelationId) {
+        finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })

@@ -16,7 +16,7 @@ const testSuiteStartCh = channel('ci:cucumber:test-suite:start')
 const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
 const testSuiteCodeCoverageCh = channel('ci:cucumber:test-suite:code-coverage')
 
-const itrConfigurationCh = channel('ci:cucumber:itr-configuration')
+const libraryConfigurationCh = channel('ci:cucumber:library-configuration')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
@@ -44,6 +44,7 @@ const patched = new WeakSet()
 let pickleByFile = {}
 const pickleResultByFile = {}
 let skippableSuites = []
+let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
 
@@ -102,7 +103,7 @@ function wrapRun (pl, isLatestVersion) {
         const testSuitePath = getTestSuitePath(testSuiteFullPath, process.cwd())
         isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
-        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun })
+        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
       }
 
       const testSourceLine = this.gherkinDocument &&
@@ -271,7 +272,7 @@ addHook({
     })
 
     asyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone })
     })
 
     await configPromise
@@ -304,6 +305,7 @@ addHook({
       this.pickleIds = picklesToRun
 
       skippedSuites = Array.from(filteredPickles.skippedSuites)
+      itrCorrelationId = skippableResponse.itrCorrelationId
     }
 
     pickleByFile = getPickleByFile(this)

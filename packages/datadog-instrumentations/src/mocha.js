@@ -20,7 +20,7 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const itrConfigurationCh = channel('ci:mocha:itr-configuration')
+const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
@@ -53,6 +53,7 @@ let isSuitesSkipped = false
 let skippedSuites = []
 const unskippableSuites = []
 let isForcedToRun = false
+let itrCorrelationId = ''
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -191,7 +192,12 @@ function mochaHook (Runner) {
         const isUnskippable = unskippableSuites.includes(suite.file)
         isForcedToRun = isUnskippable && suitesToSkip.includes(getTestSuitePath(suite.file, process.cwd()))
         asyncResource.runInAsyncScope(() => {
-          testSuiteStartCh.publish({ testSuite: suite.file, isUnskippable, isForcedToRun })
+          testSuiteStartCh.publish({
+            testSuite: suite.file,
+            isUnskippable,
+            isForcedToRun,
+            itrCorrelationId
+          })
         })
       }
     })
@@ -378,7 +384,7 @@ addHook({
       return run.apply(this, arguments)
     }
 
-    if (!itrConfigurationCh.hasSubscribers || this.isWorker) {
+    if (!libraryConfigurationCh.hasSubscribers || this.isWorker) {
       if (this.isWorker) {
         isWorker = true
       }
@@ -395,11 +401,12 @@ addHook({
       }
     })
 
-    const onReceivedSkippableSuites = ({ err, skippableSuites }) => {
+    const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
       if (err) {
         suitesToSkip = []
       } else {
         suitesToSkip = skippableSuites
+        itrCorrelationId = responseItrCorrelationId
       }
       // We remove the suites that we skip through ITR
       const filteredSuites = getFilteredSuites(runner.suite.suites)
@@ -432,7 +439,7 @@ addHook({
     }
 
     mochaRunAsyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({
+      libraryConfigurationCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })

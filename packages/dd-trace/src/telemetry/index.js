@@ -141,6 +141,9 @@ function appStarted (config) {
 }
 
 function appClosing () {
+  if (!config?.telemetry?.enabled) {
+    return
+  }
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
   // we flush before shutting down. Only in CI Visibility

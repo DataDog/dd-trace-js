@@ -37,7 +37,7 @@ const testRunFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
-const jestItrConfigurationCh = channel('ci:jest:itr-configuration')
+const libraryConfigurationCh = channel('ci:jest:library-configuration')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
@@ -234,19 +234,19 @@ function cliWrapper (cli, jestVersion) {
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
-    if (!jestItrConfigurationCh.hasSubscribers) {
+    if (!libraryConfigurationCh.hasSubscribers) {
       return runCLI.apply(this, arguments)
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
-      jestItrConfigurationCh.publish({ onDone })
+      libraryConfigurationCh.publish({ onDone })
     })
 
     try {
-      const { err, itrConfig } = await configurationPromise
+      const { err, libraryConfig } = await configurationPromise
       if (!err) {
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
       }
     } catch (err) {
       log.error(err)
@@ -497,6 +497,7 @@ addHook({
       _ddTestCommand,
       _ddForcedToRun,
       _ddUnskippable,
+      _ddItrCorrelationId,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

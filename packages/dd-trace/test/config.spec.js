@@ -1266,6 +1266,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
+      delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1311,6 +1312,15 @@ describe('Config', () => {
       it('should enable telemetry', () => {
         const config = new Config(options)
         expect(config).to.nested.property('telemetry.enabled', true)
+      })
+      it('should enable early flake detection by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isEarlyFlakeDetectionEnabled', true)
+      })
+      it('should disable early flake detection if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', () => {
+        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {

@@ -5,7 +5,7 @@ const {
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
-const kebabCase = require('lodash.kebabcase')
+const kebabCase = require('../../utils/src/kebabcase')
 const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:amqplib:command:start')
@@ -28,7 +28,7 @@ addHook({ name: 'amqplib', file: 'lib/channel.js', versions: ['>=0.5'] }, channe
   })
 
   shimmer.wrap(channel.Channel.prototype, 'sendMessage', sendMessage => function (fields) {
-    return instrument(sendMessage, this, arguments, 'basic.publish', fields)
+    return instrument(sendMessage, this, arguments, 'basic.publish', fields, arguments[2])
   })
 
   shimmer.wrap(channel.BaseChannel.prototype, 'dispatchMessage', dispatchMessage => function (fields, message) {

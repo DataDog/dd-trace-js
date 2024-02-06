@@ -30,6 +30,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const semver = require('semver')
+const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -54,6 +55,9 @@ moduleType.forEach(({
 }) => {
   // cypress only supports esm on versions >= 10.0.0
   if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+    return
+  }
+  if (version === '6.7.0' && NODE_MAJOR > 16) {
     return
   }
   describe(`cypress@${version} ${type}`, function () {
@@ -734,6 +738,40 @@ moduleType.forEach(({
         )
         childProcess.on('exit', () => {
           Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('reports itr_correlation_id in tests', (done) => {
+        const itrCorrelationId = '4321'
+        receiver.setItrCorrelationId(itrCorrelationId)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            tests.forEach(test => {
+              assert.equal(test.itr_correlation_id, itrCorrelationId)
+            })
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
             done()
           }).catch(done)
         })

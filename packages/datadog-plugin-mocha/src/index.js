@@ -14,7 +14,8 @@ const {
   TEST_SOURCE_START,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  ITR_CORRELATION_ID
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -41,7 +42,7 @@ class MochaPlugin extends CiPlugin {
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+      if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
       const testSuiteSpan = this._testSuites.get(suiteFile)
@@ -66,7 +67,12 @@ class MochaPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
     })
 
-    this.addSub('ci:mocha:test-suite:start', ({ testSuite, isUnskippable, isForcedToRun }) => {
+    this.addSub('ci:mocha:test-suite:start', ({
+      testSuite,
+      isUnskippable,
+      isForcedToRun,
+      itrCorrelationId
+    }) => {
       const store = storage.getStore()
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -92,8 +98,11 @@ class MochaPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      if (this.itrConfig?.isCodeCoverageEnabled) {
+      if (this.libraryConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
+      }
+      if (itrCorrelationId) {
+        testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       this.enter(testSuiteSpan, store)
       this._testSuites.set(testSuite, testSuiteSpan)
@@ -183,7 +192,7 @@ class MochaPlugin extends CiPlugin {
       error
     }) => {
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -213,7 +222,7 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
       }
-      this.itrConfig = null
+      this.libraryConfig = null
       this.tracer._exporter.flush()
     })
   }

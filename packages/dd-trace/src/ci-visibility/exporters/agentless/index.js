@@ -21,6 +21,8 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
 
     this._apiUrl = url || new URL(`https://api.${site}`)
+    // Agentless is always gzip compatible
+    this._isGzipCompatible = true
   }
 
   setUrl (url, coverageUrl = url, apiUrl = url) {
