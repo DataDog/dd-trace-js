@@ -69,7 +69,6 @@ benchmark-serverless:
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
-    branch: jordan.gonzalez/benchmark-dd-trace-js
   allow_failure: false
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
