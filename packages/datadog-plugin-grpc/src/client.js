@@ -41,7 +41,6 @@ class GrpcClientPlugin extends ClientPlugin {
         'grpc.status.code': 0
       }
     }, false)
-
     // needed as precursor for peer.service
     if (method.service && method.package) {
       span.setTag('rpc.service', method.package + '.' + method.service)
@@ -68,7 +67,7 @@ class GrpcClientPlugin extends ClientPlugin {
     this.addError(error, span)
   }
 
-  finish ({ span, result }) {
+  finish ({ span, result, peer }) {
     if (!span) return
 
     const { code, metadata } = result || {}
@@ -78,6 +77,21 @@ class GrpcClientPlugin extends ClientPlugin {
 
     if (metadata && metadataFilter) {
       addMetadataTags(span, metadata, metadataFilter, 'response')
+    }
+
+    if (peer) {
+      // The only scheme we want to support here is ipv[46]:port, although
+      // more are supported by the library
+      // https://github.com/grpc/grpc/blob/v1.60.0/doc/naming.md
+      const parts = peer.split(':')
+      if (parts[parts.length - 1].match(/^\d+/)) {
+        const port = parts[parts.length - 1]
+        const ip = parts.slice(0, -1).join(':')
+        span.setTag('network.destination.ip', ip)
+        span.setTag('network.destination.port', port)
+      } else {
+        span.setTag('network.destination.ip', peer)
+      }
     }
 
     this.tagPeerService(span)
