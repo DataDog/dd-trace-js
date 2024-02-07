@@ -70,8 +70,7 @@ function extractSpanLinks (trace, span) {
   const links = []
   if (span._links) {
     for (const link of span._links) {
-      const context = link.context
-      const attributes = link.attributes
+      const { context, attributes } = link
       const formattedLink = {}
 
       formattedLink.trace_id = context._traceId.toBuffer().length <= 8 && context?._trace?.tags['_dd.p.tid']
