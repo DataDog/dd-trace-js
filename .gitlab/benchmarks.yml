@@ -67,11 +67,14 @@ benchmark:
 benchmark-serverless:
   stage: benchmarks
   tags: ["arch:amd64"]
-  when: on_failure
+  when: always
   needs:
     - benchmark-serverless-trigger
+  depends:
+    - benchmark-serverless-trigger
   script:
-    - echo "previous job failed!"
+    - echo $(env | grep COLD_START)
+    - echo $(env | grep LAYER_SIZE)
 
 benchmark-serverless-trigger:
   stage: benchmarks
