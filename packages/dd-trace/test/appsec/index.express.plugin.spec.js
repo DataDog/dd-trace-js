@@ -30,7 +30,15 @@ withVersions('express', 'express', version => {
       })
 
       app.post('/', (req, res) => {
-        res.json({ resKey: 'resValue' })
+        res.send({ resKey: 'resValue' })
+      })
+
+      app.post('/jsonp', (req, res) => {
+        res.jsonp({ jsonpResKey: 'jsonpResValue' })
+      })
+
+      app.post('/json', (req, res) => {
+        res.jsonp({ jsonResKey: 'jsonResValue' })
       })
 
       getPort().then(newPort => {
@@ -112,6 +120,36 @@ withVersions('express', 'express', version => {
 
         expect(res.status).to.be.equal(200)
         expect(res.data).to.be.deep.equal({ resKey: 'resValue' })
+      })
+
+      it('should get the response body schema with res.json method', async () => {
+        appsec.enable(config)
+
+        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonResKey': [8] }])).toString('base64')
+        const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
+      })
+
+      it('should get the response body schema with res.jsonp method', async () => {
+        appsec.enable(config)
+
+        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonpResKey': [8] }])).toString('base64')
+        const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
       })
 
       it('should not get the schema', async () => {
