@@ -10,6 +10,7 @@ class TestApiManualPlugin extends CiPlugin {
   static get id () {
     return 'test-api-manual'
   }
+
   constructor (...args) {
     super(...args)
     this.sourceRoot = process.cwd()

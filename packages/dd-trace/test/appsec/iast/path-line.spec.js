@@ -9,12 +9,15 @@ class CallSiteMock {
     this.lineNumber = lineNumber
     this.columnNumber = columnNumber
   }
+
   getLineNumber () {
     return this.lineNumber
   }
+
   getColumnNumber () {
     return this.columnNumber
   }
+
   getFileName () {
     return this.fileName
   }

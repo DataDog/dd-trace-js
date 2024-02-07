@@ -46,6 +46,7 @@ class JestPlugin extends CiPlugin {
     }
     return this.unskippableSuites
   }
+
   getForcedToRunSuites (forcedToRunSuitesList) {
     if (!this.forcedToRunSuites) {
       this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)

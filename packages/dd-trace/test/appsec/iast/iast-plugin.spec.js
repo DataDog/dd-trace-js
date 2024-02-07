@@ -37,6 +37,7 @@ describe('IAST Plugin', () => {
         addSub (channelName, handler) {
           addSubMock(channelName, handler)
         }
+
         configure (config) {
           configureMock(config)
         }
@@ -191,6 +192,7 @@ describe('IAST Plugin', () => {
         addSub (channelName, handler) {
           addSubMock(channelName, handler)
         }
+
         configure (config) {
           configureMock(config)
         }

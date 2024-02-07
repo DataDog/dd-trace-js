@@ -34,6 +34,7 @@ class CookieAnalyzer extends Analyzer {
   _getExcludedPaths () {
     return EXCLUDED_PATHS
   }
+
   _checkOCE (context, value) {
     if (value && value.location) {
       return true

@@ -61,6 +61,7 @@ class CouchBasePlugin extends StoragePlugin {
     this._addCommandSubs('append')
     this._addCommandSubs('prepend')
   }
+
   _addCommandSubs (name) {
     this.addSubs(name, ({ bucket, collection, seedNodes }) => {
       const store = storage.getStore()

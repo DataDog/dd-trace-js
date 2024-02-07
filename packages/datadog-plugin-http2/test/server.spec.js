@@ -9,6 +9,7 @@ class MockAbortController {
   constructor () {
     this.signal = new EventEmitter()
   }
+
   abort () {
     this.signal.emit('abort')
   }
