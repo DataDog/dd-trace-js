@@ -55,6 +55,7 @@ let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -102,7 +103,7 @@ function getEfdTestName (testName, numAttempt) {
 }
 
 function removeEfdTestName (testName) {
-  return testName.replace(/Retried by Datadog's Early Flake Detection \(#\d+\): /g, '')
+  return testName.replace(EFD_TEST_NAME_REGEX, '')
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {

@@ -27,7 +27,8 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_NAME
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -511,6 +512,10 @@ testFrameworks.forEach(({
                   retriedTests.length
                 )
                 assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                // Test name does not change
+                newTests.forEach(test => {
+                  assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
+                })
               })
 
             childProcess = exec(
@@ -698,6 +703,10 @@ testFrameworks.forEach(({
                 const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
                 assert.equal(passingTests.length, (NUM_RETRIES_EFD + 1) / 2)
                 assert.equal(failingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+                // Test name does not change
+                retriedTests.forEach(test => {
+                  assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
+                })
               })
 
             childProcess = exec(
