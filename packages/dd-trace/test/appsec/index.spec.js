@@ -567,6 +567,7 @@ describe('AppSec Index', () => {
       it('should not call to the waf if it is not a sampled request', () => {
         apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
         const req = {}
+
         responseBody.publish({ req, body: {} })
 
         expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
@@ -577,6 +578,7 @@ describe('AppSec Index', () => {
         apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
         const req = {}
         const body = {}
+
         responseBody.publish({ req, body })
 
         expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)

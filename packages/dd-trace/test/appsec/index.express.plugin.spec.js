@@ -30,7 +30,11 @@ withVersions('express', 'express', version => {
       })
 
       app.post('/', (req, res) => {
-        res.send({ resKey: 'resValue' })
+        res.send('DONE')
+      })
+
+      app.post('/sendjson', (req, res) => {
+        res.send({ sendResKey: 'sendResValue' })
       })
 
       app.post('/jsonp', (req, res) => {
@@ -93,8 +97,7 @@ withVersions('express', 'express', version => {
             enabled: true,
             rules: path.join(__dirname, 'api_security_rules.json'),
             apiSecurity: {
-              enabled: true,
-              requestSampling: 1.0
+              enabled: true
             }
           }
         })
@@ -104,52 +107,65 @@ withVersions('express', 'express', version => {
         appsec.disable()
       })
 
-      it('should get the schema', async () => {
-        appsec.enable(config)
-
-        const expectedRequestBodySchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
-        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'resKey': [8] }])).toString('base64')
-        const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
-
-        await agent.use((traces) => {
-          const span = traces[0][0]
-          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
-          expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+      describe('with requestSampling 1.0', () => {
+        beforeEach(() => {
+          config.appsec.apiSecurity.requestSampling = 1.0
+          appsec.enable(config)
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ resKey: 'resValue' })
-      })
+        it('should get the schema', async () => {
+          const expectedRequestBodySchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
+          const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
-      it('should get the response body schema with res.json method', async () => {
-        appsec.enable(config)
+          await agent.use((traces) => {
+            const span = traces[0][0]
+            expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
+            expect(span.meta).not.to.haveOwnProperty('_dd.appsec.s.res.body')
+            expect(span.meta['_dd.appsec.s.req.body']).to.be.equal(expectedRequestBodySchema)
+          })
 
-        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonResKey': [8] }])).toString('base64')
-        const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
-
-        await agent.use((traces) => {
-          const span = traces[0][0]
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          expect(res.status).to.be.equal(200)
+          expect(res.data).to.be.deep.equal('DONE')
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
-      })
+        it('should get the response body schema with res.send method with object', async () => {
+          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'sendResKey': [8] }])).toString('base64')
+          const res = await axios.post(`http://localhost:${port}/sendjson`, { key: 'value' })
 
-      it('should get the response body schema with res.jsonp method', async () => {
-        appsec.enable(config)
+          await agent.use((traces) => {
+            const span = traces[0][0]
+            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          })
 
-        const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonpResKey': [8] }])).toString('base64')
-        const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
-
-        await agent.use((traces) => {
-          const span = traces[0][0]
-          expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          expect(res.status).to.be.equal(200)
+          expect(res.data).to.be.deep.equal({ sendResKey: 'sendResValue' })
         })
 
-        expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
+        it('should get the response body schema with res.json method', async () => {
+          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonResKey': [8] }])).toString('base64')
+          const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
+
+          await agent.use((traces) => {
+            const span = traces[0][0]
+            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          })
+
+          expect(res.status).to.be.equal(200)
+          expect(res.data).to.be.deep.equal({ jsonResKey: 'jsonResValue' })
+        })
+
+        it('should get the response body schema with res.jsonp method', async () => {
+          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonpResKey': [8] }])).toString('base64')
+          const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+          await agent.use((traces) => {
+            const span = traces[0][0]
+            expect(span.meta['_dd.appsec.s.res.body']).to.be.equal(expectedResponseBodySchema)
+          })
+
+          expect(res.status).to.be.equal(200)
+          expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
+        })
       })
 
       it('should not get the schema', async () => {
@@ -165,7 +181,7 @@ withVersions('express', 'express', version => {
         })
 
         expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal({ resKey: 'resValue' })
+        expect(res.data).to.be.deep.equal('DONE')
       })
     })
   })
