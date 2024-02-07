@@ -105,7 +105,7 @@ class Tracer extends NoopProxy {
   }
 
   _enableOrDisableTracing (config) { // TODO: add test
-    if (config.tracing) {
+    if (config.tracing !== false) {
       // dirty require for now so zero appsec code is executed unless explicitly enabled
       if (config.appsec.enabled) {
         require('./appsec').enable(config)

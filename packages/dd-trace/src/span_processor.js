@@ -28,9 +28,8 @@ class SpanProcessor {
     const formatted = []
     const trace = spanContext._trace
     const { flushMinSpans, tracing } = this._config
-
     if (trace.record === false) return
-    if (!tracing) this._erase(trace, active)
+    if (tracing === false) this._erase(trace, active)
 
     const { started, finished } = trace
     if (started.length === finished.length || finished.length >= flushMinSpans) {
