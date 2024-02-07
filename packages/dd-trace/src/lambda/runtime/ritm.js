@@ -84,6 +84,10 @@ function _getLambdaFilePath (lambdaStylePath) {
  * the file is required.
  */
 const registerLambdaHook = () => {
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+  delay(1000).then(() => {
+    console.log('testing cold start!')
+  })
   const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   const originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
