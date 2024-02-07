@@ -57,6 +57,7 @@ ${withoutExclusionStderr}
         const commitsHashesWithoutExclusions = withoutExclusionStdout.split('\n')
         if (commitsHashesWithExclusions.length !== commitsHashesWithoutExclusions.length) {
           const commitsWithInvalidLabels = []
+          // eslint-disable-next-line array-callback-return
           commitsHashesWithoutExclusions.filter(c1 => {
             if (!commitsHashesWithExclusions.some(c2 => c2 === c1)) {
               commitsWithInvalidLabels.push(c1)

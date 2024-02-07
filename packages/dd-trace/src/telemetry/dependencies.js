@@ -22,6 +22,7 @@ let updateRetryData
 
 function createBatchPayload (payload) {
   const batchPayload = []
+  // eslint-disable-next-line array-callback-return
   payload.map(item => {
     batchPayload.push({
       request_type: item.reqType,

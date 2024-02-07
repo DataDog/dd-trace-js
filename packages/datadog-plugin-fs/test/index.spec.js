@@ -1348,11 +1348,11 @@ describe('Plugin', () => {
               'file.path': __filename
             }
           })
-          fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
+          fs.exists(__filename, () => {}) // eslint-disable-line n/no-deprecated-api
         })
 
         it('should support promisification', () => {
-          const exists = util.promisify(fs.exists) // eslint-disable-line node/no-deprecated-api
+          const exists = util.promisify(fs.exists) // eslint-disable-line n/no-deprecated-api
 
           return exists(__filename)
         })

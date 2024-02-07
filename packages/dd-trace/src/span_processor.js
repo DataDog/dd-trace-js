@@ -54,6 +54,7 @@ class SpanProcessor {
     }
 
     if (this._killAll) {
+      // eslint-disable-next-line array-callback-return
       started.map(startedSpan => {
         if (!startedSpan._finished) {
           startedSpan.finish()

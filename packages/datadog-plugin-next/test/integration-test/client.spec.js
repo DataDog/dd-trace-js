@@ -7,6 +7,7 @@ const {
   checkSpansForServiceName,
   spawnPluginIntegrationTestProc
 } = require('../../../../integration-tests/helpers')
+// eslint-disable-next-line import/no-extraneous-dependencies
 const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
 

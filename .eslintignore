@@ -6,4 +6,4 @@ node_modules
 versions
 acmeair-nodejs
 vendor
-integration-tests/esbuild/out.js
+integration-tests/esbuild/*out*.js

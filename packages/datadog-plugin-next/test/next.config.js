@@ -1,5 +1,6 @@
 // Build config dynamically for ease in testing and modification
 
+// eslint-disable-next-line import/no-extraneous-dependencies
 const { satisfies } = require('semver')
 
 const { VERSION } = process.env // Next.js version to dynamically modify parts
