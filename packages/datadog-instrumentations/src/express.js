@@ -24,7 +24,7 @@ const responseJsonChannel = channel('datadog:express:response:json:start')
 function wrapResponseJson (json) {
   return function wrappedJson (obj) {
     if (responseJsonChannel.hasSubscribers) {
-      // backward compat
+      // backward compat as express 4.x supports deprecated 3.x signature
       if (arguments.length === 2 && typeof arguments[1] !== 'number') {
         obj = arguments[1]
       }
