@@ -150,6 +150,6 @@ describe('SpanProcessor', () => {
     expect(trace).to.have.deep.property('started', [])
     expect(trace).to.have.deep.property('finished', [])
     expect(finishedSpan.context()).to.have.deep.property('_tags', {})
-    expect(prioritySampler.sample).to.not.have.been.called
+    expect(exporter.export).not.to.have.been.called
   })
 })

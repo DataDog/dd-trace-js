@@ -788,8 +788,8 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_TAGS,
-      DD_VERSION,
-      DD_TRACING_ENABLED
+      DD_TRACING_ENABLED,
+      DD_VERSION
     } = process.env
 
     const tags = {}
@@ -806,7 +806,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setTags(env, 'tags', tags)
-    this._setBoolean(env, 'tracing', !isFalse(DD_TRACING_ENABLED))
+    this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
   }
 
   _applyOptions (options) {

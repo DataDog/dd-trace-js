@@ -62,9 +62,6 @@ class Tracer extends NoopProxy {
           } else {
             config.configure(conf.lib_config, true)
           }
-          this._tracer.configure(config)
-          this._pluginManager.configure(config)
-
           this._enableOrDisableTracing(config)
         })
       }
@@ -121,11 +118,12 @@ class Tracer extends NoopProxy {
       if (config.iast.enabled) {
         require('./appsec/iast').enable(config, this._tracer)
       }
-      this._pluginManager.configure(config)
     } else {
       require('./appsec').disable()
       require('./appsec/iast').disable()
     }
+    if (this._tracingInitialized) this._tracer.configure(config)
+    this._pluginManager.configure(config)
   }
 
   profilerStarted () {
