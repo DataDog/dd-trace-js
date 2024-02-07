@@ -61,7 +61,8 @@ class DatadogTracer {
       startTime: options.startTime,
       hostname: this._hostname,
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
-      integrationName: options.integrationName
+      integrationName: options.integrationName,
+      links: options.links
     }, this._debug)
 
     span.addTags(this._config.tags)

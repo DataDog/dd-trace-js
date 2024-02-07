@@ -26,6 +26,7 @@ const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
 const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
+const ALLOWED = ['string', 'number', 'boolean']
 
 const integrationCounters = {
   span_created: {},
@@ -81,6 +82,9 @@ class DatadogSpan {
     this._spanContext._trace.started.push(this)
 
     this._startTime = fields.startTime || this._getTime()
+
+    this._links = []
+    fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
@@ -150,6 +154,13 @@ class DatadogSpan {
 
   logEvent () {}
 
+  addLink (context, attributes) {
+    this._links.push({
+      context: context._ddContext ? context._ddContext : context,
+      attributes: this._sanitizeAttributes(attributes)
+    })
+  }
+
   finish (finishTime) {
     if (this._duration !== undefined) {
       return
@@ -183,6 +194,33 @@ class DatadogSpan {
     this._spanContext._isFinished = true
     finishCh.publish(this)
     this._processor.process(this)
+  }
+
+  _sanitizeAttributes (attributes = {}) {
+    const sanitizedAttributes = {}
+
+    const addArrayOrScalarAttributes = (key, maybeArray) => {
+      if (Array.isArray(maybeArray)) {
+        for (const subkey in maybeArray) {
+          addArrayOrScalarAttributes(`${key}.${subkey}`, maybeArray[subkey])
+        }
+      } else {
+        const maybeScalar = maybeArray
+        if (ALLOWED.includes(typeof maybeScalar)) {
+          // Wrap the value as a string if it's not already a string
+          sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
+        } else {
+          log.warn(`Dropping span link attribute. It is not of an allowed type`)
+        }
+      }
+    }
+
+    Object.entries(attributes).forEach(entry => {
+      const [key, value] = entry
+      addArrayOrScalarAttributes(key, value)
+    })
+
+    return sanitizedAttributes
   }
 
   _createContext (parent, fields) {

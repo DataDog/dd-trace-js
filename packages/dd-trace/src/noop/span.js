@@ -18,6 +18,7 @@ class NoopSpan {
   getBaggageItem (key) {}
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
+  addLink (link) { return this }
   log () { return this }
   logEvent () {}
   finish (finishTime) {}
