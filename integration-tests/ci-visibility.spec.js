@@ -723,6 +723,63 @@ testFrameworks.forEach(({
               }).catch(done)
             })
           })
+          it('does not retry new tests that are skipped', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
+            receiver.setKnownTests([])
+
+            const NUM_RETRIES_EFD = 5
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                }
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                const newSkippedTests = tests.filter(
+                  test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
+                )
+                const newTodoTests = tests.filter(
+                  test => test.meta[TEST_NAME] === 'ci visibility todo will not be retried'
+                )
+                assert.equal(newSkippedTests.length, 1)
+                assert.equal(newTodoTests.length, 1)
+                assert.notProperty(newSkippedTests[0].meta, TEST_EARLY_FLAKE_IS_RETRY)
+                assert.notProperty(newTodoTests[0].meta, TEST_EARLY_FLAKE_IS_RETRY)
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test' },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
         })
       })
     }
