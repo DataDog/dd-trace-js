@@ -64,26 +64,30 @@ benchmark:
   variables:
     SPLITS: 3
 
-benchmark-serverless:
+benchmark-serverless-success:
   stage: benchmarks
   tags: ["arch:amd64"]
   when: on_success
   needs:
-    - benchmark-serverless-trigger
-  dependencies:
-    - benchmark-serverless-trigger
+    - benchmark-serverless
   script:
-    - echo $(env | grep COLD_START)
-    - echo $(env | grep LAYER_SIZE)
-    - echo "COLD START IN ARM IS ${COLD_START_ARM64_STATUS}"
+    - exit 0
 
-benchmark-serverless-trigger:
+benchmark-serverless-failure:
+  stage: benchmarks
+  tags: ["arch:amd64"]
+  when: on_failure
+  needs:
+    - benchmark-serverless
+  script:
+    - exit 1
+
+benchmark-serverless:
   stage: benchmarks
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
     branch: jordan.gonzalez/report-status-upstream
-  allow_failure: true
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
     UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
