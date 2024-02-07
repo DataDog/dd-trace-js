@@ -142,6 +142,11 @@ export declare interface TraceOptions extends Analyzable {
    * The type of request.
    */
   type?: string
+
+  /**
+   * An array of span links
+   */
+  links?: Array<{ context: SpanContext, attributes?: Object }>
 }
 
 /**
@@ -153,6 +158,14 @@ export declare interface TraceOptions extends Analyzable {
  */
 export declare interface Span extends opentracing.Span {
   context (): SpanContext;
+
+  /**
+   * Causally links another span to the current span
+   * @param {SpanContext} context The context of the span to link to.
+   * @param {Object} attributes An optional key value pair of arbitrary values.
+   * @returns {void}
+   */
+  addLink (context: SpanContext, attributes?: Object): void;
 }
 
 /**
@@ -1900,6 +1913,14 @@ export namespace opentelemetry {
      *     use the current time.
      */
     recordException(exception: Exception, time?: TimeInput): void;
+
+    /**
+     * Causally links another span to the current span
+     * @param {otel.SpanContext} context The context of the span to link to.
+     * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
+     * @returns {void}
+     */
+    addLink (context: otel.SpanContext, attributes?: SpanAttributes): void;
   }
 
   /**
