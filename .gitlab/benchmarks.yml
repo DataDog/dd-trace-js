@@ -67,7 +67,7 @@ benchmark:
 benchmark-serverless:
   stage: benchmarks
   tags: ["arch:amd64"]
-  when: always
+  when: on_success
   needs:
     - benchmark-serverless-trigger
   dependencies:
