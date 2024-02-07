@@ -63,3 +63,15 @@ benchmark:
         GROUP: 3
   variables:
     SPLITS: 3
+
+benchmark-serverless:
+  stage: benchmarks
+  trigger:
+    project: DataDog/serverless-tools
+    strategy: depend
+    branch: jordan.gonzalez/benchmark-dd-trace-js
+  allow_failure: false
+  variables:
+    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
+    UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
