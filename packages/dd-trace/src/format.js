@@ -74,11 +74,9 @@ function extractSpanLinks (trace, span) {
       const attributes = link.attributes
       const formattedLink = {}
 
-      const rootTid = context?._trace?.tags['_dd.p.tid']
-        ? context._trace.tags['_dd.p.tid'] : '0000000000000000'
-      const traceIdValue = context._traceId.toString(16).padStart(16, '0')
-
-      formattedLink.trace_id = `${rootTid}${traceIdValue}`
+      formattedLink.trace_id = context?._trace?.tags['_dd.p.tid']
+        ? context._trace.tags['_dd.p.tid'] + context._traceId.toString(16).padStart(16, '0')
+        : context._traceId.toString(16).padStart(32, '0')
       formattedLink.span_id = context._spanId.toString(16).padStart(16, '0')
 
       if (attributes && Object.keys(attributes).length > 0) {
