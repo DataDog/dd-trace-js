@@ -75,6 +75,7 @@ benchmark-serverless:
   script:
     - echo $(env | grep COLD_START)
     - echo $(env | grep LAYER_SIZE)
+    - echo "COLD START IN ARM IS ${COLD_START_ARM64_STATUS}"
 
 benchmark-serverless-trigger:
   stage: benchmarks
