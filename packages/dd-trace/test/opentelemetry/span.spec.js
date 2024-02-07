@@ -287,6 +287,20 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property('baz', 'buz')
   })
 
+  it('should set span links', () => {
+    const span = makeSpan('name')
+    const span2 = makeSpan('name2')
+    const span3 = makeSpan('name3')
+
+    const { _links } = span._ddSpan
+
+    span.addLink(span2.spanContext())
+    expect(_links).to.have.lengthOf(1)
+
+    span.addLink(span3.spanContext())
+    expect(_links).to.have.lengthOf(2)
+  })
+
   it('should set status', () => {
     const unset = makeSpan('name')
     const unsetCtx = unset._ddSpan.context()
