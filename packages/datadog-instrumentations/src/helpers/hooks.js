@@ -2,6 +2,7 @@
 
 module.exports = {
   '@apollo/server': () => require('../apollo-server'),
+  '@apollo/gateway': () => require('../@apollo/gateway'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),
