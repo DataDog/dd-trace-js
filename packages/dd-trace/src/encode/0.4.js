@@ -82,12 +82,14 @@ class AgentEncoder {
     for (let span of trace) {
       span = formatSpan(span)
       bytes.reserve(1)
-      const bytesPosition = bytes.length++
-      bytes.buffer[bytesPosition] = 0x8b
+
       if (span.type) {
-        bytes.buffer[bytesPosition]++
+        bytes.buffer[bytes.length++] = 0x8c
+
         this._encodeString(bytes, 'type')
         this._encodeString(bytes, span.type)
+      } else {
+        bytes.buffer[bytes.length++] = 0x8b
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -112,34 +114,6 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
-    }
-  }
-
-  _encodeSpanLinks (bytes, links) {
-    this._encodeArrayPrefix(bytes, links)
-
-    for (const link of links) {
-      this._encodeMapPrefix(bytes, Object.keys(link).length)
-      this._encodeString(bytes, 'trace_id')
-      this._encodeId(bytes, link.trace_id)
-      this._encodeString(bytes, 'span_id')
-      this._encodeId(bytes, link.span_id)
-      if (link.trace_id_high) {
-        this._encodeString(bytes, 'trace_id_high')
-        this._encodeId(bytes, link.trace_id_high)
-      }
-      if (link.attributes) {
-        this._encodeString(bytes, 'attributes')
-        this._encodeMap(bytes, link.attributes)
-      }
-      if (link.tracestate) {
-        this._encodeString(bytes, 'tracestate')
-        this._encodeString(bytes, link.tracestate)
-      }
-      if (link.flags) {
-        this._encodeString(bytes, 'flags')
-        this._encodeInteger(bytes, link.flags)
-      }
     }
   }
 
