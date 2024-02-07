@@ -2,6 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
+const semver = require('semver')
 const Readable = require('stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
@@ -42,14 +43,14 @@ describe('Plugin', () => {
           server.addService(TestService.service, service)
           server.start()
 
-          resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+          resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
         })
       } else {
         server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
         server.addService(TestService.service, service)
         server.start()
 
-        resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
       }
     })
   }
@@ -125,6 +126,26 @@ describe('Plugin', () => {
                 }
               }
             )
+
+            if (semver.intersects(version, '>=1.1.4')) {
+              it('should provide host information', async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+
+                client.getUnary({ first: 'foobar' }, () => {})
+                return agent
+                  .use(traces => {
+                    expect(traces[0][0].meta).to.include({
+                      'network.destination.ip': '127.0.0.1',
+                      'network.destination.port': port.toString(),
+                      'rpc.service': 'test.TestService',
+                      'span.kind': 'client',
+                      'component': 'grpc'
+                    })
+                  })
+              })
+            }
 
             it('should handle `unary` calls', async () => {
               const client = await buildClient({
