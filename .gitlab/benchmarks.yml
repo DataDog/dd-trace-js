@@ -66,10 +66,19 @@ benchmark:
 
 benchmark-serverless:
   stage: benchmarks
+  tags: ["arch:amd64"]
+  when: on_failure
+  needs:
+    - benchmark-serverless-trigger
+  script:
+    - echo "previous job failed!"
+
+benchmark-serverless-trigger:
+  stage: benchmarks
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
-  allow_failure: false
+  allow_failure: true
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
     UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
