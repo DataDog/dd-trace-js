@@ -141,16 +141,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       return knownTestsForSuite
         .filter(test => test.includes(this.testSuite))
-        .map(test => test.replace(`jest.${this.testSuite}.`, ''))
+        .map(test => test.replace(`jest.${this.testSuite}.`, '').trim())
     }
 
     // Add the `add_test` event we don't have the test object yet, so
     // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
-      const { testName } = event
-      const { currentDescribeBlock } = state
-      const describeSuffix = getJestTestName(currentDescribeBlock)
-      return removeEfdTestName(`${describeSuffix} ${testName}`)
+      const describeSuffix = getJestTestName(state.currentDescribeBlock)
+      return removeEfdTestName(`${describeSuffix} ${event.testName}`).trim()
     }
 
     async handleTestEvent (event, state) {
@@ -210,9 +208,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (this.isEarlyFlakeDetectionEnabled) {
           const testName = this.getTestNameFromAddTestEvent(event, state)
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
-          if (isNew && !retriedTestsToNumAttempts.has(testName)) {
+          const isSkipped = event.mode === 'todo' || event.mode === 'skip'
+          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
             retriedTestsToNumAttempts.set(testName, 0)
-            // Add tests to be retried to the list of tests to run
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
                 this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
