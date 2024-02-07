@@ -82,7 +82,7 @@ function extractSpanLinks (trace, span) {
       formattedLink.span_id = context._spanId.toString(16).padStart(16, '0')
 
       if (attributes && Object.keys(attributes).length > 0) {
-        formattedLink.attributes = JSON.stringify(attributes)
+        formattedLink.attributes = attributes
       }
       if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
       if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()

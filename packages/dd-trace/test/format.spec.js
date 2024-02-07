@@ -253,7 +253,7 @@ describe('format', () => {
       expect(spanLinks).to.deep.equal([{
         trace_id: `${traceIdHigh}${spanId2.toString(16).padStart(16, '0')}`,
         span_id: spanId2.toString(16).padStart(16, '0'),
-        attributes: JSON.stringify({ foo: 'bar' }),
+        attributes: { foo: 'bar' },
         tracestate: ts.toString(),
         flags: 0
       }])
