@@ -70,13 +70,15 @@ describe('format', () => {
       ...spanContext,
       _traceId: spanId2,
       _spanId: spanId2,
-      _parentId: spanId2
+      _parentId: spanId2,
+      toTraceId: sinon.stub().returns(spanId2.toString(16))
     }
     spanContext3 = {
       ...spanContext,
       _traceId: spanId3,
       _spanId: spanId3,
-      _parentId: spanId3
+      _parentId: spanId3,
+      toTraceId: sinon.stub().returns(spanId3.toString(16))
     }
 
     format = require('../src/format')
@@ -217,12 +219,11 @@ describe('format', () => {
       trace = format(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
 
-      expect(trace).to.not.have.property('links')
       expect(spanLinks).to.deep.equal([{
-        trace_id: spanId2.toString(16).padStart(32, '0'),
+        trace_id: spanId2.toString(16),
         span_id: spanId2.toString(16).padStart(16, '0')
       }, {
-        trace_id: spanId3.toString(16).padStart(32, '0'),
+        trace_id: spanId3.toString(16),
         span_id: spanId3.toString(16).padStart(16, '0')
       }])
     })
@@ -249,9 +250,9 @@ describe('format', () => {
 
       trace = format(span)
       const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
-      expect(trace).to.not.have.property('links')
+
       expect(spanLinks).to.deep.equal([{
-        trace_id: `${traceIdHigh}${spanId2.toString(16).padStart(16, '0')}`,
+        trace_id: spanId2.toString(16),
         span_id: spanId2.toString(16).padStart(16, '0'),
         attributes: { foo: 'bar' },
         tracestate: ts.toString(),

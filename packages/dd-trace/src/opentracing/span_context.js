@@ -28,7 +28,12 @@ class DatadogSpanContext {
     }
   }
 
-  toTraceId () {
+  toTraceId (get128bitId = false) {
+    if (get128bitId) {
+      return this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
+        ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
+        : this._traceId.toString(16).padStart(32, '0')
+    }
     return this._traceId.toString(10)
   }
 
@@ -38,9 +43,7 @@ class DatadogSpanContext {
 
   toTraceparent () {
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
-    const traceId = this._traceId.toBuffer().length <= 8 && this._trace.tags[TRACE_ID_128]
-      ? this._trace.tags[TRACE_ID_128] + this._traceId.toString(16).padStart(16, '0')
-      : this._traceId.toString(16).padStart(32, '0')
+    const traceId = this.toTraceId(true)
     const spanId = this._spanId.toString(16).padStart(16, '0')
     const version = (this._traceparent && this._traceparent.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`

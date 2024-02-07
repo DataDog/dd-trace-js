@@ -73,9 +73,7 @@ function extractSpanLinks (trace, span) {
       const { context, attributes } = link
       const formattedLink = {}
 
-      formattedLink.trace_id = context._traceId.toBuffer().length <= 8 && context?._trace?.tags['_dd.p.tid']
-        ? context._trace.tags['_dd.p.tid'] + context._traceId.toString(16).padStart(16, '0')
-        : context._traceId.toString(16).padStart(32, '0')
+      formattedLink.trace_id = context.toTraceId(true)
       formattedLink.span_id = context._spanId.toString(16).padStart(16, '0')
 
       if (attributes && Object.keys(attributes).length > 0) {
@@ -88,7 +86,6 @@ function extractSpanLinks (trace, span) {
     }
   }
   if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
-  delete trace.links
 }
 
 function extractTags (trace, span) {
