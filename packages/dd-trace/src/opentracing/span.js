@@ -155,13 +155,10 @@ class DatadogSpan {
   logEvent () {}
 
   addLink (context, attributes) {
-    if (context._ddContext) {
-      this._links.push({ context: context._ddContext, attributes })
-      return
-    }
-
-    // only need to sanitize attributes if method is called on the open tracing api
-    this._links.push({ context, attributes: this._sanitizeAttributes(attributes) })
+    this._links.push({
+      context: context._ddContext ? context._ddContext : context,
+      attributes: this._sanitizeAttributes(attributes)
+    })
   }
 
   finish (finishTime) {
