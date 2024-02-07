@@ -74,7 +74,7 @@ function extractSpanLinks (trace, span) {
       const formattedLink = {}
 
       formattedLink.trace_id = context.toTraceId(true)
-      formattedLink.span_id = context._spanId.toString(16).padStart(16, '0')
+      formattedLink.span_id = context.toSpanId(true)
 
       if (attributes && Object.keys(attributes).length > 0) {
         formattedLink.attributes = attributes
