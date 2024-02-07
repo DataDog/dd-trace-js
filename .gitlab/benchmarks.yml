@@ -70,7 +70,7 @@ benchmark-serverless:
   when: always
   needs:
     - benchmark-serverless-trigger
-  depends:
+  dependencies:
     - benchmark-serverless-trigger
   script:
     - echo $(env | grep COLD_START)
