@@ -132,7 +132,8 @@ class Span {
       tags: {
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName
-      }
+      },
+      links
     }, _tracer._debug)
 
     if (attributes) {
@@ -148,7 +149,6 @@ class Span {
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
-    this.links = links
     this._spanProcessor.onStart(this, context)
   }
 
@@ -188,6 +188,13 @@ class Span {
 
   addEvent (name, attributesOrStartTime, startTime) {
     api.diag.warn('Events not supported')
+    return this
+  }
+
+  addLink (context, attributes) {
+    // extract dd context
+    const ddSpanContext = context._ddContext
+    this._ddSpan.addLink(ddSpanContext, attributes)
     return this
   }
 
