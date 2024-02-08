@@ -69,7 +69,7 @@ benchmark-serverless:
   tags: ["arch:amd64"]
   when: on_success
   needs:
-    - benchmark-serverless
+    - benchmark-serverless-trigger
   script:
     - echo $(curl "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN" | jq)
 
