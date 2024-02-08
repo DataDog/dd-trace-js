@@ -20,6 +20,7 @@ class Config {
     const {
       DD_AGENT_HOST,
       DD_ENV,
+      DD_INJECTION_ENABLED,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_ENABLED,
@@ -49,6 +50,7 @@ class Config {
     } = process.env
 
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
+    const injected = (DD_INJECTION_ENABLED || '').split(',').includes('profiling')
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
@@ -64,6 +66,7 @@ class Config {
       DD_PROFILING_PPROF_PREFIX, '')
 
     this.enabled = enabled
+    this.injected = injected
     this.service = service
     this.env = env
     this.host = host
