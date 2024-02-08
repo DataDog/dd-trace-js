@@ -537,7 +537,7 @@ testFrameworks.forEach(({
 
     envVarSettings.forEach(envVar => {
       context(`when ${envVar}=false`, () => {
-        it.only('does not report spans but still runs tests', (done) => {
+        it('does not report spans but still runs tests', (done) => {
           receiver.assertMessageReceived(() => {
             done(new Error('Should not create spans'))
           }).catch(() => {})
@@ -561,8 +561,6 @@ testFrameworks.forEach(({
             assert.include(testOutput, expectedStdout)
             done()
           })
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
         })
       })
     })
