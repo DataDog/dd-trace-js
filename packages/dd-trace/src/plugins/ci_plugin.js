@@ -27,7 +27,7 @@ const {
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_ITR_SKIPPED
 } = require('../ci-visibility/telemetry')
-const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH } = require('./util/tags')
+const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 
 module.exports = class CiPlugin extends Plugin {
@@ -36,17 +36,17 @@ module.exports = class CiPlugin extends Plugin {
 
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
-      if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+      if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
+      this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
           log.error(`Intelligent Test Runner configuration could not be fetched. ${err.message}`)
         } else {
-          this.itrConfig = itrConfig
+          this.libraryConfig = libraryConfig
         }
-        onDone({ err, itrConfig })
+        onDone({ err, libraryConfig })
       })
     })
 
@@ -115,6 +115,18 @@ module.exports = class CiPlugin extends Plugin {
       })
       this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
+
+    this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getKnownTests) {
+        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+      }
+      this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
+        if (err) {
+          log.error(`Known tests could not be fetched. ${err.message}`)
+        }
+        onDone({ err, knownTests })
+      })
+    })
   }
 
   get telemetry () {
@@ -140,7 +152,6 @@ module.exports = class CiPlugin extends Plugin {
   configure (config) {
     super.configure(config)
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
-    this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
@@ -151,8 +162,11 @@ module.exports = class CiPlugin extends Plugin {
       [RUNTIME_NAME]: runtimeName,
       [RUNTIME_VERSION]: runtimeVersion,
       [GIT_BRANCH]: branch,
-      [CI_PROVIDER_NAME]: ciProviderName
+      [CI_PROVIDER_NAME]: ciProviderName,
+      [CI_WORKSPACE_PATH]: repositoryRoot
     } = this.testEnvironmentMetadata
+
+    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
     this.isUnsupportedCIProvider = !ciProviderName
 
