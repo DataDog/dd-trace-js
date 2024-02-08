@@ -288,8 +288,7 @@ class Config {
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
     }
-    
-    this.isEarlyFlakeDetectionEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED)
+
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
@@ -453,6 +452,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionNamePattern', null)
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setBoolean(defaults, 'isCiVisibility', false)
+    this._setBoolean(defaults, 'isEarlyFlakeDetectionEnabled', false)
     this._setBoolean(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setBoolean(defaults, 'isManualApiEnabled', false)
     this._setBoolean(defaults, 'stats.enabled', false)
@@ -838,6 +838,10 @@ class Config {
         DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
         !this._isInServerlessEnvirontment()
       ))
+    }
+    if (this._isCiVisibility()) {
+      this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
+        coalesce(process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
