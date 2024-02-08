@@ -1,9 +1,15 @@
+'use strict'
+
+const { isMainThread, MessageChannel } = require('worker_threads')
+const { pathToFileURL } = require('url')
+const dc = require('dc-polyfill')
+const { register } = require('module')
+
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
-const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
 const {
   enableTaintTracking,
@@ -14,15 +20,21 @@ const {
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
+const iastLog = require('./iast-log')
 
 // TODO Change to `apm:http:server:request:[start|close]` when the subscription
 //  order of the callbacks can be enforce
 const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
+const sourcePreloadChannel = dc.channel('datadog:esm:source:preload')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
+
+let registered = false
+let esmRewriterEnabled = false
 
 function enable (config, _tracer) {
   iastTelemetry.configure(config, config.iast && config.iast.telemetryVerbosity)
+  enableEsmRewriter()
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -32,8 +44,47 @@ function enable (config, _tracer) {
   vulnerabilityReporter.start(config, _tracer)
 }
 
+function enableEsmRewriter () {
+  if (register && isMainThread) {
+    // When we are not in the main app thread it could be an ESM loaders thread,
+    // we don't want to register the rewriter twice
+    esmRewriterEnabled = true
+
+    if (registered) return
+
+    try {
+      const { port1, port2 } = new MessageChannel()
+      registered = true
+
+      port1.on('message', (originalData) => {
+        if (esmRewriterEnabled && sourcePreloadChannel.hasSubscribers) {
+          const data = { ...originalData }
+          sourcePreloadChannel.publish(data)
+          port1.postMessage(data)
+        } else {
+          port1.postMessage(originalData)
+        }
+      })
+      port1.unref()
+
+      register('./hooks.mjs', {
+        parentURL: pathToFileURL(__filename),
+        data: { port: port2 },
+        transferList: [port2]
+      })
+    } catch (e) {
+      iastLog.errorAndPublish(e)
+    }
+  }
+}
+
+function disableEsmRewriter () {
+  esmRewriterEnabled = false
+}
+
 function disable () {
   iastTelemetry.stop()
+  disableEsmRewriter()
   disableAllAnalyzers()
   disableTaintTracking()
   overheadController.finishGlobalContext()

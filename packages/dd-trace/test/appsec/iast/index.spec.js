@@ -127,7 +127,10 @@ describe('IAST Index', () => {
       }
       mockIast = proxyquire('../../../src/appsec/iast', {
         './vulnerability-reporter': mockVulnerabilityReporter,
-        './overhead-controller': mockOverheadController
+        './overhead-controller': mockOverheadController,
+        'module': {
+          register: sinon.stub()
+        }
       })
     })
 
