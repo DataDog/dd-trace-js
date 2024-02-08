@@ -118,7 +118,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
-    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', false)
+    expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
@@ -307,7 +307,7 @@ describe('Config', () => {
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
     process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
-    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+    process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
@@ -855,7 +855,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML_PATH // json and html here
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
-    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
     process.env.DD_IAST_ENABLED = 'false'
@@ -1348,6 +1348,31 @@ describe('Config', () => {
     expect(config.appsec.blockedTemplateGraphql).to.be.undefined
   })
 
+  it('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.true
+  })
+
+  it('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.false
+  })
+
+  it('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', () => {
+    process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED = 'false'
+    process.env.DD_API_SECURITY_ENABLED = 'true'
+
+    const config = new Config()
+
+    expect(config.appsec.apiSecurity.enabled).to.be.true
+  })
+
   context('auto configuration w/ unix domain sockets', () => {
     context('on windows', () => {
       it('should not be used', () => {
@@ -1442,6 +1467,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
+      delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1487,6 +1513,15 @@ describe('Config', () => {
       it('should enable telemetry', () => {
         const config = new Config(options)
         expect(config).to.nested.property('telemetry.enabled', true)
+      })
+      it('should enable early flake detection by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isEarlyFlakeDetectionEnabled', true)
+      })
+      it('should disable early flake detection if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', () => {
+        process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {

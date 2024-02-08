@@ -122,6 +122,11 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
+    const DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      true
+    )
+
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       false
@@ -200,10 +205,11 @@ class Config {
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
-    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+    const DD_API_SECURITY_ENABLED = coalesce(
       options.appsec?.apiSecurity?.enabled,
-      isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
-      false
+      process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
+      process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
+      true
     )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
       options.appsec?.apiSecurity?.requestSampling,
@@ -277,11 +283,13 @@ class Config {
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
       },
       apiSecurity: {
-        enabled: DD_EXPERIMENTAL_API_SECURITY_ENABLED,
+        enabled: DD_API_SECURITY_ENABLED,
         // Coerce value between 0 and 1
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
     }
+    
+    this.isEarlyFlakeDetectionEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan

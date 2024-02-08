@@ -20,7 +20,7 @@ const skipCh = channel('ci:mocha:test:skip')
 const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
-const itrConfigurationCh = channel('ci:mocha:itr-configuration')
+const libraryConfigurationCh = channel('ci:mocha:library-configuration')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
@@ -384,7 +384,7 @@ addHook({
       return run.apply(this, arguments)
     }
 
-    if (!itrConfigurationCh.hasSubscribers || this.isWorker) {
+    if (!libraryConfigurationCh.hasSubscribers || this.isWorker) {
       if (this.isWorker) {
         isWorker = true
       }
@@ -439,7 +439,7 @@ addHook({
     }
 
     mochaRunAsyncResource.runInAsyncScope(() => {
-      itrConfigurationCh.publish({
+      libraryConfigurationCh.publish({
         onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
       })
     })

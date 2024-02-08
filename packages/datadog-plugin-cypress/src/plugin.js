@@ -45,7 +45,8 @@ const {
   GIT_REPOSITORY_URL,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
-  CI_PROVIDER_NAME
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -119,14 +120,14 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getItrConfig (tracer, testConfiguration) {
+function getLibraryConfiguration (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
 
-    tracer._tracer._exporter.getItrConfiguration(testConfiguration, (err, itrConfig) => {
-      resolve({ err, itrConfig })
+    tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
+      resolve({ err, libraryConfig })
     })
   })
 }
@@ -136,7 +137,7 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
     return Promise.resolve({ skippableTests: [] })
   }
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter || !tracer._tracer._exporter.getItrConfiguration) {
+    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
     tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
@@ -186,7 +187,8 @@ module.exports = (on, config) => {
     [RUNTIME_NAME]: runtimeName,
     [RUNTIME_VERSION]: runtimeVersion,
     [GIT_BRANCH]: branch,
-    [CI_PROVIDER_NAME]: ciProviderName
+    [CI_PROVIDER_NAME]: ciProviderName,
+    [CI_WORKSPACE_PATH]: repositoryRoot
   } = testEnvironmentMetadata
 
   const isUnsupportedCIProvider = !ciProviderName
@@ -205,7 +207,7 @@ module.exports = (on, config) => {
     testLevel: 'test'
   }
 
-  const codeOwnersEntries = getCodeOwnersFileEntries()
+  const codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
   let activeSpan = null
   let testSessionSpan = null
@@ -284,12 +286,12 @@ module.exports = (on, config) => {
   }
 
   on('before:run', (details) => {
-    return getItrConfig(tracer, testConfiguration).then(({ err, itrConfig }) => {
+    return getLibraryConfiguration(tracer, testConfiguration).then(({ err, libraryConfig }) => {
       if (err) {
         log.error(err)
       } else {
-        isSuitesSkippingEnabled = itrConfig.isSuitesSkippingEnabled
-        isCodeCoverageEnabled = itrConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
       }
 
       return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration)

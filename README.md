@@ -194,38 +194,7 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 
 ## Bundling
 
-Generally, `dd-trace` works by intercepting `require()` calls that a Node.js application makes when loading modules. This includes modules that are built-in to Node.js, like the `fs` module for accessing the filesystem, as well as modules installed from the npm registry, like the `pg` database module.
-
-Also generally, bundlers work by crawling all of the `require()` calls that an application makes to files on disk, replacing the `require()` calls with custom code, and then concatenating all of the resulting JavaScript into one "bundled" file. When a built-in module is loaded, like `require('fs')`, that call can then remain the same in the resulting bundle.
-
-Fundamentally APM tools like `dd-trace` stop working at this point. Perhaps they continue to intercept the calls for built-in modules but don't intercept calls to third party libraries. This means that by default when you bundle a `dd-trace` app with a bundler it is likely to capture information about disk access (via `fs`) and outbound HTTP requests (via `http`), but will otherwise omit calls to third party libraries (like extracting incoming request route information for the `express` framework or showing which query is run for the `mysql` database client).
-
-To get around this, one can treat all third party modules, or at least third party modules that the APM needs to instrument, as being "external" to the bundler. With this setting the instrumented modules remain on disk and continue to be loaded via `require()` while the non-instrumented modules are bundled. Sadly this results in a build with many extraneous files and starts to defeat the purpose of bundling. 
-
-For these reasons it's necessary to have custom-built bundler plugins. Such plugins are able to instruct the bundler on how to behave, injecting intermediary code and otherwise intercepting the "translated" `require()` calls. The result is that many more packages are then included in the bundled JavaScript file. Some applications can have 100% of modules bundled, however native modules still need to remain external to the bundle.
-
-### ESBuild Support
-
-This library provides experimental ESBuild support in the form of an ESBuild plugin. Require the `dd-trace/esbuild` module when building your bundle to enable the plugin.
-
-Here's an example of how one might use `dd-trace` with ESBuild:
-
-```javascript
-const ddPlugin = require('dd-trace/esbuild')
-const esbuild = require('esbuild')
-
-esbuild.build({
-  entryPoints: ['app.js'], 
-  bundle: true,
-  outfile: 'out.js',
-  plugins: [ddPlugin],
-  platform: 'node', // allows built-in modules to be required
-  target: ['node18']
-}).catch((err) => {
-  console.error(err)
-  process.exit(1)
-})
-```
+If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
 
 
 ## Security Vulnerabilities
