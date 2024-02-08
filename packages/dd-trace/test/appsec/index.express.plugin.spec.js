@@ -113,7 +113,7 @@ withVersions('express', 'express', version => {
           appsec.enable(config)
         })
 
-        it('should get the schema', async () => {
+        it('should get the request body schema', async () => {
           const expectedRequestBodySchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
           const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
