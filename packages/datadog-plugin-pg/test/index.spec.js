@@ -8,6 +8,8 @@ const net = require('net')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const EventEmitter = require('events')
 
+const ddpv = require('mocha/package.json').version
+
 const clients = {
   pg: pg => pg.Client
 }
@@ -371,7 +373,7 @@ describe('Plugin', () => {
           if (client.queryQueue[0] !== undefined) {
             try {
               expect(client.queryQueue[0].text).to.equal(
-                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
             } catch (e) {
               done(e)
             }
@@ -429,7 +431,7 @@ describe('Plugin', () => {
             try {
               expect(clientDBM.queryQueue[0].text).to.equal(
                 `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
-                `ddps='test',ddpv='8.4.0'*/ SELECT $1::text as message`)
+                `ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
               done()
             } catch (e) {
               done(e)
@@ -570,7 +572,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0',` +
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT $1::text as message`)
           }).then(done, done)
 
@@ -616,7 +618,7 @@ describe('Plugin', () => {
 
           agent.use(traces => {
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
               `*/ SELECT $1::text as message`)
           }).then(done, done)
 
@@ -640,7 +642,7 @@ describe('Plugin', () => {
 
           agent.use(traces => {
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
               `*/ SELECT $1::text as message`)
           }).then(done, done)
 
@@ -674,7 +676,7 @@ describe('Plugin', () => {
 
           agent.use(traces => {
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='8.4.0'` +
+              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
               `*/ SELECT $1::text as greeting`)
           }).then(done, done)
 
