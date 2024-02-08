@@ -1,18 +1,9 @@
 'use strict'
 
-const telemetryMetrics = require('../telemetry/metrics')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { clearCache, getMetric } = require('./cache')
+const { WAF_VERSION, EVENT_RULES_VERSION, REQUEST_BLOCKED, RULE_TRIGGERED, WAF_TIMEOUT } = require('./tags')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
-
-const tags = {
-  REQUEST_BLOCKED: 'request_blocked',
-  RULE_TRIGGERED: 'rule_triggered',
-  WAF_TIMEOUT: 'waf_timeout',
-  WAF_VERSION: 'waf_version',
-  EVENT_RULES_VERSION: 'event_rules_version'
-}
 
 const metricsStoreMap = new WeakMap()
 
@@ -24,6 +15,7 @@ function enable (telemetryConfig) {
 
 function disable () {
   enabled = false
+  clearCache()
 }
 
 function getStore (req) {
@@ -37,17 +29,17 @@ function getStore (req) {
 
 function getVersionsTags (wafVersion, rulesVersion) {
   return {
-    [tags.WAF_VERSION]: wafVersion,
-    [tags.EVENT_RULES_VERSION]: rulesVersion
+    [WAF_VERSION]: wafVersion,
+    [EVENT_RULES_VERSION]: rulesVersion
   }
 }
 
 function trackWafDurations (metrics, versionsTags) {
   if (metrics.duration) {
-    appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
+    getMetric('waf.duration', versionsTags, 'distribution').track(metrics.duration)
   }
   if (metrics.durationExt) {
-    appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
+    getMetric('waf.duration_ext', versionsTags, 'distribution').track(metrics.durationExt)
   }
 }
 
@@ -57,9 +49,9 @@ function getOrCreateMetricTags (req, versionsTags) {
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
   if (!metricTags) {
     metricTags = {
-      [tags.REQUEST_BLOCKED]: false,
-      [tags.RULE_TRIGGERED]: false,
-      [tags.WAF_TIMEOUT]: false,
+      [REQUEST_BLOCKED]: false,
+      [RULE_TRIGGERED]: false,
+      [WAF_TIMEOUT]: false,
 
       ...versionsTags
     }
@@ -80,13 +72,13 @@ function updateWafRequestsMetricTags (metrics, req) {
   const { blockTriggered, ruleTriggered, wafTimeout } = metrics
 
   if (blockTriggered) {
-    metricTags[tags.REQUEST_BLOCKED] = blockTriggered
+    metricTags[REQUEST_BLOCKED] = blockTriggered
   }
   if (ruleTriggered) {
-    metricTags[tags.RULE_TRIGGERED] = ruleTriggered
+    metricTags[RULE_TRIGGERED] = ruleTriggered
   }
   if (wafTimeout) {
-    metricTags[tags.WAF_TIMEOUT] = wafTimeout
+    metricTags[WAF_TIMEOUT] = wafTimeout
   }
 
   return metricTags
@@ -97,7 +89,7 @@ function incrementWafInitMetric (wafVersion, rulesVersion) {
 
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
-  appsecMetrics.count('waf.init', versionsTags).inc()
+  getMetric('waf.init', versionsTags).inc()
 }
 
 function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
@@ -105,7 +97,7 @@ function incrementWafUpdatesMetric (wafVersion, rulesVersion) {
 
   const versionsTags = getVersionsTags(wafVersion, rulesVersion)
 
-  appsecMetrics.count('waf.updates', versionsTags).inc()
+  getMetric('waf.updates', versionsTags).inc()
 }
 
 function incrementWafRequestsMetric (req) {
@@ -115,7 +107,7 @@ function incrementWafRequestsMetric (req) {
 
   const metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
   if (metricTags) {
-    appsecMetrics.count('waf.requests', metricTags).inc()
+    getMetric('waf.requests', metricTags).inc()
   }
 
   metricsStoreMap.delete(req)

@@ -1,9 +1,9 @@
 'use strict'
 
-const telemetryMetrics = require('../../src/telemetry/metrics')
+const telemetryMetrics = require('../../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 
-const appsecTelemetry = require('../../src/appsec/telemetry')
+const appsecTelemetry = require('../../../src/appsec/telemetry')
 
 describe('Appsec Telemetry metrics', () => {
   const wafVersion = '0.0.1'
@@ -27,7 +27,10 @@ describe('Appsec Telemetry metrics', () => {
     appsecNamespace.distributions.clear()
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => {
+    sinon.restore()
+    appsecTelemetry.disable()
+  })
 
   describe('if enabled', () => {
     beforeEach(() => {
