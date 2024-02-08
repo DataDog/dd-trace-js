@@ -81,7 +81,6 @@ benchmark-serverless-trigger:
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
-    branch: jordan.gonzalez/experimental
   allow_failure: true
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
