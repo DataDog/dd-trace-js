@@ -113,8 +113,12 @@ withVersions('express', 'express', version => {
           appsec.enable(config)
         })
 
+        function formatSchema (body) {
+          return zlib.gzipSync(JSON.stringify(body)).toString('base64')
+        }
+
         it('should get the request body schema', async () => {
-          const expectedRequestBodySchema = zlib.gzipSync(JSON.stringify([{ 'key': [8] }])).toString('base64')
+          const expectedRequestBodySchema = formatSchema([{ 'key': [8] }])
           const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -125,11 +129,11 @@ withVersions('express', 'express', version => {
           })
 
           expect(res.status).to.be.equal(200)
-          expect(res.data).to.be.deep.equal('DONE')
+          expect(res.data).to.be.equal('DONE')
         })
 
         it('should get the response body schema with res.send method with object', async () => {
-          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'sendResKey': [8] }])).toString('base64')
+          const expectedResponseBodySchema = formatSchema([{ 'sendResKey': [8] }])
           const res = await axios.post(`http://localhost:${port}/sendjson`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -142,7 +146,7 @@ withVersions('express', 'express', version => {
         })
 
         it('should get the response body schema with res.json method', async () => {
-          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonResKey': [8] }])).toString('base64')
+          const expectedResponseBodySchema = formatSchema([{ 'jsonResKey': [8] }])
           const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -155,7 +159,7 @@ withVersions('express', 'express', version => {
         })
 
         it('should get the response body schema with res.jsonp method', async () => {
-          const expectedResponseBodySchema = zlib.gzipSync(JSON.stringify([{ 'jsonpResKey': [8] }])).toString('base64')
+          const expectedResponseBodySchema = formatSchema([{ 'jsonpResKey': [8] }])
           const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -181,7 +185,7 @@ withVersions('express', 'express', version => {
         })
 
         expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.deep.equal('DONE')
+        expect(res.data).to.be.equal('DONE')
       })
     })
   })
