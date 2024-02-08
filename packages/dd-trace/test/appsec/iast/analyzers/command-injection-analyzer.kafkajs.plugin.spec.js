@@ -9,6 +9,7 @@ describe('command-injection-analyzer with kafkajs', () => {
     let kafka
     let consumer
     let producer
+
     afterEach(async function () {
       this.timeout(20000)
       await consumer?.disconnect()

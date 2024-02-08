@@ -82,6 +82,7 @@ describe('IastContextPlugin', () => {
 
   describe('finishCtxOn', () => {
     const channelName = 'finish'
+
     it('should add a subscription to the channel', () => {
       plugin.finishCtxOn(channelName)
 
@@ -91,12 +92,12 @@ describe('IastContextPlugin', () => {
     it('should call finishContext when event is published', () => {
       plugin.finishCtxOn(channelName)
 
-      const startContext = sinon.stub(plugin, 'finishContext')
+      const finishContext = sinon.stub(plugin, 'finishContext')
         .returns({ isRequestAcquired: true, iastContext: {}, store: {} })
 
       addSub.firstCall.args[1]()
 
-      expect(startContext).to.be.calledOnce
+      expect(finishContext).to.be.calledOnce
     })
   })
 
