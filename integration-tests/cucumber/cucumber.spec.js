@@ -25,10 +25,10 @@ const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_FORCED_RUN,
-  TEST_ITR_UNSKIPPABLE
+  TEST_ITR_UNSKIPPABLE,
+  TEST_SOURCE_FILE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const hookFile = 'dd-trace/loader-hook.mjs'
 const isOldNode = semver.satisfies(process.version, '<=16')
 const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
@@ -43,19 +43,6 @@ const moduleType = [
     `ci-visibility/features/farewell.feature --parallel 2 --publish-quiet`,
     featuresPath: 'ci-visibility/features/',
     fileExtension: 'js'
-  },
-  {
-    type: 'esm',
-    runTestsCommand: `node --loader=${hookFile} ./node_modules/.bin/cucumber-js ci-visibility/features-esm/*.feature`,
-    runTestsWithCoverageCommand:
-      `./node_modules/nyc/bin/nyc.js -r=text-summary ` +
-      `node --loader=./node_modules/@istanbuljs/esm-loader-hook/index.js ` +
-      `--loader=${hookFile} ./node_modules/.bin/cucumber-js ci-visibility/features-esm/*.feature`,
-    parallelModeCommand:
-      `node --loader=${hookFile} ./node_modules/.bin/cucumber-js ` +
-      `ci-visibility/features-esm/farewell.feature --parallel 2 --publish-quiet`,
-    featuresPath: 'ci-visibility/features-esm/',
-    fileExtension: 'mjs'
   }
 ]
 
@@ -68,24 +55,14 @@ versions.forEach(version => {
     featuresPath,
     fileExtension
   }) => {
-    // temporary fix for failing esm tests on the CI, skip for now for the release and comeback to solve the issue
-    if (type === 'esm') {
-      return
-    }
-
-    // esm support by cucumber was only added on >= 8.0.0
-    // if (type === 'esm' && semver.satisfies(version, '<8.0.0')) {
-    //   return
-    // }
-
+    // TODO: add esm tests
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
       before(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)
 
-        sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert',
-          'nyc', '@istanbuljs/esm-loader-hook'], true)
+        sandbox = await createSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
         cwd = sandbox.folder
       })
 
@@ -225,6 +202,7 @@ versions.forEach(version => {
                 assert.exists(testSuiteId)
                 assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                 assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
               })
 
               stepEvents.forEach(stepEvent => {

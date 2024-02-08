@@ -26,7 +26,8 @@ const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_SOURCE_FILE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const semver = require('semver')
@@ -282,6 +283,7 @@ moduleType.forEach(({
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
           })
         }, 25000)
 

@@ -24,7 +24,8 @@ const {
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_SOURCE_FILE
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -514,6 +515,10 @@ testFrameworks.forEach(({
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
+
+        testSpans.forEach(testSpan => {
+          assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+        })
 
         done()
       })
