@@ -73,18 +73,14 @@ benchmark-serverless:
   needs:
     - benchmark-serverless-trigger
   script:
-    - URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN"
-    - echo $URL
-    - echo $CI_PROJECT_ID
-    - echo $(curl "$CI_API_V4_URL/projects/dd-trace-py/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN")
-    - echo $(curl $URL | jq)
+    - git clone https://github.com/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - ./ci/check_trigger_status.sh
 
 benchmark-serverless-trigger:
   stage: benchmarks
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
-    branch: jordan.gonzalez/report-status-upstream
   allow_failure: true
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
