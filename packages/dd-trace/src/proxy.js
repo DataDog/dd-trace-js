@@ -90,7 +90,6 @@ class Tracer extends NoopProxy {
       this._enableOrDisableTracing(config)
 
       if (config.tracing) {
-        setStartupLogPluginManager(this._pluginManager)
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
@@ -104,7 +103,7 @@ class Tracer extends NoopProxy {
     return this
   }
 
-  _enableOrDisableTracing (config) { // TODO: add test
+  _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
       // dirty require for now so zero appsec code is executed unless explicitly enabled
       if (config.appsec.enabled) {
@@ -118,12 +117,15 @@ class Tracer extends NoopProxy {
       if (config.iast.enabled) {
         require('./appsec/iast').enable(config, this._tracer)
       }
-      this._pluginManager.configure(config)
     } else {
       require('./appsec').disable()
       require('./appsec/iast').disable()
     }
-    if (this._tracingInitialized) this._tracer.configure(config)
+    if (this._tracingInitialized) {
+      this._tracer.configure(config)
+      this._pluginManager.configure(config)
+      setStartupLogPluginManager(this._pluginManager)
+    }
   }
 
   profilerStarted () {
