@@ -73,7 +73,7 @@ benchmark-serverless:
   needs:
     - benchmark-serverless-trigger
   script:
-    - git clone https://github.com/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
     - ./ci/check_trigger_status.sh
 
 benchmark-serverless-trigger:
