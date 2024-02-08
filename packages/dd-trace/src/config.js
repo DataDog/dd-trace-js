@@ -589,7 +589,7 @@ class Config {
     }
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
-      this._setString(env, 'peerServiceMapping', fromEntries(
+      this._setValue(env, 'peerServiceMapping', fromEntries(
         process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
     }
@@ -679,7 +679,7 @@ class Config {
       this._setString(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
     }
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
-    this._setString(opts, 'peerServiceMapping', options.peerServiceMapping)
+    this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
@@ -832,7 +832,7 @@ class Config {
       ))
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
-    this._setString(calc, 'spanComputePeerService', this._getSpanComputePeerService())
+    this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'isIntelligentTestRunnerEnabled',
       isTrue(this._isCiVisibility()) && isTrue(this._isCiVisibilityItrEnabled()))
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -897,7 +897,7 @@ class Config {
   }
 
   _setString (obj, name, value) {
-    obj[name] = value || undefined // unset for empty strings
+    obj[name] = value ? String(value) : undefined // unset for empty strings
   }
 
   _setTags (obj, name, value) {
