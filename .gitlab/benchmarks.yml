@@ -64,30 +64,22 @@ benchmark:
   variables:
     SPLITS: 3
 
-benchmark-serverless-success:
+benchmark-serverless:
   stage: benchmarks
   tags: ["arch:amd64"]
   when: on_success
   needs:
     - benchmark-serverless
   script:
-    - exit 0
+    - echo $(curl "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN" | jq)
 
-benchmark-serverless-failure:
-  stage: benchmarks
-  tags: ["arch:amd64"]
-  when: on_failure
-  needs:
-    - benchmark-serverless
-  script:
-    - exit 1
-
-benchmark-serverless:
+benchmark-serverless-trigger:
   stage: benchmarks
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
     branch: jordan.gonzalez/report-status-upstream
+  allow_failure: true
   variables:
     UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
     UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
