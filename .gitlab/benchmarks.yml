@@ -73,7 +73,11 @@ benchmark-serverless:
   needs:
     - benchmark-serverless-trigger
   script:
-    - echo $(curl "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN" | jq)
+    - URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN"
+    - echo $URL
+    - echo $CI_PROJECT_ID
+    - echo $(curl "$CI_API_V4_URL/projects/dd-trace-py/pipelines/$CI_PIPELINE_ID/bridges?job_token=$CI_JOB_TOKEN")
+    - echo $(curl $URL | jq)
 
 benchmark-serverless-trigger:
   stage: benchmarks
