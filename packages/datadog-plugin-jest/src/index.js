@@ -295,7 +295,7 @@ class JestPlugin extends CiPlugin {
       testParameters,
       frameworkVersion,
       testStartLine,
-      testFileFullPath
+      testFileAbsolutePath
     } = test
 
     const extraTags = {
@@ -306,8 +306,8 @@ class JestPlugin extends CiPlugin {
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
     }
-    if (testFileFullPath) {
-      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testFileFullPath, this.repositoryRoot)
+    if (testFileAbsolutePath) {
+      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
     } else {
       // If for whatever we don't have the full path, we'll set the source file to the suite name
       extraTags[TEST_SOURCE_FILE] = suite

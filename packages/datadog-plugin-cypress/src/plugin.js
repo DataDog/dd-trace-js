@@ -364,6 +364,8 @@ module.exports = (on, config) => {
       const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
       if (spec.absolute && repositoryRoot) {
         skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
       }
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
@@ -395,6 +397,11 @@ module.exports = (on, config) => {
       }
       if (itrCorrelationId) {
         finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
+      if (spec.absolute && repositoryRoot) {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
       }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })
@@ -497,7 +504,7 @@ module.exports = (on, config) => {
       return activeSpan ? { traceId: activeSpan.context().toTraceId() } : {}
     },
     'dd:afterEach': ({ test, coverage }) => {
-      const { state, error, isRUMActive, testSourceLine, testSuite, testName, testSourceFileAbsolute } = test
+      const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
       if (activeSpan) {
         if (coverage && isCodeCoverageEnabled && tracer._tracer._exporter && tracer._tracer._exporter.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -526,11 +533,6 @@ module.exports = (on, config) => {
         }
         if (testSourceLine) {
           activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
-        }
-        if (testSourceFileAbsolute) {
-          activeSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(testSourceFileAbsolute, repositoryRoot))
-        } else {
-          activeSpan.setTag(TEST_SOURCE_FILE, testSuite)
         }
         const finishedTest = {
           testName,

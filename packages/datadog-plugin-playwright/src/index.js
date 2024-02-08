@@ -80,7 +80,8 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const span = this.startTestSpan(testName, testSuite, testSuiteAbsolutePath, testSourceLine)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
 
       this.enter(span, store)
     })
@@ -134,7 +135,7 @@ class PlaywrightPlugin extends CiPlugin {
       [TEST_SOURCE_START]: testSourceLine
     }
     if (testSourceFile) {
-      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testSourceFile, this.repositoryRoot)
+      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

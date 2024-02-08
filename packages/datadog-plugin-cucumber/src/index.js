@@ -123,7 +123,7 @@ class CucumberPlugin extends CiPlugin {
       }
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
@@ -137,10 +137,10 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine }) => {
       const store = storage.getStore()
-      const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
-      const testSourceFile = getTestSuitePath(fullTestSuite, this.repositoryRoot)
+      const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
+      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
 
       this.enter(testSpan, store)
