@@ -4,6 +4,9 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
+const dc = require('dc-polyfill')
+
+const firstTraceExported = messageWasPublished('dd-trace:trace:exported')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -12,10 +15,21 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
   ], debug)
 }
 
+// Returns a promise that resolves when a message is next published on the given channel.
+function messageWasPublished (channel) {
+  return new Promise((resolve) => {
+    dc.subscribe(channel, function receiver () {
+      dc.unsubscribe(channel, receiver)
+      resolve()
+    })
+  })
+}
+
 class Profiler extends EventEmitter {
   constructor () {
     super()
     this._enabled = false
+    this._exporting = false
     this._logger = undefined
     this._config = undefined
     this._timer = undefined
@@ -61,6 +75,17 @@ class Profiler extends EventEmitter {
       this._logger.error(err)
     }
 
+    if (config.injected) {
+      this._logger.debug('Due to injection, profile exports will be suppressed until traces are exported.')
+      this._exporting = false
+      const that = this
+      firstTraceExported.then(() => {
+        that._exporting = true
+      })
+    } else {
+      this._exporting = true
+    }
+
     try {
       const start = new Date()
       for (const profiler of config.profilers) {
@@ -82,6 +107,8 @@ class Profiler extends EventEmitter {
   }
 
   _nearOOMExport (profileType, encodedProfile) {
+    if (!this._exporting) return
+
     const start = this._lastStart
     const end = new Date()
     this._submit({
@@ -146,22 +173,28 @@ class Profiler extends EventEmitter {
         profiles.push({ profiler, profile })
       }
 
-      // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
-        encodedProfiles[profiler.type] = await profiler.encode(profile)
-        this._logger.debug(() => {
-          const profileJson = JSON.stringify(profile, (key, value) => {
-            return typeof value === 'bigint' ? value.toString() : value
+      if (this._exporting) {
+        // encode and export asynchronously
+        for (const { profiler, profile } of profiles) {
+          encodedProfiles[profiler.type] = await profiler.encode(profile)
+          this._logger.debug(() => {
+            const profileJson = JSON.stringify(profile, (key, value) => {
+              return typeof value === 'bigint' ? value.toString() : value
+            })
+            return `Collected ${profiler.type} profile: ` + profileJson
           })
-          return `Collected ${profiler.type} profile: ` + profileJson
-        })
+        }
       }
 
       if (restart) {
         this._capture(this._timeoutInterval, endDate)
       }
-      await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
-      this._logger.debug('Submitted profiles')
+
+      if (this._exporting) {
+        // export asynchronously
+        await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+        this._logger.debug('Submitted profiles')
+      }
     } catch (err) {
       this._logger.error(err)
       this._stop()
