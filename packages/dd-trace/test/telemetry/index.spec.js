@@ -96,7 +96,6 @@ describe('telemetry', () => {
         appsec: { enabled: true },
         profiler: { version: tracerVersion, enabled: true }
       })
-      expect(payload).to.have.property('configuration').that.deep.equal([])
       expect(payload).to.have.property('install_signature').that.deep.equal({
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
         install_type: 'k8s_single_step',

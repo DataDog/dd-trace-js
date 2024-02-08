@@ -122,11 +122,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = coalesce(
-      process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
-      true
-    )
-
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       false
