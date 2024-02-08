@@ -147,15 +147,18 @@ class Profiler extends EventEmitter {
       }
 
       // encode and export asynchronously
-      for (const { profiler, profile } of profiles) {
-        encodedProfiles[profiler.type] = await profiler.encode(profile)
-        this._logger.debug(() => {
-          const profileJson = JSON.stringify(profile, (key, value) => {
-            return typeof value === 'bigint' ? value.toString() : value
+      const encodePromises = profiles.map(({ profiler, profile }) => {
+        profiler.encode(profile).then((encodedProfile) => {
+          encodedProfiles[profiler.type] = encodedProfile
+          this._logger.debug(() => {
+            const profileJson = JSON.stringify(profile, (_, value) => {
+              return typeof value === 'bigint' ? value.toString() : value
+            })
+            return `Collected ${profiler.type} profile: ` + profileJson
           })
-          return `Collected ${profiler.type} profile: ` + profileJson
         })
-      }
+      })
+      await Promise.all(encodePromises)
 
       if (restart) {
         this._capture(this._timeoutInterval, endDate)
