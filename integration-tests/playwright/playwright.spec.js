@@ -54,7 +54,7 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
-        it.only('can run and report tests', (done) => {
+        it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
@@ -104,7 +104,6 @@ versions.forEach((version) => {
 
             testEvents.forEach(testEvent => {
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
-              console.log('testEvent.content.meta[TEST_SOURCE_FILE]', testEvent.content.meta[TEST_SOURCE_FILE])
               assert.equal(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
               )
@@ -134,8 +133,6 @@ versions.forEach((version) => {
               stdio: 'pipe'
             }
           )
-          childProcess.stdout.pipe(process.stdout)
-          childProcess.stderr.pipe(process.stderr)
         })
       })
     })

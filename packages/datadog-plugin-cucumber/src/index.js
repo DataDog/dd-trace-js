@@ -141,8 +141,6 @@ class CucumberPlugin extends CiPlugin {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
-      console.log('testFileAbsolutePath', testFileAbsolutePath)
-      console.log('this.repositoryRoot', this.repositoryRoot)
       const testSpan = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
 
       this.enter(testSpan, store)

@@ -283,7 +283,6 @@ moduleType.forEach(({
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-            console.log('meta[TEST_SOURCE_FILE]', meta[TEST_SOURCE_FILE])
             assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
           })
         }, 25000)
