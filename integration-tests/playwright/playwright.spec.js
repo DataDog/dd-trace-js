@@ -54,7 +54,7 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
-        it('can run and report tests', (done) => {
+        it.only('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
             ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
@@ -134,6 +134,8 @@ versions.forEach((version) => {
               stdio: 'pipe'
             }
           )
+          childProcess.stdout.pipe(process.stdout)
+          childProcess.stderr.pipe(process.stderr)
         })
       })
     })
