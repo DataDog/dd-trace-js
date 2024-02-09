@@ -96,7 +96,6 @@ addHook({
             callbackWrapped = true
           }
         }
-        
         wrapCallbackIfExist(arguments)
 
         return asyncResource.runInAsyncScope(() => {
