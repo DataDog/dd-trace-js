@@ -173,6 +173,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               }, 'NOSQL_MONGODB_INJECTION')
 
               testThatRequestHasVulnerability({
+                textDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability using callback in exec',
                 fn: async (req, res) => {
                   try {
                     Test.find({
@@ -195,28 +196,21 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               testThatRequestHasVulnerability({
-                testDescription: 'this should fail',
+                textDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability using callback in find',
                 fn: async (req, res) => {
-                  return new Promise((resolve) => {
-                    try {
-                      Test.find({
-                        name: req.query.key,
-                        value: [1, 2,
-                          'value',
-                          false, req.query.key]
-                      }, () => {
-                        console.log('first callback')
-                      }).exec(() => {
-                        console.log('whaaaaat')
-                        resolve()
-                      })
-                    } catch (e) {
-                      console.error(e)
-                      res.writeHead(500)
+                  try {
+                    Test.find({
+                      name: req.query.key,
+                      value: [1, 2,
+                        'value',
+                        false, req.query.key]
+                    }, () => {
                       res.end()
-                      resolve()
-                    }
-                  })
+                    })
+                  } catch (e) {
+                    res.writeHead(500)
+                    res.end()
+                  }
                 },
                 vulnerability: 'NOSQL_MONGODB_INJECTION',
                 makeRequest: (done, config) => {
