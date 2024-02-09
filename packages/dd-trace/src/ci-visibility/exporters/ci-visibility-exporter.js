@@ -83,6 +83,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
   shouldRequestKnownTests () {
     return !!(
       this._config.isEarlyFlakeDetectionEnabled &&
+      this._canUseCiVisProtocol &&
       this._libraryConfig?.isEarlyFlakeDetectionEnabled
     )
   }
@@ -99,6 +100,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
     return this._canUseCiVisProtocol
   }
 
+  getRequestConfiguration (testConfiguration) {
+    return {
+      url: this._getApiUrl(),
+      env: this._config.env,
+      service: this._config.service,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      isGzipCompatible: this._isGzipCompatible,
+      evpProxyPrefix: this.evpProxyPrefix,
+      custom: getTestConfigurationTags(this._config.tags),
+      ...testConfiguration
+    }
+  }
+
   // We can't call the skippable endpoint until git upload has finished,
   // hence the this._gitUploadPromise.then
   getSkippableSuites (testConfiguration, callback) {
@@ -109,18 +123,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
-      const configuration = {
-        url: this._getApiUrl(),
-        site: this._config.site,
-        env: this._config.env,
-        service: this._config.service,
-        isEvpProxy: !!this._isUsingEvpProxy,
-        isGzipCompatible: this._isGzipCompatible,
-        evpProxyPrefix: this.evpProxyPrefix,
-        custom: getTestConfigurationTags(this._config.tags),
-        ...testConfiguration
-      }
-      getSkippableSuitesRequest(configuration, callback)
+      getSkippableSuitesRequest(this.getRequestConfiguration(testConfiguration), callback)
     })
   }
 
@@ -128,24 +131,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
     if (!this.shouldRequestKnownTests()) {
       return callback(null)
     }
-    this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
-      if (!canUseCiVisProtocol) {
-        return callback(
-          new Error('Known tests can not be requested because CI Visibility protocol can not be used')
-        )
-      }
-      const configuration = {
-        url: this._getApiUrl(),
-        env: this._config.env,
-        service: this._config.service,
-        isEvpProxy: !!this._isUsingEvpProxy,
-        evpProxyPrefix: this.evpProxyPrefix,
-        custom: getTestConfigurationTags(this._config.tags),
-        isGzipCompatible: this._isGzipCompatible,
-        ...testConfiguration
-      }
-      getKnownTestsRequest(configuration, callback)
-    })
+    getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   /**
@@ -162,22 +148,15 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
       }
-      const configuration = {
-        url: this._getApiUrl(),
-        env: this._config.env,
-        service: this._config.service,
-        isEvpProxy: !!this._isUsingEvpProxy,
-        evpProxyPrefix: this.evpProxyPrefix,
-        custom: getTestConfigurationTags(this._config.tags),
-        ...testConfiguration
-      }
+      const configuration = this.getRequestConfiguration(testConfiguration)
+
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._libraryConfig = this.getConfiguration(libraryConfig)
+        this._libraryConfig = this.filterConfiguration(libraryConfig)
 
         if (err) {
           callback(err, {})
@@ -188,19 +167,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
               return callback(gitUploadError, {})
             }
             getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-              this._libraryConfig = this.getConfiguration(finalLibraryConfig)
+              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
               callback(err, this._libraryConfig)
             })
           })
         } else {
-          callback(null, libraryConfig)
+          callback(null, this._libraryConfig)
         }
       })
     })
   }
 
   // Takes into account potential kill switches
-  getConfiguration (remoteConfiguration) {
+  filterConfiguration (remoteConfiguration) {
     if (!remoteConfiguration) {
       return {}
     }
@@ -209,14 +188,16 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isSuitesSkippingEnabled,
       isItrEnabled,
       requireGit,
-      isEarlyFlakeDetectionEnabled
+      isEarlyFlakeDetectionEnabled,
+      earlyFlakeDetectionNumRetries
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
       isItrEnabled,
       requireGit,
-      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled
+      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
+      earlyFlakeDetectionNumRetries
     }
   }
 
