@@ -7,6 +7,7 @@ const { threadNamePrefix } = require('./profilers/shared')
 const dc = require('dc-polyfill')
 
 const firstTraceExported = messageWasPublished('dd-trace:trace:exported')
+const firstSpanStarted = messageWasPublished('dd-trace:span:started')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -51,6 +52,10 @@ class Profiler extends EventEmitter {
 
     const config = this._config = new Config(options)
     if (!config.enabled) return false
+
+    if (config.injected) {
+      await firstSpanStarted
+    }
 
     this._logger = config.logger
     this._enabled = true
