@@ -29,6 +29,7 @@ module.exports = {
   'bluebird': () => require('../bluebird'),
   'body-parser': () => require('../body-parser'),
   'bunyan': () => require('../bunyan'),
+  'browser-bunyan': () => require('../browser-bunyan'),
   'cassandra-driver': () => require('../cassandra-driver'),
   'child_process': () => require('../child_process'),
   'connect': () => require('../connect'),

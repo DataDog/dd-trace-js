@@ -131,6 +131,7 @@ async function setup (modName, repoName, commitish) {
   const repoUrl = `https://github.com/${repoName}.git`
   const cwd = await getTmpDir()
   await execOrError(`git clone ${repoUrl} --branch ${commitish} --single-branch ${cwd}`)
+  await execOrError(`rm -f ${cwd}/package-lock.json`)
   await execOrError(`npm install --legacy-peer-deps`, { cwd })
 }
 
