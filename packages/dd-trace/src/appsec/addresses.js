@@ -15,6 +15,8 @@ module.exports = {
   HTTP_INCOMING_GRAPHQL_RESOLVERS: 'graphql.server.all_resolvers',
   HTTP_INCOMING_GRAPHQL_RESOLVER: 'graphql.server.resolver',
 
+  HTTP_OUTGOING_BODY: 'server.response.body',
+
   HTTP_CLIENT_IP: 'http.client_ip',
 
   USER_ID: 'usr.id',
