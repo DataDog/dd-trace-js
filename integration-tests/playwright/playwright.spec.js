@@ -104,6 +104,7 @@ versions.forEach((version) => {
 
             testEvents.forEach(testEvent => {
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
+              console.log('testEvent.content.meta[TEST_SOURCE_FILE]', testEvent.content.meta[TEST_SOURCE_FILE])
               assert.equal(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
               )
