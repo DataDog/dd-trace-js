@@ -514,6 +514,11 @@ testFrameworks.forEach(({
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
+        // Can read DD_TAGS
+        testSpans.forEach(testSpan => {
+          assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
+          assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
+        })
 
         done()
       })
@@ -522,7 +527,8 @@ testFrameworks.forEach(({
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init'
+          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init',
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
         },
         stdio: 'pipe'
       })
