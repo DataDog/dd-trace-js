@@ -22,14 +22,14 @@ describe('Api Security Sampler', () => {
     it('should sample request if enabled and sampling 1', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.true
+      expect(apiSecuritySampler.sampleRequest({})).to.true
     })
 
     it('should not sample request if enabled and sampling 0', () => {
       config.apiSecurity.requestSampling = 0
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.false
+      expect(apiSecuritySampler.sampleRequest({})).to.false
     })
 
     it('should sample request if enabled and sampling greater than random', () => {
@@ -37,7 +37,7 @@ describe('Api Security Sampler', () => {
 
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.true
+      expect(apiSecuritySampler.sampleRequest({})).to.true
     })
 
     it('should not sample request if enabled and sampling less than random', () => {
@@ -61,7 +61,7 @@ describe('Api Security Sampler', () => {
 
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.true
+      expect(apiSecuritySampler.sampleRequest({})).to.true
 
       apiSecuritySampler.setRequestSampling(0)
 
