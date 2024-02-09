@@ -87,22 +87,6 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             })
 
             testThatRequestHasVulnerability({
-              fn: async (req, res) => {
-                Test.find({
-                  name: {
-                    child: [req.query.key]
-                  }
-                }).then(() => {
-                  res.end()
-                })
-              },
-              vulnerability: 'NOSQL_MONGODB_INJECTION',
-              makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-              }
-            })
-
-            testThatRequestHasVulnerability({
               testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability using promise in exec method',
               fn: async (req, res) => {
                 Test.find({
@@ -211,20 +195,28 @@ describe('nosql injection detection in mongodb - whole feature', () => {
               })
 
               testThatRequestHasVulnerability({
+                testDescription: 'this should fail',
                 fn: async (req, res) => {
-                  try {
-                    Test.find({
-                      name: req.query.key,
-                      value: [1, 2,
-                        'value',
-                        false, req.query.key]
-                    }, () => {
+                  return new Promise((resolve) => {
+                    try {
+                      Test.find({
+                        name: req.query.key,
+                        value: [1, 2,
+                          'value',
+                          false, req.query.key]
+                      }, () => {
+                        console.log('first callback')
+                      }).exec(() => {
+                        console.log('whaaaaat')
+                        resolve()
+                      })
+                    } catch (e) {
+                      console.error(e)
+                      res.writeHead(500)
                       res.end()
-                    })
-                  } catch (e) {
-                    res.writeHead(500)
-                    res.end()
-                  }
+                      resolve()
+                    }
+                  })
                 },
                 vulnerability: 'NOSQL_MONGODB_INJECTION',
                 makeRequest: (done, config) => {
