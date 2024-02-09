@@ -13,6 +13,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { ORIGIN_KEY } = require('./constants')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -709,6 +710,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       version: this.version,
       'runtime-id': uuid()
     })
+
+    if (this.isCiVisibility) {
+      tagger.add(this.tags, {
+        [ORIGIN_KEY]: 'ciapp-test'
+      })
+    }
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(

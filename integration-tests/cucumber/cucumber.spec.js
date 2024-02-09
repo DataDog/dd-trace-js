@@ -203,6 +203,9 @@ versions.forEach(version => {
                 assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
                 assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
                 assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                // Can read DD_TAGS
+                assert.propertyVal(meta, 'test.customtag', 'customvalue')
+                assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
               })
 
               stepEvents.forEach(stepEvent => {
@@ -215,7 +218,10 @@ versions.forEach(version => {
               runTestsCommand,
               {
                 cwd,
-                env: envVars,
+                env: {
+                  ...envVars,
+                  DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                },
                 stdio: 'pipe'
               }
             )

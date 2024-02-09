@@ -284,6 +284,9 @@ moduleType.forEach(({
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
             assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
+            // Can read DD_TAGS
+            assert.propertyVal(meta, 'test.customtag', 'customvalue')
+            assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
           })
         }, 25000)
 
@@ -298,7 +301,8 @@ moduleType.forEach(({
           cwd,
           env: {
             ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
           },
           stdio: 'pipe'
         }

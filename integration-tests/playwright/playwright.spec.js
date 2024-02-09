@@ -107,6 +107,9 @@ versions.forEach((version) => {
               assert.equal(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
               )
+              // Can read DD_TAGS
+              assert.propertyVal(testEvent.content.meta, 'test.customtag', 'customvalue')
+              assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
             })
 
             stepEvents.forEach(stepEvent => {
@@ -128,7 +131,8 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
               },
               stdio: 'pipe'
             }
