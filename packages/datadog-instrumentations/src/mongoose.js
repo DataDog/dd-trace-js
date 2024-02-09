@@ -111,7 +111,9 @@ addHook({
           if (!callbackWrapped) {
             shimmer.wrap(res, 'exec', originalExec => {
               return function wrappedExec () {
-                wrapCallbackIfExist(arguments)
+                if (!callbackWrapped) {
+                  wrapCallbackIfExist(arguments)
+                }
 
                 const execResult = originalExec.apply(this, arguments)
 
