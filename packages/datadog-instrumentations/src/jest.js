@@ -42,6 +42,9 @@ const knownTestsCh = channel('ci:jest:known-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
+// Maximum time we'll wait for the tracer to flush
+const FLUSH_TIMEOUT = 10000
+
 let skippableSuites = []
 let knownTests = []
 let isCodeCoverageEnabled = false
@@ -415,6 +418,20 @@ function cliWrapper (cli, jestVersion) {
       status = 'fail'
       error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
     }
+    let timeoutId
+
+    const flushPromise = new Promise((resolve) => {
+      onDone = () => {
+        clearTimeout(timeoutId)
+        resolve()
+      }
+    })
+
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve()
+      }, FLUSH_TIMEOUT).unref()
+    })
 
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
@@ -427,9 +444,11 @@ function cliWrapper (cli, jestVersion) {
         hasUnskippableSuites,
         hasForcedToRunSuites,
         error,
-        isEarlyFlakeDetectionEnabled
+        isEarlyFlakeDetectionEnabled,
+        onDone
       })
     })
+    await Promise.race([flushPromise, timeoutPromise])
 
     numSkippedSuites = 0
 
@@ -547,6 +566,10 @@ function configureTestEnvironment (readConfigsResult) {
   })
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+
+  if (readConfigsResult.globalConfig) {
+    log.warn("The '--forceExit' jest option has been found. Passing this flag may cause data to be lost.")
+  }
 
   if (isCodeCoverageEnabled) {
     const globalConfig = {
