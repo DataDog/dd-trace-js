@@ -96,11 +96,11 @@ function wrapRun (pl, isLatestVersion) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
-      const testSuiteFullPath = this.pickle.uri
+      const testFileAbsolutePath = this.pickle.uri
 
-      if (!pickleResultByFile[testSuiteFullPath]) { // first test in suite
+      if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
         isUnskippable = isMarkedAsUnskippable(this.pickle)
-        const testSuitePath = getTestSuitePath(testSuiteFullPath, process.cwd())
+        const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
         isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
         testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
@@ -113,7 +113,7 @@ function wrapRun (pl, isLatestVersion) {
 
       testStartCh.publish({
         testName: this.pickle.name,
-        fullTestSuite: testSuiteFullPath,
+        testFileAbsolutePath,
         testSourceLine
       })
       try {
@@ -123,21 +123,21 @@ function wrapRun (pl, isLatestVersion) {
           const { status, skipReason, errorMessage } = isLatestVersion
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-          if (!pickleResultByFile[testSuiteFullPath]) {
-            pickleResultByFile[testSuiteFullPath] = [status]
+          if (!pickleResultByFile[testFileAbsolutePath]) {
+            pickleResultByFile[testFileAbsolutePath] = [status]
           } else {
-            pickleResultByFile[testSuiteFullPath].push(status)
+            pickleResultByFile[testFileAbsolutePath].push(status)
           }
           testFinishCh.publish({ status, skipReason, errorMessage })
           // last test in suite
-          if (pickleResultByFile[testSuiteFullPath].length === pickleByFile[testSuiteFullPath].length) {
-            const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testSuiteFullPath])
+          if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
+            const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
             if (global.__coverage__) {
               const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
 
               testSuiteCodeCoverageCh.publish({
                 coverageFiles,
-                suiteFile: testSuiteFullPath
+                suiteFile: testFileAbsolutePath
               })
               // We need to reset coverage to get a code coverage per suite
               // Before that, we preserve the original coverage
