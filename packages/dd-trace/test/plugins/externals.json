@@ -95,21 +95,6 @@
     {
       "name": "apollo-server-core",
       "versions": ["1.3.6"]
-    },{
-      "name": "express",
-      "versions": [">=4"]
-    },
-    {
-      "name": "apollo-server-express",
-      "versions": [">=3"]
-    },
-    {
-      "name": "fastify",
-      "versions": [">=3"]
-    },
-    {
-      "name": "apollo-server-fastify",
-      "versions": [">=3"]
     },
     {
       "name": "graphql-tools",
