@@ -24,7 +24,8 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -361,6 +362,11 @@ module.exports = (on, config) => {
         cypressTestName === test.name && spec.relative === test.suite
       )
       const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
+      if (spec.absolute && repositoryRoot) {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+      }
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
@@ -391,6 +397,11 @@ module.exports = (on, config) => {
       }
       if (itrCorrelationId) {
         finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
+      if (spec.absolute && repositoryRoot) {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
       }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })
