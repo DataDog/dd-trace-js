@@ -113,6 +113,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
       this.rootDir = rootDir
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
+      this.testFileAbsolutePath = context.testPath
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
@@ -194,6 +195,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testStartCh.publish({
             name: removeEfdTestName(testName),
             suite: this.testSuite,
+            testFileAbsolutePath: this.testFileAbsolutePath,
             runner: 'jest-circus',
             testParameters,
             frameworkVersion: jestVersion,
@@ -244,6 +246,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testSkippedCh.publish({
             name: getJestTestName(event.test),
             suite: this.testSuite,
+            testFileAbsolutePath: this.testFileAbsolutePath,
             runner: 'jest-circus',
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
