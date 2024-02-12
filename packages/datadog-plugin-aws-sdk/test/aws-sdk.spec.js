@@ -122,7 +122,7 @@ describe('Plugin', () => {
 
             expect(span).to.include({
               name: 'aws.request',
-              resource: 'completeMultipartUpload',
+              resource: 'completeMultipartUpload my-bucket',
               service: 'test-aws-s3'
             })
 
@@ -132,9 +132,16 @@ describe('Plugin', () => {
               [ERROR_STACK]: error.stack,
               'component': 'aws-sdk'
             })
+            if (semver.intersects(version, '>=2.3.4')) {
+              expect(span.meta['aws.response.request_id']).to.match(/[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+            }
           }).then(done, done)
 
-          s3.completeMultipartUpload('invalid', e => {
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, e => {
             error = e
           })
         })
