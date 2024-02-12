@@ -259,7 +259,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
-    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion

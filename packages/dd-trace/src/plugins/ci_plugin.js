@@ -166,6 +166,8 @@ module.exports = class CiPlugin extends Plugin {
       [CI_WORKSPACE_PATH]: repositoryRoot
     } = this.testEnvironmentMetadata
 
+    this.repositoryRoot = repositoryRoot || process.cwd()
+
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
     this.isUnsupportedCIProvider = !ciProviderName
