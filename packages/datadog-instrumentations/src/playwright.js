@@ -73,22 +73,33 @@ function getRootDir (playwrightRunner) {
   if (playwrightRunner._configDir) {
     return playwrightRunner._configDir
   }
-  if (playwrightRunner._config && playwrightRunner._config.config) {
-    return playwrightRunner._config.config.rootDir
+  if (playwrightRunner._config) {
+    return playwrightRunner._config.config?.rootDir || process.cwd()
   }
   return process.cwd()
 }
 
-function getProjectsFromDispatcher (dispatcher) {
-  return dispatcher?._config?.config?.projects
+function getProjectsFromRunner (runner) {
+  const config = getPlaywrightConfig(runner)
+  return config.projects?.map(({ project }) => project)
 }
 
-function getBrowserNameFromProjectId (dispatcher, projectId) {
-  const projects = getProjectsFromDispatcher(dispatcher)
-  if (projects) {
-    return projects.find(project => project.__projectId === projectId)?.name
+function getProjectsFromDispatcher (dispatcher) {
+  const newConfig = dispatcher._config?.config?.projects
+  if (newConfig) {
+    return newConfig
   }
-  return null
+  // old
+  return dispatcher._loader?.fullConfig()?.projects
+}
+
+function getBrowserNameFromProjects (projects, projectId) {
+  if (!projects) {
+    return null
+  }
+  return projects.find(project =>
+    project.__projectId === projectId || project._id === projectId
+  )?.name
 }
 
 function testBeginHandler (test, browserName) {
@@ -182,11 +193,12 @@ function dispatcherHook (dispatcherExport) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
-
     worker.process.on('message', ({ method, params }) => {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
-        testBeginHandler(test)
+        const projects = getProjectsFromDispatcher(dispatcher)
+        const browser = getBrowserNameFromProjects(projects, test._projectId)
+        testBeginHandler(test, browser)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
 
@@ -219,7 +231,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
-      const browser = getBrowserNameFromProjectId(dispatcher, test._projectId)
+      const projects = getProjectsFromDispatcher(dispatcher)
+      const browser = getBrowserNameFromProjects(projects, test._projectId)
       testBeginHandler(test, browser)
     })
     worker.on('testEnd', ({ testId, status, errors, annotations }) => {
@@ -243,6 +256,7 @@ function runnerHook (runnerExport, playwrightVersion) {
     testSessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
+    const projects = getProjectsFromRunner(this)
 
     const runAllTestsReturn = await runAllTests.apply(this, arguments)
 
@@ -251,7 +265,8 @@ function runnerHook (runnerExport, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       tests.forEach(test => {
-        testBeginHandler(test)
+        const browser = getBrowserNameFromProjects(projects, test._projectId)
+        testBeginHandler(test, browser)
         testEndHandler(test, [], 'skip')
       })
     })
