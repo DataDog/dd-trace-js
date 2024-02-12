@@ -67,16 +67,14 @@ class DogStatsDClient {
     request(buffer, this._httpOptions, (err) => {
       if (err) {
         log.error('HTTP error from agent: ' + err.stack)
-        if (err.status) {
+        if (err.status === 404) {
           // Inside this if-block, we have connectivity to the agent, but
           // we're not getting a 200 from the proxy endpoint. If it's a 404,
           // then we know we'll never have the endpoint, so just clear out the
           // options. Either way, we can give UDP a try.
-          if (err.status === 404) {
-            this._httpOptions = null
-          }
-          this._sendUdp(queue)
+          this._httpOptions = null
         }
+        this._sendUdp(queue)
       }
     })
   }
