@@ -120,6 +120,18 @@ describe('IastNamespace', () => {
       expect(metric.tags).to.be.deep.eq(['key:tag1', `version:${process.version}`])
     })
 
+    it('should register a new count type metric and store it in the map supporting non array tags', () => {
+      const namespace = new IastNamespace()
+
+      const metric = namespace.getMetric('metric.name', { key: 'tag1' })
+
+      expect(metric).to.not.be.undefined
+      expect(metric.metric).to.be.eq('metric.name')
+      expect(metric.namespace).to.be.eq('iast')
+      expect(metric.type).to.be.eq('count')
+      expect(metric.tags).to.be.deep.eq(['key:tag1', `version:${process.version}`])
+    })
+
     it('should register a new distribution type metric and store it in the map', () => {
       const namespace = new IastNamespace()
 
