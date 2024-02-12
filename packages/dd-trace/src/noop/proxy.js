@@ -20,6 +20,8 @@ class Tracer {
     return this
   }
 
+  rcReady () { return false }
+
   profilerStarted () {
     return Promise.resolve(false)
   }

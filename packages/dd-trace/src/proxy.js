@@ -54,6 +54,8 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config)
 
+        this._rc = rc
+
         rc.on('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
@@ -119,6 +121,10 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  rcReady (opts, cb) {
+    return this._rc?.isReady(opts, cb)
   }
 
   profilerStarted () {

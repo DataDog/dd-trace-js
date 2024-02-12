@@ -121,6 +121,14 @@ export declare interface Tracer extends opentracing.Tracer {
 
   appsec: Appsec;
 
+  /**
+   * Checks if the Remote Config client has successfully received data from the agent.
+   * @param {function} cb If provided, will be called once the data has been received.
+   * @param {array} opts.products If provided, will be make sure that specified products have been succesfully applied to the client.
+   */
+  rcReady (cb?: function): boolean;
+  rcReady (opts: { products?: string[] }, cb?: function): boolean;
+
   TracerProvider: opentelemetry.TracerProvider;
 
   dogstatsd: DogStatsD;
@@ -149,6 +157,8 @@ export declare interface TraceOptions extends Analyzable {
    */
   links?: Array<{ context: SpanContext, attributes?: Object }>
 }
+
+export delcare
 
 /**
  * Span represents a logical unit of work as part of a broader Trace.

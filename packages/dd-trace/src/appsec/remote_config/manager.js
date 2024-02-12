@@ -62,6 +62,65 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this.appliedConfigs = new Map()
+
+    this.hadFirstResponse = false
+  }
+
+  isReady (opts, cb) {
+    if (typeof opts === 'function') {
+      cb = opts
+      opts = {}
+    } else if (!opts) {
+      opts = {}
+    }
+
+    if (opts.products) {
+      const hasProducts = this.hasProducts(opts.products)
+
+      if (cb) {
+        if (hasProducts) {
+          setImmediate(cb)
+        } else {
+          const listener = () => {
+            if (this.hasProducts(opts.products)) {
+              this.off('kPostUpdate', listener)
+              cb()
+            }
+          }
+          this.on('kPostUpdate', listener)
+        }
+      }
+
+      return hasProducts
+    } else {
+      if (cb) {
+        if (this.hadFirstResponse) {
+          setImmediate(cb)
+        } else {
+          const listener = () => {
+            if (this.hadFirstResponse) {
+              this.off('kPostUpdate', listener)
+              cb()
+            }
+          }
+          this.on('kPostUpdate', listener)
+        }
+      }
+
+      return this.hadFirstResponse
+    }
+  }
+
+  hasProducts (products) {
+    const productsSet = new Set()
+
+    for (const configState of this.state.client.state.config_states) {
+      if (configState.apply_state === ACKNOWLEDGED) {
+        productsSet.add(configState.product)
+      }
+    }
+
+    return products.every(productsSet.has, productsSet)
   }
 
   updateCapabilities (mask, value) {
@@ -138,15 +197,31 @@ class RemoteConfigManager extends EventEmitter {
         this.state.client.state.error = ''
       }
 
-      if (data && data !== '{}') { // '{}' means the tracer is up to date
-        try {
-          this.parseConfig(JSON.parse(data))
-        } catch (err) {
-          log.error(`Could not parse remote config response: ${err}`)
+      if (!data) return cb()
 
-          this.state.client.state.has_error = true
-          this.state.client.state.error = err.toString()
+      if (data === '{}') { // '{}' means the tracer is up to date
+        if (!this.hadFirstResponse) {
+          this.hadFirstResponse = true
         }
+
+        this.emit('kPostUpdate')
+
+        return cb()
+      }
+
+      try {
+        this.parseConfig(JSON.parse(data))
+
+        if (!this.hadFirstResponse) {
+          this.hadFirstResponse = true
+        }
+
+        this.emit('kPostUpdate')
+      } catch (err) {
+        log.error(`Could not parse remote config response: ${err}`)
+
+        this.state.client.state.has_error = true
+        this.state.client.state.error = err.toString()
       }
 
       cb()
