@@ -51,15 +51,18 @@ describe('Plugin', function () {
       this.timeout(testTimeout)
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
+        const testSuiteFolder = semver.intersects(version, '>=10')
+          ? 'app-10' : 'app'
+
         cypressExecutable.run({
-          project: semver.intersects(version, '>=10')
-            ? './packages/datadog-plugin-cypress/test/app-10' : './packages/datadog-plugin-cypress/test/app',
+          project: `./packages/datadog-plugin-cypress/test/${testSuiteFolder}`,
           config: {
             baseUrl: `http://localhost:${appPort}`
           },
           quiet: true,
           headless: true
         })
+
         agent.use(traces => {
           const passedTestSpan = traces[0][0]
           const failedTestSpan = traces[1][0]
@@ -77,7 +80,8 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page renders a hello world',
             [TEST_STATUS]: 'pass',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]:
+              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [TEST_IS_RUM_ACTIVE]: 'true',
@@ -102,7 +106,8 @@ describe('Plugin', function () {
             [TEST_NAME]: 'can visit a page will fail',
             [TEST_STATUS]: 'fail',
             [TEST_SUITE]: 'cypress/integration/integration-test.js',
-            [TEST_SOURCE_FILE]: 'cypress/integration/integration-test.js',
+            [TEST_SOURCE_FILE]:
+              `packages/datadog-plugin-cypress/test/${testSuiteFolder}/cypress/integration/integration-test.js`,
             [TEST_TYPE]: 'browser',
             [ORIGIN_KEY]: CI_APP_ORIGIN,
             [ERROR_TYPE]: 'AssertionError',
