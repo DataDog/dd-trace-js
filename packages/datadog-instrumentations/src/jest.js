@@ -567,7 +567,7 @@ function configureTestEnvironment (readConfigsResult) {
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 
-  if (readConfigsResult.globalConfig) {
+  if (readConfigsResult.globalConfig.forceExit) {
     log.warn("The '--forceExit' jest option has been found. Passing this flag may cause data to be lost.")
   }
 
