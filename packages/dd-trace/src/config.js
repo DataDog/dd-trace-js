@@ -734,9 +734,9 @@ class Config {
     )
   }
 
-  _getTraceExporter () {
-    return this.options.experimental && this.options.experimental.exporter
-  }
+  // _getTraceExporter () {
+  //   return this.options.experimental && this.options.experimental.exporter
+  // }
 
   _getHostname () {
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
@@ -825,15 +825,11 @@ class Config {
     } else {
       this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this.options))
     }
-    if (this._getTraceExporter() === 'datadog') {
-      this._setBoolean(calc, 'telemetry.enabled', false)
-    } else {
-      this._setBoolean(calc, 'telemetry.enabled', coalesce(
-        DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-        DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-        !this._isInServerlessEnvirontment()
-      ))
-    }
+    this._setBoolean(calc, 'telemetry.enabled', coalesce(
+      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+      !this._isInServerlessEnvirontment()
+    ))
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))

@@ -314,7 +314,9 @@ function updateConfig (changes, config) {
   const configuration = []
 
   for (const change of changes) {
-    const name = names[change.name] || change.name
+    if (!names.hasOwnProperty(change.name)) continue
+
+    const name = names[change.name]
     const { origin, value } = change
     const entry = { name, value, origin }
 
