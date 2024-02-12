@@ -106,7 +106,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         spanId: '1',
         files: []
       }
-      agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
+      agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
     })
@@ -213,7 +213,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         spanId: '1',
         files: []
       }
-      agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
+      agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
       await new Promise(resolve => setTimeout(resolve, flushInterval))

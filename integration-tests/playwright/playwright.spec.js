@@ -12,7 +12,12 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
-const { TEST_STATUS, TEST_SOURCE_START, TEST_TYPE } = require('../../packages/dd-trace/src/plugins/util/test')
+const {
+  TEST_STATUS,
+  TEST_SOURCE_START,
+  TEST_TYPE,
+  TEST_SOURCE_FILE
+} = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.18.0', 'latest']
 
@@ -99,6 +104,12 @@ versions.forEach((version) => {
 
             testEvents.forEach(testEvent => {
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
+              assert.equal(
+                testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
+              )
+              // Can read DD_TAGS
+              assert.propertyVal(testEvent.content.meta, 'test.customtag', 'customvalue')
+              assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
             })
 
             stepEvents.forEach(stepEvent => {
@@ -120,7 +131,8 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
               },
               stdio: 'pipe'
             }

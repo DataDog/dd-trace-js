@@ -16,6 +16,7 @@ function getSkippableSuites ({
   url,
   isEvpProxy,
   evpProxyPrefix,
+  isGzipCompatible,
   env,
   service,
   repositoryUrl,
@@ -36,6 +37,10 @@ function getSkippableSuites ({
     },
     timeout: 20000,
     url
+  }
+
+  if (isGzipCompatible) {
+    options.headers['accept-encoding'] = 'gzip'
   }
 
   if (isEvpProxy) {

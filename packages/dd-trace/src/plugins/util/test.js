@@ -48,6 +48,9 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
+const TEST_IS_NEW = 'test.is_new'
+const TEST_EARLY_FLAKE_IS_RETRY = 'test.early_flake.is_retry'
+const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -87,6 +90,9 @@ module.exports = {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -253,7 +259,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
-    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion
@@ -281,16 +286,36 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   '.gitlab/CODEOWNERS'
 ]
 
-function getCodeOwnersFileEntries (rootDir = process.cwd()) {
-  let codeOwnersContent
-
-  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+function readCodeOwners (rootDir) {
+  for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
-      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+      return fs.readFileSync(path.join(rootDir, location)).toString()
     } catch (e) {
       // retry with next path
     }
-  })
+  }
+  return ''
+}
+
+function getCodeOwnersFileEntries (rootDir) {
+  let codeOwnersContent
+  let usedRootDir = rootDir
+  let isTriedCwd = false
+
+  const processCwd = process.cwd()
+
+  if (!usedRootDir || usedRootDir === processCwd) {
+    usedRootDir = processCwd
+    isTriedCwd = true
+  }
+
+  codeOwnersContent = readCodeOwners(usedRootDir)
+
+  // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
+  if (!codeOwnersContent && !isTriedCwd) {
+    codeOwnersContent = readCodeOwners(processCwd)
+  }
+
   if (!codeOwnersContent) {
     return null
   }

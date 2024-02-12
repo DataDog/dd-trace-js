@@ -19,7 +19,7 @@
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.1446.0",
-    "axios": "^0.21.2",
+    "axios": "^1.6.7",
     "esbuild": "0.16.12",
     "express": "^4.16.2",
     "knex": "^2.4.2"

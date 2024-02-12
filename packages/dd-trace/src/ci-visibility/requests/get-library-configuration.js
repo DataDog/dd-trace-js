@@ -9,9 +9,11 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
   getErrorTypeFromStatusCode
-} = require('../../ci-visibility/telemetry')
+} = require('../telemetry')
 
-function getItrConfiguration ({
+const DEFAULT_NUM_RETRIES_EARLY_FLAKE_DETECTION = 2
+
+function getLibraryConfiguration ({
   url,
   isEvpProxy,
   evpProxyPrefix,
@@ -89,12 +91,21 @@ function getItrConfiguration ({
               code_coverage: isCodeCoverageEnabled,
               tests_skipping: isSuitesSkippingEnabled,
               itr_enabled: isItrEnabled,
-              require_git: requireGit
+              require_git: requireGit,
+              early_flake_detection: earlyFlakeDetectionConfig
             }
           }
         } = JSON.parse(res)
 
-        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
+        const settings = {
+          isCodeCoverageEnabled,
+          isSuitesSkippingEnabled,
+          isItrEnabled,
+          requireGit,
+          isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
+          earlyFlakeDetectionNumRetries:
+            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_NUM_RETRIES_EARLY_FLAKE_DETECTION
+        }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
@@ -117,4 +128,4 @@ function getItrConfiguration ({
   })
 }
 
-module.exports = { getItrConfiguration }
+module.exports = { getLibraryConfiguration }

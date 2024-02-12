@@ -24,14 +24,20 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 
 const spanId = id('0234567812345678')
+const spanId2 = id('0254567812345678')
+const spanId3 = id('0264567812345678')
 
 describe('format', () => {
   let format
   let span
   let trace
   let spanContext
+  let spanContext2
+  let spanContext3
+  let TraceState
 
   beforeEach(() => {
+    TraceState = require('../src/opentracing/propagation/tracestate')
     spanContext = {
       _traceId: spanId,
       _spanId: spanId,
@@ -40,9 +46,12 @@ describe('format', () => {
       _metrics: {},
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
+        tags: {}
       },
-      _name: 'operation'
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId),
+      toSpanId: sinon.stub().returns(spanId)
     }
 
     span = {
@@ -56,6 +65,23 @@ describe('format', () => {
     }
 
     spanContext._trace.started.push(span)
+
+    spanContext2 = {
+      ...spanContext,
+      _traceId: spanId2,
+      _spanId: spanId2,
+      _parentId: spanId2,
+      toTraceId: sinon.stub().returns(spanId2.toString(16)),
+      toSpanId: sinon.stub().returns(spanId2.toString(16))
+    }
+    spanContext3 = {
+      ...spanContext,
+      _traceId: spanId3,
+      _spanId: spanId3,
+      _parentId: spanId3,
+      toTraceId: sinon.stub().returns(spanId3.toString(16)),
+      toSpanId: sinon.stub().returns(spanId3.toString(16))
+    }
 
     format = require('../src/format')
   })
@@ -180,6 +206,60 @@ describe('format', () => {
         SPAN_SAMPLING_MAX_PER_SECOND,
         SPAN_SAMPLING_RULE_RATE
       )
+    })
+
+    it('should format span links', () => {
+      span._links = [
+        {
+          context: spanContext2
+        },
+        {
+          context: spanContext3
+        }
+      ]
+
+      trace = format(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      expect(spanLinks).to.deep.equal([{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16)
+      }, {
+        trace_id: spanId3.toString(16),
+        span_id: spanId3.toString(16)
+      }])
+    })
+
+    it('creates a span link', () => {
+      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      const traceIdHigh = '0000000000000010'
+      spanContext2._tracestate = ts
+      spanContext2._trace = {
+        started: [],
+        finished: [],
+        origin: 'synthetics',
+        tags: {
+          '_dd.p.tid': traceIdHigh
+        }
+      }
+
+      spanContext2._sampling.priority = 0
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      span._links = [link]
+
+      trace = format(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      expect(spanLinks).to.deep.equal([{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16),
+        attributes: { foo: 'bar' },
+        tracestate: ts.toString(),
+        flags: 0
+      }])
     })
 
     it('should extract trace chunk tags', () => {
