@@ -25,6 +25,7 @@ const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
@@ -805,6 +806,15 @@ testFrameworks.forEach(({
         if (extraStdout) {
           assert.include(testOutput, extraStdout)
         }
+        // Can read DD_TAGS
+        testSpans.forEach(testSpan => {
+          assert.propertyVal(testSpan.meta, 'test.customtag', 'customvalue')
+          assert.propertyVal(testSpan.meta, 'test.customtag2', 'customvalue2')
+        })
+
+        testSpans.forEach(testSpan => {
+          assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+        })
 
         done()
       })
@@ -813,7 +823,8 @@ testFrameworks.forEach(({
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: receiver.port,
-          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init'
+          NODE_OPTIONS: type === 'esm' ? `-r dd-trace/ci/init --loader=${hookFile}` : '-r dd-trace/ci/init',
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
         },
         stdio: 'pipe'
       })
