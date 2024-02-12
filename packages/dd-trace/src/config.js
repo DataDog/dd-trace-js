@@ -110,10 +110,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_TRACING_ENABLED = coalesce(
-      process.env.DD_TRACING_ENABLED,
-      true
-    )
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
@@ -570,7 +566,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
-    this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
@@ -786,6 +781,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
     this._setValue(defaults, 'tags', {})
+    this._setBoolean(defaults, 'tracing', true)
   }
 
   _applyEnvironment () {
@@ -799,6 +795,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_TAGS,
+      DD_TRACING_ENABLED,
       DD_VERSION
     } = process.env
 
@@ -816,6 +813,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setTags(env, 'tags', tags)
+    this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
   }
 
   _applyOptions (options) {
@@ -850,6 +848,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
+    this._setBoolean(opts, 'tracing', options.tracing_enabled)
   }
 
   _setBoolean (obj, name, value) {
