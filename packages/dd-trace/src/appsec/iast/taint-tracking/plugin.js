@@ -72,7 +72,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage.getStore())
         const source = data.context?.source
         if (source && isTainted(iastContext, source)) {
-          this._taintTrackingHandler(GRAPHQL_RESOLVER_ARGUMENT, data.args, iastContext)
+          this._taintTrackingHandler(GRAPHQL_RESOLVER_ARGUMENT, data.args, null, iastContext)
         }
       }
     )
