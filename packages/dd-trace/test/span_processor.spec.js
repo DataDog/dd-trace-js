@@ -131,4 +131,24 @@ describe('SpanProcessor', () => {
 
     expect(SpanSampler).to.have.been.calledWith(config.sampler)
   })
+
+  it('should erase the trace and stop execution when tracing=false', () => {
+    const config = {
+      tracing: false,
+      stats: {
+        enabled: false
+      }
+    }
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    expect(trace).to.have.deep.property('started', [])
+    expect(trace).to.have.deep.property('finished', [])
+    expect(finishedSpan.context()).to.have.deep.property('_tags', {})
+    expect(exporter.export).not.to.have.been.called
+  })
 })
