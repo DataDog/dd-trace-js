@@ -79,8 +79,24 @@ function getRootDir (playwrightRunner) {
   return process.cwd()
 }
 
-function testBeginHandler (test) {
-  const { _requireFile: testSuiteAbsolutePath, title: testName, _type, location: { line: testSourceLine } } = test
+function getProjectsFromDispatcher (dispatcher) {
+  return dispatcher?._config?.config?.projects
+}
+
+function getBrowserNameFromProjectId (dispatcher, projectId) {
+  const projects = getProjectsFromDispatcher(dispatcher)
+  if (projects) {
+    return projects.find(project => project.__projectId === projectId)?.name
+  }
+  return null
+}
+
+function testBeginHandler (test, browserName) {
+  const {
+    _requireFile: testSuiteAbsolutePath,
+    title: testName, _type,
+    location: { line: testSourceLine }
+  } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
     return
@@ -100,7 +116,7 @@ function testBeginHandler (test) {
   const testAsyncResource = new AsyncResource('bound-anonymous-fn')
   testToAr.set(test, testAsyncResource)
   testAsyncResource.runInAsyncScope(() => {
-    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine })
+    testStartCh.publish({ testName, testSuiteAbsolutePath, testSourceLine, browserName })
   })
 }
 
@@ -203,7 +219,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
-      testBeginHandler(test)
+      const browser = getBrowserNameFromProjectId(dispatcher, test._projectId)
+      testBeginHandler(test, browser)
     })
     worker.on('testEnd', ({ testId, status, errors, annotations }) => {
       const test = getTestByTestId(dispatcher, testId)
