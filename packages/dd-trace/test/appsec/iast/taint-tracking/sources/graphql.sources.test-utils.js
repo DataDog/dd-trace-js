@@ -25,12 +25,12 @@ query GetBooks ($title: String) {
 }`
 
 const queryWithHardcodedArgument = `
-    query GetBooks {
-      books(title: "ls") {
-        title,
-        author
-      }
-    }`
+query GetBooks {
+  books(title: "ls") {
+    title,
+    author
+  }
+}`
 
 const books = [
   {
