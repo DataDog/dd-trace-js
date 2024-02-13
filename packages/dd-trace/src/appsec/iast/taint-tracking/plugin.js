@@ -3,9 +3,8 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString, isTainted } = require('./operations')
+const { taintObject, newTaintedString, getRanges } = require('./operations')
 const {
-  GRAPHQL_RESOLVER_ARGUMENT,
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
   HTTP_REQUEST_COOKIE_NAME,
@@ -67,12 +66,13 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     )
 
     this.addSub(
-      { channelName: 'apm:graphql:resolve:start', tag: GRAPHQL_RESOLVER_ARGUMENT },
+      { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
       (data) => {
         const iastContext = getIastContext(storage.getStore())
         const source = data.context?.source
-        if (source && isTainted(iastContext, source)) {
-          this._taintTrackingHandler(GRAPHQL_RESOLVER_ARGUMENT, data.args, null, iastContext)
+        const ranges = source && getRanges(iastContext, source)
+        if (ranges) {
+          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
         }
       }
     )
