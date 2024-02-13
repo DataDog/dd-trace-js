@@ -127,13 +127,10 @@ class IastPlugin extends Plugin {
     if (!channelName && !moduleName) return
 
     if (!moduleName) {
-      let firstSep = channelName.indexOf(':')
+      const firstSep = channelName.indexOf(':')
       if (firstSep === -1) {
         moduleName = channelName
       } else {
-        if (channelName.startsWith('tracing:')) {
-          firstSep = channelName.indexOf(':', 'tracing:'.length + 1)
-        }
         const lastSep = channelName.indexOf(':', firstSep + 1)
         moduleName = channelName.substring(firstSep + 1, lastSep !== -1 ? lastSep : channelName.length)
       }

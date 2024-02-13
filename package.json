@@ -99,7 +99,6 @@
     "protobufjs": "^7.2.5",
     "retry": "^0.13.1",
     "semver": "^7.5.4",
-    "shell-quote": "^1.8.1",
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
