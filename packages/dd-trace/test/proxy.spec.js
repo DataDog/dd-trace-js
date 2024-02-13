@@ -130,7 +130,8 @@ describe('TracerProxy', () => {
     }
 
     appsec = {
-      enable: sinon.spy()
+      enable: sinon.spy(),
+      disable: sinon.spy()
     }
 
     telemetry = {
@@ -138,7 +139,8 @@ describe('TracerProxy', () => {
     }
 
     iast = {
-      enable: sinon.spy()
+      enable: sinon.spy(),
+      disable: sinon.spy()
     }
 
     remoteConfig = {
@@ -231,6 +233,31 @@ describe('TracerProxy', () => {
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
+      })
+
+      it('should support applying remote config', () => {
+        const RemoteConfigProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './appsec': appsec,
+          './appsec/iast': iast,
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk
+        })
+
+        const remoteConfigProxy = new RemoteConfigProxy()
+        remoteConfigProxy.init()
+        expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
+
+        let conf = { tracing_enabled: false }
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        expect(appsec.disable).to.have.been.called
+        expect(iast.disable).to.have.been.called
+
+        conf = { tracing_enabled: true }
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        expect(DatadogTracer).to.have.been.calledOnce
+        expect(AppsecSdk).to.have.been.calledOnce
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
@@ -365,6 +392,7 @@ describe('TracerProxy', () => {
           './log': log,
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
+          './telemetry': telemetry,
           './appsec/remote_config': remoteConfig
         })
 

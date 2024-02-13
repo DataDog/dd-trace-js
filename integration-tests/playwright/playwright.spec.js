@@ -16,7 +16,8 @@ const {
   TEST_STATUS,
   TEST_SOURCE_START,
   TEST_TYPE,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_CONFIGURATION_BROWSER_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.18.0', 'latest']
@@ -110,6 +111,8 @@ versions.forEach((version) => {
               // Can read DD_TAGS
               assert.propertyVal(testEvent.content.meta, 'test.customtag', 'customvalue')
               assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
+              // Adds the browser used
+              assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
             })
 
             stepEvents.forEach(stepEvent => {
