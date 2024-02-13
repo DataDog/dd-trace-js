@@ -38,7 +38,7 @@ function getKnownTests ({
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
     if (!apiKey) {
-      return done(new Error('Skippable suites were not fetched because Datadog API key is not defined.'))
+      return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
     }
 
     options.headers['dd-api-key'] = apiKey
