@@ -48,6 +48,9 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
+// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
+const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
+// Early flake detection
 const TEST_IS_NEW = 'test.is_new'
 const TEST_EARLY_FLAKE_IS_RETRY = 'test.early_flake.is_retry'
 const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
@@ -90,6 +93,7 @@ module.exports = {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
+  TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
