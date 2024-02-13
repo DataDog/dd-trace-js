@@ -429,7 +429,7 @@ function cliWrapper (cli, jestVersion) {
 
     const timeoutPromise = new Promise((resolve) => {
       timeoutId = setTimeout(() => {
-        resolve()
+        resolve('timeout')
       }, FLUSH_TIMEOUT).unref()
     })
 
@@ -448,7 +448,11 @@ function cliWrapper (cli, jestVersion) {
         onDone
       })
     })
-    await Promise.race([flushPromise, timeoutPromise])
+    const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+    if (waitingResult === 'timeout') {
+      log.error('Timeout waiting for the tracer to flush')
+    }
 
     numSkippedSuites = 0
 
@@ -568,7 +572,7 @@ function configureTestEnvironment (readConfigsResult) {
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
 
   if (readConfigsResult.globalConfig.forceExit) {
-    log.warn("The '--forceExit' jest option has been found. Passing this flag may cause data to be lost.")
+    log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
   if (isCodeCoverageEnabled) {
