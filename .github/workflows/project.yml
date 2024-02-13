@@ -49,6 +49,7 @@ jobs:
       - run: yarn test:integration:${{ matrix.framework }}
         env:
           NODE_OPTIONS: '-r ./ci/init'
+          DD_TRACE_DEBUG: 1
 
   integration-cypress:
     strategy:
@@ -76,6 +77,7 @@ jobs:
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
+          DD_TRACE_DEBUG: 1
 
   lint:
     runs-on: ubuntu-latest
