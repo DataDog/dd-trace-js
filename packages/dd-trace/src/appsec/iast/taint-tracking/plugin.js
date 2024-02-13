@@ -71,7 +71,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const iastContext = getIastContext(storage.getStore())
         const source = data.context?.source
         const ranges = source && getRanges(iastContext, source)
-        if (ranges) {
+        if (ranges?.length) {
           this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
         }
       }
