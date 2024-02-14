@@ -11,7 +11,8 @@ const {
   mergeCoverage,
   getTestSuitePath,
   fromCoverageMapToCoverage,
-  getCallSites
+  getCallSites,
+  addEfdStringToTestName
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -56,6 +57,7 @@ const unskippableSuites = []
 let isForcedToRun = false
 let itrCorrelationId = ''
 let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
 let isSuitesSkippingEnabled = false
 let knownTests = []
 
@@ -102,6 +104,33 @@ function isNewTest (test) {
     .includes(`mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`)
 }
 
+function retryTest (test) {
+  const originalTestName = test.title
+  const suite = test.parent
+  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+    const clonedTest = test.clone()
+    clonedTest.title = addEfdStringToTestName(originalTestName, retryIndex + 1)
+    suite.addTest(clonedTest)
+    clonedTest._ddIsNew = true
+    clonedTest._ddIsEfdRetry = true
+  }
+}
+
+function getFailingNewTests (root) {
+  let failingTests = []
+  function getTests (suite) {
+    if (suite.tests?.length) {
+      failingTests = failingTests.concat(suite.tests.filter(test => test._ddIsNew && test.isFailed()))
+    }
+    suite.suites.forEach(suite => {
+      getTests(suite)
+    })
+  }
+  getTests(root)
+
+  return failingTests
+}
+
 function getTestAsyncResource (test) {
   if (!test.fn) {
     return testToAr.get(test)
@@ -132,6 +161,19 @@ function mochaHook (Runner) {
 
   patched.add(Runner)
 
+  shimmer.wrap(Runner.prototype, 'runTests', runTests => function (suite, fn) {
+    if (isEarlyFlakeDetectionEnabled) {
+      // by the time we reach `this.on('test')`, it is too late. We need to add retries here
+      suite.tests.forEach(test => {
+        if (isNewTest(test)) {
+          test._ddIsNew = true
+          retryTest(test)
+        }
+      })
+    }
+    return runTests.apply(this, arguments)
+  })
+
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers || isWorker) {
       return run.apply(this, arguments)
@@ -151,6 +193,14 @@ function mochaHook (Runner) {
         }
       } else if (this.failures !== 0) {
         status = 'fail'
+      }
+
+      const failingNewTests = getFailingNewTests(this.suite)
+      if (failingNewTests.length) {
+        // If test is going through early flake detection and has failures, we don't
+        // want to fail the process
+        this.stats.failures -= failingNewTests.length
+        this.failures -= failingNewTests.length
       }
 
       if (status === 'fail') {
@@ -259,12 +309,10 @@ function mochaHook (Runner) {
       if (isRetry(test)) {
         return
       }
-      if (isEarlyFlakeDetectionEnabled && isNewTest(test)) {
-        debugger
-      }
       const testStartLine = testToStartLine.get(test)
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       testToAr.set(test.fn, asyncResource)
+      // TODO: do not pass the "test" object but a normalized structure
       asyncResource.runInAsyncScope(() => {
         testStartCh.publish({ test, testStartLine })
       })
@@ -455,13 +503,13 @@ addHook({
     }
 
     const onReceivedConfiguration = ({ err, libraryConfig }) => {
-      debugger
       if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
         return global.run()
       }
 
       isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
       isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+      earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
 
       if (isEarlyFlakeDetectionEnabled) {
         knownTestsCh.publish({

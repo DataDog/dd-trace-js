@@ -16,7 +16,10 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  removeEfdStringFromTestName,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -229,8 +232,8 @@ class MochaPlugin extends CiPlugin {
   }
 
   startTestSpan (test, testStartLine) {
-    const testName = test.fullTitle()
-    const { file: testSuiteAbsolutePath, title } = test
+    const testName = removeEfdStringFromTestName(test.fullTitle())
+    const { file: testSuiteAbsolutePath, title, _ddIsNew, _ddIsEfdRetry } = test
 
     const extraTags = {}
     const testParametersString = getTestParametersString(this._testNameToParams, title)
@@ -251,6 +254,13 @@ class MochaPlugin extends CiPlugin {
       extraTags[TEST_SOURCE_FILE] = testSourceFile
     } else {
       extraTags[TEST_SOURCE_FILE] = testSuite
+    }
+
+    if (_ddIsNew) {
+      extraTags[TEST_IS_NEW] = 'true'
+      if (_ddIsEfdRetry) {
+        extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
+      }
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
