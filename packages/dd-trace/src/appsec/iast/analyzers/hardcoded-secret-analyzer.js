@@ -20,26 +20,31 @@ class HardcodedSecretAnalyzer extends Analyzer {
 
     const matches = secrets.literals
       .filter(literal => literal.value && literal.locations?.length)
-      .map(literal => {
-        const match = secretRules.find(rule => literal.value.match(rule.regex))
+      .reduce((locAndRules, literal) => {
+        literal.locations
+          .map(location => {
+            const value = location.ident ? `${location.ident}=${literal.value}` : literal.value
 
-        return match ? { locations: literal.locations, ruleId: match.id } : undefined
-      })
-      .filter(match => !!match)
+            const match = secretRules.find(rule => value.match(rule.regex))
+
+            return match ? { location, ruleId: match.id } : undefined
+          })
+          .filter(locAndRuleId => !!locAndRuleId && locAndRuleId.location.line)
+          .forEach(locAndRuleId => locAndRules.push(locAndRuleId))
+
+        return locAndRules
+      }, [])
 
     if (matches.length) {
       const file = getRelativePath(secrets.file)
 
-      matches.forEach(match => {
-        match.locations
-          .filter(location => location.line)
-          .forEach(location => this._report({
-            file,
-            line: location.line,
-            column: location.column,
-            data: match.ruleId
-          }))
-      })
+      matches
+        .forEach(match => this._report({
+          file,
+          line: match.location.line,
+          column: match.location.column,
+          data: match.ruleId
+        }))
     }
   }
 
