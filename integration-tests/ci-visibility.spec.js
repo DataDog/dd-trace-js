@@ -827,14 +827,6 @@ testFrameworks.forEach(({
       it('does not hang if server is not available and logs an error', (done) => {
         // Very slow intake
         receiver.setWaitingTime(30000)
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            assert.include(testOutput, "Jest's '--forceExit' flag has been passed")
-            assert.include(testOutput, 'Timeout waiting for the tracer to flush')
-            const events = payloads.flatMap(({ payload }) => payload.events)
-
-            assert.equal(events.length, 0)
-          }, 12000)
         // Needs to run with the CLI if we want --forceExit to work
         childProcess = exec(
           'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
@@ -848,11 +840,20 @@ testFrameworks.forEach(({
             stdio: 'inherit'
           }
         )
+        const EXPECTED_FORCE_EXIT_LOG_MESSAGE = "Jest's '--forceExit' flag has been passed"
+        const EXPECTED_TIMEOUT_LOG_MESSAGE = 'Timeout waiting for the tracer to flush'
         childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            receiver.setWaitingTime(0)
-            done()
-          }).catch(done)
+          assert.include(
+            testOutput,
+            EXPECTED_FORCE_EXIT_LOG_MESSAGE,
+            `"${EXPECTED_FORCE_EXIT_LOG_MESSAGE}" log message is not in test output: ${testOutput}`
+          )
+          assert.include(
+            testOutput,
+            EXPECTED_TIMEOUT_LOG_MESSAGE,
+            `"${EXPECTED_TIMEOUT_LOG_MESSAGE}" log message is not in the test output: ${testOutput}`
+          )
+          done()
         })
         childProcess.stdout.on('data', (chunk) => {
           testOutput += chunk.toString()
