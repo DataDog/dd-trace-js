@@ -829,8 +829,8 @@ testFrameworks.forEach(({
         receiver.setWaitingTime(30000)
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            assert.include(testOutput, "Jest's '--forceExit' flag has been passed")
-            assert.include(testOutput, 'Timeout waiting for the tracer to flush')
+            assert.include(testOutput, "Jest's '--forceExit' flag has been passed", `Actual test output: ${testOutput}`)
+            assert.include(testOutput, 'Timeout waiting for the tracer to flush', `Actual test output: ${testOutput}`)
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             assert.equal(events.length, 0)
@@ -850,7 +850,6 @@ testFrameworks.forEach(({
         )
         childProcess.on('exit', () => {
           eventsPromise.then(() => {
-            receiver.setWaitingTime(0)
             done()
           }).catch(done)
         })
