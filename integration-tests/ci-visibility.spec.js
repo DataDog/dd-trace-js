@@ -783,6 +783,84 @@ testFrameworks.forEach(({
           })
         })
       })
+      it('works with --forceExit and logs a warning', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            assert.include(testOutput, "Jest's '--forceExit' flag has been passed")
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end')
+            const testModule = events.find(event => event.type === 'test_module_end')
+            const testSuites = events.filter(event => event.type === 'test_suite_end')
+            const tests = events.filter(event => event.type === 'test')
+
+            assert.exists(testSession)
+            assert.exists(testModule)
+            assert.equal(testSuites.length, 2)
+            assert.equal(tests.length, 2)
+          })
+        // Needs to run with the CLI if we want --forceExit to work
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TRACE_DEBUG: '1',
+              DD_TRACE_LOG_LEVEL: 'warn'
+            },
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      })
+      it('does not hang if server is not available and logs an error', (done) => {
+        // Very slow intake
+        receiver.setWaitingTime(30000)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            assert.include(testOutput, "Jest's '--forceExit' flag has been passed")
+            assert.include(testOutput, 'Timeout waiting for the tracer to flush')
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            assert.equal(events.length, 0)
+          }, 12000)
+        // Needs to run with the CLI if we want --forceExit to work
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --config config-jest.js --forceExit',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_TRACE_DEBUG: '1',
+              DD_TRACE_LOG_LEVEL: 'warn'
+            },
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            receiver.setWaitingTime(0)
+            done()
+          }).catch(done)
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+      })
     }
 
     it('can run tests and report spans', (done) => {
