@@ -322,7 +322,7 @@ describe('dogstatsd', () => {
   })
 
   it('should fail over to UDP when receiving network error from agent', (done) => {
-    setTimeout(() => {
+    udp4.send = sinon.stub().callsFake(() => {
       try {
         expect(udp4.send).to.have.been.called
         expect(udp4.send.firstCall.args[0].toString()).to.equal('test.foo:10|c\n')
@@ -331,7 +331,7 @@ describe('dogstatsd', () => {
       } catch (e) {
         done(e)
       }
-    }, 10)
+    })
 
     statusCode = null
 
