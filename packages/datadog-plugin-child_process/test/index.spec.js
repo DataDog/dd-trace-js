@@ -4,6 +4,7 @@ const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const { NODE_MAJOR } = require('../../../version')
 
 function noop () {}
 
@@ -519,53 +520,58 @@ describe('Child process plugin', () => {
                 }
               })
 
-              it('should be instrumented with error code (override shell default behavior)', (done) => {
-                const command = [ 'node', '-badOption' ]
-                const options = {
-                  stdio: 'pipe',
-                  shell: true
-                }
-                const errorExpected = {
-                  type: 'system',
-                  name: 'command_execution',
-                  error: 1,
-                  meta: {
-                    component: 'subprocess',
-                    'cmd.shell': 'node -badOption',
-                    'cmd.exit_code': '9'
+              if (methodName !== 'execFileSync' || NODE_MAJOR > 16) {
+                // when a process return an invalid code, in node <=16, in execFileSync with shell:true
+                // an exception is not thrown
+                it('should be instrumented with error code (override shell default behavior)', (done) => {
+                  const command = [ 'node', '-badOption' ]
+                  const options = {
+                    stdio: 'pipe',
+                    shell: true
                   }
-                }
 
-                const noErrorExpected = {
-                  type: 'system',
-                  name: 'command_execution',
-                  error: 0,
-                  meta: {
-                    component: 'subprocess',
-                    'cmd.shell': 'node -badOption',
-                    'cmd.exit_code': '9'
-                  }
-                }
-
-                const args = normalizeArgs(methodName, command, options)
-
-                if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
-                  const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
-                } else {
-                  try {
-                    if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
-                    } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
+                  const errorExpected = {
+                    type: 'system',
+                    name: 'command_execution',
+                    error: 1,
+                    meta: {
+                      component: 'subprocess',
+                      'cmd.shell': 'node -badOption',
+                      'cmd.exit_code': '9'
                     }
-                    childProcess[methodName].apply(null, args)
-                  } catch {
-                    // process exit with code 1, exceptions are expected
                   }
-                }
-              })
+
+                  const noErrorExpected = {
+                    type: 'system',
+                    name: 'command_execution',
+                    error: 0,
+                    meta: {
+                      component: 'subprocess',
+                      'cmd.shell': 'node -badOption',
+                      'cmd.exit_code': '9'
+                    }
+                  }
+
+                  const args = normalizeArgs(methodName, command, options)
+
+                  if (async) {
+                    expectSomeSpan(agent, errorExpected).then(done, done)
+                    const res = childProcess[methodName].apply(null, args)
+                    res.on('close', noop)
+                  } else {
+                    try {
+                      if (methodName === 'spawnSync') {
+                        expectSomeSpan(agent, noErrorExpected).then(done, done)
+                      } else {
+                        expectSomeSpan(agent, errorExpected).then(done, done)
+                      }
+                      childProcess[methodName].apply(null, args)
+                    } catch {
+                      // process exit with code 1, exceptions are expected
+                    }
+                  }
+                })
+              }
             })
           })
         })
