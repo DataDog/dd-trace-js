@@ -420,6 +420,7 @@ function cliWrapper (cli, jestVersion) {
     }
     let timeoutId
 
+    // Pass the resolve callback to defer it to DC listener
     const flushPromise = new Promise((resolve) => {
       onDone = () => {
         clearTimeout(timeoutId)

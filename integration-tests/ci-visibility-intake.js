@@ -90,23 +90,14 @@ class FakeCiVisIntake extends FakeAgent {
 
     // It can be slowed down with setWaitingTime
     app.post(['/api/v2/citestcycle', '/evp_proxy/:version/api/v2/citestcycle'], (req, res) => {
-      if (waitingTime) {
-        this.waitingTimeoutId = setTimeout(() => {
-          res.status(200).send('OK')
-          this.emit('message', {
-            headers: req.headers,
-            payload: msgpack.decode(req.body, { codec }),
-            url: req.url
-          })
-        }, waitingTime)
-      } else {
+      this.waitingTimeoutId = setTimeout(() => {
         res.status(200).send('OK')
         this.emit('message', {
           headers: req.headers,
           payload: msgpack.decode(req.body, { codec }),
           url: req.url
         })
-      }
+      }, waitingTime || 0)
     })
 
     app.post([
