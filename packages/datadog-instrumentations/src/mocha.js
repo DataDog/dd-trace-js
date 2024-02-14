@@ -21,6 +21,7 @@ const testFinishCh = channel('ci:mocha:test:finish')
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 
 const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+const knownTestsCh = channel('ci:mocha:known-tests')
 const skippableSuitesCh = channel('ci:mocha:test-suite:skippable')
 
 const testSessionStartCh = channel('ci:mocha:session:start')
@@ -54,6 +55,9 @@ let skippedSuites = []
 const unskippableSuites = []
 let isForcedToRun = false
 let itrCorrelationId = ''
+let isEarlyFlakeDetectionEnabled = false
+let isSuitesSkippingEnabled = false
+let knownTests = []
 
 function getSuitesByTestFile (root) {
   const suitesByTestFile = {}
@@ -91,6 +95,11 @@ function getTestStatus (test) {
 
 function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
+}
+
+function isNewTest (test) {
+  return !knownTests
+    .includes(`mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`)
 }
 
 function getTestAsyncResource (test) {
@@ -249,6 +258,9 @@ function mochaHook (Runner) {
     this.on('test', (test) => {
       if (isRetry(test)) {
         return
+      }
+      if (isEarlyFlakeDetectionEnabled && isNewTest(test)) {
+        debugger
       }
       const testStartLine = testToStartLine.get(test)
       const asyncResource = new AsyncResource('bound-anonymous-fn')
@@ -425,17 +437,43 @@ addHook({
       global.run()
     }
 
-    const onReceivedConfiguration = ({ err }) => {
+    const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
       if (err) {
-        return global.run()
+        knownTests = []
+        isEarlyFlakeDetectionEnabled = false
+      } else {
+        knownTests = receivedKnownTests
       }
-      if (!skippableSuitesCh.hasSubscribers) {
+
+      if (isSuitesSkippingEnabled) {
+        skippableSuitesCh.publish({
+          onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+        })
+      } else {
+        global.run()
+      }
+    }
+
+    const onReceivedConfiguration = ({ err, libraryConfig }) => {
+      debugger
+      if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
         return global.run()
       }
 
-      skippableSuitesCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
-      })
+      isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+      isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+
+      if (isEarlyFlakeDetectionEnabled) {
+        knownTestsCh.publish({
+          onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
+        })
+      } else if (isSuitesSkippingEnabled) {
+        skippableSuitesCh.publish({
+          onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+        })
+      } else {
+        global.run()
+      }
     }
 
     mochaRunAsyncResource.runInAsyncScope(() => {
