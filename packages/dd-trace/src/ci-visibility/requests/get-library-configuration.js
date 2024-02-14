@@ -11,7 +11,7 @@ const {
   getErrorTypeFromStatusCode
 } = require('../telemetry')
 
-const DEFAULT_NUM_RETRIES_EARLY_FLAKE_DETECTION = 2
+const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 
 function getLibraryConfiguration ({
   url,
@@ -104,7 +104,7 @@ function getLibraryConfiguration ({
           requireGit,
           isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
           earlyFlakeDetectionNumRetries:
-            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_NUM_RETRIES_EARLY_FLAKE_DETECTION
+            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
