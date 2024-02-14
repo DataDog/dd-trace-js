@@ -10,8 +10,6 @@ jobs:
       max-parallel: 4
       matrix:
         include:
-          - node-version: 14.15
-            aws-runtime-name: "nodejs14.x"
           - node-version: 16.14
             aws-runtime-name: "nodejs16.x"
           - node-version: 18.12
