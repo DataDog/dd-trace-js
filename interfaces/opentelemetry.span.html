@@ -100,6 +100,7 @@
 							<h3>Methods</h3>
 							<ul class="tsd-index-list">
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="opentelemetry.span.html#addevent" class="tsd-kind-icon">add<wbr>Event</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-interface"><a href="opentelemetry.span.html#addlink" class="tsd-kind-icon">add<wbr>Link</a></li>
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="opentelemetry.span.html#end" class="tsd-kind-icon">end</a></li>
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="opentelemetry.span.html#isrecording" class="tsd-kind-icon">is<wbr>Recording</a></li>
 								<li class="tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite"><a href="opentelemetry.span.html#recordexception" class="tsd-kind-icon">record<wbr>Exception</a></li>
@@ -126,7 +127,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.addEvent</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1854">index.d.ts:1854</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1867">index.d.ts:1867</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -153,6 +154,43 @@
 						</li>
 					</ul>
 				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-interface">
+					<a name="addlink" class="tsd-anchor"></a>
+					<h3>add<wbr>Link</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-interface">
+						<li class="tsd-signature tsd-kind-icon">add<wbr>Link<span class="tsd-signature-symbol">(</span>context<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">SpanContext</span>, attributes<span class="tsd-signature-symbol">?: </span><a href="../modules/opentelemetry.html#spanattributes" class="tsd-signature-type">SpanAttributes</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">void</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+								<ul>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1926">index.d.ts:1926</a></li>
+								</ul>
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Causally links another span to the current span</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>context: <span class="tsd-signature-type">SpanContext</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>The context of the span to link to.</p>
+									</div>
+								</li>
+								<li>
+									<h5><span class="tsd-flag ts-flagOptional">Optional</span> attributes: <a href="../modules/opentelemetry.html#spanattributes" class="tsd-signature-type">SpanAttributes</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>An optional key value pair of arbitrary values.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4>
+						</li>
+					</ul>
+				</section>
 				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite">
 					<a name="end" class="tsd-anchor"></a>
 					<h3>end</h3>
@@ -164,7 +202,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.end</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1889">index.d.ts:1889</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1902">index.d.ts:1902</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -197,7 +235,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.isRecording</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1897">index.d.ts:1897</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1910">index.d.ts:1910</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -222,7 +260,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.recordException</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1905">index.d.ts:1905</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1918">index.d.ts:1918</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -257,7 +295,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.setAttribute</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1834">index.d.ts:1834</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1847">index.d.ts:1847</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -297,7 +335,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.setAttributes</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1843">index.d.ts:1843</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1856">index.d.ts:1856</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -331,7 +369,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.setStatus</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1863">index.d.ts:1863</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1876">index.d.ts:1876</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -365,7 +403,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.spanContext</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1823">index.d.ts:1823</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1836">index.d.ts:1836</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -392,7 +430,7 @@
 							<aside class="tsd-sources">
 								<p>Overrides Span.updateName</p>
 								<ul>
-									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/092c188/index.d.ts#L1875">index.d.ts:1875</a></li>
+									<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/2e2d6bd/index.d.ts#L1888">index.d.ts:1888</a></li>
 								</ul>
 							</aside>
 							<div class="tsd-comment tsd-typography">
@@ -441,6 +479,9 @@
 						<ul>
 							<li class=" tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite">
 								<a href="opentelemetry.span.html#addevent" class="tsd-kind-icon">add<wbr>Event</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-interface">
+								<a href="opentelemetry.span.html#addlink" class="tsd-kind-icon">add<wbr>Link</a>
 							</li>
 							<li class=" tsd-kind-method tsd-parent-kind-interface tsd-is-overwrite">
 								<a href="opentelemetry.span.html#end" class="tsd-kind-icon">end</a>
