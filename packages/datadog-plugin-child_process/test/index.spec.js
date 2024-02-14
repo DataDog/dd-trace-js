@@ -4,7 +4,7 @@ const ChildProcessPlugin = require('../src')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const semver = require('semver')
+const { NODE_MAJOR } = require('../../../version')
 
 function noop () {}
 
@@ -520,7 +520,7 @@ describe('Child process plugin', () => {
                 }
               })
 
-              if (methodName !== 'execFileSync' || semver.satisfies(process.version, '>16')) {
+              if (methodName !== 'execFileSync' || NODE_MAJOR > 16) {
                 // when a process return an invalid code, in node <=16, in execFileSync with shell:true
                 // an exception is not thrown
                 it('should be instrumented with error code (override shell default behavior)', (done) => {

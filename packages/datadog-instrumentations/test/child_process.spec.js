@@ -3,7 +3,7 @@
 const { promisify } = require('util')
 const agent = require('../../dd-trace/test/plugins/agent')
 const dc = require('dc-polyfill')
-const semver = require('semver')
+const { NODE_MAJOR } = require('../../../version')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
@@ -316,7 +316,7 @@ describe('child process', () => {
                   expect(finish).to.have.been.calledOnce
                 }
               })
-              if (methodName !== 'execFileSync' || semver.satisfies(process.version, '>16')) {
+              if (methodName !== 'execFileSync' || NODE_MAJOR > 16) {
                 // when a process return an invalid code, in node <=16, in execFileSync with shell:true
                 // an exception is not thrown
                 it('should execute error callback with `exit 1` command with shell: true', () => {
