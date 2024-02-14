@@ -172,6 +172,7 @@ describe('Config', () => {
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
       { name: 'startupLogs', value: false, origin: 'default' },
+      { name: 'telemetry.enabled', value: true, origin: 'default' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.metrics', value: false, origin: 'default' },

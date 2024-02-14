@@ -19,7 +19,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
-// let configWithOrigin = []
+let configWithOrigin = []
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -110,7 +110,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: config.configWithOrigin
+    configuration: configWithOrigin
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -242,6 +242,9 @@ function start (aConfig, thePluginManager) {
   heartbeatInterval = config.telemetry.heartbeatInterval
   integrations = getIntegrations()
 
+  const test = [{ name: 'squishy', value: true, origin: 'code' }]
+  updateConfig(test, config)
+
   dependencies.start(config, application, host, getRetryData, updateRetryData)
 
   sendData(config, application, host, 'app-started', appStarted(config))
@@ -286,20 +289,17 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
-// function formatMapForTelemetry (map) {
-//   // format from an object to a string map in order for
-//   // telemetry intake to accept the configuration
-//   return map
-//     ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
-//     : ''
-// }
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+}
 
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
-
-  // Hack to make system tests happy until we ship telemetry v2
-  if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
 
   const application = createAppObject(config)
   const host = createHostObject()
@@ -325,15 +325,16 @@ function updateConfig (changes, config) {
     } else if (name === 'DD_TAGS') {
       entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
     }
-    // if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    // if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
-    // if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
-    //   entry.value = formatMapForTelemetry(entry.value)
-    // }
+    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+    if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
+    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') {
+      entry.value = formatMapForTelemetry(entry.value)
+    }
 
     configuration.push(entry)
   }
-  // if (!configWithOrigin.length) configWithOrigin = configuration
+  console.log('SQUISHY', configuration)
+  if (!configWithOrigin.length) configWithOrigin = configuration
 
   const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
 

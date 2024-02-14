@@ -111,7 +111,7 @@ class Config {
       process.env.DD_TRACE_DEBUG,
       false
     ))
-    this.configWithOrigin = []
+    // this.configWithOrigin = []
     this.logger = options.logger
     this.logLevel = coalesce(
       options.logLevel,
@@ -734,10 +734,6 @@ class Config {
     )
   }
 
-  // _getTraceExporter () {
-  //   return this.options.experimental && this.options.experimental.exporter
-  // }
-
   _getHostname () {
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
     const url = DD_CIVISIBILITY_AGENTLESS_URL ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
@@ -934,13 +930,13 @@ class Config {
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
           if (get(this, name) === container[name] && has(this, name)) break
 
-          let value = container[name]
+          const value = container[name]
           set(this, name, value)
 
-          if (name === 'url' && value) value = value.toString()
-          if (name === 'appsec.rules') value = JSON.stringify(value)
-          if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
-          if (name === 'headerTags') value = value.toString()
+          // if (name === 'url' && value) value = value.toString()
+          // if (name === 'appsec.rules') value = JSON.stringify(value)
+          // if (name === 'peerServiceMapping' || name === 'tags') value = formatMapForTelemetry(value)
+          // if (name === 'headerTags') value = value.toString()
 
           changes.push({ name, value, origin })
 
@@ -948,20 +944,20 @@ class Config {
         }
       }
     }
-    if (!this.configWithOrigin.length) this.configWithOrigin = changes
+    // if (!this.configWithOrigin.length) this.configWithOrigin = changes
 
     this.sampler.sampleRate = this.sampleRate
     updateConfig(changes, this)
   }
 }
 
-function formatMapForTelemetry (map) {
-  // format from an object to a string map in order for
-  // telemetry intake to accept the configuration
-  return map
-    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
-    : ''
-}
+// function formatMapForTelemetry (map) {
+//   // format from an object to a string map in order for
+//   // telemetry intake to accept the configuration
+//   return map
+//     ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+//     : ''
+// }
 
 function maybeInt (number) {
   if (!isNaN(parseInt(number))) {
