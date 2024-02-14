@@ -87,7 +87,8 @@ class JestPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       error,
-      isEarlyFlakeDetectionEnabled
+      isEarlyFlakeDetectionEnabled,
+      onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -121,7 +122,12 @@ class JestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      this.tracer._exporter.flush()
+
+      this.tracer._exporter.flush(() => {
+        if (onDone) {
+          onDone()
+        }
+      })
     })
 
     // Test suites can be run in a different process from jest's main one.
