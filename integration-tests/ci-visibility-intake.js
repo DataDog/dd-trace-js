@@ -35,7 +35,7 @@ let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
-let waitingTime = null
+let waitingTime = 0
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTests (newKnownTestsResponse) {
@@ -225,6 +225,7 @@ class FakeCiVisIntake extends FakeAgent {
     if (this.waitingTimeoutId) {
       clearTimeout(this.waitingTimeoutId)
     }
+    waitingTime = 0
     return super.stop()
   }
 
