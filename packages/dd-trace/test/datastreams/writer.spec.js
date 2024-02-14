@@ -33,7 +33,7 @@ describe('DataStreamWriter unix', () => {
   it("should call 'request' through flush with correct options", () => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
-    const stubRequestCall = stubRequest.getCalls().at(0)
+    const stubRequestCall = stubRequest.getCalls()[0]
     const decodedPayload = msgpack.decode(stubRequestCall?.args[0], { codec })
     const requestOptions = stubRequestCall?.args[1]
     expect(decodedPayload).to.deep.equal({})
