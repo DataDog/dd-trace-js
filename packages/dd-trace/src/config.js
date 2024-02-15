@@ -548,8 +548,6 @@ class Config {
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED
-      DD_TRACING_ENABLED,
-      DD_VERSION
     } = process.env
 
     const tags = {}
