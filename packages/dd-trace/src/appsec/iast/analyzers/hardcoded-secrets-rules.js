@@ -592,6 +592,6 @@ module.exports = [
   },
   {
     'id': 'generic-api-key',
-    'regex': /(?:key|api|token|secret|client|passwd|password|auth|access)(?:[0-9a-z\-_\t.]{0,20})(?:[\s|']|[\s|""]){0,3}(?:=|>|:{1,3}=|\|\|:|<=|=>|:|\?=)(?:'|""|\s|=|\x60){0,5}([0-9a-z\-_.=]{10,150})(?:['"\s\x60;]|$)/i
+    'regex': /(?:key|api|token|secret|client|pass|pwd|pswd|auth|access)(?:[0-9a-z\-_\t.]{0,20})(?:[\s|']|[\s|""]){0,3}(?:=|>|:{1,3}=|\|\|:|<=|=>|:|\?=)(?:'|""|\s|=|\x60){0,5}([0-9a-z\-_.=]{10,150})(?:['"\s\x60;]|$)/i
   }
 ]
