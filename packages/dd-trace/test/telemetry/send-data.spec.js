@@ -167,7 +167,7 @@ describe('sendData', () => {
       path: '/api/v2/apmtelemetry'
     })
     const { url } = options
-    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.eu1.datadoghq.com'))
+    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
     delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

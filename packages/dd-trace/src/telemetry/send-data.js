@@ -27,9 +27,6 @@ function getAgentlessTelemetryEndpoint (site) {
   if (site === 'datad0g.com') { // staging
     return 'https://all-http-intake.logs.datad0g.com'
   }
-  if (site === 'datadoghq.eu') {
-    return 'https://instrumentation-telemetry-intake.eu1.datadoghq.com'
-  }
   return `https://instrumentation-telemetry-intake.${site}`
 }
 
