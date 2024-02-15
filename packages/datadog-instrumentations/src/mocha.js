@@ -12,7 +12,8 @@ const {
   getTestSuitePath,
   fromCoverageMapToCoverage,
   getCallSites,
-  addEfdStringToTestName
+  addEfdStringToTestName,
+  removeEfdStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 
 const testStartCh = channel('ci:mocha:test:start')
@@ -42,6 +43,7 @@ const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testFileToSuiteAr = new Map()
 const testToStartLine = new WeakMap()
+const newTests = {}
 
 // `isWorker` is true if it's a Mocha worker
 let isWorker = false
@@ -99,9 +101,12 @@ function isRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
 
+function getTestFullName (test) {
+  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${removeEfdStringFromTestName(test.fullTitle())}`
+}
+
 function isNewTest (test) {
-  return !knownTests
-    .includes(`mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`)
+  return !knownTests.includes(getTestFullName(test))
 }
 
 function retryTest (test) {
@@ -116,11 +121,12 @@ function retryTest (test) {
   }
 }
 
+// Get the tests that are failing and are new
 function getFailingNewTests (root) {
-  let failingTests = []
+  let failingNewTests = []
   function getTests (suite) {
     if (suite.tests?.length) {
-      failingTests = failingTests.concat(suite.tests.filter(test => test._ddIsNew && test.isFailed()))
+      failingNewTests = failingNewTests.concat(suite.tests.filter(test => test._ddIsNew && test.isFailed()))
     }
     suite.suites.forEach(suite => {
       getTests(suite)
@@ -128,7 +134,7 @@ function getFailingNewTests (root) {
   }
   getTests(root)
 
-  return failingTests
+  return failingNewTests
 }
 
 function getTestAsyncResource (test) {
@@ -195,12 +201,22 @@ function mochaHook (Runner) {
         status = 'fail'
       }
 
-      const failingNewTests = getFailingNewTests(this.suite)
-      if (failingNewTests.length) {
-        // If test is going through early flake detection and has failures, we don't
-        // want to fail the process
-        this.stats.failures -= failingNewTests.length
-        this.failures -= failingNewTests.length
+      if (isEarlyFlakeDetectionEnabled) {
+        /**
+         * If Early Flake Detection (EFD) is enabled the logic is as follows:
+         * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+         * - If just a single attempt passes, we will prevent the test process from failing.
+         * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+         * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+         */
+        for (const tests of Object.values(newTests)) {
+          const failingNewTests = tests.filter(test => test.isFailed())
+          const areAllNewTestsFailing = failingNewTests.length === tests.length
+          if (failingNewTests.length && !areAllNewTestsFailing) {
+            this.stats.failures -= failingNewTests.length
+            this.failures -= failingNewTests.length
+          }
+        }
       }
 
       if (status === 'fail') {
@@ -313,9 +329,35 @@ function mochaHook (Runner) {
       const testStartLine = testToStartLine.get(test)
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       testToAr.set(test.fn, asyncResource)
-      // TODO: do not pass the "test" object but a normalized structure
+
+      const {
+        file: testSuiteAbsolutePath,
+        title,
+        _ddIsNew: isNew,
+        _ddIsEfdRetry: isEfdRetry
+      } = test
+
+      const testInfo = {
+        testName: test.fullTitle(),
+        testSuiteAbsolutePath,
+        title,
+        isNew,
+        isEfdRetry,
+        testStartLine
+      }
+
+      // We want to store the result of the new tests
+      if (isNew) {
+        const testFullName = getTestFullName(test)
+        if (newTests[testFullName]) {
+          newTests[testFullName].push(test)
+        } else {
+          newTests[testFullName] = [test]
+        }
+      }
+
       asyncResource.runInAsyncScope(() => {
-        testStartCh.publish({ test, testStartLine })
+        testStartCh.publish(testInfo)
       })
     })
 
@@ -384,10 +426,23 @@ function mochaHook (Runner) {
     })
 
     this.on('pending', (test) => {
+      const testStartLine = testToStartLine.get(test)
+      const {
+        file: testSuiteAbsolutePath,
+        title
+      } = test
+
+      const testInfo = {
+        testName: test.fullTitle(),
+        testSuiteAbsolutePath,
+        title,
+        testStartLine
+      }
+
       const asyncResource = getTestAsyncResource(test)
       if (asyncResource) {
         asyncResource.runInAsyncScope(() => {
-          skipCh.publish(test)
+          skipCh.publish(testInfo)
         })
       } else {
         // if there is no async resource, the test has been skipped through `test.skip`
@@ -399,7 +454,7 @@ function mochaHook (Runner) {
           testToAr.set(test, skippedTestAsyncResource)
         }
         skippedTestAsyncResource.runInAsyncScope(() => {
-          skipCh.publish(test)
+          skipCh.publish(testInfo)
         })
       }
     })
@@ -419,8 +474,8 @@ function mochaEachHook (mochaEach) {
     const [params] = arguments
     const { it, ...rest } = mochaEach.apply(this, arguments)
     return {
-      it: function (name) {
-        parameterizedTestCh.publish({ name, params })
+      it: function (title) {
+        parameterizedTestCh.publish({ title, params })
         it.apply(this, arguments)
       },
       ...rest

@@ -43,7 +43,7 @@ class MochaPlugin extends CiPlugin {
     super(...args)
 
     this._testSuites = new Map()
-    this._testNameToParams = {}
+    this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
@@ -135,9 +135,9 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:start', ({ test, testStartLine }) => {
+    this.addSub('ci:mocha:test:start', (testInfo) => {
       const store = storage.getStore()
-      const span = this.startTestSpan(test, testStartLine)
+      const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
     })
@@ -160,12 +160,12 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:skip', (test) => {
+    this.addSub('ci:mocha:test:skip', (testInfo) => {
       const store = storage.getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
-        const testSpan = this.startTestSpan(test)
+        const testSpan = this.startTestSpan(testInfo)
         this.enter(testSpan, store)
       }
     })
@@ -183,8 +183,8 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
-      this._testNameToParams[name] = params
+    this.addSub('ci:mocha:test:parameterize', ({ title, params }) => {
+      this._testTitleToParams[title] = params
     })
 
     this.addSub('ci:mocha:session:finish', ({
@@ -237,12 +237,19 @@ class MochaPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (test, testStartLine) {
-    const testName = removeEfdStringFromTestName(test.fullTitle())
-    const { file: testSuiteAbsolutePath, title, _ddIsNew, _ddIsEfdRetry } = test
+  startTestSpan (testInfo) {
+    const {
+      testSuiteAbsolutePath,
+      title,
+      isNew,
+      isEfdRetry,
+      testStartLine
+    } = testInfo
+
+    const testName = removeEfdStringFromTestName(testInfo.testName)
 
     const extraTags = {}
-    const testParametersString = getTestParametersString(this._testNameToParams, title)
+    const testParametersString = getTestParametersString(this._testTitleToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString
     }
@@ -254,17 +261,15 @@ class MochaPlugin extends CiPlugin {
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
 
-    const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-
-    if (testSourceFile) {
-      extraTags[TEST_SOURCE_FILE] = testSourceFile
+    if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
+      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
     } else {
       extraTags[TEST_SOURCE_FILE] = testSuite
     }
 
-    if (_ddIsNew) {
+    if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
-      if (_ddIsEfdRetry) {
+      if (isEfdRetry) {
         extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
       }
     }
