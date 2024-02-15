@@ -5,13 +5,20 @@ const codec = msgpack.createCodec({ int64: true })
 const http = require('http')
 const multer = require('multer')
 const upload = multer()
+const zlib = require('zlib')
 
 const { FakeAgent } = require('./helpers')
 
 const DEFAULT_SETTINGS = {
   code_coverage: true,
   tests_skipping: true,
-  itr_enabled: true
+  itr_enabled: true,
+  early_flake_detection: {
+    enabled: false,
+    slow_test_retries: {
+      '5s': 3
+    }
+  }
 }
 
 const DEFAULT_SUITES_TO_SKIP = []
@@ -20,14 +27,21 @@ const DEFAULT_INFO_RESPONSE = {
   endpoints: ['/evp_proxy/v2']
 }
 const DEFAULT_CORRELATION_ID = '1234'
+const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
 
 let settings = DEFAULT_SETTINGS
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
+let knownTests = DEFAULT_KNOWN_TESTS
+let waitingTime = 0
 
 class FakeCiVisIntake extends FakeAgent {
+  setKnownTests (newKnownTestsResponse) {
+    knownTests = newKnownTestsResponse
+  }
+
   setInfoResponse (newInfoResponse) {
     infoResponse = newInfoResponse
   }
@@ -46,6 +60,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettings (newSettings) {
     settings = newSettings
+  }
+
+  setWaitingTime (newWaitingTime) {
+    waitingTime = newWaitingTime
   }
 
   async start () {
@@ -70,18 +88,21 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post(['/api/v2/citestcycle', '/evp_proxy/v2/api/v2/citestcycle'], (req, res) => {
-      res.status(200).send('OK')
-      this.emit('message', {
-        headers: req.headers,
-        payload: msgpack.decode(req.body, { codec }),
-        url: req.url
-      })
+    // It can be slowed down with setWaitingTime
+    app.post(['/api/v2/citestcycle', '/evp_proxy/:version/api/v2/citestcycle'], (req, res) => {
+      this.waitingTimeoutId = setTimeout(() => {
+        res.status(200).send('OK')
+        this.emit('message', {
+          headers: req.headers,
+          payload: msgpack.decode(req.body, { codec }),
+          url: req.url
+        })
+      }, waitingTime || 0)
     })
 
     app.post([
       '/api/v2/git/repository/search_commits',
-      '/evp_proxy/v2/api/v2/git/repository/search_commits'
+      '/evp_proxy/:version/api/v2/git/repository/search_commits'
     ], (req, res) => {
       res.status(gitUploadStatus).send(JSON.stringify({ data: [] }))
       this.emit('message', {
@@ -93,7 +114,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     app.post([
       '/api/v2/git/repository/packfile',
-      '/evp_proxy/v2/api/v2/git/repository/packfile'
+      '/evp_proxy/:version/api/v2/git/repository/packfile'
     ], (req, res) => {
       res.status(202).send('')
       this.emit('message', {
@@ -104,7 +125,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     app.post([
       '/api/v2/citestcov',
-      '/evp_proxy/v2/api/v2/citestcov'
+      '/evp_proxy/:version/api/v2/citestcov'
     ], upload.any(), (req, res) => {
       res.status(200).send('OK')
 
@@ -128,7 +149,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     app.post([
       '/api/v2/libraries/tests/services/setting',
-      '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+      '/evp_proxy/:version/api/v2/libraries/tests/services/setting'
     ], (req, res) => {
       res.status(200).send(JSON.stringify({
         data: {
@@ -143,7 +164,7 @@ class FakeCiVisIntake extends FakeAgent {
 
     app.post([
       '/api/v2/ci/tests/skippable',
-      '/evp_proxy/v2/api/v2/ci/tests/skippable'
+      '/evp_proxy/:version/api/v2/ci/tests/skippable'
     ], (req, res) => {
       res.status(200).send(JSON.stringify({
         data: suitesToSkip,
@@ -151,6 +172,30 @@ class FakeCiVisIntake extends FakeAgent {
           correlation_id: correlationId
         }
       }))
+      this.emit('message', {
+        headers: req.headers,
+        url: req.url
+      })
+    })
+
+    app.post([
+      '/api/v2/ci/libraries/tests',
+      '/evp_proxy/:version/api/v2/ci/libraries/tests'
+    ], (req, res) => {
+      // The endpoint returns compressed data if 'accept-encoding' is set to 'gzip'
+      const isGzip = req.headers['accept-encoding'] === 'gzip'
+      const data = JSON.stringify({
+        data: {
+          attributes: {
+            test_full_names: knownTests
+          }
+        }
+      })
+      res.setHeader('content-type', 'application/json')
+      if (isGzip) {
+        res.setHeader('content-encoding', 'gzip')
+      }
+      res.status(200).send(isGzip ? zlib.gzipSync(data) : data)
       this.emit('message', {
         headers: req.headers,
         url: req.url
@@ -177,6 +222,10 @@ class FakeCiVisIntake extends FakeAgent {
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
     this.removeAllListeners()
+    if (this.waitingTimeoutId) {
+      clearTimeout(this.waitingTimeoutId)
+    }
+    waitingTime = 0
     return super.stop()
   }
 

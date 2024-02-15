@@ -11,6 +11,8 @@ const {
   getErrorTypeFromStatusCode
 } = require('../telemetry')
 
+const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
+
 function getLibraryConfiguration ({
   url,
   isEvpProxy,
@@ -89,7 +91,8 @@ function getLibraryConfiguration ({
               code_coverage: isCodeCoverageEnabled,
               tests_skipping: isSuitesSkippingEnabled,
               itr_enabled: isItrEnabled,
-              require_git: requireGit
+              require_git: requireGit,
+              early_flake_detection: earlyFlakeDetectionConfig
             }
           }
         } = JSON.parse(res)
@@ -99,8 +102,9 @@ function getLibraryConfiguration ({
           isSuitesSkippingEnabled,
           isItrEnabled,
           requireGit,
-          // TODO: change to backend response
-          isEarlyFlakeDetectionEnabled: false
+          isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
+          earlyFlakeDetectionNumRetries:
+            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

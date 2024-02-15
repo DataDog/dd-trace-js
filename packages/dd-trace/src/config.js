@@ -16,6 +16,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { ORIGIN_KEY } = require('./constants')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -307,6 +308,12 @@ class Config {
       'runtime-id': uuid()
     })
 
+    if (this.isCiVisibility) {
+      tagger.add(this.tags, {
+        [ORIGIN_KEY]: 'ciapp-test'
+      })
+    }
+
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
         coalesce(
@@ -541,6 +548,8 @@ class Config {
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED
+      DD_TRACING_ENABLED,
+      DD_VERSION
     } = process.env
 
     const tags = {}
@@ -635,6 +644,7 @@ class Config {
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
   }
 
   _applyOptions (options) {
@@ -855,6 +865,7 @@ class Config {
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
+    this._setBoolean(opts, 'tracing', options.tracing_enabled)
   }
 
   _setBoolean (obj, name, value) {

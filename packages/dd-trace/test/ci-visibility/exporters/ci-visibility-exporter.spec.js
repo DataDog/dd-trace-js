@@ -166,7 +166,7 @@ describe('CI Visibility Exporter', () => {
         const ciVisibilityExporter = new CiVisibilityExporter({ port, isIntelligentTestRunnerEnabled: true })
 
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
-          expect(libraryConfig).to.eql({
+          expect(libraryConfig).to.contain({
             requireGit: false,
             isCodeCoverageEnabled: true,
             isItrEnabled: true,
@@ -666,7 +666,7 @@ describe('CI Visibility Exporter', () => {
       })
     })
     context('if early flake detection is enabled but can not use CI Visibility protocol', () => {
-      it('should raise an error', (done) => {
+      it('should not request known tests', (done) => {
         const scope = nock(`http://localhost:${port}`)
           .post('/api/v2/ci/libraries/tests')
           .reply(200)
@@ -676,9 +676,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
         ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err) => {
-          expect(err.message).to.include(
-            'Known tests can not be requested because CI Visibility protocol can not be used'
-          )
+          expect(err).to.be.null
           expect(scope.isDone()).not.to.be.true
           done()
         })

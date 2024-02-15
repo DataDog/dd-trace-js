@@ -14,7 +14,8 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -122,7 +123,7 @@ class CucumberPlugin extends CiPlugin {
       }
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.sourceRoot))
+        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
@@ -136,10 +137,11 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, fullTestSuite, testSourceLine }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine }) => {
       const store = storage.getStore()
-      const testSuite = getTestSuitePath(fullTestSuite, this.sourceRoot)
-      const testSpan = this.startTestSpan(testName, testSuite, testSourceLine)
+      const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
+      const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
+      const testSpan = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
 
       this.enter(testSpan, store)
     })
@@ -191,12 +193,15 @@ class CucumberPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite, testSourceLine) {
+  startTestSpan (testName, testSuite, testSourceFile, testSourceLine) {
     return super.startTestSpan(
       testName,
       testSuite,
       this.testSuiteSpan,
-      { [TEST_SOURCE_START]: testSourceLine }
+      {
+        [TEST_SOURCE_START]: testSourceLine,
+        [TEST_SOURCE_FILE]: testSourceFile
+      }
     )
   }
 }
