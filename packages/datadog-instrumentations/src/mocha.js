@@ -121,22 +121,6 @@ function retryTest (test) {
   }
 }
 
-// Get the tests that are failing and are new
-function getFailingNewTests (root) {
-  let failingNewTests = []
-  function getTests (suite) {
-    if (suite.tests?.length) {
-      failingNewTests = failingNewTests.concat(suite.tests.filter(test => test._ddIsNew && test.isFailed()))
-    }
-    suite.suites.forEach(suite => {
-      getTests(suite)
-    })
-  }
-  getTests(root)
-
-  return failingNewTests
-}
-
 function getTestAsyncResource (test) {
   if (!test.fn) {
     return testToAr.get(test)
