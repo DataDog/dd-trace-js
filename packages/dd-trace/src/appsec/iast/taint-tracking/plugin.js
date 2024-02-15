@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString } = require('./operations')
+const { taintObject, newTaintedString, getRanges } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -61,6 +61,18 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ req }) => {
         if (req && req.params && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
+      (data) => {
+        const iastContext = getIastContext(storage.getStore())
+        const source = data.context?.source
+        const ranges = source && getRanges(iastContext, source)
+        if (ranges?.length) {
+          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
         }
       }
     )
