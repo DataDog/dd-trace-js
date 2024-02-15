@@ -19,7 +19,8 @@ const {
   TEST_SOURCE_FILE,
   removeEfdStringFromTestName,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -193,7 +194,8 @@ class MochaPlugin extends CiPlugin {
       numSkippedSuites,
       hasForcedToRunSuites,
       hasUnskippableSuites,
-      error
+      error,
+      isEarlyFlakeDetectionEnabled
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -219,6 +221,10 @@ class MochaPlugin extends CiPlugin {
             hasUnskippableSuites
           }
         )
+
+        if (isEarlyFlakeDetectionEnabled) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+        }
 
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')

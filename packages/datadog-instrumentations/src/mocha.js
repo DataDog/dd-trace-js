@@ -165,7 +165,7 @@ function mochaHook (Runner) {
     if (isEarlyFlakeDetectionEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
       suite.tests.forEach(test => {
-        if (isNewTest(test)) {
+        if (!test.isPending() && isNewTest(test)) {
           test._ddIsNew = true
           retryTest(test)
         }
@@ -227,7 +227,8 @@ function mochaHook (Runner) {
         numSkippedSuites: skippedSuites.length,
         hasForcedToRunSuites: isForcedToRun,
         hasUnskippableSuites: !!unskippableSuites.length,
-        error
+        error,
+        isEarlyFlakeDetectionEnabled
       })
     }))
 
