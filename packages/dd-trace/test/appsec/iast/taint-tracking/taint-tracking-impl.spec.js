@@ -28,6 +28,12 @@ const propagationFns = [
   'replaceRegexStr'
 ]
 
+const propagationLodashFns = [
+  'trimLodash',
+  'trimStartLodash',
+  'trimEndLodash'
+]
+
 const commands = [
   '  ls -la  ',
   '  ls -la',
@@ -40,6 +46,56 @@ const commands = [
 
 const propagationFunctionsFile = path.join(__dirname, 'resources/propagationFunctions.js')
 const propagationFunctions = require(propagationFunctionsFile)
+
+const propagationLodashFunctionsFile = path.join(__dirname, 'resources/propagationLodashFunctions.js')
+const propagationLodashFunctions = require(propagationLodashFunctionsFile)
+
+describe('TaintTracking lodash', () => {
+  let instrumentedFunctionsFile
+
+  beforeEach(() => {
+    instrumentedFunctionsFile = copyFileToTmp(propagationLodashFunctionsFile)
+  })
+
+  afterEach(() => {
+    fs.unlinkSync(instrumentedFunctionsFile)
+    clearCache()
+  })
+
+  prepareTestServerForIast('should propagate strings with lodash', (testThatRequestHasVulnerability) => {
+    propagationLodashFns.forEach((propFn) => {
+      describe(`using ${propFn}()`, () => {
+        commands.forEach((command) => {
+          describe(`with command: '${command}'`, () => {
+            testThatRequestHasVulnerability(function () {
+              const _ = require('../../../../../../versions/lodash').get()
+              const store = storage.getStore()
+              const iastContext = iastContextFunctions.getIastContext(store)
+              const commandTainted = newTaintedString(iastContext, command, 'param', 'Request')
+
+              const propFnInstrumented = require(instrumentedFunctionsFile)[propFn]
+              const propFnOriginal = propagationLodashFunctions[propFn]
+
+              const commandResult = propFnInstrumented(_, commandTainted)
+              expect(isTainted(iastContext, commandResult)).to.be.true
+
+              const commandResultOrig = propFnOriginal(commandTainted)
+              expect(commandResult).eq(commandResultOrig)
+
+              try {
+                const childProcess = require('child_process')
+                childProcess.execSync(commandResult, { stdio: 'ignore' })
+              } catch (e) {
+                // do nothing
+              }
+            }, 'COMMAND_INJECTION')
+          })
+        })
+      })
+    })
+  })
+
+})
 
 describe('TaintTracking', () => {
   let instrumentedFunctionsFile
