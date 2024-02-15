@@ -35,6 +35,7 @@ let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
+let waitingTime = 0
 
 class FakeCiVisIntake extends FakeAgent {
   setKnownTests (newKnownTestsResponse) {
@@ -61,6 +62,10 @@ class FakeCiVisIntake extends FakeAgent {
     settings = newSettings
   }
 
+  setWaitingTime (newWaitingTime) {
+    waitingTime = newWaitingTime
+  }
+
   async start () {
     const app = express()
     app.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -83,13 +88,16 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    // It can be slowed down with setWaitingTime
     app.post(['/api/v2/citestcycle', '/evp_proxy/:version/api/v2/citestcycle'], (req, res) => {
-      res.status(200).send('OK')
-      this.emit('message', {
-        headers: req.headers,
-        payload: msgpack.decode(req.body, { codec }),
-        url: req.url
-      })
+      this.waitingTimeoutId = setTimeout(() => {
+        res.status(200).send('OK')
+        this.emit('message', {
+          headers: req.headers,
+          payload: msgpack.decode(req.body, { codec }),
+          url: req.url
+        })
+      }, waitingTime || 0)
     })
 
     app.post([
@@ -214,6 +222,10 @@ class FakeCiVisIntake extends FakeAgent {
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
     this.removeAllListeners()
+    if (this.waitingTimeoutId) {
+      clearTimeout(this.waitingTimeoutId)
+    }
+    waitingTime = 0
     return super.stop()
   }
 
