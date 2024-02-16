@@ -5,10 +5,30 @@ const BaseAwsSdkPlugin = require('../base')
 class Sfn extends BaseAwsSdkPlugin {
   static get id () { return 'sfn' }
 
+  // "StartExecutionInput": {
+  //   "type": "structure",
+  //   "required": [
+  //     "stateMachineArn"
+  //   ],
+  //   "members": {
+  //     "stateMachineArn": {
+  //       "shape": "Arn",
+  //     },
+  //     "name": {
+  //       "shape": "Name",
+  //     },
+  //     "input": {
+  //       "shape": "SensitiveData",
+  //     },
+  //     "traceHeader": {
+  //       "shape": "TraceHeader",
+  //     }
+  //   }
+
   generateTags (params, operation, response) {
     if (!params) return {}
     return {
-      'resource.name': `${operation}`,
+      'resource.name': params.name ? `${operation} ${params.name}` : `${operation}`,
       'statemachinearn': `${params.stateMachineArn}`
     }
   }
