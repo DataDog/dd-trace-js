@@ -891,7 +891,7 @@ declare namespace tracer {
     /**
      * Binds a target to the provided span, or the active span if omitted.
      *
-     * @param {Function|Promise} target Target that will have the span activated on its scope.
+     * @param {Function|Promise} fn Target that will have the span activated on its scope.
      * @param {Span} [span=scope.active()] The span to activate.
      * @returns The bound target.
      */
@@ -1741,15 +1741,12 @@ declare namespace tracer {
        * Returns a Tracer, creating one if one with the given name and version is
        * not already created.
        *
-       * This function may return different Tracer types (e.g.
-       * {@link NoopTracerProvider} vs. a functional tracer).
-       *
        * @param name The name of the tracer or instrumentation library.
        * @param version The version of the tracer or instrumentation library.
        * @param options The options of the tracer or instrumentation library.
        * @returns Tracer A Tracer with the given name and version
        */
-      getTracer(name: string, version?: string): Tracer;
+      getTracer(name: string, version?: string, options?: any): Tracer;
 
       /**
        * Register this tracer provider with @opentelemetry/api
@@ -1821,9 +1818,9 @@ declare namespace tracer {
        *     do some more work
        *     span.end();
        */
-      startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
-      startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
       startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, context: otel.Context, fn: F): ReturnType<F>;
+      startActiveSpan<F extends (span: Span) => unknown>(name: string, options: SpanOptions, fn: F): ReturnType<F>;
+      startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>;
     }
 
     /**
@@ -1873,14 +1870,14 @@ declare namespace tracer {
        * @param name the name of the event.
        * @param [attributesOrStartTime] the attributes that will be added; these are
        *     associated with this event. Can be also a start time
-       *     if type is {@type TimeInput} and 3rd param is undefined
+       *     if type is {@link TimeInput} and 3rd param is undefined
        * @param [startTime] start time of the event.
        */
       addEvent(name: string, attributesOrStartTime?: SpanAttributes | TimeInput, startTime?: TimeInput): this;
 
       /**
        * Sets a status to the span. If used, this will override the default Span
-       * status. Default is {@link SpanStatusCode.UNSET}. SetStatus overrides the value
+       * status. Default is {@link otel.SpanStatusCode.UNSET}. SetStatus overrides the value
        * of previous calls to SetStatus on the Span.
        *
        * @param status the SpanStatus to set.
@@ -1940,7 +1937,7 @@ declare namespace tracer {
 
     /**
      * A SpanContext represents the portion of a {@link Span} which must be
-     * serialized and propagated along side of a {@link Baggage}.
+     * serialized and propagated along side of a {@link otel.Baggage}.
      */
     export interface SpanContext extends otel.SpanContext {
       /**
@@ -1971,7 +1968,7 @@ declare namespace tracer {
        * caller may have recorded trace data. A caller who does not record trace
        * data out-of-band leaves this flag unset.
        *
-       * see {@link TraceFlags} for valid flag values.
+       * see {@link otel.TraceFlags} for valid flag values.
        */
       traceFlags: number;
 
