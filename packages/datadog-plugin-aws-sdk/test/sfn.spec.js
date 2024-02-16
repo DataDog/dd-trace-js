@@ -1,10 +1,10 @@
 /* eslint-disable max-len */
 'use strict'
 
-const StepFunctions = require('../src/services/stepfunctions')
+const Sfn = require('../src/services/sfn')
 const tracer = require('../../dd-trace')
 
-describe('StepFunctions', () => {
+describe('Sfn', () => {
   let span
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let traceId
@@ -46,7 +46,7 @@ describe('StepFunctions', () => {
     })
 
     it('generates tags for an event', () => {
-      const eventbridge = new StepFunctions(tracer)
+      const eventbridge = new Sfn(tracer)
       const params = {
         statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       }
