@@ -17,6 +17,7 @@ const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
 const testSuiteCodeCoverageCh = channel('ci:cucumber:test-suite:code-coverage')
 
 const libraryConfigurationCh = channel('ci:cucumber:library-configuration')
+const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
@@ -41,12 +42,16 @@ const originalCoverageMap = createCoverageMap()
 // TODO: remove in a later major version
 const patched = new WeakSet()
 
+const lastStatusByPickleId = new Map()
+
 let pickleByFile = {}
 const pickleResultByFile = {}
 let skippableSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
+let isEarlyFlakeDetectionEnabled = false
+let knownTests = []
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -84,6 +89,10 @@ function getStatusFromResultLatest (result) {
   return { status: 'fail', errorMessage: result.message }
 }
 
+function isNewTest (testSuite, testName) {
+  return !knownTests.includes(`cucumber.${testSuite}.${testName}`)
+}
+
 function wrapRun (pl, isLatestVersion) {
   if (patched.has(pl)) return
 
@@ -98,6 +107,10 @@ function wrapRun (pl, isLatestVersion) {
     return asyncResource.runInAsyncScope(() => {
       const testFileAbsolutePath = this.pickle.uri
 
+      // this pickleResultByFile is not going to work if I run it multiple times per
+      // new test:
+      // maybe the pickleResultByFile can be moved up? in the runTestCase wrapper
+      // the runTestCase wrapper is going to run just once
       if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
         isUnskippable = isMarkedAsUnskippable(this.pickle)
         const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -106,10 +119,8 @@ function wrapRun (pl, isLatestVersion) {
         testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
       }
 
-      const testSourceLine = this.gherkinDocument &&
-        this.gherkinDocument.feature &&
-        this.gherkinDocument.feature.location &&
-        this.gherkinDocument.feature.location.line
+      const testSourceLine = this.gherkinDocument?.feature?.location?.line
+      // debugger
 
       testStartCh.publish({
         testName: this.pickle.name,
@@ -120,8 +131,11 @@ function wrapRun (pl, isLatestVersion) {
         const promise = run.apply(this, arguments)
         promise.finally(() => {
           const result = this.getWorstStepResult()
+          // debugger
           const { status, skipReason, errorMessage } = isLatestVersion
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+
+          lastStatusByPickleId.set(this.pickle.id, status)
 
           if (!pickleResultByFile[testFileAbsolutePath]) {
             pickleResultByFile[testFileAbsolutePath] = [status]
@@ -230,6 +244,7 @@ addHook({
 }, testCaseHook)
 
 function getFilteredPickles (runtime, suitesToSkip) {
+  debugger
   return runtime.pickleIds.reduce((acc, pickleId) => {
     const test = runtime.eventDataCollector.getPickle(pickleId)
     const testSuitePath = getTestSuitePath(test.uri, process.cwd())
@@ -263,7 +278,28 @@ addHook({
   versions: ['>=7.0.0'],
   file: 'lib/runtime/index.js'
 }, (runtimePackage, frameworkVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => async function (pickleId, testCase) {
+    const test = this.eventDataCollector.getPickle(pickleId)
+
+    const res = await runTestCase.apply(this, arguments)
+
+    const lastResult = lastStatusByPickleId.get(pickleId)
+    // check result and retry if necessary (can we check if the test is skipped?)
+    // I can't think of a way to get the status of the test that just run
+    if (lastResult !== 'skip' && isNewTest(getTestSuitePath(test.uri, process.cwd()), test.name)) {
+      // TODO: change 10 by proper variable
+      for (let retryIndex = 0; retryIndex < 10; retryIndex++) {
+        await runTestCase.apply(this, arguments)
+      }
+    }
+
+    return res
+  })
+
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
+    if (!libraryConfigurationCh.hasSubscribers) {
+      return start.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     let onDone
 
@@ -275,7 +311,26 @@ addHook({
       libraryConfigurationCh.publish({ onDone })
     })
 
-    await configPromise
+    const configurationResponse = await configPromise
+
+    if (configurationResponse.err) {
+      return start.apply(this, arguments)
+    }
+
+    isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
+
+    if (isEarlyFlakeDetectionEnabled) {
+      const knownTestsPromise = new Promise(resolve => {
+        onDone = resolve
+      })
+      asyncResource.runInAsyncScope(() => {
+        knownTestsCh.publish({ onDone })
+      })
+      const knownTestsResponse = await knownTestsPromise
+      if (!knownTestsResponse.err) {
+        knownTests = knownTestsResponse.knownTests
+      }
+    }
 
     const skippableSuitesPromise = new Promise(resolve => {
       onDone = resolve
