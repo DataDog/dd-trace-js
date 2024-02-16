@@ -63,7 +63,6 @@ describe('EventBridge', () => {
       const params = {
         foo: 'bar'
       }
-      expect(1).to.equal(2) // purposefully fail
       expect(eventbridge.generateTags(params, 'putEvent', {})).to.deep.equal({})
     })
 
