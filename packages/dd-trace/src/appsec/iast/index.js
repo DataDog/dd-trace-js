@@ -22,7 +22,7 @@ const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
 
 function enable (config, _tracer) {
-  iastTelemetry.configure(config, config.iast && config.iast.telemetryVerbosity)
+  iastTelemetry.configure(config, config.iast?.telemetryVerbosity)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -43,7 +43,7 @@ function disable () {
 }
 
 function onIncomingHttpRequestStart (data) {
-  if (data && data.req) {
+  if (data?.req) {
     const store = storage.getStore()
     if (store) {
       const topContext = web.getContext(data.req)
@@ -68,11 +68,11 @@ function onIncomingHttpRequestStart (data) {
 }
 
 function onIncomingHttpRequestEnd (data) {
-  if (data && data.req) {
+  if (data?.req) {
     const store = storage.getStore()
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
-    if (iastContext && iastContext.rootSpan) {
+    if (iastContext?.rootSpan) {
       iastResponseEnd.publish(data)
 
       const vulnerabilities = iastContext.vulnerabilities
