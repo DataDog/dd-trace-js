@@ -318,7 +318,6 @@ function updateConfig (changes, config) {
     if (Array.isArray(value)) entry.value = value.join(',')
     if (entry.name === 'DD_TAGS') entry.value = formatMapForTelemetry(entry.value)
     if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'appsec.rules') entry.value = JSON.stringify(entry.value)
     if (entry.name === 'peerServiceMapping' || entry.name === 'tags') entry.value = formatMapForTelemetry(entry.value)
 
     configuration.push(entry)
