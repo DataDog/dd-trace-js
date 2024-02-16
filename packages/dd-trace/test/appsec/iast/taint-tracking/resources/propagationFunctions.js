@@ -60,6 +60,10 @@ function replaceRegexStr (str) {
   return str.replace(/ls/g, 'ls')
 }
 
+function jsonParseStr (str) {
+  return JSON.parse(str)
+}
+
 module.exports = {
   concatSuffix,
   insertStr,
@@ -75,5 +79,6 @@ module.exports = {
   substrStr,
   sliceStr,
   replaceStr,
-  replaceRegexStr
+  replaceRegexStr,
+  jsonParseStr
 }
