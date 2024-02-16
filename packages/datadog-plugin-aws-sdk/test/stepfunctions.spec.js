@@ -50,6 +50,7 @@ describe('StepFunctions', () => {
       const params = {
         statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       }
+      expect(1).to.equal(2) // purposefully fail
       expect(eventbridge.generateTags(params, 'start_execution', {})).to.deep.equal({
         'resource.name': 'start_execution',
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
