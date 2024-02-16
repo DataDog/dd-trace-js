@@ -6,7 +6,7 @@ class Sfn extends BaseAwsSdkPlugin {
   static get id () { return 'sfn' }
 
   generateTags (params, operation, response) {
-    if (!params || !params.source) return {}
+    if (!params) return {}
     return {
       'resource.name': `${operation}`,
       'statemachinearn': `${params.stateMachineArn}`
