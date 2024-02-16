@@ -46,11 +46,11 @@ describe('Sfn', () => {
     })
 
     it('generates tags for an event', () => {
-      const eventbridge = new Sfn(tracer)
+      const sfn = new Sfn(tracer)
       const params = {
         statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       }
-      expect(eventbridge.generateTags(params, 'start_execution', {})).to.deep.equal({
+      expect(sfn.generateTags(params, 'start_execution', {})).to.deep.equal({
         'resource.name': 'start_execution',
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
