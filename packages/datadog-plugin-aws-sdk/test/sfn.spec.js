@@ -72,9 +72,9 @@ describe('Sfn', () => {
       const sfn = new Sfn(tracer)
       const request = {
         params: {
-          input: JSON.stringify({ 'foo': 'bar' }),
-          operation: 'startExecution'
-        }
+          input: JSON.stringify({ 'foo': 'bar' })
+        },
+        operation: 'startExecution'
       }
 
       traceId = '456853219676779160'
