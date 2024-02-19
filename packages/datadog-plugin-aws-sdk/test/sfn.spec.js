@@ -81,7 +81,7 @@ describe('Sfn', () => {
       spanId = '456853219676779160'
       parentId = '0000000000000000'
       sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({})
+      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
     })
   })
 })
