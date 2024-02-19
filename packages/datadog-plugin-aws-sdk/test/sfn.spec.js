@@ -67,5 +67,21 @@ describe('Sfn', () => {
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
+
+    it('injects trace context into StepFunction start_execution requests', () => {
+      const sfn = new Sfn(tracer)
+      const request = {
+        params: {
+          input: JSON.stringify({'foo': 'bar'}),
+          operation: 'startExecution'
+        }
+      }
+
+      traceId = '456853219676779160'
+      spanId = '456853219676779160'
+      parentId = '0000000000000000'
+      sfn.requestInject(span.context(), request)
+      expect(request.params).to.deep.equal({})
+    })
   })
 })
