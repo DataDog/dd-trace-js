@@ -9,7 +9,9 @@ const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
-  getTestParametersString
+  getTestParametersString,
+  EFD_STRING,
+  removeEfdStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -57,9 +59,6 @@ let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 
-const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
-
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const specStatusToTestStatus = {
@@ -105,10 +104,6 @@ function getEfdTestName (testName, numAttempt) {
   return `${EFD_STRING} (#${numAttempt}): ${testName}`
 }
 
-function removeEfdTestName (testName) {
-  return testName.replace(EFD_TEST_NAME_REGEX, '')
-}
-
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -116,11 +111,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
       this.rootDir = rootDir
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
-      this.testFileAbsolutePath = context.testPath
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
+
+      const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
+
+      if (repositoryRoot) {
+        this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+      }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
 
@@ -152,7 +152,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
-      return removeEfdTestName(`${describeSuffix} ${event.testName}`).trim()
+      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`).trim()
     }
 
     async handleTestEvent (event, state) {
@@ -186,7 +186,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const testName = getJestTestName(event.test)
 
         if (this.isEarlyFlakeDetectionEnabled) {
-          const originalTestName = removeEfdTestName(testName)
+          const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
@@ -196,9 +196,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: removeEfdTestName(testName),
+            name: removeEfdStringFromTestName(testName),
             suite: this.testSuite,
-            testFileAbsolutePath: this.testFileAbsolutePath,
+            testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
             testParameters,
             frameworkVersion: jestVersion,
@@ -249,7 +249,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testSkippedCh.publish({
             name: getJestTestName(event.test),
             suite: this.testSuite,
-            testFileAbsolutePath: this.testFileAbsolutePath,
+            testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
@@ -635,6 +635,7 @@ addHook({
       _ddKnownTests,
       _ddIsEarlyFlakeDetectionEnabled,
       _ddEarlyFlakeDetectionNumRetries,
+      _ddRepositoryRoot,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

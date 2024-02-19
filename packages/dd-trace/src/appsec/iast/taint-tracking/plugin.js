@@ -116,14 +116,6 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintHeaders(req.headers, iastContext)
     this.taintUrl(req, iastContext)
   }
-
-  enable () {
-    this.configure(true)
-  }
-
-  disable () {
-    this.configure(false)
-  }
 }
 
 module.exports = new TaintTrackingPlugin()
