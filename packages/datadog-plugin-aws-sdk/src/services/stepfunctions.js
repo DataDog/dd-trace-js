@@ -34,7 +34,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
   }
 
   requestInject (span, request) {
-    const operation = request.operation;
+    const operation = request.operation
     if (operation === 'startExecution' || operation === 'startSyncExecution') {
       if (!request.params || !request.params.input) {
         return
