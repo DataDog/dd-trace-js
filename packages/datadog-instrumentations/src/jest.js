@@ -117,7 +117,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
-      this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+
+      if (repositoryRoot) {
+        this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+      }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
 
