@@ -71,7 +71,8 @@ moduleType.forEach(({
     }
 
     before(async () => {
-      sandbox = await createSandbox([`cypress@${version}`], true)
+      // cypress-fail-fast is required as an incompatible plugin
+      sandbox = await createSandbox([`cypress@${version}`, `cypress-fail-fast@7.1.0`], true)
       cwd = sandbox.folder
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
@@ -781,6 +782,47 @@ moduleType.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('still reports correct format if there is a plugin incompatibility', (done) => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+
+          testEvents.forEach(testEvent => {
+            assert.exists(testEvent.content.test_suite_id)
+            assert.exists(testEvent.content.test_module_id)
+            assert.exists(testEvent.content.test_session_id)
+            assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
+          })
+        })
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
