@@ -74,6 +74,10 @@ const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 
+// Early flake detection util strings
+const EFD_STRING = "Retried by Datadog's Early Flake Detection"
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
@@ -131,7 +135,11 @@ module.exports = {
   getTestLineStart,
   getCallSites,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  EFD_STRING,
+  EFD_TEST_NAME_REGEX,
+  removeEfdStringFromTestName,
+  addEfdStringToTestName
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -551,4 +559,12 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+function addEfdStringToTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
+}
+
+function removeEfdStringFromTestName (testName) {
+  return testName.replace(EFD_TEST_NAME_REGEX, '')
 }
