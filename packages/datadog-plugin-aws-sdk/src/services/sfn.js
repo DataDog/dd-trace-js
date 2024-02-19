@@ -35,7 +35,7 @@ class Sfn extends BaseAwsSdkPlugin {
 
   requestInject (span, request) {
     const operation = request.operation;
-    if (operation === 'start_execution' || operation === 'start_sync_execution') {
+    if (operation === 'startExecution' || operation === 'startSyncExecution') {
       if (!request.params) {
         request.params = {}
       }
