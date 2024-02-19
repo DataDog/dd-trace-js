@@ -115,7 +115,8 @@ function getSuiteStatus (suiteStats) {
   if (suiteStats.failures !== undefined && suiteStats.failures > 0) {
     return 'fail'
   }
-  if (suiteStats.tests !== undefined && suiteStats.tests === suiteStats.pending) {
+  if (suiteStats.tests !== undefined &&
+    (suiteStats.tests === suiteStats.pending || suiteStats.tests === suiteStats.skipped)) {
     return 'skip'
   }
   return 'pass'
@@ -246,6 +247,10 @@ module.exports = (on, config) => {
     if (testSessionSpan && testModuleSpan) {
       testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
+      // If testSuiteSpan couldn't be created, we'll use the testModuleSpan as the parent
+      if (!testSuiteSpan) {
+        testSuiteTags[TEST_SUITE_ID] = testModuleSpan.context().toSpanId()
+      }
     }
 
     const {
@@ -282,6 +287,19 @@ module.exports = (on, config) => {
         ...testSpanMetadata,
         ...testEnvironmentMetadata,
         ...testSuiteTags
+      }
+    })
+  }
+
+  function getTestSuiteSpan (suite) {
+    const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+    ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+    return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+      childOf: testModuleSpan,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...testEnvironmentMetadata,
+        ...testSuiteSpanMetadata
       }
     })
   }
@@ -348,6 +366,13 @@ module.exports = (on, config) => {
   on('after:spec', (spec, { tests, stats }) => {
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
+
+    if (!testSuiteSpan) {
+      // dd:testSuiteStart hasn't been triggered for whatever reason
+      // We will create the test suite span on the spot if that's the case
+      log.warn('There was an error creating the test suite event.')
+      testSuiteSpan = getTestSuiteSpan(spec.relative)
+    }
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
@@ -470,16 +495,7 @@ module.exports = (on, config) => {
       if (testSuiteSpan) {
         return null
       }
-      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
-      testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
-        childOf: testModuleSpan,
-        tags: {
-          [COMPONENT]: TEST_FRAMEWORK_NAME,
-          ...testEnvironmentMetadata,
-          ...testSuiteSpanMetadata
-        }
-      })
-      ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+      testSuiteSpan = getTestSuiteSpan(suite)
       return null
     },
     'dd:beforeEach': (test) => {
