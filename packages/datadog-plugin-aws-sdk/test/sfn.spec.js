@@ -50,8 +50,8 @@ describe('Sfn', () => {
       const params = {
         stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       }
-      expect(sfn.generateTags(params, 'start_execution', {})).to.deep.equal({
-        'resource.name': 'start_execution',
+      expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
+        'resource.name': 'startExecution',
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
@@ -62,8 +62,8 @@ describe('Sfn', () => {
         stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2',
         name: 'my-execution'
       }
-      expect(sfn.generateTags(params, 'start_execution', {})).to.deep.equal({
-        'resource.name': 'start_execution my-execution',
+      expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
+        'resource.name': 'startExecution my-execution',
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
@@ -72,7 +72,7 @@ describe('Sfn', () => {
       const sfn = new Sfn(tracer)
       const request = {
         params: {
-          input: JSON.stringify({'foo': 'bar'}),
+          input: JSON.stringify({ 'foo': 'bar' }),
           operation: 'startExecution'
         }
       }
