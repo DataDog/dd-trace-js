@@ -2,7 +2,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
-class Sfn extends BaseAwsSdkPlugin {
+class Stepfunctions extends BaseAwsSdkPlugin {
   static get id () { return 'sfn' }
 
   // "StartExecutionInput": {
@@ -58,4 +58,4 @@ class Sfn extends BaseAwsSdkPlugin {
   }
 }
 
-module.exports = Sfn
+module.exports = Stepfunctions
