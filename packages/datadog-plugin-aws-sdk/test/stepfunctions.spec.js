@@ -84,4 +84,43 @@ describe('Sfn', () => {
       expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
     })
   })
+
+  it('injects trace context into StepFunction start_sync_execution requests', () => {
+    const sfn = new Stepfunctions(tracer)
+    const request = {
+      params: {
+        input: JSON.stringify({ 'foo': 'bar' })
+      },
+      operation: 'startSyncExecution'
+    }
+
+    sfn.requestInject(span.context(), request)
+    expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
+  })
+
+  it('will not inject trace context if the input is a number', () => {
+    const sfn = new Stepfunctions(tracer)
+    const request = {
+      params: {
+        input: JSON.stringify(1024)
+      },
+      operation: 'startSyncExecution'
+    }
+
+    sfn.requestInject(span.context(), request)
+    expect(request.params).to.deep.equal({ 'input': '1024' })
+  })
+
+  it('will not inject trace context if the input is a boolean', () => {
+    const sfn = new Stepfunctions(tracer)
+    const request = {
+      params: {
+        input: JSON.stringify(true)
+      },
+      operation: 'startSyncExecution'
+    }
+
+    sfn.requestInject(span.context(), request)
+    expect(request.params).to.deep.equal({ 'input': 'true' })
+  })
 })
