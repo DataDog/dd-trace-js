@@ -16,7 +16,6 @@ const {
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  getTestSuitePath,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED
@@ -141,6 +140,7 @@ class JestPlugin extends CiPlugin {
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddRepositoryRoot = this.repositoryRoot
       })
     })
 
@@ -311,7 +311,7 @@ class JestPlugin extends CiPlugin {
       testParameters,
       frameworkVersion,
       testStartLine,
-      testFileAbsolutePath,
+      testSourceFile,
       isNew,
       isEfdRetry
     } = test
@@ -324,12 +324,8 @@ class JestPlugin extends CiPlugin {
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
     }
-    if (testFileAbsolutePath) {
-      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
-    } else {
-      // If for whatever we don't have the full path, we'll set the source file to the suite name
-      extraTags[TEST_SOURCE_FILE] = suite
-    }
+    // If for whatever we don't have the source file, we'll fall back to the suite name
+    extraTags[TEST_SOURCE_FILE] = testSourceFile || suite
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
