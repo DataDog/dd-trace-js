@@ -61,45 +61,50 @@ class AgentExporter {
   }
 
   export ({ profiles, start, end, tags }) {
-    const types = Object.keys(profiles)
+    const fields = []
 
-    const fields = [
-      ['recording-start', start.toISOString()],
-      ['recording-end', end.toISOString()],
-      ['language', 'javascript'],
-      ['runtime', 'nodejs'],
-      ['runtime_version', process.version],
-      ['profiler_version', version],
-      ['format', 'pprof'],
+    function typeToFile (type) {
+      return `${type}.pprof`
+    }
 
-      ['tags[]', 'language:javascript'],
-      ['tags[]', 'runtime:nodejs'],
-      ['tags[]', `runtime_version:${process.version}`],
-      ['tags[]', `process_id:${process.pid}`],
-      ['tags[]', `profiler_version:${version}`],
-      ['tags[]', 'format:pprof'],
-      ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
-    ]
-
-    this._logger.debug(() => {
-      const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
-      return `Building agent export report: ${'\n' + body}`
+    const event = JSON.stringify({
+      attachments: Object.keys(profiles).map(typeToFile),
+      start: start.toISOString(),
+      end: end.toISOString(),
+      family: 'node',
+      version: '4',
+      tags_profiler: [
+        'language:javascript',
+        'runtime:nodejs',
+        `runtime_arch:${process.arch}`,
+        `runtime_os:${process.platform}`,
+        `runtime_version:${process.version}`,
+        `process_id:${process.pid}`,
+        `profiler_version:${version}`,
+        'format:pprof',
+        ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
+      ].join(',')
     })
 
-    for (let index = 0; index < types.length; index++) {
-      const type = types[index]
-      const buffer = profiles[type]
+    fields.push(['event', event, {
+      filename: 'event.json',
+      contentType: 'application/json'
+    }])
 
+    this._logger.debug(() => {
+      return `Building agent export report: \n${event}`
+    })
+
+    for (const [type, buffer] of Object.entries(profiles)) {
       this._logger.debug(() => {
         const bytes = buffer.toString('hex').match(/../g).join(' ')
         return `Adding ${type} profile to agent export: ` + bytes
       })
 
-      fields.push([`types[${index}]`, type])
-      fields.push([`data[${index}]`, buffer, {
-        filename: `${type}.pb.gz`,
-        contentType: 'application/octet-stream',
-        knownLength: buffer.length
+      const filename = typeToFile(type)
+      fields.push([filename, buffer, {
+        filename,
+        contentType: 'application/octet-stream'
       }])
     }
 
@@ -121,7 +126,11 @@ class AgentExporter {
         const options = {
           method: 'POST',
           path: '/profiling/v1/input',
-          headers: form.getHeaders(),
+          headers: {
+            'DD-EVP-ORIGIN': 'dd-trace-js',
+            'DD-EVP-ORIGIN-VERSION': version,
+            ...form.getHeaders()
+          },
           timeout: this._backoffTime * Math.pow(2, attempt)
         }
 
