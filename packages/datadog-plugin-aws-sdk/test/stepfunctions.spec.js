@@ -1,7 +1,7 @@
 /* eslint-disable max-len */
 'use strict'
 
-const Sfn = require('../src/services/sfn')
+const Stepfunctions = require('../src/services/stepfunctions')
 const tracer = require('../../dd-trace')
 
 describe('Sfn', () => {
@@ -46,7 +46,7 @@ describe('Sfn', () => {
     })
 
     it('generates tags for a start_execution', () => {
-      const sfn = new Sfn(tracer)
+      const sfn = new Stepfunctions(tracer)
       const params = {
         stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       }
@@ -57,7 +57,7 @@ describe('Sfn', () => {
     })
 
     it('generates tags for a start_execution with a name', () => {
-      const sfn = new Sfn(tracer)
+      const sfn = new Stepfunctions(tracer)
       const params = {
         stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2',
         name: 'my-execution'
@@ -69,7 +69,7 @@ describe('Sfn', () => {
     })
 
     it('injects trace context into StepFunction start_execution requests', () => {
-      const sfn = new Sfn(tracer)
+      const sfn = new Stepfunctions(tracer)
       const request = {
         params: {
           input: JSON.stringify({ 'foo': 'bar' })
