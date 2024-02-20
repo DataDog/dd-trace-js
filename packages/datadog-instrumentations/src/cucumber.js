@@ -367,17 +367,20 @@ function getWrappedRunTest (runTestFunction) {
 
       testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
     }
-    const isNew = isNewTest(testSuitePath, test.name)
-    if (isNew) {
-      numRetriesByPickleId.set(pickleId, 0)
+
+    let isNew = false
+
+    if (isEarlyFlakeDetectionEnabled) {
+      isNew = isNewTest(testSuitePath, test.name)
+      if (isNew) {
+        numRetriesByPickleId.set(pickleId, 0)
+      }
     }
-    // We run the test once
     const runTestCaseResult = await runTestFunction.apply(this, arguments)
 
     const testStatus = lastStatusByPickleId.get(pickleId)
-
     // If it's a new test and it hasn't been skipped, we run it again
-    if (testStatus !== 'skip' && isNew) {
+    if (isEarlyFlakeDetectionEnabled && testStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickleId, retryIndex + 1)
         await runTestFunction.apply(this, arguments)
