@@ -6,6 +6,7 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
+const logs = require('./logs')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -210,6 +211,7 @@ function createPayload (currReqType, currPayload = {}) {
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     metricsManager.send(config, application, host)
+    logs.send(config, application, host)
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
@@ -243,6 +245,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
+  logs.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
