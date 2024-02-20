@@ -20,7 +20,7 @@ function iterateObject (target, fn, levelKeys = [], depth = 50) {
 
     fn(val, nextLevelKeys, target, key)
 
-    if (val !== null && typeof val === 'object') {
+    if (val !== null && typeof val === 'object' && depth > 0) {
       iterateObject(val, fn, nextLevelKeys, depth - 1)
     }
   })
