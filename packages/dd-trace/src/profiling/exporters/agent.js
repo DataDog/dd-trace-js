@@ -9,6 +9,8 @@ const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
+const os = require('os')
+const perf = require('perf_hooks').performance
 
 const containerId = docker.id()
 
@@ -50,7 +52,7 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout } = {}) {
+  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
     this._url = url
     this._logger = logger
 
@@ -58,6 +60,10 @@ class AgentExporter {
 
     this._backoffTime = backoffTime
     this._backoffTries = backoffTries
+    this._env = env
+    this._host = host
+    this._service = service
+    this._appVersion = version
   }
 
   export ({ profiles, start, end, tags }) {
@@ -83,7 +89,28 @@ class AgentExporter {
         `profiler_version:${version}`,
         'format:pprof',
         ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
-      ].join(',')
+      ].join(','),
+      info: {
+        application: {
+          env: this._env,
+          service: this._service,
+          start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
+          version: this._appVersion
+        },
+        platform: {
+          hostname: this._host,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version()
+        },
+        profiler: {
+          version
+        },
+        runtime: {
+          engine: 'node',
+          version: process.version.substring(1) // strip off leading 'v'
+        }
+      }
     })
 
     fields.push(['event', event, {
