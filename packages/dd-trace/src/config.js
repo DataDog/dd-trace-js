@@ -105,7 +105,11 @@ function propagationStyle (key, option, defaultValue) {
 
 class Config {
   constructor (options) {
-    options = this.options = options || {}
+    options = this.options = {
+      ...options,
+      appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
+      iastOptions: options?.experimental?.iast
+    }
 
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
@@ -178,11 +182,6 @@ class Config {
       false
     )
 
-    options = this.options = {
-      ...options,
-      appsec: options.appsec != null ? options.appsec : options.experimental && options.experimental.appsec
-    }
-
     if (typeof options.appsec === 'boolean') {
       options.appsec = {
         enabled: options.appsec
@@ -211,11 +210,6 @@ class Config {
       parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
       0.1
     )
-
-    options = this.options = {
-      ...options,
-      iastOptions: options?.experimental?.iast
-    }
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
     const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
@@ -545,7 +539,10 @@ class Config {
       DD_TRACE_TAGS,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
-      DD_VERSION
+      DD_VERSION,
+      FUNCTION_NAME,
+      K_SERVICE,
+      WEBSITE_SITE_NAME
     } = process.env
 
     const tags = {}
@@ -617,7 +614,8 @@ class Config {
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
+    this._setString(env, 'service',
+      DD_SERVICE || DD_SERVICE_NAME || AWS_LAMBDA_FUNCTION_NAME || FUNCTION_NAME || K_SERVICE || WEBSITE_SITE_NAME)
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
