@@ -105,6 +105,7 @@ function propagationStyle (key, option, defaultValue) {
 
 class Config {
   constructor (options) {
+    options = this.options = options || {}
     options = this.options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
