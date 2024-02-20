@@ -52,9 +52,9 @@ function stop () {
 function send (config, application, host) {
   if (!enabled) return
 
-  const logs = { 'logs': logCollector.drain() }
+  const logs = logCollector.drain()
   if (logs) {
-    sendData(config, application, host, 'logs', logs)
+    sendData(config, application, host, 'logs', { logs })
   }
 }
 
