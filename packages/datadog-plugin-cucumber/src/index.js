@@ -15,7 +15,10 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -46,7 +49,8 @@ class CucumberPlugin extends CiPlugin {
       numSkippedSuites,
       testCodeCoverageLinesTotal,
       hasUnskippableSuites,
-      hasForcedToRunSuites
+      hasForcedToRunSuites,
+      isEarlyFlakeDetectionEnabled
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -63,6 +67,9 @@ class CucumberPlugin extends CiPlugin {
           hasForcedToRunSuites
         }
       )
+      if (isEarlyFlakeDetectionEnabled) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+      }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -137,11 +144,23 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isNew, isEfdRetry }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
-      const testSpan = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine)
+
+      const extraTags = {
+        [TEST_SOURCE_START]: testSourceLine,
+        [TEST_SOURCE_FILE]: testSourceFile
+      }
+      if (isNew) {
+        extraTags[TEST_IS_NEW] = 'true'
+        if (isEfdRetry) {
+          extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
+        }
+      }
+
+      const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
     })
@@ -193,15 +212,12 @@ class CucumberPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite, testSourceFile, testSourceLine) {
+  startTestSpan (testName, testSuite, extraTags) {
     return super.startTestSpan(
       testName,
       testSuite,
       this.testSuiteSpan,
-      {
-        [TEST_SOURCE_START]: testSourceLine,
-        [TEST_SOURCE_FILE]: testSourceFile
-      }
+      extraTags
     )
   }
 }
