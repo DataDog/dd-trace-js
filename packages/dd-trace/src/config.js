@@ -569,7 +569,7 @@ class Config {
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
-    if (AWS_LAMBDA_FUNCTION_NAME !== undefined) this._setValue(env, 'flushInterval', 0)
+    if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
@@ -661,7 +661,9 @@ class Config {
       options.experimental && options.experimental.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
-    if (parseInt(options.flushInterval, 10)) this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    if (!isNaN(parseInt(options.flushInterval, 10))) {
+      this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
+    }
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
