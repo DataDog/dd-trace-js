@@ -257,7 +257,7 @@ class Config {
 
     // TODO: refactor
     this.apiKey = DD_API_KEY
-    this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
+    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
@@ -539,10 +539,7 @@ class Config {
       DD_TRACE_TAGS,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
-      DD_VERSION,
-      FUNCTION_NAME,
-      K_SERVICE,
-      WEBSITE_SITE_NAME
+      DD_VERSION
     } = process.env
 
     const tags = {}
@@ -614,8 +611,7 @@ class Config {
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service',
-      DD_SERVICE || DD_SERVICE_NAME || AWS_LAMBDA_FUNCTION_NAME || FUNCTION_NAME || K_SERVICE || WEBSITE_SITE_NAME)
+    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
