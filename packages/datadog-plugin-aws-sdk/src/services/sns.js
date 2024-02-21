@@ -98,10 +98,13 @@ class Sns extends BaseAwsSdkPlugin {
   }
 
   setDSMCheckpoint (span, params, topicArn) {
-    const payloadSize = getHeadersSize(params)
-    const dataStreamsContext = this.tracer
-      .setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
-    return dataStreamsContext
+    // only set a checkpoint if publishing to a topic
+    if (topicArn) {
+      const payloadSize = getHeadersSize(params)
+      const dataStreamsContext = this.tracer
+        .setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
+      return dataStreamsContext
+    }
   }
 }
 
