@@ -893,7 +893,7 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
-            it('retries flaky tests', (done) => {
+            it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
               const NUM_RETRIES_EFD = 3
               receiver.setSettings({
                 itr_enabled: false,
@@ -937,7 +937,8 @@ versions.forEach(version => {
                   stdio: 'pipe'
                 }
               )
-              childProcess.on('exit', () => {
+              childProcess.on('exit', (exitCode) => {
+                assert.equal(exitCode, 0)
                 eventsPromise.then(() => {
                   done()
                 }).catch(done)

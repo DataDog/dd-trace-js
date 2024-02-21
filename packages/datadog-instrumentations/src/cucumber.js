@@ -95,6 +95,16 @@ function isNewTest (testSuite, testName) {
   return !knownTests.includes(`cucumber.${testSuite}.${testName}`)
 }
 
+function getTestStatusFromRetries (testStatuses) {
+  if (testStatuses.every(status => status === 'fail')) {
+    return 'fail'
+  }
+  if (testStatuses.some(status => status === 'pass')) {
+    return 'pass'
+  }
+  return 'pass'
+}
+
 function wrapRun (pl, isLatestVersion) {
   if (patched.has(pl)) return
 
@@ -123,7 +133,11 @@ function wrapRun (pl, isLatestVersion) {
           const { status, skipReason, errorMessage } = isLatestVersion
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
-          lastStatusByPickleId.set(this.pickle.id, status)
+          if (lastStatusByPickleId.has(this.pickle.id)) {
+            lastStatusByPickleId.get(this.pickle.id).push(status)
+          } else {
+            lastStatusByPickleId.set(this.pickle.id, [status])
+          }
           let isNew = false
           let isEfdRetry = false
           if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
@@ -375,13 +389,27 @@ function getWrappedRunTest (runTestFunction) {
     }
     const runTestCaseResult = await runTestFunction.apply(this, arguments)
 
-    const testStatus = lastStatusByPickleId.get(pickleId)
+    const testStatuses = lastStatusByPickleId.get(pickleId)
+    const lastTestStatus = testStatuses[testStatuses.length - 1]
     // If it's a new test and it hasn't been skipped, we run it again
-    if (isEarlyFlakeDetectionEnabled && testStatus !== 'skip' && isNew) {
+    if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
         numRetriesByPickleId.set(pickleId, retryIndex + 1)
         await runTestFunction.apply(this, arguments)
-        // TODO: get test status from each retry
+      }
+    }
+    let testStatus = lastTestStatus
+    if (isEarlyFlakeDetectionEnabled) {
+      /**
+       * If Early Flake Detection (EFD) is enabled the logic is as follows:
+       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+       * - If just a single attempt passes, we will prevent the test process from failing.
+       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+       */
+      testStatus = getTestStatusFromRetries(testStatuses)
+      if (testStatus === 'pass') {
+        this.success = true
       }
     }
 
