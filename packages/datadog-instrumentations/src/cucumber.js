@@ -261,10 +261,6 @@ function getWrappedStart (start, frameworkVersion) {
 
     const configurationResponse = await configPromise
 
-    if (configurationResponse.err) {
-      return start.apply(this, arguments)
-    }
-
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
 
