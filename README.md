@@ -80,10 +80,17 @@ but code loaded using `import` might not always work.
 
 Use the following command to enable experimental ESM support with your application:
 
+Node.js < v20
+
 ```sh
 node --loader dd-trace/loader-hook.mjs entrypoint.js
 ```
 
+Node.js >= v20
+
+```sh
+node --import dd-trace/register entrypoint.js
+```
 
 ## Serverless / Lambda
 
