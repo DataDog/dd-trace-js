@@ -350,6 +350,51 @@ describe('Sns', () => {
           })
         })
       })
+
+      it('outputs DSM stats to the agent when publishing batch messages', done => {
+        agent.expectPipelineStats(dsmStats => {
+          let statsPointsReceived = 0
+          // we should have 5 dsm stats points
+          dsmStats.forEach((timeStatsBucket) => {
+            if (timeStatsBucket && timeStatsBucket.Stats) {
+              timeStatsBucket.Stats.forEach((statsBuckets) => {
+                statsPointsReceived += statsBuckets.Stats.length
+              })
+            }
+          })
+          expect(statsPointsReceived).to.be.at.least(5)
+          expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+        }).then(done, done)
+
+        sns.subscribe(subParams, () => {
+          sns.publishBatch(
+            {
+              TopicArn,
+              PublishBatchRequestEntries: [
+                {
+                  Id: 1,
+                  Message: 'message DSM 1'
+                },
+                {
+                  Id: 2,
+                  Message: 'message DSM 2'
+                },
+                {
+                  Id: 3,
+                  Message: 'message DSM 3'
+                },
+                {
+                  Id: 4,
+                  Message: 'message DSM 4'
+                },
+                {
+                  Id: 5,
+                  Message: 'message DSM 5'
+                }
+              ]
+            }, () => {})
+        })
+      })
     })
   })
 })

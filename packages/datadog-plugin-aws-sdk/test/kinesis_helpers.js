@@ -45,6 +45,34 @@ function putTestRecord (kinesis, streamName, data, cb) {
   }, cb)
 }
 
+function putTestRecords (kinesis, streamName, data, cb) {
+  kinesis.putRecords({
+    Records: [
+      {
+        PartitionKey: id().toString(),
+        Data: data
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: data
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: data
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: data
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: data
+      }
+    ],
+    StreamName: streamName
+  }, cb)
+}
+
 function waitForActiveStream (kinesis, streamName, cb) {
   kinesis.describeStream({
     StreamName: streamName
@@ -74,6 +102,7 @@ module.exports = {
   getTestData,
   getTestRecord,
   putTestRecord,
+  putTestRecords,
   waitForActiveStream,
   waitForDeletedStream
 }

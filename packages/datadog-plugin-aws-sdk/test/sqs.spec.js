@@ -434,6 +434,49 @@ describe('Plugin', () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
           })
         })
+
+        it('Should emit DSM stats to the agent when sending batch messages', done => {
+          agent.expectPipelineStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 5 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(5)
+            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          }).then(done, done)
+
+          sqs.sendMessageBatch(
+            {
+              Entries: [
+                {
+                  Id: 1,
+                  MessageBody: 'test DSM 1'
+                },
+                {
+                  Id: 2,
+                  MessageBody: 'test DSM 2'
+                },
+                {
+                  Id: 3,
+                  MessageBody: 'test DSM 3'
+                },
+                {
+                  Id: 4,
+                  MessageBody: 'test DSM 4'
+                },
+                {
+                  Id: 5,
+                  MessageBody: 'test DSM 5'
+                }
+              ],
+              QueueUrl: QueueUrlDsm
+            }, () => {})
+        })
       })
     })
   })
