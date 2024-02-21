@@ -142,7 +142,6 @@ class Config {
       process.env.DD_API_KEY
     )
 
-    const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
 
     // TODO: Remove the experimental env vars as a major?
@@ -636,7 +635,7 @@ class Config {
 
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
-    this._setBoolean(opts, 'appsec.customRulesProvided', !!options.appsec.rules)
+    if (options.appsec.rules) this._setBoolean(opts, 'appsec.customRulesProvided', true)
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
