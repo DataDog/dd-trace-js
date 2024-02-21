@@ -31,8 +31,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
 
-let defaultFlushInterval
-
 function maybeFile (filepath) {
   if (!filepath) return
   try {
@@ -254,11 +252,8 @@ class Config {
       })
     }
 
-    defaultFlushInterval = inAWSLambda ? 0 : 2000
-
     // TODO: refactor
     this.apiKey = DD_API_KEY
-    // this.flushInterval = coalesce(parseInt(options.flushInterval, 10), defaultFlushInterval)
     this.serviceMapping = DD_SERVICE_MAPPING
     this.tracePropagationStyle = {
       inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
@@ -389,7 +384,7 @@ class Config {
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
-    this._setValue(defaults, 'appsec.wafTimeout', 5e3)
+    this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setBoolean(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
@@ -433,7 +428,7 @@ class Config {
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setBoolean(defaults, 'remoteConfig.enabled', true)
-    this._setValue(defaults, 'remoteConfig.pollInterval', 5)
+    this._setValue(defaults, 'remoteConfig.pollInterval', 5) // seconds
     this._setBoolean(defaults, 'reportHostname', false)
     this._setBoolean(defaults, 'runtimeMetrics', false)
     this._setUnit(defaults, 'sampleRate', undefined)
@@ -557,7 +552,7 @@ class Config {
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
-    if (DD_APPSEC_RULES) this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
+    this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
@@ -641,7 +636,7 @@ class Config {
 
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
-    if (options.appsec.rules) this._setBoolean(opts, 'appsec.customRulesProvided', !!options.appsec.rules)
+    this._setBoolean(opts, 'appsec.customRulesProvided', !!options.appsec.rules)
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
@@ -941,17 +936,12 @@ class Config {
 }
 
 function maybeInt (number) {
-  if (!isNaN(parseInt(number))) {
-    return parseInt(number)
-  }
-  return undefined
+  const parsed = parseInt(number)
+  return isNaN(parsed) ? undefined : parsed
 }
-
 function maybeFloat (number) {
-  if (!isNaN(parseFloat(number))) {
-    return parseFloat(number)
-  }
-  return undefined
+  const parsed = parseFloat(number)
+  return isNaN(parsed) ? undefined : parsed
 }
 
 function getAgentUrl (url, options) {
