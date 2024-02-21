@@ -17,12 +17,15 @@ const semver = require('semver')
 
 async function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
+  const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   const resultPromise = agent.assertMessageReceived(({ headers, payload, files }) => {
     assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-    assert.propertyVal(payload, 'format', 'pprof')
-    assert.deepPropertyVal(payload, 'types', expectedProfileTypes)
-    for (const [index, profileType] of expectedProfileTypes.entries()) {
-      assert.propertyVal(files[index], 'originalname', `${profileType}.pb.gz`)
+    assert.propertyVal(files[0], 'originalname', 'event.json')
+    const event = JSON.parse(files[0].buffer.toString())
+    assert.propertyVal(event, 'family', 'node')
+    assert.deepPropertyVal(event, 'attachments', fileNames)
+    for (const [index, fileName] of fileNames.entries()) {
+      assert.propertyVal(files[index + 1], 'originalname', fileName)
     }
   }, timeout, multiplicity)
 
