@@ -144,7 +144,7 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isNew, isEfdRetry }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
@@ -153,13 +153,6 @@ class CucumberPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testSourceLine,
         [TEST_SOURCE_FILE]: testSourceFile
       }
-      if (isNew) {
-        extraTags[TEST_IS_NEW] = 'true'
-        if (isEfdRetry) {
-          extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
-        }
-      }
-
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
@@ -179,11 +172,18 @@ class CucumberPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage }) => {
+    this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage, isNew, isEfdRetry }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
       span.setTag(statusTag, status)
+
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+        }
+      }
 
       if (skipReason) {
         span.setTag(TEST_SKIP_REASON, skipReason)

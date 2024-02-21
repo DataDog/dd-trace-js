@@ -111,17 +111,10 @@ function wrapRun (pl, isLatestVersion) {
 
       const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
-      const numRetries = numRetriesByPickleId.get(this.pickle.id)
-
-      const isNew = numRetries !== undefined
-      const isEfdRetry = numRetries > 0
-
       testStartCh.publish({
         testName: this.pickle.name,
         testFileAbsolutePath,
-        testSourceLine,
-        isNew,
-        isEfdRetry
+        testSourceLine
       })
       try {
         const promise = run.apply(this, arguments)
@@ -131,7 +124,15 @@ function wrapRun (pl, isLatestVersion) {
             ? getStatusFromResultLatest(result) : getStatusFromResult(result)
 
           lastStatusByPickleId.set(this.pickle.id, status)
-          testFinishCh.publish({ status, skipReason, errorMessage })
+          let isNew = false
+          let isEfdRetry = false
+          if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+            const numRetries = numRetriesByPickleId.get(this.pickle.id)
+
+            isNew = numRetries !== undefined
+            isEfdRetry = numRetries > 0
+          }
+          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry })
         })
         return promise
       } catch (err) {
