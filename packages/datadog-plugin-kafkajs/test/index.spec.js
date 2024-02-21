@@ -269,6 +269,7 @@ describe('Plugin', () => {
 
             const spy = sinon.spy(() => {
               expect(tracer.scope().active()).to.not.be.null
+              afterStart.unsubscribe(spy)
             })
             afterStart.subscribe(spy)
 
@@ -287,8 +288,6 @@ describe('Plugin', () => {
                 const name = spy.firstCall.args[1]
                 expect(name).to.eq(afterStart.name)
 
-                afterStart.unsubscribe(spy)
-
                 done()
               }
             }).then(() => sendMessages(kafka, testTopic, messages))
@@ -299,6 +298,7 @@ describe('Plugin', () => {
 
             const spy = sinon.spy(() => {
               expect(tracer.scope().active()).to.not.be.null
+              beforeFinish.unsubscribe(spy)
             })
             beforeFinish.subscribe(spy)
 
@@ -306,8 +306,6 @@ describe('Plugin', () => {
               eachMessage: () => {
                 setImmediate(() => {
                   expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
-
-                  beforeFinish.unsubscribe(spy)
 
                   done()
                 })
