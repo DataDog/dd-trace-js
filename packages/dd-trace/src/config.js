@@ -350,7 +350,7 @@ class Config {
     this._merge()
   }
 
-  _isInServerlessEnvirontment () {
+  _isInServerlessEnvironment() {
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const isGCPFunction = getIsGCPFunction()
     const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
