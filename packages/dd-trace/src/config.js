@@ -103,11 +103,11 @@ function propagationStyle (key, option, defaultValue) {
 
 class Config {
   constructor (options) {
-    options = this.options = options || {}
+    options = options || {}
     options = this.options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iastOptions: options?.experimental?.iast
+      iastOptions: options.experimental?.iast
     }
 
     // Configure the logger first so it can be used to warn about other configs
