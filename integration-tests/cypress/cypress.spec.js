@@ -26,7 +26,8 @@ const {
   TEST_ITR_SKIPPING_COUNT,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN
+  TEST_ITR_FORCED_RUN,
+  TEST_SOURCE_FILE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const semver = require('semver')
@@ -70,7 +71,8 @@ moduleType.forEach(({
     }
 
     before(async () => {
-      sandbox = await createSandbox([`cypress@${version}`], true)
+      // cypress-fail-fast is required as an incompatible plugin
+      sandbox = await createSandbox([`cypress@${version}`, `cypress-fail-fast@7.1.0`], true)
       cwd = sandbox.folder
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
@@ -282,6 +284,10 @@ moduleType.forEach(({
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
+            // Can read DD_TAGS
+            assert.propertyVal(meta, 'test.customtag', 'customvalue')
+            assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
           })
         }, 25000)
 
@@ -296,7 +302,8 @@ moduleType.forEach(({
           cwd,
           env: {
             ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
           },
           stdio: 'pipe'
         }
@@ -775,6 +782,47 @@ moduleType.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('still reports correct format if there is a plugin incompatibility', (done) => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+
+          testEvents.forEach(testEvent => {
+            assert.exists(testEvent.content.test_suite_id)
+            assert.exists(testEvent.content.test_module_id)
+            assert.exists(testEvent.content.test_session_id)
+            assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
+          })
+        })
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })

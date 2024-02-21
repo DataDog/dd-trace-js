@@ -24,7 +24,8 @@ const {
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -45,7 +46,8 @@ const {
   GIT_REPOSITORY_URL,
   GIT_COMMIT_SHA,
   GIT_BRANCH,
-  CI_PROVIDER_NAME
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH
 } = require('../../dd-trace/src/plugins/util/tags')
 const {
   OS_VERSION,
@@ -113,7 +115,8 @@ function getSuiteStatus (suiteStats) {
   if (suiteStats.failures !== undefined && suiteStats.failures > 0) {
     return 'fail'
   }
-  if (suiteStats.tests !== undefined && suiteStats.tests === suiteStats.pending) {
+  if (suiteStats.tests !== undefined &&
+    (suiteStats.tests === suiteStats.pending || suiteStats.tests === suiteStats.skipped)) {
     return 'skip'
   }
   return 'pass'
@@ -186,7 +189,8 @@ module.exports = (on, config) => {
     [RUNTIME_NAME]: runtimeName,
     [RUNTIME_VERSION]: runtimeVersion,
     [GIT_BRANCH]: branch,
-    [CI_PROVIDER_NAME]: ciProviderName
+    [CI_PROVIDER_NAME]: ciProviderName,
+    [CI_WORKSPACE_PATH]: repositoryRoot
   } = testEnvironmentMetadata
 
   const isUnsupportedCIProvider = !ciProviderName
@@ -205,7 +209,7 @@ module.exports = (on, config) => {
     testLevel: 'test'
   }
 
-  const codeOwnersEntries = getCodeOwnersFileEntries()
+  const codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
   let activeSpan = null
   let testSessionSpan = null
@@ -243,6 +247,10 @@ module.exports = (on, config) => {
     if (testSessionSpan && testModuleSpan) {
       testSuiteTags[TEST_SESSION_ID] = testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_MODULE_ID] = testModuleSpan.context().toSpanId()
+      // If testSuiteSpan couldn't be created, we'll use the testModuleSpan as the parent
+      if (!testSuiteSpan) {
+        testSuiteTags[TEST_SUITE_ID] = testModuleSpan.context().toSpanId()
+      }
     }
 
     const {
@@ -279,6 +287,19 @@ module.exports = (on, config) => {
         ...testSpanMetadata,
         ...testEnvironmentMetadata,
         ...testSuiteTags
+      }
+    })
+  }
+
+  function getTestSuiteSpan (suite) {
+    const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+    ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+    return tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+      childOf: testModuleSpan,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...testEnvironmentMetadata,
+        ...testSuiteSpanMetadata
       }
     })
   }
@@ -346,6 +367,13 @@ module.exports = (on, config) => {
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
+    if (!testSuiteSpan) {
+      // dd:testSuiteStart hasn't been triggered for whatever reason
+      // We will create the test suite span on the spot if that's the case
+      log.warn('There was an error creating the test suite event.')
+      testSuiteSpan = getTestSuiteSpan(spec.relative)
+    }
+
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
     cypressTests.filter(({ title }) => {
@@ -359,6 +387,11 @@ module.exports = (on, config) => {
         cypressTestName === test.name && spec.relative === test.suite
       )
       const skippedTestSpan = getTestSpan(cypressTestName, spec.relative)
+      if (spec.absolute && repositoryRoot) {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+      }
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
@@ -389,6 +422,11 @@ module.exports = (on, config) => {
       }
       if (itrCorrelationId) {
         finishedTest.testSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+      }
+      if (spec.absolute && repositoryRoot) {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, repositoryRoot))
+      } else {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
       }
       finishedTest.testSpan.finish(finishedTest.finishTime)
     })
@@ -457,16 +495,7 @@ module.exports = (on, config) => {
       if (testSuiteSpan) {
         return null
       }
-      const testSuiteSpanMetadata = getTestSuiteCommonTags(command, frameworkVersion, suite, TEST_FRAMEWORK_NAME)
-      testSuiteSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
-        childOf: testModuleSpan,
-        tags: {
-          [COMPONENT]: TEST_FRAMEWORK_NAME,
-          ...testEnvironmentMetadata,
-          ...testSuiteSpanMetadata
-        }
-      })
-      ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+      testSuiteSpan = getTestSuiteSpan(suite)
       return null
     },
     'dd:beforeEach': (test) => {

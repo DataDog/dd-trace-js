@@ -17,5 +17,6 @@ module.exports = {
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
+  responseBody: dc.channel('datadog:express:response:json:start'),
   responseEnd: dc.channel('apm:http:server:response:end:start')
 }

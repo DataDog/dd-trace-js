@@ -9,7 +9,9 @@ const {
   getTestSuitePath,
   getTestSuiteCommonTags,
   TEST_SOURCE_START,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SOURCE_FILE,
+  TEST_CONFIGURATION_BROWSER_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -76,10 +78,11 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine }) => {
+    this.addSub('ci:playwright:test:start', ({ testName, testSuiteAbsolutePath, testSourceLine, browserName }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const span = this.startTestSpan(testName, testSuite, testSourceLine)
+      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const span = this.startTestSpan(testName, testSuite, testSourceFile, testSourceLine, browserName)
 
       this.enter(span, store)
     })
@@ -126,9 +129,20 @@ class PlaywrightPlugin extends CiPlugin {
     })
   }
 
-  startTestSpan (testName, testSuite, testSourceLine) {
+  startTestSpan (testName, testSuite, testSourceFile, testSourceLine, browserName) {
     const testSuiteSpan = this._testSuites.get(testSuite)
-    return super.startTestSpan(testName, testSuite, testSuiteSpan, { [TEST_SOURCE_START]: testSourceLine })
+
+    const extraTags = {
+      [TEST_SOURCE_START]: testSourceLine
+    }
+    if (testSourceFile) {
+      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
+    }
+    if (browserName) {
+      extraTags[TEST_CONFIGURATION_BROWSER_NAME] = browserName
+    }
+
+    return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }
 }
 

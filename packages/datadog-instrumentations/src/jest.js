@@ -9,7 +9,9 @@ const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
-  getTestParametersString
+  getTestParametersString,
+  EFD_STRING,
+  removeEfdStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -38,10 +40,15 @@ const testErrCh = channel('ci:jest:test:err')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
+const knownTestsCh = channel('ci:jest:known-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
+// Maximum time we'll wait for the tracer to flush
+const FLUSH_TIMEOUT = 10000
+
 let skippableSuites = []
+let knownTests = []
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
@@ -49,6 +56,8 @@ let isSuitesSkipped = false
 let numSkippedSuites = 0
 let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
@@ -62,6 +71,7 @@ const specStatusToTestStatus = {
 
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
+const retriedTestsToNumAttempts = new Map()
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -90,6 +100,10 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
+function getEfdTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
+}
+
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -101,6 +115,44 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.global._ddtrace = global._ddtrace
 
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
+
+      const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
+
+      if (repositoryRoot) {
+        this.testSourceFile = getTestSuitePath(context.testPath, repositoryRoot)
+      }
+
+      this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
+
+      if (this.isEarlyFlakeDetectionEnabled) {
+        earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
+        try {
+          this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+        } catch (e) {
+          // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
+          this.isEarlyFlakeDetectionEnabled = false
+        }
+      }
+    }
+
+    // Function that receives a list of known tests for a test service and
+    // returns the ones that belong to the current suite
+    getKnownTestsForSuite (knownTests) {
+      let knownTestsForSuite = knownTests
+      // If jest runs in band, the known tests are not serialized, so they're an array.
+      if (!Array.isArray(knownTests)) {
+        knownTestsForSuite = JSON.parse(knownTestsForSuite)
+      }
+      return knownTestsForSuite
+        .filter(test => test.includes(this.testSuite))
+        .map(test => test.replace(`jest.${this.testSuite}.`, '').trim())
+    }
+
+    // Add the `add_test` event we don't have the test object yet, so
+    // we use its describe block to get the full name
+    getTestNameFromAddTestEvent (event, state) {
+      const describeSuffix = getJestTestName(state.currentDescribeBlock)
+      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`).trim()
     }
 
     async handleTestEvent (event, state) {
@@ -124,22 +176,55 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'test_start') {
+        let isNewTest = false
+        let numEfdRetry = null
         const testParameters = getTestParametersString(this.nameToParams, event.test.name)
         // Async resource for this test is created here
         // It is used later on by the test_done handler
         const asyncResource = new AsyncResource('bound-anonymous-fn')
         asyncResources.set(event.test, asyncResource)
+        const testName = getJestTestName(event.test)
+
+        if (this.isEarlyFlakeDetectionEnabled) {
+          const originalTestName = removeEfdStringFromTestName(testName)
+          isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+          if (isNewTest) {
+            numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
+            retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
+          }
+        }
+
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
-            name: getJestTestName(event.test),
+            name: removeEfdStringFromTestName(testName),
             suite: this.testSuite,
+            testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
             testParameters,
-            frameworkVersion: jestVersion
+            frameworkVersion: jestVersion,
+            isNew: isNewTest,
+            isEfdRetry: numEfdRetry > 0
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
         })
+      }
+      if (event.name === 'add_test') {
+        if (this.isEarlyFlakeDetectionEnabled) {
+          const testName = this.getTestNameFromAddTestEvent(event, state)
+          const isNew = !this.knownTestsForThisSuite?.includes(testName)
+          const isSkipped = event.mode === 'todo' || event.mode === 'skip'
+          if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
+            retriedTestsToNumAttempts.set(testName, 0)
+            for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+              if (this.global.test) {
+                this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+              } else {
+                log.error('Early flake detection could not retry test because global.test is undefined')
+              }
+            }
+          }
+        }
       }
       if (event.name === 'test_done') {
         const asyncResource = asyncResources.get(event.test)
@@ -164,6 +249,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           testSkippedCh.publish({
             name: getJestTestName(event.test),
             suite: this.testSuite,
+            testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
@@ -206,7 +292,7 @@ addHook({
     }
     // TODO: could we get the rootDir from each test?
     const [test] = shardedTests
-    const rootDir = test && test.context && test.context.config && test.context.config.rootDir
+    const rootDir = test?.context?.config?.rootDir
 
     const jestSuitesToRun = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
 
@@ -247,9 +333,30 @@ function cliWrapper (cli, jestVersion) {
       if (!err) {
         isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
         isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
       }
     } catch (err) {
       log.error(err)
+    }
+
+    if (isEarlyFlakeDetectionEnabled) {
+      const knownTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        knownTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+        if (!err) {
+          knownTests = receivedKnownTests
+        }
+      } catch (err) {
+        log.error(err)
+      }
     }
 
     if (isSuitesSkippingEnabled) {
@@ -311,6 +418,21 @@ function cliWrapper (cli, jestVersion) {
       status = 'fail'
       error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
     }
+    let timeoutId
+
+    // Pass the resolve callback to defer it to DC listener
+    const flushPromise = new Promise((resolve) => {
+      onDone = () => {
+        clearTimeout(timeoutId)
+        resolve()
+      }
+    })
+
+    const timeoutPromise = new Promise((resolve) => {
+      timeoutId = setTimeout(() => {
+        resolve('timeout')
+      }, FLUSH_TIMEOUT).unref()
+    })
 
     sessionAsyncResource.runInAsyncScope(() => {
       testSessionFinishCh.publish({
@@ -322,9 +444,16 @@ function cliWrapper (cli, jestVersion) {
         numSkippedSuites,
         hasUnskippableSuites,
         hasForcedToRunSuites,
-        error
+        error,
+        isEarlyFlakeDetectionEnabled,
+        onDone
       })
     })
+    const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+    if (waitingResult === 'timeout') {
+      log.error('Timeout waiting for the tracer to flush')
+    }
 
     numSkippedSuites = 0
 
@@ -438,9 +567,14 @@ function configureTestEnvironment (readConfigsResult) {
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+    config.testEnvironmentOptions._ddKnownTests = knownTests
   })
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+
+  if (readConfigsResult.globalConfig.forceExit) {
+    log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
+  }
 
   if (isCodeCoverageEnabled) {
     const globalConfig = {
@@ -498,6 +632,10 @@ addHook({
       _ddForcedToRun,
       _ddUnskippable,
       _ddItrCorrelationId,
+      _ddKnownTests,
+      _ddIsEarlyFlakeDetectionEnabled,
+      _ddEarlyFlakeDetectionNumRetries,
+      _ddRepositoryRoot,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 

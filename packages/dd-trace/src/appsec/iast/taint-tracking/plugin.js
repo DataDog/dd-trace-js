@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString } = require('./operations')
+const { taintObject, newTaintedString, getRanges } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -65,6 +65,18 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       }
     )
 
+    this.addSub(
+      { channelName: 'apm:graphql:resolve:start', tag: HTTP_REQUEST_BODY },
+      (data) => {
+        const iastContext = getIastContext(storage.getStore())
+        const source = data.context?.source
+        const ranges = source && getRanges(iastContext, source)
+        if (ranges?.length) {
+          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
+        }
+      }
+    )
+
     // this is a special case to increment INSTRUMENTED_SOURCE metric for header
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
   }
@@ -103,14 +115,6 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   taintRequest (req, iastContext) {
     this.taintHeaders(req.headers, iastContext)
     this.taintUrl(req, iastContext)
-  }
-
-  enable () {
-    this.configure(true)
-  }
-
-  disable () {
-    this.configure(false)
   }
 }
 

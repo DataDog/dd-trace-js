@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -261,6 +262,55 @@ describe('Plugin', () => {
             runResult
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
+          })
+
+          it('should publish on afterStart channel', (done) => {
+            const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+              afterStart.unsubscribe(spy)
+            })
+            afterStart.subscribe(spy)
+
+            consumer.run({
+              eachMessage: () => {
+                expect(spy).to.have.been.calledOnce
+
+                const channelMsg = spy.firstCall.args[0]
+                expect(channelMsg).to.not.undefined
+                expect(channelMsg.topic).to.eq(testTopic)
+                expect(channelMsg.message.key).to.not.undefined
+                expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
+                expect(channelMsg.message.value).to.not.undefined
+                expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+
+                const name = spy.firstCall.args[1]
+                expect(name).to.eq(afterStart.name)
+
+                done()
+              }
+            }).then(() => sendMessages(kafka, testTopic, messages))
+          })
+
+          it('should publish on beforeFinish channel', (done) => {
+            const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+              beforeFinish.unsubscribe(spy)
+            })
+            beforeFinish.subscribe(spy)
+
+            consumer.run({
+              eachMessage: () => {
+                setImmediate(() => {
+                  expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+
+                  done()
+                })
+              }
+            }).then(() => sendMessages(kafka, testTopic, messages))
           })
 
           withNamingSchema(

@@ -13,6 +13,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { ORIGIN_KEY } = require('./constants')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -109,10 +110,6 @@ class Config {
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel, this)
 
-    const DD_TRACING_ENABLED = coalesce(
-      process.env.DD_TRACING_ENABLED,
-      true
-    )
     const DD_PROFILING_ENABLED = coalesce(
       options.profiling, // TODO: remove when enabled by default
       process.env.DD_EXPERIMENTAL_PROFILING_ENABLED,
@@ -170,6 +167,11 @@ class Config {
     const DD_CIVISIBILITY_MANUAL_API_ENABLED = coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
       false
+    )
+
+    const DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = coalesce(
+      process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      true
     )
 
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
@@ -416,10 +418,11 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       'safe'
     ).toLowerCase()
-    const DD_EXPERIMENTAL_API_SECURITY_ENABLED = coalesce(
+    const DD_API_SECURITY_ENABLED = coalesce(
       appsec?.apiSecurity?.enabled,
-      isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
-      false
+      process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
+      process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
+      true
     )
     const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
       appsec?.apiSecurity?.requestSampling,
@@ -563,7 +566,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     const defaultFlushInterval = inAWSLambda ? 0 : 2000
 
-    this.tracing = !isFalse(DD_TRACING_ENABLED)
     this.dbmPropagationMode = DD_DBM_PROPAGATION_MODE
     this.dsmEnabled = isTrue(DD_DATA_STREAMS_ENABLED)
     this.openAiLogsEnabled = DD_OPENAI_LOGS_ENABLED
@@ -636,7 +638,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
       },
       apiSecurity: {
-        enabled: DD_EXPERIMENTAL_API_SECURITY_ENABLED,
+        enabled: DD_API_SECURITY_ENABLED,
         // Coerce value between 0 and 1
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
@@ -666,6 +668,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
 
     this.gitMetadataEnabled = isTrue(DD_TRACE_GIT_METADATA_ENABLED)
     this.isManualApiEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_MANUAL_API_ENABLED)
+    this.isEarlyFlakeDetectionEnabled = this.isCiVisibility && isTrue(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED)
 
     this.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
 
@@ -702,6 +705,12 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       version: this.version,
       'runtime-id': uuid()
     })
+
+    if (this.isCiVisibility) {
+      tagger.add(this.tags, {
+        [ORIGIN_KEY]: 'ciapp-test'
+      })
+    }
 
     if (this.gitMetadataEnabled) {
       this.repositoryUrl = removeUserSensitiveInfo(
@@ -772,6 +781,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(defaults, 'logInjection', false)
     this._setArray(defaults, 'headerTags', [])
     this._setValue(defaults, 'tags', {})
+    this._setBoolean(defaults, 'tracing', true)
   }
 
   _applyEnvironment () {
@@ -785,6 +795,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_SAMPLE_RATE,
       DD_TRACE_TAGS,
+      DD_TRACING_ENABLED,
       DD_VERSION
     } = process.env
 
@@ -802,6 +813,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setTags(env, 'tags', tags)
+    this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
   }
 
   _applyOptions (options) {
@@ -836,6 +848,7 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
+    this._setBoolean(opts, 'tracing', options.tracing_enabled)
   }
 
   _setBoolean (obj, name, value) {
