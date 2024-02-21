@@ -1,4 +1,4 @@
-const { register } = require("node:module");
-const { pathToFileURL } = require("node:url");
+const { register } = require('node:module')
+const { pathToFileURL } = require('node:url')
 
-register("./loader-hook.mjs", pathToFileURL(__filename));
+register('./loader-hook.mjs', pathToFileURL(__filename))
