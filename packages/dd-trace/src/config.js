@@ -142,8 +142,6 @@ class Config {
       process.env.DD_API_KEY
     )
 
-    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
@@ -275,7 +273,7 @@ class Config {
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-    this.isAzureFunctionConsumptionPlan = isAzureFunctionConsumptionPlan
+    this.isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
     this.installSignature = {
       id: DD_INSTRUMENTATION_INSTALL_ID,
@@ -350,7 +348,7 @@ class Config {
     this._merge()
   }
 
-  _isInServerlessEnvirontment () {
+  _isInServerlessEnvironment () {
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const isGCPFunction = getIsGCPFunction()
     const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
@@ -459,7 +457,7 @@ class Config {
     return coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvirontment()
+      !this._isInServerlessEnvironment()
     )
   }
 
@@ -546,12 +544,12 @@ class Config {
 
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
+    this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
-    this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
@@ -596,8 +594,8 @@ class Config {
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
-      DD_REMOTE_CONFIGURATION_ENABLED,
-      !this._isInServerlessEnvirontment()
+      isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
+      !this._isInServerlessEnvironment()
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
@@ -640,7 +638,7 @@ class Config {
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
-    this._setString(opts, 'appsec.rules', options.appsec.rules)
+    if (options.appsec.rules) this._setString(opts, 'appsec.rules', options.appsec.rules)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
@@ -812,7 +810,7 @@ class Config {
     this._setBoolean(calc, 'telemetry.enabled', coalesce(
       DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvirontment()
+      !this._isInServerlessEnvironment()
     ))
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
