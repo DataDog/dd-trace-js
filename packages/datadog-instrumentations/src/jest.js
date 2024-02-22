@@ -58,6 +58,7 @@ let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let hasFilteredSkippableSuites = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
