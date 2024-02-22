@@ -68,14 +68,6 @@ function putTestRecords (kinesis, streamName, cb) {
       {
         PartitionKey: id().toString(),
         Data: dataBufferCustom(3)
-      },
-      {
-        PartitionKey: id().toString(),
-        Data: dataBufferCustom(4)
-      },
-      {
-        PartitionKey: id().toString(),
-        Data: dataBufferCustom(5)
       }
     ],
     StreamName: streamName

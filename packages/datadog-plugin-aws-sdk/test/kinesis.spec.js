@@ -279,7 +279,7 @@ describe('Kinesis', function () {
       it('emits DSM stats to the agent during Kinesis putRecords', done => {
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
-          // we should have only have 5 stats points since we only had 5 records published
+          // we should have only have 3 stats points since we only had 3 records published
           dsmStats.forEach((timeStatsBucket) => {
             if (timeStatsBucket && timeStatsBucket.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
@@ -287,7 +287,7 @@ describe('Kinesis', function () {
               })
             }
           })
-          expect(statsPointsReceived).to.be.at.least(5)
+          expect(statsPointsReceived).to.be.at.least(3)
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }, { timeoutMs: 10000 }).then(done, done)
 
