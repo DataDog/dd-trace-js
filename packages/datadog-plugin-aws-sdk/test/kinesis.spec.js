@@ -291,7 +291,7 @@ describe('Kinesis', function () {
           expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
         }).then(done, done)
 
-        helpers.putTestRecords(kinesis, streamNameDSM, helpers.dataBuffer, (err, data) => {
+        helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
           if (err) return done(err)
         })
       })
