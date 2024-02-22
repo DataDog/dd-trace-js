@@ -86,6 +86,13 @@ class Sns extends BaseAwsSdkPlugin {
     }
 
     if (this.config.dsmEnabled) {
+      if (!params.MessageAttributes._datadog) {
+        params.MessageAttributes._datadog = {
+          DataType: 'Binary',
+          BinaryValue: ddInfo
+        }
+      }
+
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
       if (dataStreamsContext) {
         const pathwayCtx = encodePathwayContext(dataStreamsContext)
@@ -93,8 +100,13 @@ class Sns extends BaseAwsSdkPlugin {
       }
     }
 
-    // BINARY types are automatically base64 encoded
-    params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+    if (Object.keys(ddInfo).length !== 0) {
+      // BINARY types are automatically base64 encoded
+      params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+    } else if (params.MessageAttributes._datadog) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
+    }
   }
 
   setDSMCheckpoint (span, params, topicArn) {

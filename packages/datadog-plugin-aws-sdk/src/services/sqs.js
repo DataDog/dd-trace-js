@@ -243,12 +243,25 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     if (this.config.dsmEnabled) {
+      if (!params.MessageAttributes._datadog) {
+        params.MessageAttributes._datadog = {
+          DataType: 'String',
+          StringValue: JSON.stringify(ddInfo)
+        }
+      }
+
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
       if (dataStreamsContext) {
         const pathwayCtx = encodePathwayContext(dataStreamsContext)
         ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+
+        params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
       }
-      params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
+    }
+
+    if (params.MessageAttributes._datadog && Object.keys(ddInfo).length === 0) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
     }
   }
 

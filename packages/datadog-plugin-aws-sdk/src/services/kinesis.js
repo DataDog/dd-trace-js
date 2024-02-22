@@ -180,6 +180,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     // set DSM hash if enabled
     if (this.config.dsmEnabled) {
+      parsedData._datadog = ddInfo
       const dataStreamsContext = this.setDSMCheckpoint(span, parsedData, stream)
       if (dataStreamsContext) {
         const pathwayCtx = encodePathwayContext(dataStreamsContext)

@@ -454,23 +454,23 @@ describe('Plugin', () => {
             {
               Entries: [
                 {
-                  Id: 1,
+                  Id: '1',
                   MessageBody: 'test DSM 1'
                 },
                 {
-                  Id: 2,
+                  Id: '2',
                   MessageBody: 'test DSM 2'
                 },
                 {
-                  Id: 3,
+                  Id: '3',
                   MessageBody: 'test DSM 3'
                 },
                 {
-                  Id: 4,
+                  Id: '4',
                   MessageBody: 'test DSM 4'
                 },
                 {
-                  Id: 5,
+                  Id: '5',
                   MessageBody: 'test DSM 5'
                 }
               ],

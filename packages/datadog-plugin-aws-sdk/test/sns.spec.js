@@ -372,23 +372,23 @@ describe('Sns', () => {
               TopicArn,
               PublishBatchRequestEntries: [
                 {
-                  Id: 1,
+                  Id: '1',
                   Message: 'message DSM 1'
                 },
                 {
-                  Id: 2,
+                  Id: '2',
                   Message: 'message DSM 2'
                 },
                 {
-                  Id: 3,
+                  Id: '3',
                   Message: 'message DSM 3'
                 },
                 {
-                  Id: 4,
+                  Id: '4',
                   Message: 'message DSM 4'
                 },
                 {
-                  Id: 5,
+                  Id: '5',
                   Message: 'message DSM 5'
                 }
               ]
