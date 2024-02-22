@@ -298,10 +298,24 @@ addHook({
   versions: ['>=24.8.0']
 }, getTestEnvironment)
 
+function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
+  return async function (tests) {
+    if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
+      return scheduleTests.apply(this, arguments)
+    }
+    const [test] = tests
+    const rootDir = test?.context?.config?.rootDir
+
+    arguments[0] = applySuiteSkipping(tests, rootDir, frameworkVersion)
+
+    return scheduleTests.apply(this, arguments)
+  }
+}
+
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=24.8.0']
+  versions: ['>=27.0.0']
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
@@ -310,17 +324,22 @@ addHook({
     }
     // If suite skipping is enabled and has not filtered skippable suites yet, we'll attempt to do it
     const scheduler = await oldCreateTestScheduler.apply(this, arguments)
-    shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => async function (scheduledTests) {
-      const [test] = scheduledTests
-      const rootDir = test?.context?.config?.rootDir
-
-      arguments[0] = applySuiteSkipping(scheduledTests, rootDir, frameworkVersion)
-
-      return scheduleTests.apply(this, arguments)
-    })
+    shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion))
     return scheduler
   }
   testSchedulerPackage.createTestScheduler = newCreateTestScheduler
+  return testSchedulerPackage
+})
+
+addHook({
+  name: '@jest/core',
+  file: 'build/TestScheduler.js',
+  versions: ['>=24.8.0 <27.0.0']
+}, (testSchedulerPackage, frameworkVersion) => {
+  shimmer.wrap(
+    testSchedulerPackage.default.prototype,
+    'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
+  )
   return testSchedulerPackage
 })
 
