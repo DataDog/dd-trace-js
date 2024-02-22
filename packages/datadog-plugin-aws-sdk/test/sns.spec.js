@@ -353,7 +353,7 @@ describe('Sns', () => {
 
       it('outputs DSM stats to the agent when publishing batch messages', function (done) {
         // publishBatch was released with version 2.1031.0
-        if (semver.gte(version, '2.1031.0')) {
+        if (semver.intersects(version, '>=2.1031.0')) {
           agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
             // we should have 5 dsm stats points
