@@ -112,6 +112,9 @@ function getSessionStatus (summary) {
 }
 
 function getSuiteStatus (suiteStats) {
+  if (!suiteStats) {
+    return 'skip'
+  }
   if (suiteStats.failures !== undefined && suiteStats.failures > 0) {
     return 'fail'
   }
@@ -322,8 +325,9 @@ module.exports = (on, config) => {
             itrCorrelationId = correlationId
           }
 
+          // specs might be undefined if cypress is being run with "cypress open"
           // `details.specs` are test files
-          details.specs.forEach(({ absolute, relative }) => {
+          details.specs?.forEach(({ absolute, relative }) => {
             const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
             if (isUnskippableSuite) {
               unskippableSuites.push(relative)
@@ -363,7 +367,9 @@ module.exports = (on, config) => {
         })
     })
   })
-  on('after:spec', (spec, { tests, stats }) => {
+  // results might be undefined if cypress is being run with "cypress open"
+  on('after:spec', (spec, results) => {
+    const { tests, stats } = results || {}
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
