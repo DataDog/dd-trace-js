@@ -26,7 +26,11 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -768,6 +772,221 @@ versions.forEach(version => {
                   cwd,
                   env: envVars,
                   stdio: 'inherit'
+                }
+              )
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+          })
+          context('early flake detection', () => {
+            it('retries new tests', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+              // "cucumber.ci-visibility/features/farewell.feature.Say" whatever will be considered new
+              receiver.setKnownTests([
+                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
+                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
+                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
+                'cucumber.ci-visibility/features/greetings.feature.Say yo',
+                'cucumber.ci-visibility/features/greetings.feature.Say skip'
+              ])
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  const newTests = tests.filter(test =>
+                    test.resource === 'ci-visibility/features/farewell.feature.Say whatever'
+                  )
+                  newTests.forEach(test => {
+                    assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                  })
+                  const retriedTests = newTests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+                  // all but one has been retried
+                  assert.equal(
+                    newTests.length - 1,
+                    retriedTests.length
+                  )
+                  assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                  // Test name does not change
+                  newTests.forEach(test => {
+                    assert.equal(test.meta[TEST_NAME], 'Say whatever')
+                  })
+                })
+              childProcess = exec(
+                runTestsCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'pipe'
+                }
+              )
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+            it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                  const newTests = tests.filter(test =>
+                    test.meta[TEST_IS_NEW] === 'true'
+                  )
+                  // new tests are not detected
+                  assert.equal(newTests.length, 0)
+                })
+              // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
+              receiver.setKnownTests([
+                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
+                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
+                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
+                'cucumber.ci-visibility/features/greetings.feature.Say yo',
+                'cucumber.ci-visibility/features/greetings.feature.Say skip'
+              ])
+
+              childProcess = exec(
+                runTestsCommand,
+                {
+                  cwd,
+                  env: { ...envVars, DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false' },
+                  stdio: 'pipe'
+                }
+              )
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+            it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+              // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
+              receiver.setKnownTests([])
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  tests.forEach(test => {
+                    assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                  })
+
+                  const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                  const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+
+                  // (1 original run + 3 retries) / 2
+                  assert.equal(failedAttempts.length, 2)
+                  assert.equal(passedAttempts.length, 2)
+                })
+
+              childProcess = exec(
+                './node_modules/.bin/cucumber-js ci-visibility/features-flaky/*.feature',
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'pipe'
+                }
+              )
+              childProcess.on('exit', (exitCode) => {
+                assert.equal(exitCode, 0)
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+            it('does not retry tests that are skipped', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+              // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
+              // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
+              receiver.setKnownTests([
+                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
+                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
+                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
+                'cucumber.ci-visibility/features/greetings.feature.Say yo'
+              ])
+
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  const skippedNewTest = tests.filter(test =>
+                    test.resource === 'ci-visibility/features/greetings.feature.Say skip'
+                  )
+                  // not retried
+                  assert.equal(skippedNewTest.length, 1)
+                })
+
+              childProcess = exec(
+                runTestsCommand,
+                {
+                  cwd,
+                  env: envVars,
+                  stdio: 'pipe'
                 }
               )
               childProcess.on('exit', () => {

@@ -744,7 +744,7 @@ testFrameworks.forEach(({
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
-                test.meta[TEST_SUITE] === 'true'
+                test.meta[TEST_IS_NEW] === 'true'
               )
               // new tests are not detected
               assert.equal(newTests.length, 0)
