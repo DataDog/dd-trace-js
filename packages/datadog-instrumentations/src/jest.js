@@ -270,6 +270,23 @@ function getTestEnvironment (pkg, jestVersion) {
   return getWrappedEnvironment(pkg, jestVersion)
 }
 
+function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, rootDir || process.cwd())
+  hasFilteredSkippableSuites = true
+  log.debug(
+    () => `${jestSuitesToRun.suitesToRun.length} out of ${originalTests.length} suites are going to run.`
+  )
+  hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
+  hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
+
+  isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
+  numSkippedSuites = jestSuitesToRun.skippedSuites.length
+
+  itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
+  skippableSuites = []
+  return jestSuitesToRun.suitesToRun
+}
+
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0']
@@ -281,35 +298,45 @@ addHook({
 }, getTestEnvironment)
 
 addHook({
+  name: '@jest/core',
+  file: 'build/TestScheduler.js',
+  versions: ['>=24.8.0']
+}, (testSchedulerPackage, frameworkVersion) => {
+  const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
+  const newCreateTestScheduler = async function () {
+    if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
+      return oldCreateTestScheduler.apply(this, arguments)
+    }
+    // If suite skipping is enabled and has not filtered skippable suites yet, we'll attempt to do it
+    const scheduler = await oldCreateTestScheduler.apply(this, arguments)
+    shimmer.wrap(scheduler, 'scheduleTests', scheduleTests => async function (scheduledTests) {
+      const [test] = scheduledTests
+      const rootDir = test?.context?.config?.rootDir
+
+      arguments[0] = applySuiteSkipping(scheduledTests, rootDir, frameworkVersion)
+
+      return scheduleTests.apply(this, arguments)
+    })
+    return scheduler
+  }
+  testSchedulerPackage.createTestScheduler = newCreateTestScheduler
+  return testSchedulerPackage
+})
+
+addHook({
   name: '@jest/test-sequencer',
   versions: ['>=24.8.0']
 }, (sequencerPackage, frameworkVersion) => {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
     const shardedTests = shard.apply(this, arguments)
 
-    if (!shardedTests.length) {
+    if (!shardedTests.length || !isSuitesSkippingEnabled || !skippableSuites.length) {
       return shardedTests
     }
-    // TODO: could we get the rootDir from each test?
     const [test] = shardedTests
     const rootDir = test?.context?.config?.rootDir
 
-    const jestSuitesToRun = getJestSuitesToRun(skippableSuites, shardedTests, rootDir || process.cwd())
-
-    log.debug(
-      () => `${jestSuitesToRun.suitesToRun.length} out of ${shardedTests.length} suites are going to run.`
-    )
-
-    hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
-    hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
-
-    isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== shardedTests.length
-    numSkippedSuites = jestSuitesToRun.skippedSuites.length
-
-    itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
-
-    skippableSuites = []
-    return jestSuitesToRun.suitesToRun
+    return applySuiteSkipping(shardedTests, rootDir, frameworkVersion)
   })
   return sequencerPackage
 })
@@ -660,13 +687,13 @@ addHook({
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
-    if (!skippableSuites.length) {
+    if (!isSuitesSkippingEnabled || !skippableSuites.length) {
       return getTestPaths.apply(this, arguments)
     }
 
     const [{ rootDir, shard }] = arguments
 
-    if (shard && shard.shardIndex) {
+    if (shard?.shardCount > 1) {
       // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
       // The reason for this is the following:
       // The tests for different shards are likely being run in different CI jobs so
@@ -680,21 +707,8 @@ addHook({
     const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
-    const jestSuitesToRun = getJestSuitesToRun(skippableSuites, tests, rootDir)
-
-    log.debug(() => `${jestSuitesToRun.suitesToRun.length} out of ${tests.length} suites are going to run.`)
-
-    hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
-    hasForcedToRunSuites = jestSuitesToRun.hasForcedToRunSuites
-
-    isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== tests.length
-    numSkippedSuites = jestSuitesToRun.skippedSuites.length
-
-    itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
-
-    skippableSuites = []
-
-    return { ...testPaths, tests: jestSuitesToRun.suitesToRun }
+    const suitesToRun = applySuiteSkipping(tests, rootDir, frameworkVersion)
+    return { ...testPaths, tests: suitesToRun }
   })
 
   return searchSourcePackage
