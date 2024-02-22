@@ -30,7 +30,6 @@ const {
   TEST_SOURCE_FILE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const semver = require('semver')
 const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
@@ -55,7 +54,7 @@ moduleType.forEach(({
   testCommand
 }) => {
   // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+  if (type === 'esm' && version === '6.7.0') {
     return
   }
   if (version === '6.7.0' && NODE_MAJOR > 16) {
