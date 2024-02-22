@@ -80,7 +80,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             if (producerCommitCh.hasSubscribers) {
               producerCommitCh.publish(res)
             }
-          })
+          }, () => {})
 
           return result
         } catch (e) {
