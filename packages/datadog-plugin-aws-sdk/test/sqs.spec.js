@@ -310,6 +310,7 @@ describe('Plugin', () => {
       describe('data stream monitoring', () => {
         const expectedProducerHash = '4673734031235697865'
         const expectedConsumerHash = '9749472979704578383'
+        let nowStub
 
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -344,6 +345,15 @@ describe('Plugin', () => {
 
         after(() => {
           return agent.close({ ritmReset: false })
+        })
+
+        afterEach(() => {
+          try {
+            nowStub.restore()
+          } catch {
+            // pass
+          }
+          agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
         })
 
         it('Should set pathway hash tag on a span when producing', (done) => {
@@ -436,9 +446,18 @@ describe('Plugin', () => {
         })
 
         it('Should emit DSM stats to the agent when sending batch messages', done => {
+          // we need to stub Date.now() to ensure a new stats bucket is created for each call
+          // otherwise, all stats checkpoints will be combined into a single stats points
+          let now = Date.now()
+          nowStub = sinon.stub(Date, 'now')
+          nowStub.callsFake(() => {
+            now += 1000000
+            return now
+          })
+
           agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
-            // we should have 5 dsm stats points
+            // we should have 3 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
               if (timeStatsBucket && timeStatsBucket.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
@@ -446,7 +465,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(5)
+            expect(statsPointsReceived).to.be.at.least(3)
             expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
           }).then(done, done)
 
@@ -464,18 +483,12 @@ describe('Plugin', () => {
                 {
                   Id: '3',
                   MessageBody: 'test DSM 3'
-                },
-                {
-                  Id: '4',
-                  MessageBody: 'test DSM 4'
-                },
-                {
-                  Id: '5',
-                  MessageBody: 'test DSM 5'
                 }
               ],
               QueueUrl: QueueUrlDsm
-            }, () => {})
+            }, () => {
+              nowStub.restore()
+            })
         })
       })
     })

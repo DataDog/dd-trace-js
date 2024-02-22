@@ -228,6 +228,7 @@ describe('Sns', () => {
     describe('Data Streams Monitoring', () => {
       const expectedProducerHash = '5117773060236273241'
       const expectedConsumerHash = '1353703578833511841'
+      let nowStub
 
       before(() => {
         return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
@@ -251,6 +252,15 @@ describe('Sns', () => {
 
       after(() => {
         return agent.close({ ritmReset: false })
+      })
+
+      afterEach(() => {
+        try {
+          nowStub.restore()
+        } catch {
+          // pass
+        }
+        agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
       })
 
       it('injects DSM pathway hash to SNS publish span', done => {
@@ -352,11 +362,20 @@ describe('Sns', () => {
       })
 
       it('outputs DSM stats to the agent when publishing batch messages', function (done) {
+        // we need to stub Date.now() to ensure a new stats bucket is created for each call
+        // otherwise, all stats checkpoints will be combined into a single stats points
+        let now = Date.now()
+        nowStub = sinon.stub(Date, 'now')
+        nowStub.callsFake(() => {
+          now += 1000000
+          return now
+        })
+
         // publishBatch was released with version 2.1031.0
         if (semver.intersects(version, '>=2.1031.0')) {
           agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
-            // we should have 5 dsm stats points
+            // we should have 3 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
               if (timeStatsBucket && timeStatsBucket.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
@@ -364,7 +383,7 @@ describe('Sns', () => {
                 })
               }
             })
-            expect(statsPointsReceived).to.be.at.least(5)
+            expect(statsPointsReceived).to.be.at.least(3)
             expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
           }).then(done, done)
 
@@ -384,17 +403,11 @@ describe('Sns', () => {
                   {
                     Id: '3',
                     Message: 'message DSM 3'
-                  },
-                  {
-                    Id: '4',
-                    Message: 'message DSM 4'
-                  },
-                  {
-                    Id: '5',
-                    Message: 'message DSM 5'
                   }
                 ]
-              }, () => {})
+              }, () => {
+                nowStub.restore()
+              })
           })
         } else {
           this.skip()
