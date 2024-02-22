@@ -3,6 +3,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const sinon = require('sinon')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
@@ -166,6 +167,7 @@ describe('Kinesis', function () {
     describe('DSM Context Propagation', () => {
       const expectedProducerHash = '15481393933680799703'
       const expectedConsumerHash = '10538746554122257118'
+      let nowStub
 
       before(() => {
         return agent.load('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
@@ -188,7 +190,14 @@ describe('Kinesis', function () {
         })
       })
 
-      afterEach(() => agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true }))
+      afterEach(() => {
+        try {
+          nowStub.restore()
+        } catch {
+          // pass
+        }
+        agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+      })
 
       it('injects DSM pathway hash during Kinesis getRecord to the span', done => {
         let getRecordSpanMeta = {}
@@ -277,6 +286,15 @@ describe('Kinesis', function () {
       })
 
       it('emits DSM stats to the agent during Kinesis putRecords', done => {
+        // we need to stub Date.now() to ensure a new stats bucket is created for each call
+        // otherwise, all stats checkpoints will be combined into a single stats points
+        let now = Date.now()
+        nowStub = sinon.stub(Date, 'now')
+        nowStub.callsFake(() => {
+          now += 1000000
+          return now
+        })
+
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
           // we should have only have 3 stats points since we only had 3 records published
@@ -293,6 +311,8 @@ describe('Kinesis', function () {
 
         helpers.putTestRecords(kinesis, streamNameDSM, (err, data) => {
           if (err) return done(err)
+
+          nowStub.restore()
         })
       })
     })
