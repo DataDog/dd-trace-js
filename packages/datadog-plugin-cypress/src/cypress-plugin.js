@@ -1,5 +1,3 @@
-const { getSessionStatus } = require('./utils')
-
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -30,10 +28,7 @@ const {
   TEST_SOURCE_FILE
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
-
-const {
-  TELEMETRY_EVENT_FINISHED
-} = require('../../dd-trace/src/ci-visibility/telemetry')
+const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -48,7 +43,39 @@ const {
   distributionMetric
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
+const {
+  GIT_REPOSITORY_URL,
+  GIT_COMMIT_SHA,
+  GIT_BRANCH,
+  CI_PROVIDER_NAME,
+  CI_WORKSPACE_PATH
+} = require('../../dd-trace/src/plugins/util/tags')
+const {
+  OS_VERSION,
+  OS_PLATFORM,
+  OS_ARCHITECTURE,
+  RUNTIME_NAME,
+  RUNTIME_VERSION
+} = require('../../dd-trace/src/plugins/util/env')
+
 const TEST_FRAMEWORK_NAME = 'cypress'
+
+const CYPRESS_STATUS_TO_TEST_STATUS = {
+  passed: 'pass',
+  failed: 'fail',
+  pending: 'skip',
+  skipped: 'skip'
+}
+
+function getSessionStatus (summary) {
+  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+    return 'fail'
+  }
+  if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
+    return 'skip'
+  }
+  return 'pass'
+}
 
 function getCypressVersion (details) {
   if (details && details.cypressVersion) {
@@ -104,22 +131,147 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
   })
 }
 
+function getSuiteStatus (suiteStats) {
+  if (!suiteStats) {
+    return 'skip'
+  }
+  if (suiteStats.failures !== undefined && suiteStats.failures > 0) {
+    return 'fail'
+  }
+  if (suiteStats.tests !== undefined &&
+    (suiteStats.tests === suiteStats.pending || suiteStats.tests === suiteStats.skipped)) {
+    return 'skip'
+  }
+  return 'pass'
+}
+
 class CypressPlugin {
   constructor () {
     this._isInit = false
+    this.testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
+
+    const {
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_COMMIT_SHA]: sha,
+      [OS_VERSION]: osVersion,
+      [OS_PLATFORM]: osPlatform,
+      [OS_ARCHITECTURE]: osArchitecture,
+      [RUNTIME_NAME]: runtimeName,
+      [RUNTIME_VERSION]: runtimeVersion,
+      [GIT_BRANCH]: branch,
+      [CI_PROVIDER_NAME]: ciProviderName,
+      [CI_WORKSPACE_PATH]: repositoryRoot
+    } = this.testEnvironmentMetadata
+
+    this.repositoryRoot = repositoryRoot
+    this.isUnsupportedCIProvider = !ciProviderName
+    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
+
+    this.testConfiguration = {
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      branch,
+      testLevel: 'test'
+    }
+    this.finishedTestsByFile = {}
+
+    this.isTestsSkipped = false
+    this.isSuitesSkippingEnabled = false
+    this.isCodeCoverageEnabled = false
+    this.skippedTests = []
+    this.hasForcedToRunSuites = false
+    this.hasUnskippableSuites = false
+    this.unskippableSuites = []
   }
-  init (attributes) {
+
+  init (tracer, cypressConfig) {
     this._isInit = true
-    this.isTestsSkipped = attributes.isTestsSkipped
-    this.isSuitesSkippingEnabled = attributes.isSuitesSkippingEnabled
-    this.isCodeCoverageEnabled = attributes.isCodeCoverageEnabled
-    this.skippedTests = attributes.skippedTests
-    this.hasForcedToRunSuites = attributes.hasForcedToRunSuites
-    this.hasUnskippableSuites = attributes.hasUnskippableSuites
-    this.ciVisEvent = attributes.ciVisEvent
-    this.tracer = attributes.tracer
+    this.tracer = tracer
+    this.cypressConfig = cypressConfig
+  }
 
+  getTestSuiteSpan (suite) {
+    const testSuiteSpanMetadata =
+      getTestSuiteCommonTags(this.command, this.frameworkVersion, suite, TEST_FRAMEWORK_NAME)
+    this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+      childOf: this.testModuleSpan,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteSpanMetadata
+      }
+    })
+  }
 
+  getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
+    const testSuiteTags = {
+      [TEST_COMMAND]: this.command,
+      [TEST_COMMAND]: this.command,
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME
+    }
+    if (this.testSuiteSpan) {
+      testSuiteTags[TEST_SUITE_ID] = this.testSuiteSpan.context().toSpanId()
+    }
+    if (this.testSessionSpan && this.testModuleSpan) {
+      testSuiteTags[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
+      testSuiteTags[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+      // If testSuiteSpan couldn't be created, we'll use the testModuleSpan as the parent
+      if (!this.testSuiteSpan) {
+        testSuiteTags[TEST_SUITE_ID] = this.testModuleSpan.context().toSpanId()
+      }
+    }
+
+    const childOf = getTestParentSpan(this.tracer)
+    const {
+      resource,
+      ...testSpanMetadata
+    } = getTestCommonTags(testName, testSuite, this.cypressConfig.version, TEST_FRAMEWORK_NAME)
+
+    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+
+    if (codeOwners) {
+      testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
+    }
+
+    if (isUnskippable) {
+      this.hasUnskippableSuites = true
+      incrementCountMetric(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
+      testSpanMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
+    }
+
+    if (isForcedToRun) {
+      this.hasForcedToRunSuites = true
+      incrementCountMetric(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
+      testSpanMetadata[TEST_ITR_FORCED_RUN] = 'true'
+    }
+
+    this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
+
+    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
+      childOf,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [ORIGIN_KEY]: CI_APP_ORIGIN,
+        ...testSpanMetadata,
+        ...this.testEnvironmentMetadata,
+        ...testSuiteTags
+      }
+    })
+  }
+
+  ciVisEvent (name, testLevel, tags = {}) {
+    incrementCountMetric(name, {
+      testLevel,
+      testFramework: 'cypress',
+      isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+      ...tags
+    })
   }
 
   beforeRun (details) {
@@ -141,7 +293,7 @@ class CypressPlugin {
           }
 
           // `details.specs` are test files
-          details.specs.forEach(({ absolute, relative }) => {
+          details.specs?.forEach(({ absolute, relative }) => {
             const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
             if (isUnskippableSuite) {
               this.unskippableSuites.push(relative)
@@ -154,41 +306,30 @@ class CypressPlugin {
           this.command = getCypressCommand(details)
           this.frameworkVersion = getCypressVersion(details)
 
-          const testSessionSpanMetadata = getTestSessionCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
-          const testModuleSpanMetadata = getTestModuleCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
+          const testSessionSpanMetadata =
+            getTestSessionCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
+          const testModuleSpanMetadata =
+            getTestModuleCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
 
           this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
             childOf,
             tags: {
               [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...testEnvironmentMetadata,
+              ...this.testEnvironmentMetadata,
               ...testSessionSpanMetadata
             }
           })
           this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
-          this.testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-            childOf: testSessionSpan,
+          this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+            childOf: this.testSessionSpan,
             tags: {
               [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...testEnvironmentMetadata,
+              ...this.testEnvironmentMetadata,
               ...testModuleSpanMetadata
             }
           })
           this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
-
-          cypressPlugin.init({
-            testSessionSpan,
-            testModuleSpan,
-            isTestsSkipped,
-            isSuitesSkippingEnabled,
-            isCodeCoverageEnabled,
-            skippedTests,
-            hasForcedToRunSuites,
-            hasUnskippableSuites,
-            ciVisEvent,
-            tracer
-          })
 
           return details
         })
@@ -244,6 +385,175 @@ class CypressPlugin {
         })
       }
     })
+  }
+
+  afterSpec (spec, results) {
+    const { tests, stats } = results || {}
+    const cypressTests = tests || []
+    const finishedTests = this.finishedTestsByFile[spec.relative] || []
+
+    if (!this.testSuiteSpan) {
+      // dd:testSuiteStart hasn't been triggered for whatever reason
+      // We will create the test suite span on the spot if that's the case
+      log.warn('There was an error creating the test suite event.')
+      this.testSuiteSpan = this.getTestSuiteSpan(spec.relative)
+    }
+
+    // Get tests that didn't go through `dd:afterEach`
+    // and create a skipped test span for each of them
+    cypressTests.filter(({ title }) => {
+      const cypressTestName = title.join(' ')
+      const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
+
+      return !isTestFinished
+    }).forEach(({ title }) => {
+      const cypressTestName = title.join(' ')
+      const isSkippedByItr = this.testsToSkip.find(test =>
+        cypressTestName === test.name && spec.relative === test.suite
+      )
+      const skippedTestSpan = this.getTestSpan(cypressTestName, spec.relative)
+      if (spec.absolute && this.repositoryRoot) {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+      } else {
+        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+      }
+      skippedTestSpan.setTag(TEST_STATUS, 'skip')
+      if (isSkippedByItr) {
+        skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
+      }
+      if (this.itrCorrelationId) {
+        skippedTestSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
+      }
+      skippedTestSpan.finish()
+    })
+
+    // Make sure that reported test statuses are the same as Cypress reports.
+    // This is not always the case, such as when an `after` hook fails:
+    // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
+    let latestError
+    finishedTests.forEach((finishedTest) => {
+      const cypressTest = cypressTests.find(test => test.title.join(' ') === finishedTest.testName)
+      if (!cypressTest) {
+        return
+      }
+      if (cypressTest.displayError) {
+        latestError = new Error(cypressTest.displayError)
+      }
+      const cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+      // update test status
+      if (cypressTestStatus !== finishedTest.testStatus) {
+        finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
+        finishedTest.testSpan.setTag('error', latestError)
+      }
+      if (this.itrCorrelationId) {
+        finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
+      }
+      if (spec.absolute && this.repositoryRoot) {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+      } else {
+        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+      }
+      finishedTest.testSpan.finish(finishedTest.finishTime)
+    })
+
+    if (this.testSuiteSpan) {
+      const status = getSuiteStatus(stats)
+      this.testSuiteSpan.setTag(TEST_STATUS, status)
+
+      if (latestError) {
+        this.testSuiteSpan.setTag('error', latestError)
+      }
+      this.testSuiteSpan.finish()
+      this.testSuiteSpan = null
+      this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+    }
+  }
+
+  getTasks () {
+    return {
+      'dd:testSuiteStart': (suite) => {
+        if (this.testSuiteSpan) {
+          return null
+        }
+        this.testSuiteSpan = this.getTestSuiteSpan(suite)
+        return null
+      },
+      'dd:beforeEach': (test) => {
+        const { testName, testSuite } = test
+        const shouldSkip = !!this.testsToSkip.find(test => {
+          return testName === test.name && testSuite === test.suite
+        })
+        const isUnskippable = this.unskippableSuites.includes(testSuite)
+        const isForcedToRun = shouldSkip && isUnskippable
+
+        // skip test
+        if (shouldSkip && !isUnskippable) {
+          this.skippedTests.push(test)
+          this.isTestsSkipped = true
+          return { shouldSkip: true }
+        }
+
+        if (!this.activeSpan) {
+          this.activeSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
+        }
+
+        return this.activeSpan ? { traceId: this.activeSpan.context().toTraceId() } : {}
+      },
+      'dd:afterEach': ({ test, coverage }) => {
+        const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
+        if (this.activeSpan) {
+          if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
+            const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
+            const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
+            if (!relativeCoverageFiles.length) {
+              incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
+            }
+            distributionMetric(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
+            const { _traceId, _spanId } = this.testSuiteSpan.context()
+            const formattedCoverage = {
+              sessionId: _traceId,
+              suiteId: _spanId,
+              testId: this.activeSpan.context()._spanId,
+              files: relativeCoverageFiles
+            }
+            this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
+          }
+          const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
+          this.activeSpan.setTag(TEST_STATUS, testStatus)
+
+          if (error) {
+            this.activeSpan.setTag('error', error)
+          }
+          if (isRUMActive) {
+            this.activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+          }
+          if (testSourceLine) {
+            this.activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          }
+          const finishedTest = {
+            testName,
+            testStatus,
+            finishTime: this.activeSpan._getTime(), // we store the finish time here
+            testSpan: this.activeSpan
+          }
+          if (this.finishedTestsByFile[testSuite]) {
+            this.finishedTestsByFile[testSuite].push(finishedTest)
+          } else {
+            this.finishedTestsByFile[testSuite] = [finishedTest]
+          }
+          // test spans are finished at after:spec
+        }
+        this.activeSpan = null
+        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
+        return null
+      },
+      'dd:addTags': (tags) => {
+        if (this.activeSpan) {
+          this.activeSpan.addTags(tags)
+        }
+        return null
+      }
+    }
   }
 }
 

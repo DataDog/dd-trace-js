@@ -202,7 +202,7 @@ moduleType.forEach(({
       })
     })
 
-    it.only('can run and report tests', (done) => {
+    it('can run and report tests', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -825,12 +825,18 @@ moduleType.forEach(({
       })
     })
 
-    it.only('works if after:run is explicitly used', (done) => {
-
+    it('works if after:run is explicitly used', (done) => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          debugger
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.exists(testSessionEvent)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          assert.exists(testModuleEvent)
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 4)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 9)
         })
 
       const {
@@ -850,9 +856,6 @@ moduleType.forEach(({
           stdio: 'pipe'
         }
       )
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
 
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
