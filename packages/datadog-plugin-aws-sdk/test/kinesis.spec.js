@@ -1,9 +1,9 @@
 /* eslint-disable max-len */
 'use strict'
 
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
-const sinon = require('sinon')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
