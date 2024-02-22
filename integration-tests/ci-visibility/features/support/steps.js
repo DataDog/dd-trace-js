@@ -38,3 +38,7 @@ When('the greeter says yeah', function () {
 When('the greeter says greetings', function () {
   this.whatIHeard = new Greeter().sayGreetings()
 })
+
+When('the greeter says whatever', function () {
+  this.whatIHeard = 'whatever'
+})
