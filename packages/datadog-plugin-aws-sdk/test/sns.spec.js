@@ -363,17 +363,22 @@ describe('Sns', () => {
       })
 
       it('outputs DSM stats to the agent when publishing batch messages', function (done) {
-        // we need to stub Date.now() to ensure a new stats bucket is created for each call
-        // otherwise, all stats checkpoints will be combined into a single stats points
-        let now = Date.now()
-        nowStub = sinon.stub(Date, 'now')
-        nowStub.callsFake(() => {
-          now += 1000000
-          return now
-        })
+        // publishBatch was released with version 2.1031.0 for the aws-sdk
+        // publishBatch does not work with smithy-client 3.0.0, unable to find compatible version it
+        // was released for, but works on 3.374.0
+        if (
+          (moduleName === '@aws-sdk/smithy-client' && semver.intersects(version, '>=3.374.0')) ||
+          (moduleName === 'aws-sdk' && semver.intersects(version, '>=2.1031.0'))
+        ) {
+          // we need to stub Date.now() to ensure a new stats bucket is created for each call
+          // otherwise, all stats checkpoints will be combined into a single stats points
+          let now = Date.now()
+          nowStub = sinon.stub(Date, 'now')
+          nowStub.callsFake(() => {
+            now += 1000000
+            return now
+          })
 
-        // publishBatch was released with version 2.1031.0
-        if (semver.intersects(version, '>=2.1031.0')) {
           agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
             // we should have 3 dsm stats points
@@ -386,7 +391,7 @@ describe('Sns', () => {
             })
             expect(statsPointsReceived).to.be.at.least(3)
             expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
-          }).then(done, done)
+          }, { timeoutMs: 2000 }).then(done, done)
 
           sns.subscribe(subParams, () => {
             sns.publishBatch(
