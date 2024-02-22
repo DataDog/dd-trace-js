@@ -57,6 +57,9 @@ const {
   RUNTIME_VERSION
 } = require('../../dd-trace/src/plugins/util/env')
 
+const { getSessionStatus, getCiVisEvent } = require('./utils')
+const { cypressPlugin } = require('./cypress-plugin')
+
 const TEST_FRAMEWORK_NAME = 'cypress'
 
 const CYPRESS_STATUS_TO_TEST_STATUS = {
@@ -77,39 +80,6 @@ function getTestSpanMetadata (tracer, testName, testSuite, cypressConfig) {
   }
 }
 
-function getCypressVersion (details) {
-  if (details && details.cypressVersion) {
-    return details.cypressVersion
-  }
-  if (details && details.config && details.config.version) {
-    return details.config.version
-  }
-  return ''
-}
-
-function getRootDir (details) {
-  if (details && details.config) {
-    return details.config.projectRoot || details.config.repoRoot || process.cwd()
-  }
-  return process.cwd()
-}
-
-function getCypressCommand (details) {
-  if (!details) {
-    return TEST_FRAMEWORK_NAME
-  }
-  return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
-}
-
-function getSessionStatus (summary) {
-  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
-    return 'fail'
-  }
-  if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
-    return 'skip'
-  }
-  return 'pass'
-}
 
 function getSuiteStatus (suiteStats) {
   if (!suiteStats) {
@@ -123,36 +93,6 @@ function getSuiteStatus (suiteStats) {
     return 'skip'
   }
   return 'pass'
-}
-
-function getLibraryConfiguration (tracer, testConfiguration) {
-  return new Promise(resolve => {
-    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
-    }
-
-    tracer._tracer._exporter.getLibraryConfiguration(testConfiguration, (err, libraryConfig) => {
-      resolve({ err, libraryConfig })
-    })
-  })
-}
-
-function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) {
-  if (!isSuitesSkippingEnabled) {
-    return Promise.resolve({ skippableTests: [] })
-  }
-  return new Promise(resolve => {
-    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
-      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
-    }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
-      resolve({
-        err,
-        skippableTests,
-        correlationId
-      })
-    })
-  })
 }
 
 const noopTask = {
@@ -229,14 +169,7 @@ module.exports = (on, config) => {
   let hasForcedToRunSuites = false
   let hasUnskippableSuites = false
 
-  function ciVisEvent (name, testLevel, tags = {}) {
-    incrementCountMetric(name, {
-      testLevel,
-      testFramework: 'cypress',
-      isUnsupportedCIProvider,
-      ...tags
-    })
-  }
+  const ciVisEvent = getCiVisEvent(isUnsupportedCIProvider)
 
   function getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
     const testSuiteTags = {
@@ -307,69 +240,9 @@ module.exports = (on, config) => {
     })
   }
 
-  on('before:run', (details) => {
-    return getLibraryConfiguration(tracer, testConfiguration).then(({ err, libraryConfig }) => {
-      if (err) {
-        log.error(err)
-      } else {
-        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
-      }
+  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
 
-      return getSkippableTests(isSuitesSkippingEnabled, tracer, testConfiguration)
-        .then(({ err, skippableTests, correlationId }) => {
-          if (err) {
-            log.error(err)
-          } else {
-            testsToSkip = skippableTests || []
-            itrCorrelationId = correlationId
-          }
-
-          // specs might be undefined if cypress is being run with "cypress open"
-          // `details.specs` are test files
-          details.specs?.forEach(({ absolute, relative }) => {
-            const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-            if (isUnskippableSuite) {
-              unskippableSuites.push(relative)
-            }
-          })
-
-          const childOf = getTestParentSpan(tracer)
-          rootDir = getRootDir(details)
-
-          command = getCypressCommand(details)
-          frameworkVersion = getCypressVersion(details)
-
-          const testSessionSpanMetadata = getTestSessionCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-          const testModuleSpanMetadata = getTestModuleCommonTags(command, frameworkVersion, TEST_FRAMEWORK_NAME)
-
-          testSessionSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
-            childOf,
-            tags: {
-              [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...testEnvironmentMetadata,
-              ...testSessionSpanMetadata
-            }
-          })
-          ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
-
-          testModuleSpan = tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-            childOf: testSessionSpan,
-            tags: {
-              [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...testEnvironmentMetadata,
-              ...testModuleSpanMetadata
-            }
-          })
-          ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
-
-          return details
-        })
-    })
-  })
-  // results might be undefined if cypress is being run with "cypress open"
-  on('after:spec', (spec, results) => {
-    const { tests, stats } = results || {}
+  on('after:spec', (spec, { tests, stats }) => {
     const cypressTests = tests || []
     const finishedTests = finishedTestsByFile[spec.relative] || []
 
@@ -450,52 +323,8 @@ module.exports = (on, config) => {
     }
   })
 
-  on('after:run', (suiteStats) => {
-    if (testSessionSpan && testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
-      testModuleSpan.setTag(TEST_STATUS, testStatus)
-      testSessionSpan.setTag(TEST_STATUS, testStatus)
+  on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
 
-      addIntelligentTestRunnerSpanTags(
-        testSessionSpan,
-        testModuleSpan,
-        {
-          isSuitesSkipped: isTestsSkipped,
-          isSuitesSkippingEnabled,
-          isCodeCoverageEnabled,
-          skippingType: 'test',
-          skippingCount: skippedTests.length,
-          hasForcedToRunSuites,
-          hasUnskippableSuites
-        }
-      )
-
-      testModuleSpan.finish()
-      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
-      testSessionSpan.finish()
-      ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
-
-      finishAllTraceSpans(testSessionSpan)
-    }
-
-    return new Promise(resolve => {
-      const exporter = tracer._tracer._exporter
-      if (!exporter) {
-        return resolve(null)
-      }
-      if (exporter.flush) {
-        exporter.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
-        })
-      } else if (exporter._writer) {
-        exporter._writer.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
-        })
-      }
-    })
-  })
   on('task', {
     'dd:testSuiteStart': (suite) => {
       if (testSuiteSpan) {
