@@ -110,8 +110,8 @@ describe('opentelemetry', () => {
       const metrics = payload.payload
       assert.strictEqual(metrics.namespace, 'tracers')
 
-      const spanCreated = metrics.series.find(({ metric }) => metric === 'span_created')
-      const spanFinished = metrics.series.find(({ metric }) => metric === 'span_finished')
+      const spanCreated = metrics.series.find(({ metric }) => metric === 'spans_created')
+      const spanFinished = metrics.series.find(({ metric }) => metric === 'spans_finished')
 
       // Validate common fields between start and finish
       for (const series of [spanCreated, spanFinished]) {
