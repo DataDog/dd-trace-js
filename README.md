@@ -89,7 +89,7 @@ node --loader dd-trace/loader-hook.mjs entrypoint.js
 Node.js >= v20
 
 ```sh
-node --import dd-trace/register entrypoint.js
+node --import dd-trace/register.js entrypoint.js
 ```
 
 ## Serverless / Lambda
