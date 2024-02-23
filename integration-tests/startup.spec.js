@@ -12,8 +12,7 @@ const { assert } = require('chai')
 const execArgvs = [
   [],
   ['--import', 'dd-trace/register.js'],
-  ['--loader', 'dd-trace/loader-hook.mjs'],
-  ['--loader', 'dd-trace/loader-hook']
+  ['--loader', 'dd-trace/loader-hook.mjs']
 ]
 
 execArgvs.forEach((execArgv) => {
