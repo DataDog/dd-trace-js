@@ -40,7 +40,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span ?? null, parsedMessageAttributes ?? null
+        request.operation, request.params, response, span || null, parsedMessageAttributes || null
       )
     })
 
