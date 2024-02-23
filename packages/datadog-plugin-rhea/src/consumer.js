@@ -33,7 +33,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 
     if (
       this.config.dsmEnabled &&
-      msgObj.message?.delivery_annotations?.[CONTEXT_PROPAGATION_KEY]
+      msgObj?.message?.delivery_annotations?.[CONTEXT_PROPAGATION_KEY]
     ) {
       const payloadSize = getAmqpMessageSize(
         { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }
