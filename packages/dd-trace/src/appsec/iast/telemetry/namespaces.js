@@ -40,11 +40,12 @@ function finalizeRequestNamespace (context, rootSpan) {
 }
 
 function merge (metrics) {
-  metrics.forEach(metric => metric.points.forEach(point => {
-    globalNamespace
-      .count(metric.metric, getTagsObject(metric.tags))
-      .inc(point[1])
-  }))
+  metrics.forEach(metric => {
+    if (metric.points?.length) {
+      const count = globalNamespace.count(metric.metric, getTagsObject(metric.tags))
+      metric.points.forEach(point => count.inc(point[1]))
+    }
+  })
 }
 
 function getTagsObject (tags) {
