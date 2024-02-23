@@ -4,17 +4,6 @@
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
-  "exports": {
-    ".": "./index.js",
-    "./register": "./register.js",
-    "./loader-hook.mjs": "./loader-hook.mjs",
-    "./loader-hook": "./loader-hook.mjs",
-    "./init": "./init.js",
-    "./ci/init": "./ci/init.js",
-    "./ci/cypress/plugin": "./ci/cypress/plugin.js",
-    "./ci/cypress/support": "./ci/cypress/support.js",
-    "./*": "./*"
-  },
   "scripts": {
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark",
