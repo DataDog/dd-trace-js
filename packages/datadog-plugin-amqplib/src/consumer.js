@@ -33,7 +33,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
       message?.properties?.headers?.[CONTEXT_PROPAGATION_KEY]
     ) {
       const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
-      const queue = fields.queue ?? fields.routingKey
+      const queue = fields.queue ? fields.queue : fields.routingKey
       this.tracer.decodeDataStreamsContext(message.properties.headers[CONTEXT_PROPAGATION_KEY])
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:rabbitmq'], span, payloadSize)

@@ -8,6 +8,15 @@ const dataBuffer = Buffer.from(JSON.stringify({
   from: 'Aaron Stuyvenberg'
 }))
 
+const dataBufferCustom = (n) => {
+  return Buffer.from(JSON.stringify({
+    number: n,
+    custom: 'data',
+    for: 'my users',
+    from: 'Aaron Stuyvenberg'
+  }))
+}
+
 function getTestData (kinesis, streamName, input, cb) {
   getTestRecord(kinesis, streamName, input, (err, data) => {
     if (err) return cb(err)
@@ -45,6 +54,26 @@ function putTestRecord (kinesis, streamName, data, cb) {
   }, cb)
 }
 
+function putTestRecords (kinesis, streamName, cb) {
+  kinesis.putRecords({
+    Records: [
+      {
+        PartitionKey: id().toString(),
+        Data: dataBufferCustom(1)
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: dataBufferCustom(2)
+      },
+      {
+        PartitionKey: id().toString(),
+        Data: dataBufferCustom(3)
+      }
+    ],
+    StreamName: streamName
+  }, cb)
+}
+
 function waitForActiveStream (kinesis, streamName, cb) {
   kinesis.describeStream({
     StreamName: streamName
@@ -74,6 +103,7 @@ module.exports = {
   getTestData,
   getTestRecord,
   putTestRecord,
+  putTestRecords,
   waitForActiveStream,
   waitForDeletedStream
 }
