@@ -95,7 +95,6 @@ describe('telemetry', () => {
     return testSeq(1, 'app-started', payload => {
       expect(payload).to.have.property('products').that.deep.equal({
         appsec: { enabled: true },
-        appsec_sca: { enabled: true },
         profiler: { version: tracerVersion, enabled: true }
       })
       expect(payload).to.have.property('configuration').that.deep.equal([
@@ -334,7 +333,7 @@ describe('Telemetry extended heartbeat', () => {
     traceAgent.close()
   })
   it('extended beat', (done) => {
-    let extendedHeartbeatRequest
+    let extendedHeartbeatRequest, extendedHeartbeatPayload
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
@@ -346,6 +345,7 @@ describe('Telemetry extended heartbeat', () => {
         if (reqType === 'app-extended-heartbeat') {
           beats++
           extendedHeartbeatRequest = reqType
+          extendedHeartbeatPayload = payload
         }
       }
 
@@ -377,6 +377,20 @@ describe('Telemetry extended heartbeat', () => {
     })
     clock.tick(86400000)
     expect(extendedHeartbeatRequest).to.equal('app-extended-heartbeat')
+    expect(extendedHeartbeatPayload).to.haveOwnProperty('configuration')
+    expect(extendedHeartbeatPayload).to.have.property('configuration').that.deep.equal([
+      { name: 'telemetry.enabled', value: true, origin: 'unknown' },
+      { name: 'telemetry.heartbeatInterval', value: HEARTBEAT_INTERVAL, origin: 'unknown' },
+      { name: 'hostname', value: 'localhost', origin: 'unknown' },
+      { name: 'port', value: 0, origin: 'unknown' },
+      { name: 'service', value: 'test service', origin: 'unknown' },
+      { name: 'version', value: '1.2.3-beta4', origin: 'unknown' },
+      { name: 'appsec.enabled', value: true, origin: 'unknown' },
+      { name: 'sca.enabled', value: true, origin: 'unknown' },
+      { name: 'profiling.enabled', value: true, origin: 'unknown' },
+      { name: 'env', value: 'preprod', origin: 'unknown' },
+      { name: 'tags.runtime-id', value: '1a2b3c', origin: 'unknown' }
+    ])
     expect(beats).to.equal(1)
     clock.tick(86400000)
     expect(beats).to.equal(2)
@@ -765,11 +779,21 @@ describe('Telemetry retry', () => {
         { name: 'bar2', enabled: false, auto_enabled: true }
       ]
     })
-    expect(extendedHeartbeatPayload['products']).to.deep.include({
-      appsec: { enabled: true },
-      appsec_sca: { enabled: true },
-      profiler: { version: tracerVersion, enabled: true }
-    })
+
+    expect(extendedHeartbeatPayload).to.haveOwnProperty('configuration')
+    expect(extendedHeartbeatPayload).to.have.property('configuration').that.deep.equal([
+      { name: 'telemetry.enabled', value: true, origin: 'unknown' },
+      { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL, origin: 'unknown' },
+      { name: 'hostname', value: 'localhost', origin: 'unknown' },
+      { name: 'port', value: 0, origin: 'unknown' },
+      { name: 'service', value: 'test service', origin: 'unknown' },
+      { name: 'version', value: '1.2.3-beta4', origin: 'unknown' },
+      { name: 'appsec.enabled', value: true, origin: 'unknown' },
+      { name: 'sca.enabled', value: true, origin: 'unknown' },
+      { name: 'profiling.enabled', value: true, origin: 'unknown' },
+      { name: 'env', value: 'preprod', origin: 'unknown' },
+      { name: 'tags.runtime-id', value: '1a2b3c', origin: 'unknown' }
+    ])
   })
 })
 

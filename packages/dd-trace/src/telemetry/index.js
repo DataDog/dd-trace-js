@@ -85,9 +85,6 @@ function getProducts (config) {
     appsec: {
       enabled: config.appsec.enabled
     },
-    appsec_sca: {
-      enabled: config.sca?.enabled
-    },
     profiler: {
       version: tracerVersion,
       enabled: config.profiling.enabled
