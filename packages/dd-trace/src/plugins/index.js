@@ -1,7 +1,7 @@
 'use strict'
 
 module.exports = {
-  get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
+  get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo-gateway/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },

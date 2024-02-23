@@ -1,4 +1,10 @@
 {
+  "apollo-gateway": [
+    {
+      "name": "@apollo/subgraph",
+      "versions": [">=2.3.0"]
+    }
+  ],
   "aws-sdk": [
     {
       "name": "@aws-sdk/client-lambda",

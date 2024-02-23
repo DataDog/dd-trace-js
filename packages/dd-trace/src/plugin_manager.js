@@ -44,6 +44,12 @@ function maybeEnable (Plugin) {
 
       pluginClasses[Plugin.id] = null
     } else {
+      // disable graphql plugin if apollo-gateway plugin is enabled
+      if (Plugin.id === 'apollo-gateway' && 'graphql' in pluginClasses && pluginClasses['graphql'] !== null) {
+        log.debug(`Plugin "graphql" was disabled via configuration option.`)
+        pluginClasses['graphql'] = null
+      }
+
       pluginClasses[Plugin.id] = Plugin
     }
   }
