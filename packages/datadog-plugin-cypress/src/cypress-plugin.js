@@ -78,17 +78,17 @@ function getSessionStatus (summary) {
 }
 
 function getCypressVersion (details) {
-  if (details && details.cypressVersion) {
+  if (details?.cypressVersion) {
     return details.cypressVersion
   }
-  if (details && details.config && details.config.version) {
+  if (details?.config?.version) {
     return details.config.version
   }
   return ''
 }
 
 function getRootDir (details) {
-  if (details && details.config) {
+  if (details?.config) {
     return details.config.projectRoot || details.config.repoRoot || process.cwd()
   }
   return process.cwd()
@@ -275,6 +275,10 @@ class CypressPlugin {
   }
 
   beforeRun (details) {
+    this.command = getCypressCommand(details)
+    this.frameworkVersion = getCypressVersion(details)
+    this.rootDir = getRootDir(details)
+
     return getLibraryConfiguration(this.tracer, this.testConfiguration).then(({ err, libraryConfig }) => {
       if (err) {
         log.error(err)
@@ -301,10 +305,6 @@ class CypressPlugin {
           })
 
           const childOf = getTestParentSpan(this.tracer)
-          this.rootDir = getRootDir(details)
-
-          this.command = getCypressCommand(details)
-          this.frameworkVersion = getCypressVersion(details)
 
           const testSessionSpanMetadata =
             getTestSessionCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
@@ -493,15 +493,15 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
-        if (!this.activeSpan) {
-          this.activeSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
+        if (!this.activeTestSpan) {
+          this.activeTestSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
         }
 
-        return this.activeSpan ? { traceId: this.activeSpan.context().toTraceId() } : {}
+        return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
       'dd:afterEach': ({ test, coverage }) => {
         const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
-        if (this.activeSpan) {
+        if (this.activeTestSpan) {
           if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
             const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
             const relativeCoverageFiles = coverageFiles.map(file => getTestSuitePath(file, this.rootDir))
@@ -513,28 +513,28 @@ class CypressPlugin {
             const formattedCoverage = {
               sessionId: _traceId,
               suiteId: _spanId,
-              testId: this.activeSpan.context()._spanId,
+              testId: this.activeTestSpan.context()._spanId,
               files: relativeCoverageFiles
             }
             this.tracer._tracer._exporter.exportCoverage(formattedCoverage)
           }
           const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
-          this.activeSpan.setTag(TEST_STATUS, testStatus)
+          this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
           if (error) {
-            this.activeSpan.setTag('error', error)
+            this.activeTestSpan.setTag('error', error)
           }
           if (isRUMActive) {
-            this.activeSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
+            this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
           }
           if (testSourceLine) {
-            this.activeSpan.setTag(TEST_SOURCE_START, testSourceLine)
+            this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
           }
           const finishedTest = {
             testName,
             testStatus,
-            finishTime: this.activeSpan._getTime(), // we store the finish time here
-            testSpan: this.activeSpan
+            finishTime: this.activeTestSpan._getTime(), // we store the finish time here
+            testSpan: this.activeTestSpan
           }
           if (this.finishedTestsByFile[testSuite]) {
             this.finishedTestsByFile[testSuite].push(finishedTest)
@@ -543,13 +543,13 @@ class CypressPlugin {
           }
           // test spans are finished at after:spec
         }
-        this.activeSpan = null
+        this.activeTestSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
         return null
       },
       'dd:addTags': (tags) => {
-        if (this.activeSpan) {
-          this.activeSpan.addTags(tags)
+        if (this.activeTestSpan) {
+          this.activeTestSpan.addTags(tags)
         }
         return null
       }
