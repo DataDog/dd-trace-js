@@ -557,6 +557,4 @@ class CypressPlugin {
   }
 }
 
-module.exports = {
-  cypressPlugin: new CypressPlugin()
-}
+module.exports = new CypressPlugin()
