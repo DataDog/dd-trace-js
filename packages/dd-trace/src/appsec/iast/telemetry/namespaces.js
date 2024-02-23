@@ -41,9 +41,11 @@ function finalizeRequestNamespace (context, rootSpan) {
 
 function merge (metrics) {
   metrics.forEach(metric => {
-    if (metric.points?.length) {
-      const count = globalNamespace.count(metric.metric, getTagsObject(metric.tags))
-      metric.points.forEach(point => count.inc(point[1]))
+    const { metric: metricName, type, tags, points } = metric
+
+    if (points?.length) {
+      const gMetric = globalNamespace[type](metricName, getTagsObject(tags))
+      points.forEach(point => gMetric.inc(point[1]))
     }
   })
 }
