@@ -3,6 +3,10 @@
     {
       "name": "@apollo/subgraph",
       "versions": [">=2.3.0"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^16.0.0"]
     }
   ],
   "aws-sdk": [
