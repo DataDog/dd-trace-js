@@ -802,9 +802,7 @@ class Config {
     const calc = this._calculated = {}
 
     const {
-      DD_CIVISIBILITY_AGENTLESS_URL,
-      DD_TRACE_TELEMETRY_ENABLED,
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED
+      DD_CIVISIBILITY_AGENTLESS_URL
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
