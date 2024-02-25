@@ -488,6 +488,7 @@ class Config {
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
       DD_IAST_TELEMETRY_VERBOSITY,
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_LOGS_INJECTION,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
@@ -530,6 +531,7 @@ class Config {
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
+      DD_TRACE_TELEMETRY_ENABLED,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
       DD_VERSION
@@ -594,7 +596,7 @@ class Config {
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
-      isTrue(DD_REMOTE_CONFIGURATION_ENABLED),
+      DD_REMOTE_CONFIGURATION_ENABLED,
       !this._isInServerlessEnvironment()
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
@@ -612,6 +614,11 @@ class Config {
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
     this._setTags(env, 'tags', tags)
     this._setValue(env, 'tagsHeaderMaxLength', DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH)
+    this._setBoolean(env, 'telemetry.enabled', coalesce(
+      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
+      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
+      !this._isInServerlessEnvironment()
+    ))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
@@ -653,9 +660,7 @@ class Config {
       options.experimental && options.experimental.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
-    if (!isNaN(parseInt(options.flushInterval, 10))) {
-      this._setValue(opts, 'flushInterval', parseInt(options.flushInterval, 10))
-    }
+    this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
@@ -792,7 +797,7 @@ class Config {
     )
   }
 
-  // currently does not support dynamic/remote config
+  // handles values calculated from a mixture of options and env vars
   _applyCalculated () {
     const calc = this._calculated = {}
 
@@ -807,11 +812,6 @@ class Config {
     } else {
       this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this.options))
     }
-    this._setBoolean(calc, 'telemetry.enabled', coalesce(
-      DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-      DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvironment()
-    ))
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
