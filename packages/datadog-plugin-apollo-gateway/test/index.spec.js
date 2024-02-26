@@ -1,12 +1,15 @@
 'use strict'
 
-const { gql } = require('graphql-tag')
 const { expect } = require('chai')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const accounts = require('./fixtures.js')
+
+const graphqlTag = require(`../../../versions/graphql-tag`).get()
+const gql = graphqlTag.gql
+accounts.typeDefs = gql(accounts.typeDefs)
 
 const fixtures = [accounts]
 

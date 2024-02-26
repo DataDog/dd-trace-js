@@ -1,5 +1,3 @@
-const { gql } = require('graphql-tag')
-
 const typeDefs = `
   type Query {
     hello(name: String, title: String): String
@@ -73,6 +71,6 @@ const resolvers = {
 const name = 'accounts'
 
 exports.name = name
-exports.typeDefs = gql(typeDefs)
+exports.typeDefs = typeDefs
 exports.url = `https://${name}.api.com.invalid`
 exports.resolvers = resolvers

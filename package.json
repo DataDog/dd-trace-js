@@ -79,7 +79,6 @@
     "@opentelemetry/core": "^1.14.0",
     "crypto-randomuuid": "^1.0.0",
     "dc-polyfill": "^0.1.4",
-    "graphql-tag": "^2.12.6",
     "ignore": "^5.2.4",
     "import-in-the-middle": "^1.7.3",
     "int64-buffer": "^0.1.9",
