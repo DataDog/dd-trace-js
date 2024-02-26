@@ -273,8 +273,8 @@ describe('Plugin', () => {
             })
             afterStart.subscribe(spy)
 
-            consumer.run({
-              eachMessage: () => {
+            let eachMessage = async ({ topic, partition, message }) => {
+              try {
                 expect(spy).to.have.been.calledOnce
 
                 const channelMsg = spy.firstCall.args[0]
@@ -289,8 +289,15 @@ describe('Plugin', () => {
                 expect(name).to.eq(afterStart.name)
 
                 done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachMessage = () => {}
               }
-            }).then(() => sendMessages(kafka, testTopic, messages))
+            }
+
+            consumer.run({ eachMessage: (...args) => eachMessage(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
           })
 
           it('should publish on beforeFinish channel', (done) => {
@@ -302,15 +309,22 @@ describe('Plugin', () => {
             })
             beforeFinish.subscribe(spy)
 
-            consumer.run({
-              eachMessage: () => {
-                setImmediate(() => {
+            let eachMessage = async ({ topic, partition, message }) => {
+              setImmediate(() => {
+                try {
                   expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
 
                   done()
-                })
-              }
-            }).then(() => sendMessages(kafka, testTopic, messages))
+                } catch (e) {
+                  done(e)
+                } finally {
+                  eachMessage = () => {}
+                }
+              })
+            }
+
+            consumer.run({ eachMessage: (...args) => eachMessage(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
           })
 
           withNamingSchema(
