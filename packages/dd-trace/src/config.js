@@ -546,7 +546,7 @@ class Config {
 
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
-    this._setBoolean(env, 'appsec.customRulesProvided', !!DD_APPSEC_RULES)
+    if (DD_APPSEC_RULES) this._setBoolean(env, 'appsec.customRulesProvided', true)
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
