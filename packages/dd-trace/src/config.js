@@ -453,14 +453,6 @@ class Config {
     this._setValue(defaults, 'version', pkg.version)
   }
 
-  _isInstrumentationTelemetryEnabled () {
-    return coalesce(
-      process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
-      process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvironment()
-    )
-  }
-
   _applyEnvironment () {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
@@ -479,6 +471,7 @@ class Config {
       DD_DOGSTATSD_PORT,
       DD_ENV,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
+      JEST_WORKER_ID,
       DD_IAST_DEDUPLICATION_ENABLED,
       DD_IAST_ENABLED,
       DD_IAST_MAX_CONCURRENT_REQUESTS,
@@ -617,7 +610,7 @@ class Config {
     this._setBoolean(env, 'telemetry.enabled', coalesce(
       DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !this._isInServerlessEnvironment()
+      !(this._isInServerlessEnvironment() || !!JEST_WORKER_ID)
     ))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
