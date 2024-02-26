@@ -173,7 +173,7 @@ class TextMapPropagator {
     ts.forVendor('dd', state => {
       state.set('s', priority)
       if (mechanism) {
-        state.set('t.dm', mechanism)
+        state.set('t.dm', `-${mechanism}`)
       }
 
       if (typeof origin === 'string') {

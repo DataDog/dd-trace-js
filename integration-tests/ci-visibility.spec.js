@@ -544,6 +544,60 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
       })
+      it('intelligent test runner can skip when using a custom test sequencer', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          tests_skipping: true
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testEvents = events.filter(event => event.type === 'test')
+            // no tests end up running (suite is skipped)
+            assert.equal(testEvents.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_ITR_TESTS_SKIPPED, 'true')
+
+            const skippedSuite = events.find(event =>
+              event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+            ).content
+            assert.propertyVal(skippedSuite.meta, TEST_STATUS, 'skip')
+            assert.propertyVal(skippedSuite.meta, TEST_SKIPPED_BY_ITR, 'true')
+          })
+        childProcess = exec(
+          runTestsWithCoverageCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              CUSTOM_TEST_SEQUENCER: './ci-visibility/jest-custom-test-sequencer.js',
+              TEST_SHARD: '2/2'
+            },
+            stdio: 'inherit'
+          }
+        )
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        childProcess.on('exit', () => {
+          assert.include(testOutput, 'Running shard with a custom sequencer')
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
     }
     const reportingOptions = ['agentless', 'evp proxy']
 
@@ -744,7 +798,7 @@ testFrameworks.forEach(({
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
-                test.meta[TEST_SUITE] === 'true'
+                test.meta[TEST_IS_NEW] === 'true'
               )
               // new tests are not detected
               assert.equal(newTests.length, 0)

@@ -30,7 +30,6 @@ const {
   TEST_SOURCE_FILE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const semver = require('semver')
 const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
@@ -55,7 +54,7 @@ moduleType.forEach(({
   testCommand
 }) => {
   // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+  if (type === 'esm' && version === '6.7.0') {
     return
   }
   if (version === '6.7.0' && NODE_MAJOR > 16) {
@@ -814,6 +813,45 @@ moduleType.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('works if after:run is explicitly used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.exists(testSessionEvent)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          assert.exists(testModuleEvent)
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 4)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 9)
+        })
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1'
           },
           stdio: 'pipe'
         }
