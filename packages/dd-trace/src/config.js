@@ -638,7 +638,7 @@ class Config {
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
-    if (options.appsec.rules) this._setString(opts, 'appsec.rules', options.appsec.rules)
+    this._setString(opts, 'appsec.rules', options.appsec.rules)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
