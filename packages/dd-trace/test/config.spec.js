@@ -1292,6 +1292,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.JEST_WORKER_ID
       options = {}
     })
     context('ci visibility mode is enabled', () => {
@@ -1356,6 +1357,11 @@ describe('Config', () => {
         expect(config).to.have.property('isIntelligentTestRunnerEnabled', false)
         expect(config).to.have.property('isGitUploadEnabled', false)
       })
+    })
+    it('disables telemetry if inside a jest worker', () => {
+      process.env.JEST_WORKER_ID = '1'
+      const config = new Config(options)
+      expect(config.telemetry.enabled).to.be.false
     })
   })
 

@@ -209,10 +209,12 @@ class Config {
 
     const inServerlessEnvironment = inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
 
+    const isJestWorker = !!process.env.JEST_WORKER_ID
+
     const DD_INSTRUMENTATION_TELEMETRY_ENABLED = coalesce(
       process.env.DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !inServerlessEnvironment
+      !(inServerlessEnvironment || isJestWorker)
     )
     const DD_TELEMETRY_HEARTBEAT_INTERVAL = process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL
       ? Math.floor(parseFloat(process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL) * 1000)
@@ -611,7 +613,6 @@ ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)
     this.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     this.lookup = options.lookup
     this.startupLogs = isTrue(DD_TRACE_STARTUP_LOGS)
-    // Disabled for CI Visibility's agentless
     this.telemetry = {
       enabled: isTrue(DD_INSTRUMENTATION_TELEMETRY_ENABLED),
       heartbeatInterval: DD_TELEMETRY_HEARTBEAT_INTERVAL,
