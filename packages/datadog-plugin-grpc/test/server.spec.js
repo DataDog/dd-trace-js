@@ -1,5 +1,6 @@
 'use strict'
 
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
@@ -124,56 +125,59 @@ describe('Plugin', () => {
             })
         })
 
-        it.skip('should handle `stream` calls', async () => {
-          const client = await buildClient({
-            getServerStream: stream => stream.end()
+        // TODO: fix these tests for >= 1.1.0
+        if (semver.intersects(version, '<1.1.0')) {
+          it('should handle `stream` calls', async () => {
+            const client = await buildClient({
+              getServerStream: stream => stream.end()
+            })
+
+            client.getServerStream({ first: 'foobar' }, () => {})
+
+            return agent
+              .use(traces => {
+                expect(traces[0][0]).to.deep.include({
+                  name: 'grpc.server',
+                  service: 'test',
+                  resource: '/test.TestService/getServerStream',
+                  type: 'web'
+                })
+                expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getServerStream')
+                expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
+                expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getServerStream')
+                expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+                expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+                expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              })
           })
 
-          client.getServerStream({ first: 'foobar' }, () => {})
-
-          return agent
-            .use(traces => {
-              expect(traces[0][0]).to.deep.include({
-                name: 'grpc.server',
-                service: 'test',
-                resource: '/test.TestService/getServerStream',
-                type: 'web'
-              })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getServerStream')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getServerStream')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'server_streaming')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
+          it('should handle `bidi` calls', async () => {
+            const client = await buildClient({
+              getBidi: stream => stream.end()
             })
-        })
 
-        it.skip('should handle `bidi` calls', async () => {
-          const client = await buildClient({
-            getBidi: stream => stream.end()
+            call = client.getBidi(new Readable(), () => {})
+            call.on('error', () => {})
+
+            return agent
+              .use(traces => {
+                expect(traces[0][0]).to.deep.include({
+                  name: 'grpc.server',
+                  service: 'test',
+                  resource: '/test.TestService/getBidi',
+                  type: 'web'
+                })
+                expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
+                expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
+                expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
+                expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'server')
+                expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
+                expect(traces[0][0].meta).to.have.property('component', 'grpc')
+              })
           })
-
-          call = client.getBidi(new Readable(), () => {})
-          call.on('error', () => {})
-
-          return agent
-            .use(traces => {
-              expect(traces[0][0]).to.deep.include({
-                name: 'grpc.server',
-                service: 'test',
-                resource: '/test.TestService/getBidi',
-                type: 'web'
-              })
-              expect(traces[0][0].meta).to.have.property('grpc.method.name', 'getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.service', 'TestService')
-              expect(traces[0][0].meta).to.have.property('grpc.method.path', '/test.TestService/getBidi')
-              expect(traces[0][0].meta).to.have.property('grpc.method.kind', 'bidi_streaming')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-              expect(traces[0][0].metrics).to.have.property('grpc.status.code', 0)
-              expect(traces[0][0].meta).to.have.property('component', 'grpc')
-            })
-        })
+        }
 
         it('should handle cancelled `unary` calls', async () => {
           let call = null
