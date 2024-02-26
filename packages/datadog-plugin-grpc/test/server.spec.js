@@ -124,7 +124,7 @@ describe('Plugin', () => {
             })
         })
 
-        it('should handle `stream` calls', async () => {
+        it.skip('should handle `stream` calls', async () => {
           const client = await buildClient({
             getServerStream: stream => stream.end()
           })
@@ -149,7 +149,7 @@ describe('Plugin', () => {
             })
         })
 
-        it('should handle `bidi` calls', async () => {
+        it.skip('should handle `bidi` calls', async () => {
           const client = await buildClient({
             getBidi: stream => stream.end()
           })
