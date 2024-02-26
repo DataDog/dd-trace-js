@@ -9,8 +9,7 @@ module.exports = (object, path, value) => {
     if (property.hasOwnProperty(n)) {
       property = property[n]
     } else {
-      property[n] = {}
-      property = property[n]
+      property[n] = property = {}
     }
   }
   property[pathArr[i]] = value

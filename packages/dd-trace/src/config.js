@@ -610,7 +610,7 @@ class Config {
     this._setBoolean(env, 'telemetry.enabled', coalesce(
       DD_TRACE_TELEMETRY_ENABLED, // for backward compatibility
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
-      !(this._isInServerlessEnvironment() || !!JEST_WORKER_ID)
+      !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
     ))
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
@@ -767,10 +767,10 @@ class Config {
   }
 
   _isCiVisibilityManualApiEnabled () {
-    return coalesce(
+    return isTrue(coalesce(
       process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED,
       false
-    )
+    ))
   }
 
   _isTraceStatsComputationEnabled () {
@@ -807,7 +807,7 @@ class Config {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
-      this._setBoolean(calc, 'isManualApiEnabled', isTrue(this._isCiVisibilityManualApiEnabled()))
+      this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
