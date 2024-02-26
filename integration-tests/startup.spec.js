@@ -8,7 +8,7 @@ const {
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
-const { NODE_MAJOR } = require('../version')
+const { NODE_MAJOR, NODE_MINOR } = require('../version')
 
 const execArgvs = [
   [],
@@ -17,11 +17,12 @@ const execArgvs = [
 ]
 
 execArgvs.forEach((execArgv) => {
-  if (NODE_MAJOR < 20 && execArgv.includes('--import')) {
+  // register() was not added until Node 20.6
+  if ((NODE_MAJOR < 20 || (NODE_MAJOR === 20 && NODE_MINOR < 6)) && execArgv.includes('--import')) {
     return
   }
 
-  if (NODE_MAJOR >= 20 && execArgv.includes('--loader')) {
+  if ((NODE_MAJOR > 20 || (NODE_MAJOR === 20 && NODE_MINOR >= 6)) && execArgv.includes('--loader')) {
     return
   }
 
