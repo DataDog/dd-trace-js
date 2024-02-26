@@ -142,8 +142,6 @@ class Config {
       process.env.DD_API_KEY
     )
 
-    const isJestWorker = !!process.env.JEST_WORKER_ID
-
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
       options.experimental && options.experimental.b3,
