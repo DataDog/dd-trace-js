@@ -55,17 +55,17 @@ class Sns extends BaseAwsSdkPlugin {
 
     switch (operation) {
       case 'publish':
-        this._injectMessageAttributes(span, params)
+        this.injectToMessage(span, params, params.TopicArn, true)
         break
       case 'publishBatch':
-        if (params.PublishBatchRequestEntries && params.PublishBatchRequestEntries.length > 0) {
-          this._injectMessageAttributes(span, params.PublishBatchRequestEntries[0])
+        for (let i = 0; i < params.PublishBatchRequestEntries.length; i++) {
+          this.injectToMessage(span, params.PublishBatchRequestEntries[i], params.TopicArn, i === 0)
         }
         break
     }
   }
 
-  _injectMessageAttributes (span, params) {
+  injectToMessage (span, params, topicArn, injectTraceContext) {
     if (!params.MessageAttributes) {
       params.MessageAttributes = {}
     }
@@ -73,27 +73,50 @@ class Sns extends BaseAwsSdkPlugin {
       log.info('Message attributes full, skipping trace context injection')
       return
     }
+
     const ddInfo = {}
-    this.tracer.inject(span, 'text_map', ddInfo)
-    // add ddInfo before checking DSM so we can include DD attributes in payload size
-    params.MessageAttributes._datadog = {
-      DataType: 'Binary',
-      BinaryValue: ddInfo
+    // for now, we only want to inject to the first message, this may change for batches in the future
+    if (injectTraceContext) {
+      this.tracer.inject(span, 'text_map', ddInfo)
+      // add ddInfo before checking DSM so we can include DD attributes in payload size
+      params.MessageAttributes._datadog = {
+        DataType: 'Binary',
+        BinaryValue: ddInfo
+      }
     }
+
     if (this.config.dsmEnabled) {
-      const payloadSize = getHeadersSize({
-        Message: params.Message,
-        MessageAttributes: params.MessageAttributes
-      })
-      const dataStreamsContext = this.tracer
-        .setCheckpoint(['direction:out', `topic:${params.TopicArn}`, 'type:sns'], span, payloadSize)
+      if (!params.MessageAttributes._datadog) {
+        params.MessageAttributes._datadog = {
+          DataType: 'Binary',
+          BinaryValue: ddInfo
+        }
+      }
+
+      const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
       if (dataStreamsContext) {
         const pathwayCtx = encodePathwayContext(dataStreamsContext)
         ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
       }
     }
-    // BINARY types are automatically base64 encoded
-    params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+
+    if (Object.keys(ddInfo).length !== 0) {
+      // BINARY types are automatically base64 encoded
+      params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+    } else if (params.MessageAttributes._datadog) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
+    }
+  }
+
+  setDSMCheckpoint (span, params, topicArn) {
+    // only set a checkpoint if publishing to a topic
+    if (topicArn) {
+      const payloadSize = getHeadersSize(params)
+      const dataStreamsContext = this.tracer
+        .setCheckpoint(['direction:out', `topic:${topicArn}`, 'type:sns'], span, payloadSize)
+      return dataStreamsContext
+    }
   }
 }
 

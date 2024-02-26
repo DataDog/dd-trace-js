@@ -62,95 +62,12 @@ For more information about library versioning and compatibility, see the [NodeJS
 Changes associated with each individual release are documented on the [GitHub Releases](https://github.com/DataDog/dd-trace-js/releases) screen.
 
 
-## Development
+## Development and Contribution
 
-Before contributing to this open source project, read our [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md).
-
-
-## Requirements
-
-Since this project supports multiple Node versions, using a version
-manager such as [nvm](https://github.com/creationix/nvm) is recommended.
-
-We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
-
-To install dependencies once you have Node and yarn installed, run:
-
-```sh
-$ yarn
-```
+Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
 
 
-## Testing
-
-Before running _plugin_ tests, the data stores need to be running.
-The easiest way to start all of them is to use the provided
-docker-compose configuration:
-
-```sh
-$ docker-compose up -d -V --remove-orphans --force-recreate
-$ yarn services
-```
-
-> **Note**
-> The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
-> that do not compile on ARM64 devices (for example M1/M2 Mac) - their tests
-> cannot be run locally on these devices.
-
-### Unit Tests
-
-There are several types of unit tests, for various types of components. The
-following commands may be useful:
-
-```sh
-# Tracer core tests (i.e. testing `packages/dd-trace`)
-$ yarn test:trace:core
-# "Core" library tests (i.e. testing `packages/datadog-core`
-$ yarn test:core
-# Instrumentations tests (i.e. testing `packages/datadog-instrumentations`
-$ yarn test:instrumentations
-```
-
-Several other components have test commands as well. See `package.json` for
-details.
-
-To test _plugins_ (i.e. components in `packages/datadog-plugin-XXXX`
-directories, set the `PLUGINS` environment variable to the plugin you're
-interested in, and use `yarn test:plugins`. If you need to test multiple
-plugins you may separate then with a pipe (`|`) delimiter. Here's an
-example testing the `express` and `bluebird` plugins:
-
-```sh
-PLUGINS="express|bluebird" yarn test:plugins
-```
-
-
-### Memory Leaks
-
-To run the memory leak tests, use:
-
-```sh
-$ yarn leak:core
-
-# or
-
-$ yarn leak:plugins
-```
-
-
-### Linting
-
-We use [ESLint](https://eslint.org) to make sure that new code
-conforms to our coding standards.
-
-To run the linter, use:
-
-```sh
-$ yarn lint
-```
-
-
-### Experimental ESM Support
+## Experimental ESM Support
 
 > **Warning**
 > 
@@ -175,21 +92,6 @@ Node.js >= v20
 node --import dd-trace/register.js entrypoint.js
 ```
 
-### Benchmarks
-
-Our microbenchmarks live in `benchmark/sirun`. Each directory in there
-corresponds to a specific benchmark test and its variants, which are used to
-track regressions and improvements over time.
-
-In addition to those, when two or more approaches must be compared, please write
-a benchmark in the `benchmark/index.js` module so that we can keep track of the
-most efficient algorithm. To run your benchmark, use:
-
-```sh
-$ yarn bench
-```
-
-
 ## Serverless / Lambda
 
 Note that there is a separate Lambda project, [datadog-lambda-js](https://github.com/DataDog/datadog-lambda-js), that is responsible for enabling metrics and distributed tracing when your application runs on Lambda.
@@ -206,4 +108,4 @@ If you would like to trace your bundled application then please read this page o
 
 ## Security Vulnerabilities
 
-If you have found a security issue, please contact the security team directly at [security@datadoghq.com](mailto:security@datadoghq.com).
+Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
