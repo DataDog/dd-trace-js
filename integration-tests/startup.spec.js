@@ -8,6 +8,7 @@ const {
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
+const { NODE_MAJOR } = require('../version')
 
 const execArgvs = [
   [],
@@ -16,6 +17,14 @@ const execArgvs = [
 ]
 
 execArgvs.forEach((execArgv) => {
+  if (NODE_MAJOR < 20 && execArgv.includes('--import')) {
+    return
+  }
+
+  if (NODE_MAJOR >= 20 && execArgv.includes('--loader')) {
+    return
+  }
+
   describe(`startup ${execArgv.join(' ')}`, () => {
     let agent
     let proc
