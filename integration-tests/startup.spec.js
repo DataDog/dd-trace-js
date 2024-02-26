@@ -8,23 +8,24 @@ const {
 } = require('./helpers')
 const path = require('path')
 const { assert } = require('chai')
-const { NODE_MAJOR, NODE_MINOR } = require('../version')
+const semver = require('semver')
 
 const execArgvs = [
-  [],
-  ['--import', 'dd-trace/register.js'],
-  ['--loader', 'dd-trace/loader-hook.mjs']
+  {
+    execArgv: []
+  },
+  {
+    execArgv: ['--import', 'dd-trace/register.js'],
+    skip: semver.satisfies(process.versions.node, '<20.6')
+  },
+  {
+    execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],
+    skip: semver.satisfies(process.versions.node, '>=20.6')
+  }
 ]
 
-execArgvs.forEach((execArgv) => {
-  // register() was not added until Node 20.6
-  if ((NODE_MAJOR < 20 || (NODE_MAJOR === 20 && NODE_MINOR < 6)) && execArgv.includes('--import')) {
-    return
-  }
-
-  if ((NODE_MAJOR > 20 || (NODE_MAJOR === 20 && NODE_MINOR >= 6)) && execArgv.includes('--loader')) {
-    return
-  }
+execArgvs.forEach(({ execArgv, skip }) => {
+  const describe = skip ? globalThis.describe.skip : globalThis.describe
 
   describe(`startup ${execArgv.join(' ')}`, () => {
     let agent
