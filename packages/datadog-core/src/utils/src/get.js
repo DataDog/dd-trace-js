@@ -3,9 +3,9 @@
 module.exports = (object, path) => {
   const pathArr = path.split('.')
   let val = object
-  for (const p in pathArr) {
+  for (const p of pathArr) {
     if (val === undefined) return val
-    val = val[pathArr[p]]
+    val = val[p]
   }
   return val
 }
