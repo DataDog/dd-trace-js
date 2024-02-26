@@ -269,7 +269,7 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('traceparent', '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01')
       expect(carrier).to.have.property(
         'tracestate',
-        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo_bar~;t.dm:4,other=bleh'
+        'dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo_bar~;t.dm:-4,other=bleh'
       )
     })
 

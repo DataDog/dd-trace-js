@@ -70,4 +70,102 @@ We follow an all-green policy which means that for any PR to be merged _all_ tes
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
+## Development Requirements
+
+Since this project supports multiple Node versions, using a version
+manager such as [nvm](https://github.com/creationix/nvm) is recommended.
+
+We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
+
+To install dependencies once you have Node and yarn installed, run:
+
+```sh
+$ yarn
+```
+
+
+## Testing
+
+Before running _plugin_ tests, the data stores need to be running.
+The easiest way to start all of them is to use the provided
+docker-compose configuration:
+
+```sh
+$ docker-compose up -d -V --remove-orphans --force-recreate
+$ yarn services
+```
+
+> **Note**
+> The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
+> that do not compile on ARM64 devices (for example M1/M2 Mac) - their tests
+> cannot be run locally on these devices.
+
+### Unit Tests
+
+There are several types of unit tests, for various types of components. The
+following commands may be useful:
+
+```sh
+# Tracer core tests (i.e. testing `packages/dd-trace`)
+$ yarn test:trace:core
+# "Core" library tests (i.e. testing `packages/datadog-core`
+$ yarn test:core
+# Instrumentations tests (i.e. testing `packages/datadog-instrumentations`
+$ yarn test:instrumentations
+```
+
+Several other components have test commands as well. See `package.json` for
+details.
+
+To test _plugins_ (i.e. components in `packages/datadog-plugin-XXXX`
+directories, set the `PLUGINS` environment variable to the plugin you're
+interested in, and use `yarn test:plugins`. If you need to test multiple
+plugins you may separate then with a pipe (`|`) delimiter. Here's an
+example testing the `express` and `bluebird` plugins:
+
+```sh
+PLUGINS="express|bluebird" yarn test:plugins
+```
+
+
+### Memory Leaks
+
+To run the memory leak tests, use:
+
+```sh
+$ yarn leak:core
+
+# or
+
+$ yarn leak:plugins
+```
+
+
+### Linting
+
+We use [ESLint](https://eslint.org) to make sure that new code
+conforms to our coding standards.
+
+To run the linter, use:
+
+```sh
+$ yarn lint
+```
+
+
+### Benchmarks
+
+Our microbenchmarks live in `benchmark/sirun`. Each directory in there
+corresponds to a specific benchmark test and its variants, which are used to
+track regressions and improvements over time.
+
+In addition to those, when two or more approaches must be compared, please write
+a benchmark in the `benchmark/index.js` module so that we can keep track of the
+most efficient algorithm. To run your benchmark, use:
+
+```sh
+$ yarn bench
+```
+
+
 [1]: https://docs.datadoghq.com/help
