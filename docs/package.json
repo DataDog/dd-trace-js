@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "typedoc.js",
   "scripts": {
-    "build": "typedoc",
+    "build": "typedoc ../index.d.ts",
     "pretest": "tsc -p . && tsc test",
     "test": "node test"
   },
