@@ -1,6 +1,6 @@
 'use strict'
 
-const uniq = require('../../../../utils/src/uniq')
+const uniq = require('../../../../datadog-core/src/utils/src/uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
