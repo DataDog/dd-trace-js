@@ -114,7 +114,11 @@ class PlaywrightPlugin extends CiPlugin {
         if (step.error) {
           stepSpan.setTag('error', step.error)
         }
-        stepSpan.finish(stepStartTime + step.duration)
+        let stepDuration = step.duration
+        if (stepDuration <= 0 || isNaN(stepDuration)) {
+          stepDuration = 0
+        }
+        stepSpan.finish(stepStartTime + stepDuration)
       })
 
       span.finish()
