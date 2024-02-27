@@ -20,6 +20,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
+let configWithOrigin = []
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -96,23 +97,6 @@ function getProducts (config) {
   return products
 }
 
-function flatten (input, result = [], prefix = [], traversedObjects = null) {
-  traversedObjects = traversedObjects || new WeakSet()
-  if (traversedObjects.has(input)) {
-    return
-  }
-  traversedObjects.add(input)
-  for (const [key, value] of Object.entries(input)) {
-    if (typeof value === 'object' && value !== null) {
-      flatten(value, result, [...prefix, key], traversedObjects)
-    } else {
-      // TODO: add correct origin value
-      result.push({ name: [...prefix, key].join('.'), value, origin: 'unknown' })
-    }
-  }
-  return result
-}
-
 function getInstallSignature (config) {
   const { installSignature: sig } = config
   if (sig && (sig.id || sig.time || sig.type)) {
@@ -127,7 +111,7 @@ function getInstallSignature (config) {
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: flatten(config)
+    configuration: configWithOrigin
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -305,12 +289,17 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+}
+
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
-
-  // Hack to make system tests happy until we ship telemetry v2
-  if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
 
   const application = createAppObject(config)
   const host = createHostObject()
@@ -325,24 +314,23 @@ function updateConfig (changes, config) {
   const configuration = []
 
   for (const change of changes) {
-    if (!names.hasOwnProperty(change.name)) continue
-
-    const name = names[change.name]
+    const name = names[change.name] || change.name
     const { origin, value } = change
-    const entry = { name, origin, value }
+    const entry = { name, value, origin }
 
-    if (Array.isArray(value)) {
-      entry.value = value.join(',')
-    } else if (name === 'DD_TAGS') {
-      entry.value = Object.entries(value).map(([key, value]) => `${key}:${value}`)
-    }
+    if (Array.isArray(value)) entry.value = value.join(',')
+    if (entry.name === 'DD_TAGS') entry.value = formatMapForTelemetry(entry.value)
+    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') entry.value = formatMapForTelemetry(entry.value)
 
     configuration.push(entry)
   }
-
-  const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
-
-  sendData(config, application, host, reqType, payload, updateRetryData)
+  if (!configWithOrigin.length) {
+    configWithOrigin = configuration
+  } else {
+    const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
+    sendData(config, application, host, reqType, payload, updateRetryData)
+  }
 }
 
 module.exports = {

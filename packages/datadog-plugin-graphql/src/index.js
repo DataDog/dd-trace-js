@@ -1,6 +1,6 @@
 'use strict'
 
-const pick = require('../../utils/src/pick')
+const pick = require('../../datadog-core/src/utils/src/pick')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
