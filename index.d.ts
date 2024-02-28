@@ -1121,8 +1121,8 @@ declare namespace tracer {
     /**
      * This plugin automatically instruments the
      * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
-     * this module uses graphql operations to service requests & thus generates graphql spans.
-     * if you only want to trace @apollo/gateway, please disable the graphql plugin when using this plugin.
+     * This module uses graphql operations to service requests & thus generates graphql spans.
+     * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
      */
     interface apollo_gateway extends Instrumentation {}
 
