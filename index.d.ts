@@ -137,7 +137,7 @@ interface Tracer extends opentracing.Tracer {
 // is doesn't need to be exported for Tracer
 /** @hidden */
 interface Plugins {
-  "aerospike": tracer.plugins.aerospike
+  "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
   "apollo-gateway": tracer.plugins.apollo_gateway;
@@ -1100,29 +1100,29 @@ declare namespace tracer {
       meta?: boolean;
     }
 
-  /**
-   * This plugin automatically instruments the
-   * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
-   */
-  interface aerospike extends Instrumentation {}
+    /**
+     * This plugin automatically instruments the
+     * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
+     */
+    interface aerospike extends Instrumentation {}
 
-  /**
-   * This plugin automatically instruments the
-   * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
-   */
-  interface amqp10 extends Instrumentation {}
+    /**
+     * This plugin automatically instruments the
+     * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
+     */
+    interface amqp10 extends Instrumentation {}
 
-  /**
-   * This plugin automatically instruments the
-   * [amqplib](https://github.com/squaremo/amqp.node) module.
-   */
-  interface amqplib extends Instrumentation {}
+    /**
+     * This plugin automatically instruments the
+     * [amqplib](https://github.com/squaremo/amqp.node) module.
+     */
+    interface amqplib extends Instrumentation {}
 
-  /**
-   * This plugin automatically instruments the
-   * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
-   */
-  interface apollo_gateway extends Instrumentation {}
+    /**
+     * This plugin automatically instruments the
+     * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
+     */
+    interface apollo_gateway extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
