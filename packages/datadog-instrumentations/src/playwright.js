@@ -123,7 +123,6 @@ function getBrowserNameFromProjects (projects, test) {
 function formatTestHookError (error, hookType, isTimeout) {
   let hookError = error
   if (error) {
-    hookError = error
     hookError.message = `Error in ${hookType} hook: ${error.message}`
   }
   if (!hookError && isTimeout) {
@@ -202,10 +201,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     testFinishCh.publish({ testStatus, steps: testResult.steps, error, extraTags: annotationTags })
   })
 
-  if (!testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
-  } else {
+  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+  } else {
+    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
   }
 
   if (error) {
