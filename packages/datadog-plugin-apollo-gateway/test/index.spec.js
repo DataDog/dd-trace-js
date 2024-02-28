@@ -32,7 +32,6 @@ describe('Plugin', () => {
   let ApolloGateway
   let LocalGraphQLDataSource
   let buildSubgraphSchema
-  let tracer
 
   function gateway () {
     const localDataSources = Object.fromEntries(
@@ -54,7 +53,6 @@ describe('Plugin', () => {
   describe('@apollo/gateway', () => {
     withVersions('apollo-gateway', '@apollo/gateway', version => {
       before(() => {
-        tracer = require('../../dd-trace')
         const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
         const subgraph = require(`../../../versions/@apollo/subgraph@${version}`).get()
         buildSubgraphSchema = subgraph.buildSubgraphSchema
