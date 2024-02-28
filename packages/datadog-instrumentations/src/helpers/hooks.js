@@ -3,9 +3,6 @@
 module.exports = {
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo-gateway'),
-  '@apollo/federation-internals': () => require('../apollo-gateway'),
-  '@apollo/usage-reporting-protobuf': () => require('../apollo-gateway'),
-  '@apollo/query-planner': () => require('../apollo-gateway'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@cucumber/cucumber': () => require('../cucumber'),
