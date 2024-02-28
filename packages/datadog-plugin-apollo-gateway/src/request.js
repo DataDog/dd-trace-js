@@ -30,10 +30,10 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
 
     const { requestContext, gateway } = ctx
 
-    if (requestContext.operationName) {
+    if (requestContext?.operationName) {
       spanData.meta['graphql.operation.name'] = requestContext.operationName
     }
-    if (gateway.config?.telemetry.includeDocument !== false && requestContext.source) {
+    if (gateway?.config?.telemetry?.includeDocument !== false && requestContext?.source) {
       spanData.meta['graphql.source'] = requestContext.source
     }
 
@@ -41,12 +41,12 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
     buildOperationContext(gateway.schema, requestContext.document, requestContext.request.operationName)
 
     if (operationContext?.operation?.operation) {
-      const document = requestContext.document
-      const type = operationContext.operation.operation
-      const name = operationContext.operation.name && operationContext.operation.name.value
+      const document = requestContext?.document
+      const type = operationContext?.operation?.operation
+      const name = operationContext?.operation?.name && operationContext?.operation?.name?.value
 
-      spanData['resource'] = getSignature(document, name, type, this.config.signature)
-      spanData.meta['graphql.operation.type'] = operationContext.operation.operation
+      spanData['resource'] = getSignature(document, name, type, this?.config?.signature)
+      spanData.meta['graphql.operation.type'] = type
     }
     const span = this.startSpan(this.operationName(), spanData, false)
 
@@ -76,25 +76,29 @@ function buildOperationContext (schema, operationDocument, operationName) {
   let operation
   let operationCount = 0
   const fragments = Object.create(null)
-  operationDocument.definitions.forEach(definition => {
-    switch (definition.kind) {
-      case OPERATION_DEFINITION:
-        operationCount++
-        if (!operationName && operationCount > 1) {
-          return
-        }
-        if (
-          !operationName ||
-          (definition.name && definition.name.value === operationName)
-        ) {
-          operation = definition
-        }
-        break
-      case FRAGMENT_DEFINITION:
-        fragments[definition.name.value] = definition
-        break
-    }
-  })
+  try {
+    operationDocument.definitions.forEach(definition => {
+      switch (definition.kind) {
+        case OPERATION_DEFINITION:
+          operationCount++
+          if (!operationName && operationCount > 1) {
+            return
+          }
+          if (
+            !operationName ||
+            (definition.name && definition.name.value === operationName)
+          ) {
+            operation = definition
+          }
+          break
+        case FRAGMENT_DEFINITION:
+          fragments[definition.name.value] = definition
+          break
+      }
+    })
+  } catch (e) {
+    // safety net
+  }
 
   return {
     schema,
