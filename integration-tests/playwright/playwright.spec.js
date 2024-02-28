@@ -77,6 +77,10 @@ versions.forEach((version) => {
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'browser')
+
+            assert.exists(testSessionEvent.content.meta[ERROR_MESSAGE])
+            assert.exists(testModuleEvent.content.meta[ERROR_MESSAGE])
+
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
               'test_suite.landing-page-test.js',
@@ -88,6 +92,12 @@ versions.forEach((version) => {
               'fail',
               'skip'
             ])
+
+            testSuiteEvents.forEach(testSuiteEvent => {
+              if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
+                assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
+              }
+            })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
               'landing-page-test.js.should work with passing tests',
