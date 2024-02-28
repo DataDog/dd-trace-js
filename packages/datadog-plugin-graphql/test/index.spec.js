@@ -8,6 +8,7 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 const axios = require('axios')
 const http = require('http')
 const getPort = require('get-port')
+const dc = require('dc-polyfill')
 
 describe('Plugin', () => {
   let tracer
@@ -987,11 +988,28 @@ describe('Plugin', () => {
         it('should support multiple executions on a pre-parsed document', () => {
           const source = `query MyQuery { hello(name: "world") }`
           const document = graphql.parse(source)
-
           expect(() => {
             graphql.execute({ schema, document })
             graphql.execute({ schema, document })
           }).to.not.throw()
+        })
+
+        it('should not fail without directives in the document ' +
+          'and with subscription to datadog:graphql:resolver:start', () => {
+          const source = `query MyQuery { hello(name: "world") }`
+          const document = graphql.parse(source)
+          delete document.definitions[0].directives
+          delete document.definitions[0].selectionSet.selections[0].directives
+
+          function noop () {}
+
+          dc.channel('datadog:graphql:resolver:start').subscribe(noop)
+
+          expect(() => {
+            graphql.execute({ schema, document })
+          }).to.not.throw()
+
+          dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
         })
 
         it('should support multiple validations on a pre-parsed document', () => {
