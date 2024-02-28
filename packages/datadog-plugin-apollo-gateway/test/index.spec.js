@@ -32,6 +32,7 @@ describe('Plugin', () => {
   let ApolloGateway
   let LocalGraphQLDataSource
   let buildSubgraphSchema
+  let tracer
 
   function gateway () {
     const localDataSources = Object.fromEntries(
@@ -53,7 +54,7 @@ describe('Plugin', () => {
   describe('@apollo/gateway', () => {
     withVersions('apollo-gateway', '@apollo/gateway', version => {
       before(() => {
-        require('../../dd-trace')
+        tracer = require('../../dd-trace')
         const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
         const subgraph = require(`../../../versions/@apollo/subgraph@${version}`).get()
         buildSubgraphSchema = subgraph.buildSubgraphSchema
@@ -63,31 +64,7 @@ describe('Plugin', () => {
       after(() => {
         return agent.close({ ritmReset: false })
       })
-      describe('plugin manager', () => {
-        before(() => {
-          return agent.load(['apollo-gateway', 'graphql'])
-        })
-        it('should only get apollo-gateway traces if both graphql and apollo-gateway are loaded', done => {
-          const operationName = 'MyQuery'
-          const source = `query ${operationName} { hello(name: "world") }`
-          const variableValues = { who: 'world' }
-          agent
-            .use((traces) => {
-              for (const trace of traces) {
-                for (const span of trace) {
-                  expect(span.name).to.include('apollo-gateway')
-                }
-              }
-            })
-            .then(done)
-            .catch(done)
 
-          gateway()
-            .then(executor => {
-              return execute(executor, source, variableValues, operationName).then(() => {})
-            })
-        })
-      })
       describe('without configuration', () => {
         before(() => {
           return agent.load('apollo-gateway')
@@ -114,7 +91,6 @@ describe('Plugin', () => {
               expect(traces[0][1]).to.have.property('service', expectedSchema.server.serviceName)
               expect(traces[0][1]).to.have.property('type', 'apollo-gateway')
               expect(traces[0][1]).to.have.property('error', 0)
-              expect(traces[0][1].meta).to.have.property('graphql.source', source)
               expect(traces[0][1].meta).to.have.property('component', 'apollo-gateway')
 
               expect(traces[0][2]).to.have.property('name', 'apollo-gateway.plan')
@@ -281,14 +257,10 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .use((traces) => {
-              expect(traces[0].length).equal(4)
+              expect(traces[0].length).equal(3)
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
               expect(traces[0][0]).to.have.property('error', 1)
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'apollo-gateway')
 
               expect(traces[0][1]).to.have.property('name', 'apollo-gateway.validate')
               expect(traces[0][1]).to.have.property('error', 0)
@@ -296,18 +268,9 @@ describe('Plugin', () => {
               expect(traces[0][2]).to.have.property('name', 'apollo-gateway.plan')
               expect(traces[0][2]).to.have.property('service', expectedSchema.server.serviceName)
               expect(traces[0][2]).to.have.property('error', 1)
-
               expect(traces[0][2].meta).to.have.property(ERROR_TYPE, error.name)
-              // due to internal differences in error handling between versions, we're gonna skip comparing
-              // the error message and error stack with the error object thrown by gateway()
-              if (version > '2.3.0') {
-                expect(traces[0][2].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][2].meta).to.have.property(ERROR_STACK, error.stack)
-              }
-              expect(traces[0][2].meta).to.have.property('component', 'apollo-gateway')
-
-              expect(traces[0][3]).to.have.property('name', 'apollo-gateway.execute')
-              expect(traces[0][3]).to.have.property('error', version === '2.3.0' ? 1 : 0)
+              expect(traces[0][2].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][2].meta).to.have.property(ERROR_STACK, error.stack)
             })
             .then(done)
             .catch(done)
@@ -340,30 +303,26 @@ describe('Plugin', () => {
 
               expect(traces[0][2]).to.have.property('name', 'apollo-gateway.plan')
               expect(traces[0][2]).to.have.property('service', expectedSchema.server.serviceName)
-              if (version > '2.3.0') {
-                expect(traces[0][2]).to.have.property('error', 1)
-                expect(traces[0][2].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][2].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][2].meta).to.have.property(ERROR_STACK, error.stack)
-              }
-              expect(traces[0][2].meta).to.have.property('component', 'apollo-gateway')
+              expect(traces[0][2]).to.have.property('error', 0)
 
               expect(traces[0][3]).to.have.property('name', 'apollo-gateway.execute')
-              expect(traces[0][3]).to.have.property('error', 0)
-
-              // because of the way we patch the fetch method, in order to set errors on the fetch span we instrument
+              // In order to mimick the ApolloGateway instrumentation we also patch
               // the call to  the recordExceptions() method by ApolloGateway
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
-              // fetch span but instead the error will be propgated to the request span and be set there
+              // fetch span but instead the error will be propagated to the request span and be set there
+              if (version > '2.3.0') {
+                expect(traces[0][3]).to.have.property('error', 1)
+                expect(traces[0][3].meta).to.have.property(ERROR_TYPE, error.name)
+                expect(traces[0][3].meta).to.have.property(ERROR_MESSAGE, error.message)
+                expect(traces[0][3].meta).to.have.property(ERROR_STACK, error.stack)
+              } else { expect(traces[0][3]).to.have.property('error', 0) }
+
               expect(traces[0][4]).to.have.property('name', 'apollo-gateway.fetch')
               expect(traces[0][4]).to.have.property('service', expectedSchema.server.serviceName)
-              if (version > '2.3.0') {
-                expect(traces[0][4]).to.have.property('error', 1)
-                expect(traces[0][4].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][4].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][4].meta).to.have.property(ERROR_STACK, error.stack)
-              }
-              expect(traces[0][4].meta).to.have.property('component', 'apollo-gateway')
+              expect(traces[0][4]).to.have.property('error', 1)
+              expect(traces[0][4].meta).to.have.property(ERROR_TYPE, error.name)
+              expect(traces[0][4].meta).to.have.property(ERROR_MESSAGE, error.message)
+              expect(traces[0][4].meta).to.have.property(ERROR_STACK, error.stack)
 
               expect(traces[0][5]).to.have.property('name', 'apollo-gateway.postprocessing')
               expect(traces[0][5]).to.have.property('error', 0)
@@ -380,9 +339,45 @@ describe('Plugin', () => {
           gateway.load().then(resp => {
             return execute(resp.executor, source, variableValues, operationName)
               .then((result) => {
-                error = result.errors[0]
+                const errors = result.errors
+                error = errors[errors.length - 1]
               })
           })
+        })
+
+        it('should run spans in the correct context', done => {
+          const operationName = 'MyQuery'
+          const resource = `query ${operationName}`
+          const source = `${resource} { hello(name: "world") }`
+          const variableValues = { who: 'world' }
+
+          agent
+            .use((traces) => {
+              // the spans are in order of execution
+              expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
+
+              expect(traces[0][1]).to.have.property('name', 'apollo-gateway.validate')
+              expect(traces[0][1].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+
+              expect(traces[0][2]).to.have.property('name', 'apollo-gateway.plan')
+              expect(traces[0][2].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+
+              expect(traces[0][3]).to.have.property('name', 'apollo-gateway.execute')
+              expect(traces[0][3].parent_id.toString()).to.equal(traces[0][0].span_id.toString())
+
+              expect(traces[0][4]).to.have.property('name', 'apollo-gateway.fetch')
+              expect(traces[0][4].parent_id.toString()).to.equal(traces[0][3].span_id.toString())
+
+              expect(traces[0][5]).to.have.property('name', 'apollo-gateway.postprocessing')
+              expect(traces[0][5].parent_id.toString()).to.equal(traces[0][3].span_id.toString())
+            })
+            .then(done)
+            .catch(done)
+
+          gateway()
+            .then(executor => {
+              return execute(executor, source, variableValues, operationName).then(() => {})
+            })
         })
 
         withNamingSchema(

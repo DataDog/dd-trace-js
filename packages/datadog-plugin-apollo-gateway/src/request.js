@@ -57,6 +57,8 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
 
   asyncStart (ctx) {
     const errors = ctx?.result?.errors
+    // apollo gateway catches certain errors and returns them in the result object
+    // we want to capture these errors as spans
     if (errors instanceof Array &&
       errors[errors.length - 1] && errors[errors.length - 1].stack && errors[errors.length - 1].message) {
       ctx.currentStore.span.setTag('error', errors[errors.length - 1])

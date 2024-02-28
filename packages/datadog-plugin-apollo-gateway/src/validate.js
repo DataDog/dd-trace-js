@@ -19,9 +19,7 @@ class ApolloGatewayValidatePlugin extends TracingPlugin {
       childOf,
       service: this.config.service,
       type: this.constructor.type,
-      meta: {
-        'graphql.source': ctx.requestContext.source
-      }
+      meta: {}
     }, false)
 
     ctx.parentStore = store

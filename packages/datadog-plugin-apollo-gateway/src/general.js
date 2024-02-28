@@ -8,7 +8,9 @@ class ApolloGatewayGeneralPlugin extends TracingPlugin {
   static get operation () { return 'general' }
 
   error (ctx) {
-    const { span } = storage.getStore()
+    const store = storage.getStore()
+    const span = store?.span
+    if (!span) return
     span.setTag('error', ctx.error)
   }
 }

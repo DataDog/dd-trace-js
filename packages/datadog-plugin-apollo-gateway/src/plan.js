@@ -10,28 +10,34 @@ class ApolloGatewayPlanPlugin extends TracingPlugin {
   static get type () { return 'apollo-gateway' }
   static get kind () { return 'server' }
 
-  start () {
+  static get prefix () {
+    return 'tracing:apm:apollo-gateway:plan'
+  }
+
+  bindStart (ctx) {
     const store = storage.getStore()
     const childOf = store ? store.span : null
 
-    if (childOf._name === 'apollo-gateway.request') {
-      const spanData = {
-        childOf,
-        service: this.config.service,
-        type: this.constructor.type,
-        kind: this.constructor.kind,
-        meta: {}
-      }
-
-      this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData)
+    const spanData = {
+      childOf,
+      service: this.config.service,
+      type: this.constructor.type,
+      kind: this.constructor.kind,
+      meta: {}
     }
+
+    const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData, false)
+    ctx.parentStore = store
+    ctx.currentStore = { ...store, span }
+
+    return ctx.currentStore
   }
+  end (ctx) {
+    ctx.currentStore.span.finish()
+  }
+
   error (ctx) {
-    const { span } = storage.getStore()
-    span.setTag('error', ctx.error)
-  }
-  end () {
-    super.finish()
+    ctx.currentStore.span.setTag('error', ctx.error)
   }
 }
 

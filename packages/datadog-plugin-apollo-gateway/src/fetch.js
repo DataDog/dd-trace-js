@@ -9,26 +9,38 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
   static get type () { return 'apollo-gateway' }
   static get kind () { return 'server' }
 
-  start (ctx) {
+  static get prefix () {
+    return 'tracing:apm:apollo-gateway:fetch'
+  }
+
+  bindStart (ctx) {
     const store = storage.getStore()
     const childOf = store ? store.span : null
 
-    if (childOf._name === `${this.constructor.id}.execute`) {
-      const spanData = {
-        childOf,
-        service: this.config.service,
-        type: this.constructor.type,
-        kind: this.constructor.kind,
-        meta: {}
-      }
-
-      if (ctx?.properties?.serviceName) { spanData.meta['serviceName'] = ctx.properties.serviceName }
-      this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData)
+    const spanData = {
+      childOf,
+      service: this.config.service,
+      type: this.constructor.type,
+      meta: {}
     }
+
+    if (ctx?.attributes?.service) { spanData.meta['serviceName'] = ctx?.attributes?.service }
+
+    const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData, false)
+
+    ctx.parentStore = store
+    ctx.currentStore = { ...store, span }
+
+    return ctx.currentStore
   }
 
-  end (ctx) {
-    super.finish()
+  asyncStart (ctx) {
+    ctx.currentStore.span.finish()
+    return ctx.parentStore
+  }
+
+  error (ctx) {
+    ctx.currentStore.span.setTag('error', ctx.error)
   }
 }
 

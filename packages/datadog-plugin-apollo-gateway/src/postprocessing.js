@@ -30,8 +30,9 @@ class ApolloGatewayPostProcessingPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  end (ctx) {
+  asyncStart (ctx) {
     ctx.currentStore.span.finish()
+    return ctx.parentStore
   }
 
   error (ctx) {
