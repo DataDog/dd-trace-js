@@ -317,10 +317,10 @@ describe('Plugin', () => {
                   done()
                 } catch (e) {
                   done(e)
-                } finally {
-                  eachMessage = () => {}
                 }
               })
+
+              eachMessage = () => {}
             }
 
             consumer.run({ eachMessage: (...args) => eachMessage(...args) })
