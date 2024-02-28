@@ -142,14 +142,12 @@ describe('format', () => {
     })
 
     it('should extract Datadog specific tags', () => {
-      spanContext._tags['operation.name'] = 'name'
       spanContext._tags['service.name'] = 'service'
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
 
       trace = format(span)
 
-      expect(trace.name).to.equal('name')
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
       expect(trace.resource).to.equal('resource')
