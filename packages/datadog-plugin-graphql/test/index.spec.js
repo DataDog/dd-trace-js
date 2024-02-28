@@ -1004,11 +1004,13 @@ describe('Plugin', () => {
           function noop () {}
           dc.channel('datadog:graphql:resolver:start').subscribe(noop)
 
-          expect(() => {
-            graphql.execute({ schema, document })
-          }).to.not.throw()
-
-          dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
+          try {
+            expect(() => {
+              graphql.execute({ schema, document })
+            }).to.not.throw()
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
+          }
         })
 
         it('should support multiple validations on a pre-parsed document', () => {
