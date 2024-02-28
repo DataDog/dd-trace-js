@@ -835,8 +835,10 @@ export declare interface Scope {
 
 /** @hidden */
 interface Plugins {
+  "aerospike": plugins.aerospike;
   "amqp10": plugins.amqp10;
   "amqplib": plugins.amqplib;
+  "apollo-gateway": plugins.apollo_gateway;
   "aws-sdk": plugins.aws_sdk;
   "bunyan": plugins.bunyan;
   "cassandra-driver": plugins.cassandra_driver;
@@ -1085,6 +1087,11 @@ export declare namespace plugins {
      */
     meta?: boolean;
   }
+  /**
+   * This plugin automatically instruments the
+   * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
+   */
+  interface aerospike extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
@@ -1097,6 +1104,12 @@ export declare namespace plugins {
    * [amqplib](https://github.com/squaremo/amqp.node) module.
    */
   interface amqplib extends Instrumentation {}
+
+  /**
+   * This plugin automatically instruments the
+   * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
+   */
+  interface apollo_gateway extends Instrumentation {}
 
   /**
    * This plugin automatically instruments the
