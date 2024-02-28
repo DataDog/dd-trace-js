@@ -133,10 +133,10 @@ function formatTestHookError (error, hookType, isTimeout) {
 }
 
 function addErrorToTestSuite (testSuiteAbsolutePath, error) {
-  if (!testSuiteToErrors.has(testSuiteAbsolutePath)) {
-    testSuiteToErrors.set(testSuiteAbsolutePath, [error])
-  } else {
+  if (testSuiteToErrors.has(testSuiteAbsolutePath)) {
     testSuiteToErrors.get(testSuiteAbsolutePath).push(error)
+  } else {
+    testSuiteToErrors.set(testSuiteAbsolutePath, [error])
   }
 }
 
