@@ -1002,7 +1002,6 @@ describe('Plugin', () => {
           delete document.definitions[0].selectionSet.selections[0].directives
 
           function noop () {}
-
           dc.channel('datadog:graphql:resolver:start').subscribe(noop)
 
           expect(() => {
