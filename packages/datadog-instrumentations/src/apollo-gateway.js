@@ -51,39 +51,40 @@ function wrapStartActiveSpan (startActiveSpan) {
     if (typeof firstArg !== 'string') return startActiveSpan.apply(this, args)
 
     const cb = args[args.length - 1]
+    let newCb
     switch (firstArg) {
       case 'gateway.request': {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return requestCh.tracePromise(cb, REQUEST_CTX, this, ...callbackArgs)
         }
         break
       }
       case 'gateway.plan' : {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return planCh.traceSync(cb, {}, this, ...callbackArgs)
         }
         break
       }
       case 'gateway.validate': {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return validateCh.traceSync(cb, {}, this, ...callbackArgs)
         }
         break
       }
       case 'gateway.execute': {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return executeCh.tracePromise(cb, {}, this, ...callbackArgs)
         }
         break
       }
       case 'gateway.fetch': {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return fetchCh.tracePromise(cb, { attributes: args[1].attributes }, this, ...callbackArgs)
         }
         break
       }
       case 'gateway.postprocessing' : {
-        args[args.length - 1] = function (...callbackArgs) {
+        newCb = function (...callbackArgs) {
           return postProcessingCh.tracePromise(cb, {}, this, ...callbackArgs)
         }
         break
@@ -91,14 +92,14 @@ function wrapStartActiveSpan (startActiveSpan) {
       default:
         return startActiveSpan.apply(this, args)
     }
+    args[args.length - 1] = newCb
     return startActiveSpan.apply(this, args)
   }
 }
 
 addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', versions: ['>=2.3.0'] },
   (obj) => {
-    const newTracerProto = Object.getPrototypeOf(obj.tracer)
-    shimmer.wrap(newTracerProto, 'startActiveSpan', wrapStartActiveSpan)
+    shimmer.wrap(Object.getPrototypeOf(obj.tracer), 'startActiveSpan', wrapStartActiveSpan)
     shimmer.wrap(obj, 'recordExceptions', wrapRecordExceptions)
     return obj
   })
