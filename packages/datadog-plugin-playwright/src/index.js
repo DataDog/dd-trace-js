@@ -30,10 +30,22 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuites = new Map()
+    this.numFailedTests = 0
+    this.numFailedSuites = 0
 
     this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
+
+      if (this.numFailedSuites > 0) {
+        let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
+        if (this.numFailedTests > 0) {
+          errorMessage += ` Tests failed: ${this.numFailedTests}`
+        }
+        const error = new Error(errorMessage)
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -42,6 +54,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
+      this.numFailedTests = 0
     })
 
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
@@ -69,11 +82,21 @@ class PlaywrightPlugin extends CiPlugin {
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
-    this.addSub('ci:playwright:test-suite:finish', (status) => {
+    this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
-      span.setTag(TEST_STATUS, status)
+      if (error) {
+        span.setTag('error', error)
+        span.setTag(TEST_STATUS, 'fail')
+      } else {
+        span.setTag(TEST_STATUS, status)
+      }
+
+      if (status === 'fail' || error) {
+        this.numFailedSuites++
+      }
+
       span.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
@@ -122,6 +145,10 @@ class PlaywrightPlugin extends CiPlugin {
       })
 
       span.finish()
+
+      if (testStatus === 'fail') {
+        this.numFailedTests++
+      }
 
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,

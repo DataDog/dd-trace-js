@@ -19,6 +19,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_CONFIGURATION_BROWSER_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const versions = ['1.18.0', 'latest']
 
@@ -177,6 +178,34 @@ versions.forEach((version) => {
       childProcess.stderr.on('data', chunk => {
         testOutput += chunk.toString()
       })
+    })
+
+    it('works when before all fails and step durations are negative', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+        const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+
+        assert.propertyVal(testSuiteEvent.meta, TEST_STATUS, 'fail')
+        assert.propertyVal(testSessionEvent.meta, TEST_STATUS, 'fail')
+        assert.exists(testSuiteEvent.meta[ERROR_MESSAGE])
+        assert.include(testSessionEvent.meta[ERROR_MESSAGE], 'Test suites failed: 1')
+      }).then(() => done()).catch(done)
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-error',
+            TEST_TIMEOUT: 3000
+          },
+          stdio: 'pipe'
+        }
+      )
     })
   })
 })
