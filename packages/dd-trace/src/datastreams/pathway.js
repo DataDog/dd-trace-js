@@ -107,6 +107,8 @@ module.exports = {
   computePathwayHash: computeHash,
   encodePathwayContext,
   decodePathwayContext,
+  encodePathwayContextBase64,
+  decodePathwayContextBase64,
   DsmPathwayCodec,
   CONTEXT_PROPAGATION_KEY,
   CONTEXT_PROPAGATION_KEY_BASE64

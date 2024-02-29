@@ -4,7 +4,7 @@ const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
-const { getAmqpMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
 const { getResourceName } = require('./util')
 
 class AmqplibProducerPlugin extends ProducerPlugin {
@@ -33,7 +33,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
 
-    if (this.config.dsmEnabled && DsmPathwayCodec.contextExists(fields.headers)) {
+    if (this.config.dsmEnabled) {
       const hasRoutingKey = fields.routingKey != null
       const payloadSize = getAmqpMessageSize({ content: message, headers: fields.headers })
       const dataStreamsContext = this.tracer

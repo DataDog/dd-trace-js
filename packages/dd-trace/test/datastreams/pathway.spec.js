@@ -3,9 +3,13 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const { computePathwayHash, encodePathwayContext, decodePathwayContext } = require(
-  '../../src/datastreams/pathway'
-)
+const {
+  computePathwayHash,
+  encodePathwayContext,
+  decodePathwayContext,
+  encodePathwayContextBase64,
+  decodePathwayContextBase64
+} = require('../../src/datastreams/pathway')
 
 describe('encoding', () => {
   it('hash should always give the same value', () => {
@@ -41,5 +45,20 @@ describe('encoding', () => {
     expect(decoded.hash.toString()).to.equal(expectedContext.hash.toString())
     expect(decoded.pathwayStartNs).to.equal(expectedContext.pathwayStartNs)
     expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
+  })
+  it('should encode and decode to the same value when using base64', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    const encodedPathway = encodePathwayContextBase64(ctx)
+    const decodedPathway = decodePathwayContextBase64(encodedPathway)
+
+    expect(decodedPathway.hash.toString()).to.equal(ctx.hash.toString())
+    expect(decodedPathway.pathwayStartNs).to.equal(ctx.pathwayStartNs)
+    expect(decodedPathway.edgeStartNs).to.equal(ctx.edgeStartNs)
   })
 })
