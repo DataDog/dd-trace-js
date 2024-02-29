@@ -63,7 +63,7 @@ function decodePathwayContextBase64 (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return
   }
-  const encodedPathway = Buffer.from(pathwayContext.hash, 'base64')
+  const encodedPathway = Buffer.from(pathwayContext, 'base64')
   return decodePathwayContext(encodedPathway)
 }
 
