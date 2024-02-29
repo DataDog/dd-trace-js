@@ -122,15 +122,17 @@ function getResolverInfo (info, args) {
     Object.assign(resolverVars, args)
   }
 
-  const directives = info.fieldNodes[0].directives
-  for (const directive of directives) {
-    const argList = {}
-    for (const argument of directive['arguments']) {
-      argList[argument.name.value] = argument.value.value
-    }
+  const directives = info.fieldNodes?.[0]?.directives
+  if (Array.isArray(directives)) {
+    for (const directive of directives) {
+      const argList = {}
+      for (const argument of directive['arguments']) {
+        argList[argument.name.value] = argument.value.value
+      }
 
-    if (Object.keys(argList).length) {
-      resolverVars[directive.name.value] = argList
+      if (Object.keys(argList).length) {
+        resolverVars[directive.name.value] = argList
+      }
     }
   }
 
