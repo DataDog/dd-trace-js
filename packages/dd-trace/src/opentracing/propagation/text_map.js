@@ -171,7 +171,7 @@ class TextMapPropagator {
     carrier[traceparentKey] = spanContext.toTraceparent()
 
     ts.forVendor('dd', state => {
-      state.set("p", spanContext._parentId.toString(16))
+      state.set("p", spanContext._spanId)
       state.set('s', priority)
       if (mechanism) {
         state.set('t.dm', `-${mechanism}`)
@@ -371,7 +371,7 @@ class TextMapPropagator {
         }
       })
 
-      if (!spanContext._trace.tags.has('_dd.parent_id')) {
+      if (!spanContext._trace.tags['_dd.parent_id']) {
         spanContext._trace.tags['_dd.parent_id'] = "0000000000000000"
       }
 
