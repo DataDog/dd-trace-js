@@ -14,6 +14,7 @@ const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
+const testSuiteToErrors = new Map()
 
 let startedSuites = []
 
@@ -81,7 +82,12 @@ function getRootDir (playwrightRunner) {
 
 function getProjectsFromRunner (runner) {
   const config = getPlaywrightConfig(runner)
-  return config.projects?.map(({ project }) => project)
+  return config.projects?.map((project) => {
+    if (project.project) {
+      return project.project
+    }
+    return project
+  })
 }
 
 function getProjectsFromDispatcher (dispatcher) {
@@ -93,13 +99,55 @@ function getProjectsFromDispatcher (dispatcher) {
   return dispatcher._loader?.fullConfig()?.projects
 }
 
-function getBrowserNameFromProjects (projects, projectId) {
-  if (!projects) {
+function getBrowserNameFromProjects (projects, test) {
+  if (!projects || !test) {
     return null
   }
-  return projects.find(project =>
-    project.__projectId === projectId || project._id === projectId
-  )?.name
+  const { _projectIndex, _projectId: testProjectId } = test
+
+  if (_projectIndex !== undefined) {
+    return projects[_projectIndex]?.name
+  }
+
+  return projects.find(({ __projectId, _id, name }) => {
+    if (__projectId !== undefined) {
+      return __projectId === testProjectId
+    }
+    if (_id !== undefined) {
+      return _id === testProjectId
+    }
+    return name === testProjectId
+  })?.name
+}
+
+function formatTestHookError (error, hookType, isTimeout) {
+  let hookError = error
+  if (error) {
+    hookError.message = `Error in ${hookType} hook: ${error.message}`
+  }
+  if (!hookError && isTimeout) {
+    hookError = new Error(`${hookType} hook timed out`)
+  }
+  return hookError
+}
+
+function addErrorToTestSuite (testSuiteAbsolutePath, error) {
+  if (testSuiteToErrors.has(testSuiteAbsolutePath)) {
+    testSuiteToErrors.get(testSuiteAbsolutePath).push(error)
+  } else {
+    testSuiteToErrors.set(testSuiteAbsolutePath, [error])
+  }
+}
+
+function getTestSuiteError (testSuiteAbsolutePath) {
+  const errors = testSuiteToErrors.get(testSuiteAbsolutePath)
+  if (!errors) {
+    return null
+  }
+  if (errors.length === 1) {
+    return errors[0]
+  }
+  return new Error(`${errors.length} errors in this test suite:\n${errors.map(e => e.message).join('\n------\n')}`)
 }
 
 function testBeginHandler (test, browserName) {
@@ -131,7 +179,7 @@ function testBeginHandler (test, browserName) {
   })
 }
 
-function testEndHandler (test, annotations, testStatus, error) {
+function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   let annotationTags
   if (annotations.length) {
     annotationTags = parseAnnotations(annotations)
@@ -139,6 +187,11 @@ function testEndHandler (test, annotations, testStatus, error) {
   const { _requireFile: testSuiteAbsolutePath, results, _type } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
+    const hookError = formatTestHookError(error, _type, isTimeout)
+
+    if (hookError) {
+      addErrorToTestSuite(testSuiteAbsolutePath, hookError)
+    }
     return
   }
 
@@ -148,15 +201,20 @@ function testEndHandler (test, annotations, testStatus, error) {
     testFinishCh.publish({ testStatus, steps: testResult.steps, error, extraTags: annotationTags })
   })
 
-  if (!testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
-  } else {
+  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
     testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+  } else {
+    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+  }
+
+  if (error) {
+    addErrorToTestSuite(testSuiteAbsolutePath, error)
   }
 
   remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
     .filter(currentTest => currentTest !== test)
 
+  // Last test, we finish the suite
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
 
@@ -167,9 +225,10 @@ function testEndHandler (test, annotations, testStatus, error) {
       testSuiteStatus = 'skip'
     }
 
+    const suiteError = getTestSuiteError(testSuiteAbsolutePath)
     const testSuiteAsyncResource = testSuiteToAr.get(testSuiteAbsolutePath)
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteFinishCh.publish(testSuiteStatus)
+      testSuiteFinishCh.publish({ status: testSuiteStatus, error: suiteError })
     })
   }
 }
@@ -197,7 +256,7 @@ function dispatcherHook (dispatcherExport) {
       if (method === 'testBegin') {
         const { test } = dispatcher._testById.get(params.testId)
         const projects = getProjectsFromDispatcher(dispatcher)
-        const browser = getBrowserNameFromProjects(projects, test._projectId)
+        const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser)
       } else if (method === 'testEnd') {
         const { test } = dispatcher._testById.get(params.testId)
@@ -205,7 +264,8 @@ function dispatcherHook (dispatcherExport) {
         const { results } = test
         const testResult = results[results.length - 1]
 
-        testEndHandler(test, params.annotations, STATUS_TO_TEST_STATUS[testResult.status], testResult.error)
+        const isTimeout = testResult.status === 'timedOut'
+        testEndHandler(test, params.annotations, STATUS_TO_TEST_STATUS[testResult.status], testResult.error, isTimeout)
       }
     })
 
@@ -232,13 +292,14 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
       const projects = getProjectsFromDispatcher(dispatcher)
-      const browser = getBrowserNameFromProjects(projects, test._projectId)
+      const browser = getBrowserNameFromProjects(projects, test)
       testBeginHandler(test, browser)
     })
     worker.on('testEnd', ({ testId, status, errors, annotations }) => {
       const test = getTestByTestId(dispatcher, testId)
 
-      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0])
+      const isTimeout = status === 'timedOut'
+      testEndHandler(test, annotations, STATUS_TO_TEST_STATUS[status], errors && errors[0], isTimeout)
     })
 
     return worker
@@ -265,7 +326,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       tests.forEach(test => {
-        const browser = getBrowserNameFromProjects(projects, test._projectId)
+        const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser)
         testEndHandler(test, [], 'skip')
       })
@@ -327,6 +388,7 @@ addHook({
   file: 'lib/runner/runner.js',
   versions: ['>=1.38.0']
 }, runnerHook)
+
 addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
