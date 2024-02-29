@@ -3,7 +3,7 @@ const {
   CONTEXT_PROPAGATION_KEY,
   getSizeOrZero
 } = require('../../../dd-trace/src/datastreams/processor')
-const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
@@ -113,13 +113,10 @@ class Kinesis extends BaseAwsSdkPlugin {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
       if (
-        parsedAttributes &&
-        parsedAttributes._datadog &&
-        parsedAttributes._datadog[CONTEXT_PROPAGATION_KEY] &&
-        streamName
+        parsedAttributes?._datadog && streamName && DsmPathwayCodec.contextExists(parsedAttributes._datadog)
       ) {
         const payloadSize = getSizeOrZero(record.Data)
-        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes._datadog[CONTEXT_PROPAGATION_KEY]))
+        this.tracer.decodeDataStreamsContext(parsedAttributes._datadog)
         this.tracer
           .setCheckpoint(['direction:in', `topic:${streamName}`, 'type:kinesis'], span, payloadSize)
       }
@@ -182,10 +179,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (this.config.dsmEnabled) {
       parsedData._datadog = ddInfo
       const dataStreamsContext = this.setDSMCheckpoint(span, parsedData, stream)
-      if (dataStreamsContext) {
-        const pathwayCtx = encodePathwayContext(dataStreamsContext)
-        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
-      }
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
     if (Object.keys(ddInfo).length !== 0) {

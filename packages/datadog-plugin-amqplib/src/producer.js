@@ -3,7 +3,7 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { encodePathwayContext } = require('../../dd-trace/src/datastreams/pathway')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const { getAmqpMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
 const { getResourceName } = require('./util')
 
@@ -33,15 +33,14 @@ class AmqplibProducerPlugin extends ProducerPlugin {
 
     this.tracer.inject(span, TEXT_MAP, fields.headers)
 
-    if (this.config.dsmEnabled) {
+    if (this.config.dsmEnabled && DsmPathwayCodec.contextExists(fields.headers)) {
       const hasRoutingKey = fields.routingKey != null
       const payloadSize = getAmqpMessageSize({ content: message, headers: fields.headers })
       const dataStreamsContext = this.tracer
         .setCheckpoint(
           ['direction:out', `exchange:${fields.exchange}`, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq']
           , span, payloadSize)
-      const pathwayCtx = encodePathwayContext(dataStreamsContext)
-      fields.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
+      DsmPathwayCodec.encode(dataStreamsContext, fields.headers)
     }
   }
 }

@@ -3,7 +3,9 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const { computePathwayHash, encodePathwayContext, decodePathwayContext } = require('../../src/datastreams/pathway')
+const { computePathwayHash, encodePathwayContext, decodePathwayContext } = require(
+  '../../src/datastreams/pathway'
+)
 
 describe('encoding', () => {
   it('hash should always give the same value', () => {
