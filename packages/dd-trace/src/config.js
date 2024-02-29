@@ -376,7 +376,7 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.customRulesProvided', false)
-    this._setValue(defaults, 'appsec.enabled', false)
+    this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rateLimit', 100)
