@@ -37,7 +37,7 @@ function encodePathwayContext (dataStreamsContext) {
 }
 
 function encodePathwayContextBase64 (dataStreamsContext) {
-  const encodedPathway = encodePathwayContext(dataStreamsContext.hash)
+  const encodedPathway = encodePathwayContext(dataStreamsContext)
   return encodedPathway.toString('base64')
 }
 
@@ -106,8 +106,6 @@ class DsmPathwayCodec {
 module.exports = {
   computePathwayHash: computeHash,
   encodePathwayContext,
-  encodePathwayContextBase64,
-  decodePathwayContextBase64,
   decodePathwayContext,
   DsmPathwayCodec,
   CONTEXT_PROPAGATION_KEY,
