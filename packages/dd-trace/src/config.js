@@ -495,6 +495,7 @@ class Config {
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sca.enabled', false)
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -528,6 +529,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
+      DD_APPSEC_SCA_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -680,6 +682,7 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
+    this._setBoolean(env, 'sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)

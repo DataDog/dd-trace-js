@@ -7,6 +7,7 @@ const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
 const logs = require('./logs')
+const log = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -235,6 +236,10 @@ function extendedHeartbeat (config) {
 
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
+    if (aConfig.sca?.enabled) {
+      log.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+    }
+
     return
   }
   config = aConfig
