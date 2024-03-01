@@ -1643,4 +1643,83 @@ describe('Config', () => {
       }
     })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
+
+  context('payload tagging', () => {
+    let env
+
+    const staticConfig = require('../src/payload-tagging/config/aws')
+
+    beforeEach(() => {
+      env = process.env
+    })
+
+    afterEach(() => {
+      process.env = env
+    })
+
+    it('defaults', () => {
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+    })
+
+    it('enabling requests with no additional filter', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [serviceName, service] of Object.entries(awsRules)) {
+        expect(service.request).to.deep.equal(staticConfig[serviceName].request)
+      }
+    })
+
+    it('enabling requests with an additional filter', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = '$.foo.bar'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', false)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [, service] of Object.entries(awsRules)) {
+        expect(service.request).to.include('$.foo.bar')
+      }
+    })
+
+    it('enabling responses with no additional filter', () => {
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [serviceName, service] of Object.entries(awsRules)) {
+        expect(service.response).to.deep.equal(staticConfig[serviceName].response)
+      }
+    })
+
+    it('enabling responses with an additional filter', () => {
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = '$.foo.bar'
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', false)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 10)
+      const awsRules = taggingConfig.rules.aws
+      for (const [, service] of Object.entries(awsRules)) {
+        expect(service.response).to.include('$.foo.bar')
+      }
+    })
+
+    it('overriding max depth', () => {
+      process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = 'all'
+      process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = 'all'
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = 7
+      const taggingConfig = new Config().cloudPayloadTagging
+      expect(taggingConfig).to.have.property('requestsEnabled', true)
+      expect(taggingConfig).to.have.property('responsesEnabled', true)
+      expect(taggingConfig).to.have.property('maxDepth', 7)
+    })
+  })
 })
