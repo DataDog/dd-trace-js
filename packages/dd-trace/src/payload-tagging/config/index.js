@@ -1,4 +1,5 @@
-const sdks = { }
+const aws = require('./aws.json')
+const sdks = { aws }
 
 function getSDKRules (sdk, requestInput, responseInput) {
   return Object.fromEntries(
