@@ -8,7 +8,8 @@ const {
   encodePathwayContext,
   decodePathwayContext,
   encodePathwayContextBase64,
-  decodePathwayContextBase64
+  decodePathwayContextBase64,
+  DsmPathwayCodec
 } = require('../../src/datastreams/pathway')
 
 describe('encoding', () => {
@@ -60,5 +61,58 @@ describe('encoding', () => {
     expect(decodedPathway.hash.toString()).to.equal(ctx.hash.toString())
     expect(decodedPathway.pathwayStartNs).to.equal(ctx.pathwayStartNs)
     expect(decodedPathway.edgeStartNs).to.equal(ctx.edgeStartNs)
+  })
+
+  it('should encode and decode to the same value when using the PathwayCodec', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    const carrier = {}
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    DsmPathwayCodec.encode(ctx, carrier)
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
+    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
+    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
+  })
+
+  it('should encode/decode to the same value when using the PathwayCodec, base64 and the deprecated ctx key', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    const carrier = {}
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    DsmPathwayCodec.encode(ctx, carrier)
+    carrier['dd-pathway-ctx'] = carrier['dd-pathway-ctx-base64']
+    delete carrier['dd-pathway-ctx-base64']
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
+    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
+    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
+  })
+
+  it('should encode/decode to the same value when using the PathwayCodec and the deprecated encoding', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    const carrier = {}
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    carrier['dd-pathway-ctx'] = encodePathwayContext(ctx).hash
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
+    expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
+    expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
   })
 })
