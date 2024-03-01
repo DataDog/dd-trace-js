@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const jp = require('jsonpath')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const URL = require('url').URL
@@ -18,6 +19,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -173,6 +175,26 @@ function validateNamingVersion (versionString) {
   return versionString
 }
 
+/**
+ * Given a string of comma-separated paths, return the array of paths if
+ * all paths are valid JSON paths, or undefined if any path is invalid.
+ *
+ * @param {string} input
+ * @returns {[string] | undefined}
+ */
+function validJSONPathsOrUndef (input) {
+  if (input === 'all') return []
+  const rules = input.split(',')
+  for (const rule of rules) {
+    try {
+      jp.parse(rule)
+    } catch (e) {
+      return undefined
+    }
+  }
+  return rules
+}
+
 // Shallow clone with property name remapping
 function remapify (input, mappings) {
   if (!input) return
@@ -281,6 +303,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     // TODO: refactor
     this.apiKey = DD_API_KEY
 
@@ -289,6 +331,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
+      responsesEnabled: !!(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING),
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()

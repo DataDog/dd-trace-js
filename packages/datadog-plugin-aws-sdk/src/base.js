@@ -5,9 +5,11 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const coalesce = require('koalas')
+const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
+  static get isPayloadReporter () { return false }
 
   get serviceIdentifier () {
     const id = this.constructor.id.toLowerCase()
@@ -18,6 +20,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       value: id
     })
     return id
+  }
+
+  get cloudTaggingConfig () { return this._tracerConfig.cloudPayloadTagging }
+
+  get payloadTaggingRules () {
+    return this.cloudTaggingConfig.rules['aws']?.[this.constructor.id]
   }
 
   constructor (...args) {
@@ -50,6 +58,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       analyticsSampler.sample(span, this.config.measured)
 
       this.requestInject(span, request)
+
+      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
+        const maxDepth = this.cloudTaggingConfig.maxDepth
+        const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
+        span.addTags(requestTags)
+      }
 
       const store = storage.getStore()
 
@@ -116,6 +130,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const params = response.request.params
     const operation = response.request.operation
     const extraTags = this.generateTags(params, operation, response) || {}
+
     const tags = Object.assign({
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
@@ -123,6 +138,22 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     }, extraTags)
 
     span.addTags(tags)
+
+    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.responsesEnabled) {
+      const maxDepth = this.cloudTaggingConfig.maxDepth
+      const responseBody = this.extractResponseBody(response)
+      const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })
+      span.addTags(responseTags)
+    }
+  }
+
+  extractResponseBody (response) {
+    if (response.hasOwnProperty('data')) {
+      return response.data
+    }
+    return Object.fromEntries(
+      Object.entries(response).filter(([key]) => !['request', 'requestId', 'error', '$metadata'].includes(key))
+    )
   }
 
   generateTags () {
