@@ -63,6 +63,9 @@ function decodePathwayContextBase64 (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return
   }
+  if (Buffer.isBuffer(pathwayContext)) {
+    pathwayContext = pathwayContext.toString()
+  }
   const encodedPathway = Buffer.from(pathwayContext, 'base64')
   return decodePathwayContext(encodedPathway)
 }
@@ -88,12 +91,11 @@ class DsmPathwayCodec {
       try {
         // decode v1 encoding
         ctx = decodePathwayContext(carrier[CONTEXT_PROPAGATION_KEY])
-
-        if (!ctx) ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
       } catch {
-        // cover case where base64 context was received under wrong key
-        ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
+        // pass
       }
+      // cover case where base64 context was received under wrong key
+      if (!ctx) ctx = decodePathwayContextBase64(carrier[CONTEXT_PROPAGATION_KEY])
     }
     return ctx
   }
