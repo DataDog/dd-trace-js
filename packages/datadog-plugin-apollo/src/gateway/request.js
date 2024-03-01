@@ -1,7 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
+const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
+const { storage } = require('../../../datadog-core')
 
 let tools
 
@@ -9,12 +9,23 @@ const OPERATION_DEFINITION = 'OperationDefinition'
 const FRAGMENT_DEFINITION = 'FragmentDefinition'
 
 class ApolloGatewayRequestPlugin extends TracingPlugin {
-  static get id () { return 'apollo-gateway' }
+  static get id () { return 'apollo.gateway' }
   static get operation () { return 'request' }
-  static get type () { return 'apollo-gateway' }
+  static get type () { return 'web' }
   static get kind () { return 'server' }
   static get prefix () {
-    return 'tracing:apm:apollo-gateway:request'
+    return 'tracing:apm:apollo:gateway:request'
+  }
+
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:apollo:gateway:request:executor', (ctx) => {
+      if (ctx.requestContext || ctx.gateway) {
+        this.requestContext = ctx
+      } else {
+        this.requestContext = {}
+      }
+    })
   }
 
   bindStart (ctx) {
@@ -22,13 +33,13 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
     const childOf = store ? store.span : null
     const spanData = {
       childOf,
-      service: this.config.service || this.serviceName(),
+      service: this.config.service,
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {}
     }
 
-    const { requestContext, gateway } = ctx
+    const { requestContext, gateway } = this.requestContext
 
     if (requestContext?.operationName) {
       spanData.meta['graphql.operation.name'] = requestContext.operationName
@@ -48,7 +59,7 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
       spanData['resource'] = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
-    const span = this.startSpan(this.operationName(), spanData, false)
+    const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData, false)
 
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }
@@ -65,10 +76,6 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
-  }
-
-  error (ctx) {
-    ctx.currentStore.span.setTag('error', ctx.error)
   }
 }
 

@@ -140,7 +140,7 @@ interface Plugins {
   "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
-  "apollo-gateway": tracer.plugins.apollo_gateway;
+  "apollo": tracer.plugins.apollo;
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -1119,12 +1119,12 @@ declare namespace tracer {
     interface amqplib extends Instrumentation {}
 
     /**
-     * This plugin automatically instruments the
+     * Currently this plugin automatically instruments the
      * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
      * This module uses graphql operations to service requests & thus generates graphql spans.
      * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
      */
-    interface apollo_gateway extends Instrumentation {}
+    interface apollo extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

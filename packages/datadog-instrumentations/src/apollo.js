@@ -5,20 +5,24 @@ const {
 const shimmer = require('../../datadog-shimmer')
 const tracingChannel = require('dc-polyfill').tracingChannel
 
-const validateCh = tracingChannel('apm:apollo-gateway:validate')
-const requestCh = tracingChannel('apm:apollo-gateway:request')
-const fetchCh = tracingChannel('apm:apollo-gateway:fetch')
-const planCh = tracingChannel('apm:apollo-gateway:plan')
-const executeCh = tracingChannel('apm:apollo-gateway:execute')
-const postProcessingCh = tracingChannel('apm:apollo-gateway:postprocessing')
+const CHANNELS = {
+  'gateway.request': tracingChannel('apm:apollo:gateway:request'),
+  'gateway.plan': tracingChannel('apm:apollo:gateway:plan'),
+  'gateway.validate': tracingChannel('apm:apollo:gateway:validate'),
+  'gateway.execute': tracingChannel('apm:apollo:gateway:execute'),
+  'gateway.fetch': tracingChannel('apm:apollo:gateway:fetch'),
+  'gateway.postprocessing': tracingChannel('apm:apollo:gateway:postprocessing')
+}
 
-const generalErrorCh = channel('apm:apollo-gateway:general:error')
-const REQUEST_CTX = {}
+const executorCh = channel('apm:apollo:gateway:request:executor')
+const generalErrorCh = channel('apm:apollo:gateway:general:error')
 
 function wrapExecutor (executor) {
   return function (...args) {
+    const REQUEST_CTX = {}
     REQUEST_CTX.requestContext = args[0]
     REQUEST_CTX.gateway = { ...this }
+    executorCh.publish(REQUEST_CTX)
     return executor.apply(this, args)
   }
 }
@@ -51,48 +55,33 @@ function wrapStartActiveSpan (startActiveSpan) {
     if (typeof firstArg !== 'string') return startActiveSpan.apply(this, args)
 
     const cb = args[args.length - 1]
-    let newCb
+    const method = CHANNELS[firstArg]
+
+    let ctx = {}
+    if (firstArg === 'gateway.fetch') {
+      ctx = { attributes: args[1].attributes }
+    }
+
     switch (firstArg) {
-      case 'gateway.request': {
-        newCb = function (...callbackArgs) {
-          return requestCh.tracePromise(cb, REQUEST_CTX, this, ...callbackArgs)
-        }
-        break
-      }
-      case 'gateway.plan' : {
-        newCb = function (...callbackArgs) {
-          return planCh.traceSync(cb, {}, this, ...callbackArgs)
-        }
-        break
-      }
+      case 'gateway.plan' :
       case 'gateway.validate': {
-        newCb = function (...callbackArgs) {
-          return validateCh.traceSync(cb, {}, this, ...callbackArgs)
+        args[args.length - 1] = function (...callbackArgs) {
+          return method.traceSync(cb, ctx, this, ...callbackArgs)
         }
         break
       }
-      case 'gateway.execute': {
-        newCb = function (...callbackArgs) {
-          return executeCh.tracePromise(cb, {}, this, ...callbackArgs)
-        }
-        break
-      }
+      case 'gateway.request':
+      case 'gateway.execute':
+      case 'gateway.postprocessing' :
       case 'gateway.fetch': {
-        newCb = function (...callbackArgs) {
-          return fetchCh.tracePromise(cb, { attributes: args[1].attributes }, this, ...callbackArgs)
-        }
-        break
-      }
-      case 'gateway.postprocessing' : {
-        newCb = function (...callbackArgs) {
-          return postProcessingCh.tracePromise(cb, {}, this, ...callbackArgs)
+        args[args.length - 1] = function (...callbackArgs) {
+          return method.tracePromise(cb, ctx, this, ...callbackArgs)
         }
         break
       }
       default:
         return startActiveSpan.apply(this, args)
     }
-    args[args.length - 1] = newCb
     return startActiveSpan.apply(this, args)
   }
 }

@@ -1,16 +1,16 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
+const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
+const { storage } = require('../../../datadog-core')
 
 class ApolloGatewayFetchPlugin extends TracingPlugin {
-  static get id () { return 'apollo-gateway' }
+  static get id () { return 'apollo.gateway' }
   static get operation () { return 'fetch' }
-  static get type () { return 'apollo-gateway' }
+  static get type () { return 'web' }
   static get kind () { return 'server' }
 
   static get prefix () {
-    return 'tracing:apm:apollo-gateway:fetch'
+    return 'tracing:apm:apollo:gateway:fetch'
   }
 
   bindStart (ctx) {
@@ -24,7 +24,9 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
       meta: {}
     }
 
-    if (ctx?.attributes?.service) { spanData.meta['serviceName'] = ctx?.attributes?.service }
+    const serviceName = ctx?.attributes?.service
+
+    if (serviceName) { spanData.meta['serviceName'] = serviceName }
 
     const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData, false)
 
@@ -32,15 +34,6 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore
-  }
-
-  asyncStart (ctx) {
-    ctx.currentStore.span.finish()
-    return ctx.parentStore
-  }
-
-  error (ctx) {
-    ctx.currentStore.span.setTag('error', ctx.error)
   }
 }
 

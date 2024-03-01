@@ -1,15 +1,16 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
+const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
+const { storage } = require('../../../datadog-core')
 
 class ApolloGatewayExecutePlugin extends TracingPlugin {
-  static get id () { return 'apollo-gateway' }
+  static get id () { return 'apollo.gateway' }
   static get operation () { return 'execute' }
-  static get type () { return 'apollo-gateway' }
+  static get type () { return 'web' }
+  static get kind () { return 'server' }
 
   static get prefix () {
-    return 'tracing:apm:apollo-gateway:execute'
+    return 'tracing:apm:apollo:gateway:execute'
   }
 
   bindStart (ctx) {
@@ -20,6 +21,7 @@ class ApolloGatewayExecutePlugin extends TracingPlugin {
       childOf,
       service: this.config.service,
       type: this.constructor.type,
+      kind: this.constructor.kind,
       meta: {}
     }, false)
 
@@ -27,15 +29,6 @@ class ApolloGatewayExecutePlugin extends TracingPlugin {
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore
-  }
-
-  asyncStart (ctx) {
-    ctx.currentStore.span.finish()
-    return ctx.parentStore
-  }
-
-  error (ctx) {
-    ctx.currentStore.span.setTag('error', ctx.error)
   }
 }
 

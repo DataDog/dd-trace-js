@@ -1,6 +1,6 @@
 'use strict'
 
-const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const CompositePlugin = require('../../../dd-trace/src/plugins/composite')
 const ApolloGatewayExecutePlugin = require('./execute')
 const ApolloGatewayPostProcessingPlugin = require('./postprocessing')
 const ApolloGatewayRequestPlugin = require('./request')
@@ -10,7 +10,7 @@ const ApolloGatewayFetchPlugin = require('./fetch')
 const ApolloGatewayGeneralPlugin = require('./general')
 
 class ApolloGatewayPlugin extends CompositePlugin {
-  static get id () { return 'apollo-gateway' }
+  static get id () { return 'gateway' }
   static get plugins () {
     return {
       execute: ApolloGatewayExecutePlugin,

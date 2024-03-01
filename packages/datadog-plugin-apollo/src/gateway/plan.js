@@ -1,17 +1,17 @@
 
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { storage } = require('../../datadog-core')
+const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
+const { storage } = require('../../../datadog-core')
 
 class ApolloGatewayPlanPlugin extends TracingPlugin {
-  static get id () { return 'apollo-gateway' }
+  static get id () { return 'apollo.gateway' }
   static get operation () { return 'plan' }
-  static get type () { return 'apollo-gateway' }
+  static get type () { return 'web' }
   static get kind () { return 'server' }
 
   static get prefix () {
-    return 'tracing:apm:apollo-gateway:plan'
+    return 'tracing:apm:apollo:gateway:plan'
   }
 
   bindStart (ctx) {
@@ -32,12 +32,9 @@ class ApolloGatewayPlanPlugin extends TracingPlugin {
 
     return ctx.currentStore
   }
-  end (ctx) {
-    ctx.currentStore.span.finish()
-  }
 
-  error (ctx) {
-    ctx.currentStore.span.setTag('error', ctx.error)
+  end (ctx) {
+    ctx?.currentStore?.span.finish()
   }
 }
 

@@ -202,10 +202,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  apollo-gateway:
+  apollo:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: apollo-gateway
+      PLUGINS: apollo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
