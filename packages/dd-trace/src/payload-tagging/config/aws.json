@@ -1,0 +1,30 @@
+{
+  "sns": {
+    "request": [
+      "$.Attributes.KmsMasterKeyId",
+      "$.Attributes.PlatformCredential",
+      "$.Attributes.PlatformPrincipal",
+      "$.Attributes.Token",
+      "$.AWSAccountId",
+      "$.Endpoint",
+      "$.OneTimePassword",
+      "$.phoneNumber",
+      "$.PhoneNumber",
+      "$.Token"
+    ],
+    "response": [
+      "$.Attributes.KmsMasterKeyId",
+      "$.Attributes.Token",
+      "$.Endpoints.*.Token",
+      "$.PhoneNumber",
+      "$.PhoneNumbers",
+      "$.phoneNumbers",
+      "$.PlatformApplication.*.PlatformCredential",
+      "$.PlatformApplication.*.PlatformPrincipal",
+      "$.Subscriptions.*.Endpoint"
+    ],
+    "expand": [
+      "$.MessageAttributes.*.StringValue"
+    ]
+  }
+}

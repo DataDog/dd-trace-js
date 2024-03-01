@@ -30,5 +30,8 @@ module.exports = {
   PEER_SERVICE_SOURCE_KEY: '_dd.peer.service.source',
   PEER_SERVICE_REMAP_KEY: '_dd.peer.service.remapped_from',
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
-  SCI_COMMIT_SHA: '_dd.git.commit.sha'
+  SCI_COMMIT_SHA: '_dd.git.commit.sha',
+  PAYLOAD_TAG_REQUEST_PREFIX: 'aws.request.body',
+  PAYLOAD_TAG_RESPONSE_PREFIX: 'aws.response.body',
+  PAYLOAD_TAGGING_MAX_TAGS: 758
 }
