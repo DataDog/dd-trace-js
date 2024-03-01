@@ -108,7 +108,7 @@ describe('encoding', () => {
     ctx.hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
-    carrier['dd-pathway-ctx'] = encodePathwayContext(ctx).hash
+    carrier['dd-pathway-ctx'] = encodePathwayContext(ctx)
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
     expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
