@@ -1119,7 +1119,7 @@ declare namespace tracer {
     interface amqplib extends Instrumentation {}
 
     /**
-     * Currently this plugin automatically instruments the
+     * Currently this plugin automatically instruments
      * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
      * This module uses graphql operations to service requests & thus generates graphql spans.
      * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
