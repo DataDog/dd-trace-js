@@ -19,10 +19,8 @@ const generalErrorCh = channel('apm:apollo:gateway:general:error')
 
 function wrapExecutor (executor) {
   return function (...args) {
-    const REQUEST_CTX = {}
-    REQUEST_CTX.requestContext = args[0]
-    REQUEST_CTX.gateway = { ...this }
-    executorCh.publish(REQUEST_CTX)
+    const ctx = { requestContext: args[0], gateway: this }
+    executorCh.publish(ctx)
     return executor.apply(this, args)
   }
 }
