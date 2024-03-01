@@ -1,46 +1,38 @@
 /* eslint-disable */
-const EFD_STRING = "Retried by Datadog's Early Flake Detection"
-
 let isEarlyFlakeDetectionEnabled = false
 let knownTestsForSuite = []
-
-debugger
-function addEfdStringToTestName (testName, numAttempt) {
-  return `${EFD_STRING} (#${numAttempt}): ${testName}`
-}
-
-function retryTest (test, earlyFlakeDetectionNumRetries = 3) {
-  const originalTestName = test.title
-  const suite = test.parent
-  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
-    const clonedTest = test.clone()
-    clonedTest.title = addEfdStringToTestName(originalTestName, retryIndex + 1)
-    suite.addTest(clonedTest)
-    clonedTest._ddIsNew = true
-    clonedTest._ddIsEfdRetry = true
-  }
-}
+let suiteTests = []
+const NUM_RETRIES = 3 // TODO: get value from backend
 
 function isNewTest (test) {
   return !knownTestsForSuite.includes(test.fullTitle())
 }
-// const oldIt = window.it
 
-debugger
+function retryTest (test, earlyFlakeDetectionNumRetries = 3, suiteTests) {
+  for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+    const clonedTest = test.clone()
+    // TODO: we'll have to somehow signal that this is a retry
+    suiteTests.unshift(clonedTest)
+    clonedTest._ddIsNew = true
+    clonedTest._ddIsEfdRetry = true
+    // TODO: these tests are allowed to fail. We'll have to change that
+  }
+}
+
+
 const oldRunTests = Cypress.mocha.getRunner().runTests
-
-Cypress.mocha.getRunner().runTests = function (suite) {
+Cypress.mocha.getRunner().runTests = function (suite, fn) {
   if (!isEarlyFlakeDetectionEnabled) {
     return oldRunTests.apply(this, arguments)
   }
   suite.tests.forEach(test => {
-    debugger
     if (!test._ddIsNew && !test.isPending() && isNewTest(test)) {
       test._ddIsNew = true
-      retryTest(test)
+      retryTest(test, NUM_RETRIES, suite.tests)
     }
   })
-  return oldRunTests.apply(this, arguments)
+
+  return oldRunTests.apply(this, [suite, fn])
 }
 
 beforeEach(function () {
@@ -58,7 +50,6 @@ beforeEach(function () {
 
 before(function () {
   cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
-    debugger
     isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
     knownTestsForSuite = suiteConfig.knownTestsForSuite
   })
@@ -73,7 +64,7 @@ after(() => {
 })
 
 
-afterEach(() => {
+afterEach(function () {
   cy.window().then(win => {
     const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
     const testInfo = {

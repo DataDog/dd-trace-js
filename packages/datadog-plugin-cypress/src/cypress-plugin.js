@@ -25,7 +25,9 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -518,15 +520,6 @@ class CypressPlugin {
 
   getTasks () {
     return {
-      'dd:supportLoad': (testSuite) => {
-        if (this.isEarlyFlakeDetectionEnabled) {
-          return {
-            isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
-            knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || []
-          }
-        }
-        return { isEarlyFlakeDetectionEnabled: false }
-      },
       'dd:testSuiteStart': (testSuite) => {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
@@ -546,7 +539,6 @@ class CypressPlugin {
         })
         const isUnskippable = this.unskippableSuites.includes(testSuite)
         const isForcedToRun = shouldSkip && isUnskippable
-        let isNewTest = false
 
         // skip test
         if (shouldSkip && !isUnskippable) {
@@ -554,19 +546,15 @@ class CypressPlugin {
           this.isTestsSkipped = true
           return { shouldSkip: true }
         }
-        if (this.isEarlyFlakeDetectionEnabled) {
-          isNewTest = this.isNewTest(testName, testSuite)
-        }
 
         if (!this.activeTestSpan) {
           this.activeTestSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
         }
 
-        return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId(), isNewTest } : { isNewTest }
+        return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
       'dd:afterEach': ({ test, coverage }) => {
         const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
-        console.log({ testName, isNew, isEfdRetry })
         if (this.activeTestSpan) {
           if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
             const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -595,6 +583,12 @@ class CypressPlugin {
           }
           if (testSourceLine) {
             this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          }
+          if (isNew) {
+            this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
+            if (isEfdRetry) {
+              this.activeTestSpan.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+            }
           }
           const finishedTest = {
             testName,
