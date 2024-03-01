@@ -863,5 +863,71 @@ moduleType.forEach(({
         }).catch(done)
       })
     })
+
+    it.only('retries tests if early flake detection is enabled', (done) => {
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD
+          }
+        }
+      })
+
+      receiver.setKnownTests({
+        'cypress': {
+          'cypress/e2e/spec.cy.js': [
+            // This test will be considered new
+            // 'context passes',
+            'other context fails'
+          ]
+        }
+      })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          debugger
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.exists(testSessionEvent)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          assert.exists(testModuleEvent)
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 4)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 9)
+        })
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 })

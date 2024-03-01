@@ -13,7 +13,8 @@ module.exports = {
           require('dd-trace/ci/cypress/after-run')(...args)
         })
       }
-    }
+    },
+    specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*'
   },
   video: false,
   screenshotOnRunFailure: false
