@@ -1,6 +1,5 @@
 'use strict'
 const {
-  CONTEXT_PROPAGATION_KEY,
   getSizeOrZero
 } = require('../../../dd-trace/src/datastreams/processor')
 const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
