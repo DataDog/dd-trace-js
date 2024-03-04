@@ -115,4 +115,35 @@ describe('encoding', () => {
     expect(decodedCtx.pathwayStartNs).to.equal(ctx.pathwayStartNs)
     expect(decodedCtx.edgeStartNs).to.equal(ctx.edgeStartNs)
   })
+
+  it('should inject the base64 encoded string to the carrier', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    const carrier = {}
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    DsmPathwayCodec.encode(ctx, carrier)
+
+    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    expect(carrier['dd-pathway-ctx-base64']).to.equal(expectedBase64Hash)
+  })
+
+  it('should extract the base64 encoded string from the carrier', () => {
+    const ctx = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673506404000000
+    }
+    ctx.hash = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+
+    const carrier = {}
+    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    carrier['dd-pathway-ctx-base64'] = expectedBase64Hash
+    const decodedCtx = DsmPathwayCodec.decode(carrier)
+
+    expect(decodedCtx.hash.toString()).to.equal(ctx.hash.toString())
+  })
 })
