@@ -40,7 +40,7 @@ addHook({ name: 'mongodb', versions: ['>=4.6.0 <6.4.0'], file: 'lib/cmap/connect
 
 addHook({ name: 'mongodb', versions: ['>=6.4.0'], file: 'lib/cmap/connection.js' }, Connection => {
   const proto = Connection.Connection.prototype
-  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, true))
+  shimmer.wrap(proto, 'command', command => wrapConnectionCommand(command, 'command', undefined, instrumentPromise))
   return Connection
 })
 
@@ -95,7 +95,7 @@ function wrapUnifiedCommand (command, operation, name) {
   return shimmer.wrap(command, wrapped)
 }
 
-function wrapConnectionCommand (command, operation, name, isPromise = false) {
+function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
   const wrapped = function (ns, ops) {
     if (!startCh.hasSubscribers) {
       return command.apply(this, arguments)
@@ -107,11 +107,7 @@ function wrapConnectionCommand (command, operation, name, isPromise = false) {
     const topology = { s: { options } }
 
     ns = `${ns.db}.${ns.collection}`
-    if (isPromise) {
-      return instrumentPromise(operation, command, this, arguments, topology, ns, ops, { name })
-    } else {
-      return instrument(operation, command, this, arguments, topology, ns, ops, { name })
-    }
+    return instrumentFn(operation, command, this, arguments, topology, ns, ops, { name })
   }
   return shimmer.wrap(command, wrapped)
 }
