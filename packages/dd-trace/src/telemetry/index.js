@@ -304,33 +304,45 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const names = {
+  const nameMapping = {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS'
   }
 
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'tags'])
+
   const configuration = []
+  const names = []
 
   for (const change of changes) {
-    const name = names[change.name] || change.name
+    const name = nameMapping[change.name] || change.name
+    names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }
 
     if (Array.isArray(value)) entry.value = value.join(',')
-    if (entry.name === 'DD_TAGS') entry.value = formatMapForTelemetry(entry.value)
+    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
     if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') entry.value = formatMapForTelemetry(entry.value)
 
     configuration.push(entry)
   }
+
+  function isNotModified (entry) {
+    return !names.includes(entry.name)
+  }
+
   if (!configWithOrigin.length) {
     configWithOrigin = configuration
   } else {
+    configWithOrigin = configWithOrigin.filter(isNotModified)
+    configWithOrigin = configWithOrigin.concat(configuration)
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+
+  return configWithOrigin // for testing using sinon
 }
 
 module.exports = {

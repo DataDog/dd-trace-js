@@ -718,6 +718,71 @@ describe('Telemetry retry', () => {
   })
 })
 
+describe('updateConfig', () => {
+  const config = {
+    service: 'node',
+    env: undefined,
+    version: '5.0.0',
+    telemetry: {
+      enabled: true
+    }
+  }
+  const sendDataStub = sinon.stub()
+
+  const { updateConfig } = proxyquire('../../src/telemetry', {
+    './send-data': {
+      sendData: sendDataStub
+    }
+  })
+
+  it('should set configWithOrigin on initial call', () => {
+    const initialChanges = [
+      {
+        name: 'test',
+        value: true,
+        origin: 'code'
+      }
+    ]
+    expect(updateConfig(initialChanges, config)).to.deep.equal(initialChanges)
+    expect(sendDataStub.called).to.be.false
+  })
+
+  it('should modify configWithOrigin after initial call', () => {
+    const changes = [
+      {
+        name: 'test',
+        value: false,
+        origin: 'code'
+      }
+    ]
+    expect(updateConfig(changes, config)).to.deep.equal(changes)
+    expect(sendDataStub).to.be.calledOnce
+  })
+
+  it('should modify entry name', () => {
+    const inputChanges = [
+      {
+        name: 'sampleRate',
+        value: 0,
+        origin: 'code'
+      }
+    ]
+    const expectedChanges = [
+      {
+        name: 'test',
+        value: false,
+        origin: 'code'
+      },
+      {
+        name: 'DD_TRACE_SAMPLE_RATE',
+        value: 0,
+        origin: 'code'
+      }
+    ]
+    expect(updateConfig(inputChanges, config)).to.deep.equal(expectedChanges)
+  })
+})
+
 async function testSeq (seqId, reqType, validatePayload) {
   while (traceAgent.reqs.length < seqId) {
     await once(traceAgent, 'handled-req')
