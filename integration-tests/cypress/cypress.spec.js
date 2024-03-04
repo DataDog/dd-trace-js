@@ -920,14 +920,16 @@ moduleType.forEach(({
           ...restEnvVars
         } = getCiVisEvpProxyConfig(receiver.port)
 
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
         childProcess = exec(
-          testCommand,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+              SPEC_PATTERN: specToRun
             },
             stdio: 'pipe'
           }
@@ -979,14 +981,15 @@ moduleType.forEach(({
             assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
           })
 
+        const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
-          testCommand,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+              SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
             },
             stdio: 'pipe'
@@ -1034,8 +1037,10 @@ moduleType.forEach(({
             assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
           })
 
+        const specToRun = 'cypress/e2e/skipped-test.js'
+
         childProcess = exec(
-          testCommand,
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {

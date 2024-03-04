@@ -11,11 +11,11 @@ function isNewTest (test) {
 function retryTest (test, earlyFlakeDetectionNumRetries = 3, suiteTests) {
   for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
     const clonedTest = test.clone()
-    // TODO: we'll have to somehow signal that this is a retry
+    // TODO: signal in framework logs that this is a retry
     suiteTests.unshift(clonedTest)
     clonedTest._ddIsNew = true
     clonedTest._ddIsEfdRetry = true
-    // TODO: these tests are allowed to fail. We'll have to change that
+    // TODO: Change it so these tests are allowed to fail.
   }
 }
 
@@ -50,8 +50,8 @@ beforeEach(function () {
 
 before(function () {
   cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
-    isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
-    knownTestsForSuite = suiteConfig.knownTestsForSuite
+    isEarlyFlakeDetectionEnabled = suiteConfig?.isEarlyFlakeDetectionEnabled
+    knownTestsForSuite = suiteConfig?.knownTestsForSuite
   })
 })
 
