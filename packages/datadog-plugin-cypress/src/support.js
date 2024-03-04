@@ -50,8 +50,10 @@ beforeEach(function () {
 
 before(function () {
   cy.task('dd:testSuiteStart', Cypress.mocha.getRootSuite().file).then((suiteConfig) => {
-    isEarlyFlakeDetectionEnabled = suiteConfig?.isEarlyFlakeDetectionEnabled
-    knownTestsForSuite = suiteConfig?.knownTestsForSuite
+    if (suiteConfig) {
+      isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
+      knownTestsForSuite = suiteConfig.knownTestsForSuite
+    }
   })
 })
 

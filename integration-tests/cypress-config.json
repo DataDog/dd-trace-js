@@ -5,6 +5,5 @@
   "supportFile": "cypress/support/e2e.js",
   "integrationFolder": "cypress/e2e",
   "defaultCommandTimeout": 100,
-  "nodeVersion": "system",
-  "testFiles": "cypress/e2e/**/*.cy.js"
+  "nodeVersion": "system"
 }

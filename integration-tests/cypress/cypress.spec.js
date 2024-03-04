@@ -43,7 +43,7 @@ const moduleType = [
   {
     type: 'commonJS',
     testCommand: function commandWithSuffic (version) {
-      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
+      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"' : ''
       return `./node_modules/.bin/cypress run ${commandSuffix}`
     }
   },
