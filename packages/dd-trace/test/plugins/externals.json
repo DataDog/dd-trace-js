@@ -251,6 +251,10 @@
     {
       "name": "bson",
       "versions": ["4.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["6.3.0"]
     }
   ],
   "mongoose": [
