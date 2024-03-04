@@ -198,6 +198,7 @@ class CypressPlugin {
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
     this.isEarlyFlakeDetectionEnabled = false
+    this.earlyFlakeDetectionNumRetries = 0
     this.testsToSkip = []
     this.skippedTests = []
     this.hasForcedToRunSuites = false
@@ -295,10 +296,6 @@ class CypressPlugin {
     return !this.knownTestsByTestSuite?.[testSuite]?.includes(testName)
   }
 
-  async beforeSpec (spec) {
-    // console.log('spec', spec)
-  }
-
   async beforeRun (details) {
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
@@ -313,12 +310,14 @@ class CypressPlugin {
         libraryConfig: {
           isSuitesSkippingEnabled,
           isCodeCoverageEnabled,
-          isEarlyFlakeDetectionEnabled
+          isEarlyFlakeDetectionEnabled,
+          earlyFlakeDetectionNumRetries
         }
       } = libraryConfigurationResponse
       this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
       this.isCodeCoverageEnabled = isCodeCoverageEnabled
       this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+      this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     }
 
     if (this.isEarlyFlakeDetectionEnabled) {
@@ -528,7 +527,8 @@ class CypressPlugin {
       'dd:testSuiteStart': (testSuite) => {
         const suitePayload = {
           isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
-          knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || []
+          knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
+          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries
         }
 
         if (this.testSuiteSpan) {
