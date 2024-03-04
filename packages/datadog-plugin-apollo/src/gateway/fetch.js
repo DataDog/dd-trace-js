@@ -19,7 +19,8 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
 
     const spanData = {
       childOf,
-      service: this.config.service,
+      service: this.serviceName(
+        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
       type: this.constructor.type,
       meta: {}
     }
@@ -28,7 +29,8 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
 
     if (serviceName) { spanData.meta['serviceName'] = serviceName }
 
-    const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, spanData, false)
+    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` })
+      , spanData, false)
 
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }

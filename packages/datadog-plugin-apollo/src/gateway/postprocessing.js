@@ -16,9 +16,10 @@ class ApolloGatewayPostProcessingPlugin extends TracingPlugin {
     const store = storage.getStore()
     const childOf = store ? store.span : null
 
-    const span = this.startSpan(`${this.constructor.id}.${this.constructor.operation}`, {
+    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }), {
       childOf,
-      service: this.config.service,
+      service: this.serviceName(
+        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {}

@@ -63,7 +63,7 @@ describe('Plugin', () => {
       before(() => {
         require('../../dd-trace/index.js')
         const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-        const subgraph = require(`../../../versions/@apollo/subgraph@${version}`).get()
+        const subgraph = require(`../../../versions/@apollo/subgraph`).get()
         buildSubgraphSchema = subgraph.buildSubgraphSchema
         ApolloGateway = apollo.ApolloGateway
         LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
