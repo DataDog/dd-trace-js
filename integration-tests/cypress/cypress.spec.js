@@ -27,13 +27,17 @@ const {
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
+const NUM_RETRIES_EFD = 3
 
 const moduleType = [
   {
@@ -864,69 +868,190 @@ moduleType.forEach(({
       })
     })
 
-    it.only('retries tests if early flake detection is enabled', (done) => {
-      const NUM_RETRIES_EFD = 3
-      receiver.setSettings({
-        itr_enabled: false,
-        code_coverage: false,
-        tests_skipping: false,
-        early_flake_detection: {
-          enabled: true,
-          slow_test_retries: {
-            '5s': NUM_RETRIES_EFD
+    context('early flake detection', () => {
+      it('retries new tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
           }
-        }
-      })
-
-      receiver.setKnownTests({
-        'cypress': {
-          'cypress/e2e/spec.cy.js': [
-            // This test will be considered new
-            // 'context passes',
-            'other context fails'
-          ]
-        }
-      })
-
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          debugger
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          assert.exists(testSessionEvent)
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          assert.exists(testModuleEvent)
-          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-          assert.equal(testSuiteEvents.length, 4)
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.equal(testEvents.length, 9)
         })
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
+        receiver.setKnownTests({
+          'cypress': {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes', // This test will be considered new
+              'other context fails'
+            ]
+          }
+        })
 
-      childProcess = exec(
-        testCommand,
-        {
-          cwd,
-          env: {
-            ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
-          },
-          stdio: 'pipe'
-        }
-      )
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 5)
 
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
 
-      childProcess.on('exit', () => {
-        receiverPromise.then(() => {
-          done()
-        }).catch(done)
+            const retriedTests = tests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+
+            newTests.forEach(newTest => {
+              assert.equal(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
+            })
+
+            const knownTest = tests.filter(test => !test.meta[TEST_IS_NEW])
+            assert.equal(knownTest.length, 1)
+            assert.equal(knownTest[0].resource, 'cypress/e2e/spec.cy.js.other context fails')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          'cypress': {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes', // This test will be considered new
+              'other context fails'
+            ]
+          }
+        })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+          })
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('does not retry tests that are skipped', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({})
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            assert.equal(tests[0].resource, 'cypress/e2e/skipped-test.js.skipped skipped')
+            assert.propertyVal(tests[0].meta, TEST_STATUS, 'skip')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+          })
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/skipped-test.js'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
       })
     })
   })
