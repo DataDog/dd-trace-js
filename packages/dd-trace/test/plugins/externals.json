@@ -325,5 +325,11 @@
       "name": "redis",
       "versions": ["^4"]
     }
+  ],
+  "sequelize": [
+    {
+      "name": "express",
+      "versions": [">=4"]
+    }
   ]
 }
