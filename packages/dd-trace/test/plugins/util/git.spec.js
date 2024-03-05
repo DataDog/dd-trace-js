@@ -56,6 +56,7 @@ describe('git', () => {
     delete process.env.DD_GIT_COMMIT_COMMITTER_EMAIL
     delete process.env.DD_GIT_COMMIT_COMMITTER_DATE
   })
+
   it('returns ci metadata if it is present and does not call git for those parameters', () => {
     const ciMetadata = {
       commitSHA: 'ciSHA',
@@ -83,6 +84,7 @@ describe('git', () => {
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
     expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
   })
+
   it('does not crash if git is not available', () => {
     execFileSyncStub.returns('')
     const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
@@ -102,6 +104,7 @@ describe('git', () => {
       [CI_WORKSPACE_PATH]: ''
     })
   })
+
   it('returns all git metadata is git is available', () => {
     execFileSyncStub
       .onCall(0).returns(
@@ -180,15 +183,18 @@ describe('getCommitsRevList', () => {
 describe('generatePackFilesForCommits', () => {
   let tmpdirStub, statSyncStub
   const fakeDirectory = getFakeDirectory()
+
   beforeEach(() => {
     sinon.stub(Math, 'random').returns('0.1234')
     tmpdirStub = sinon.stub(os, 'tmpdir').returns(fakeDirectory)
     sinon.stub(process, 'cwd').returns('cwd')
     statSyncStub = sinon.stub(fs, 'statSync').returns({ isDirectory: () => true })
   })
+
   afterEach(() => {
     sinon.restore()
   })
+
   it('creates pack files in temporary path', () => {
     const execFileSyncSpy = sinon.stub().returns(['commitSHA'])
 
@@ -244,6 +250,7 @@ describe('unshallowRepository', () => {
   afterEach(() => {
     execFileSyncStub.reset()
   })
+
   it('works for the usual case', () => {
     execFileSyncStub
       .onCall(0).returns(
@@ -265,6 +272,7 @@ describe('unshallowRepository', () => {
     unshallowRepository()
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
   })
+
   it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
     execFileSyncStub
       .onCall(0).returns(
@@ -288,6 +296,7 @@ describe('unshallowRepository', () => {
     unshallowRepository()
     expect(execFileSyncStub).to.have.been.calledWith('git', options)
   })
+
   it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
     execFileSyncStub
       .onCall(0).returns(
@@ -318,6 +327,7 @@ describe('user credentials', () => {
     execFileSyncStub.reset()
     execFileSyncStub.reset()
   })
+
   it('scrubs https user credentials', () => {
     execFileSyncStub
       .onCall(0).returns(
@@ -330,6 +340,7 @@ describe('user credentials', () => {
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('https://github.com/datadog/safe-repository.git')
   })
+
   it('scrubs ssh user credentials', () => {
     execFileSyncStub
       .onCall(0).returns(

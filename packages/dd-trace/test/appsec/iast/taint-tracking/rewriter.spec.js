@@ -61,6 +61,7 @@ describe('IAST Rewriter', () => {
 
   describe('getOriginalPathAndLineFromSourceMap', () => {
     let rewriter, getOriginalPathAndLineFromSourceMap, argvs
+
     beforeEach(() => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {

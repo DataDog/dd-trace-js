@@ -113,6 +113,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -141,6 +142,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('failing test', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -172,6 +174,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(false)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -207,6 +210,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('skipped test', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -238,6 +242,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -266,6 +271,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('skipped test based on tag', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -303,6 +309,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' }
@@ -335,6 +342,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('not implemented step', () => {
         it('should create a test span with a skip reason', async () => {
           const checkTraces = agent.use(traces => {
@@ -365,6 +373,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('integration test', () => {
         it('should create a test span and a span for the integration', async function () {
           const checkTraces = agent.use(traces => {
@@ -401,6 +410,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(true)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'pass' },
@@ -429,6 +439,7 @@ describe('Plugin', function () {
           await checkTraces
         })
       })
+
       describe('hook fail', () => {
         it('should create a test span', async function () {
           const checkTraces = agent.use(traces => {
@@ -464,6 +475,7 @@ describe('Plugin', function () {
           expect(result.success).to.equal(false)
           await checkTraces
         })
+
         it('should create spans for each cucumber step', async () => {
           const steps = [
             { name: 'datadog', stepStatus: 'skip' },

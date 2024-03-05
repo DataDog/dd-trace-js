@@ -874,17 +874,20 @@ describe('IP blocking', () => {
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
+
   before(() => {
     return getPort().then(newPort => {
       port = newPort
     })
   })
+
   before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
       })
   })
+
   before(done => {
     const server = new http.Server((req, res) => {
       res.writeHead(200)

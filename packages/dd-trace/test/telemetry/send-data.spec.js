@@ -12,6 +12,7 @@ describe('sendData', () => {
 
   let sendDataModule
   let request
+
   beforeEach(() => {
     request = sinon.stub()
     sendDataModule = proxyquire('../../src/telemetry/send-data', {

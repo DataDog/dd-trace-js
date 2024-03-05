@@ -1,9 +1,9 @@
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX
-} = require('../../src/constants')
-const { tagsFromObject } = require('../../src/payload-tagging/tagging')
-const { computeTags } = require('../../src/payload-tagging')
+} = require('../src/constants')
+const { tagsFromObject } = require('../src/payload-tagging/tagging')
+const { computeTags } = require('../src/payload-tagging')
 
 const { expect } = require('chai')
 

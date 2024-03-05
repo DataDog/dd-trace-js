@@ -14,6 +14,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     before(() => {
       return agent.load(['express', 'cookie-parser'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const cookieParser = require(`../../../versions/cookie-parser@${version}`).get()
@@ -30,6 +31,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
         })
       })
     })
+
     beforeEach(async () => {
       middlewareProcessCookieStub = sinon.stub()
     })

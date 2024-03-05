@@ -102,6 +102,7 @@ describe('Exporter', () => {
     beforeEach(() => {
       exporter = new Exporter({ url })
     })
+
     it('should set the URL on self and writer', () => {
       exporter.setUrl('http://example2.com')
       const url = new URL('http://example2.com')

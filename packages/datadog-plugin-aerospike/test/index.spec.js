@@ -59,6 +59,7 @@ describe('Plugin', () => {
             'test',
             'aerospike.namespace'
           )
+
           it('should instrument put', done => {
             agent
               .use(traces => {

@@ -13,6 +13,7 @@ const {
 
 describe('Metrics', () => {
   let IastMetric, reqNamespace, inc, context
+
   beforeEach(() => {
     context = {}
     inc = sinon.stub()

@@ -62,6 +62,7 @@ versions.forEach(version => {
     // TODO: add esm tests
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
+
       before(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)

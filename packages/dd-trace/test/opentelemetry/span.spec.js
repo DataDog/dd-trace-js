@@ -216,6 +216,7 @@ describe('OTel Span', () => {
         expect(span.name).to.equal(kindName)
       })
     }
+
     it(`should map span name with default span kind of internal`, () => {
       const span = makeSpan()
       expect(span.name).to.equal('internal')

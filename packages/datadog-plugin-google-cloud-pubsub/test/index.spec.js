@@ -19,9 +19,11 @@ describe('Plugin', () => {
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
     })
+
     after(() => {
       delete process.env.PUBSUB_EMULATOR_HOST
     })
+
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })
@@ -37,6 +39,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub')
         })
+
         beforeEach(() => {
           tracer = require('../../dd-trace')
           gax = require(`../../../versions/google-gax@3.5.7`).get()
@@ -47,6 +50,7 @@ describe('Plugin', () => {
           v1 = lib.v1
           pubsub = new lib.PubSub({ projectId: project })
         })
+
         describe('createTopic', () => {
           withNamingSchema(
             async () => pubsub.createTopic(topicName),

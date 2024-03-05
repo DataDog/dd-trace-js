@@ -10,14 +10,17 @@ const {
 
 describe('CI Visibility Jest Worker Exporter', () => {
   let send, originalSend
+
   beforeEach(() => {
     send = sinon.spy()
     originalSend = process.send
     process.send = send
   })
+
   afterEach(() => {
     process.send = originalSend
   })
+
   it('can export traces', () => {
     const trace = [{ type: 'test' }]
     const traceSecond = [{ type: 'test', name: 'other' }]
@@ -27,6 +30,7 @@ describe('CI Visibility Jest Worker Exporter', () => {
     jestWorkerExporter.flush()
     expect(send).to.have.been.calledWith([JEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace, traceSecond])])
   })
+
   it('can export coverages', () => {
     const coverage = { sessionId: '1', suiteId: '1', files: ['test.js'] }
     const coverageSecond = { sessionId: '2', suiteId: '2', files: ['test2.js'] }
@@ -38,6 +42,7 @@ describe('CI Visibility Jest Worker Exporter', () => {
       [JEST_WORKER_COVERAGE_PAYLOAD_CODE, JSON.stringify([coverage, coverageSecond])]
     )
   })
+
   it('does not break if process.send is undefined', () => {
     delete process.send
     const trace = [{ type: 'test' }]
