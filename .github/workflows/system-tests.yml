@@ -29,7 +29,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-          ref: 'conti/add-dsm-test-for-each-version-of-context-propagation'
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
@@ -46,7 +45,7 @@ jobs:
         run: ./build.sh -i agent
 
       - name: Run
-        run: ./run.sh INTEGRATIONS -F tests/integrations/test_dsm.py::Test_DsmContext_Extraction_V2 -F tests/integrations/test_dsm.py::Test_DsmContext_Extraction_V1 -F tests/integrations/test_dsm.py::Test_DsmContext_Injection
+        run: ./run.sh TRACER_ESSENTIAL_SCENARIOS
 
       - name: Compress artifact
         if: ${{ always() }}

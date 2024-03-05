@@ -111,7 +111,5 @@ module.exports = {
   decodePathwayContext,
   encodePathwayContextBase64,
   decodePathwayContextBase64,
-  DsmPathwayCodec,
-  CONTEXT_PROPAGATION_KEY,
-  CONTEXT_PROPAGATION_KEY_BASE64
+  DsmPathwayCodec
 }
