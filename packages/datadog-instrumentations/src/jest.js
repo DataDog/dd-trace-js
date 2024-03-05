@@ -115,6 +115,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
+      this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
@@ -201,6 +202,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
+            displayName: this.displayName,
             testParameters,
             frameworkVersion: jestVersion,
             isNew: isNewTest,
@@ -252,6 +254,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
+            displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           })
@@ -559,6 +562,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
       return adapter.apply(this, arguments).then(suiteResults => {

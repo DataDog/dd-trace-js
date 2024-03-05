@@ -58,6 +58,7 @@ const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
+const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
@@ -83,6 +84,7 @@ module.exports = {
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
+  JEST_DISPLAY_NAME,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
