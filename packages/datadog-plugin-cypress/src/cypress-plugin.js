@@ -25,7 +25,10 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -113,12 +116,9 @@ function getLibraryConfiguration (tracer, testConfiguration) {
   })
 }
 
-function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) {
-  if (!isSuitesSkippingEnabled) {
-    return Promise.resolve({ skippableTests: [] })
-  }
+function getSkippableTests (tracer, testConfiguration) {
   return new Promise(resolve => {
-    if (!tracer._tracer._exporter?.getLibraryConfiguration) {
+    if (!tracer._tracer._exporter?.getSkippableSuites) {
       return resolve({ err: new Error('CI Visibility was not initialized correctly') })
     }
     tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
@@ -126,6 +126,20 @@ function getSkippableTests (isSuitesSkippingEnabled, tracer, testConfiguration) 
         err,
         skippableTests,
         correlationId
+      })
+    })
+  })
+}
+
+function getKnownTests (tracer, testConfiguration) {
+  return new Promise(resolve => {
+    if (!tracer._tracer._exporter?.getKnownTests) {
+      return resolve({ err: new Error('CI Visibility was not initialized correctly') })
+    }
+    tracer._tracer._exporter.getKnownTests(testConfiguration, (err, knownTests) => {
+      resolve({
+        err,
+        knownTests
       })
     })
   })
@@ -183,10 +197,14 @@ class CypressPlugin {
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isEarlyFlakeDetectionEnabled = false
+    this.earlyFlakeDetectionNumRetries = 0
+    this.testsToSkip = []
     this.skippedTests = []
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
     this.unskippableSuites = []
+    this.knownTests = []
   }
 
   init (tracer, cypressConfig) {
@@ -274,66 +292,101 @@ class CypressPlugin {
     })
   }
 
-  beforeRun (details) {
+  isNewTest (testName, testSuite) {
+    return !this.knownTestsByTestSuite?.[testSuite]?.includes(testName)
+  }
+
+  async beforeRun (details) {
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
 
-    return getLibraryConfiguration(this.tracer, this.testConfiguration).then(({ err, libraryConfig }) => {
-      if (err) {
-        log.error(err)
+    const libraryConfigurationResponse = await getLibraryConfiguration(this.tracer, this.testConfiguration)
+
+    if (libraryConfigurationResponse.err) {
+      log.error(libraryConfigurationResponse.err)
+    } else {
+      const {
+        libraryConfig: {
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          isEarlyFlakeDetectionEnabled,
+          earlyFlakeDetectionNumRetries
+        }
+      } = libraryConfigurationResponse
+      this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
+      this.isCodeCoverageEnabled = isCodeCoverageEnabled
+      this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+      this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    }
+
+    if (this.isEarlyFlakeDetectionEnabled) {
+      const knownTestsResponse = await getKnownTests(
+        this.tracer,
+        this.testConfiguration
+      )
+      if (knownTestsResponse.err) {
+        log.error(knownTestsResponse.err)
       } else {
-        this.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-        this.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+        // We use TEST_FRAMEWORK_NAME for the name of the module
+        this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]
       }
+    }
 
-      return getSkippableTests(this.isSuitesSkippingEnabled, this.tracer, this.testConfiguration)
-        .then(({ err, skippableTests, correlationId }) => {
-          if (err) {
-            log.error(err)
-          } else {
-            this.testsToSkip = skippableTests || []
-            this.itrCorrelationId = correlationId
-          }
+    if (this.isSuitesSkippingEnabled) {
+      const skippableTestsResponse = await getSkippableTests(
+        this.tracer,
+        this.testConfiguration
+      )
+      if (skippableTestsResponse.err) {
+        log.error(skippableTestsResponse.err)
+      } else {
+        const { skippableTests, correlationId } = skippableTestsResponse
+        this.testsToSkip = skippableTests || []
+        this.itrCorrelationId = correlationId
+      }
+    }
 
-          // `details.specs` are test files
-          details.specs?.forEach(({ absolute, relative }) => {
-            const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-            if (isUnskippableSuite) {
-              this.unskippableSuites.push(relative)
-            }
-          })
-
-          const childOf = getTestParentSpan(this.tracer)
-
-          const testSessionSpanMetadata =
-            getTestSessionCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
-          const testModuleSpanMetadata =
-            getTestModuleCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
-
-          this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
-            childOf,
-            tags: {
-              [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...this.testEnvironmentMetadata,
-              ...testSessionSpanMetadata
-            }
-          })
-          this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
-
-          this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
-            childOf: this.testSessionSpan,
-            tags: {
-              [COMPONENT]: TEST_FRAMEWORK_NAME,
-              ...this.testEnvironmentMetadata,
-              ...testModuleSpanMetadata
-            }
-          })
-          this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
-
-          return details
-        })
+    // `details.specs` are test files
+    details.specs?.forEach(({ absolute, relative }) => {
+      const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+      if (isUnskippableSuite) {
+        this.unskippableSuites.push(relative)
+      }
     })
+
+    const childOf = getTestParentSpan(this.tracer)
+
+    const testSessionSpanMetadata =
+      getTestSessionCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
+    const testModuleSpanMetadata =
+      getTestModuleCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
+
+    if (this.isEarlyFlakeDetectionEnabled) {
+      testSessionSpanMetadata[TEST_EARLY_FLAKE_IS_ENABLED] = 'true'
+    }
+
+    this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
+      childOf,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...this.testEnvironmentMetadata,
+        ...testSessionSpanMetadata
+      }
+    })
+    this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
+
+    this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
+      childOf: this.testSessionSpan,
+      tags: {
+        [COMPONENT]: TEST_FRAMEWORK_NAME,
+        ...this.testEnvironmentMetadata,
+        ...testModuleSpanMetadata
+      }
+    })
+    this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
+
+    return details
   }
 
   afterRun (suiteStats) {
@@ -471,12 +524,18 @@ class CypressPlugin {
 
   getTasks () {
     return {
-      'dd:testSuiteStart': (suite) => {
-        if (this.testSuiteSpan) {
-          return null
+      'dd:testSuiteStart': (testSuite) => {
+        const suitePayload = {
+          isEarlyFlakeDetectionEnabled: this.isEarlyFlakeDetectionEnabled,
+          knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
+          earlyFlakeDetectionNumRetries: this.earlyFlakeDetectionNumRetries
         }
-        this.testSuiteSpan = this.getTestSuiteSpan(suite)
-        return null
+
+        if (this.testSuiteSpan) {
+          return suitePayload
+        }
+        this.testSuiteSpan = this.getTestSuiteSpan(testSuite)
+        return suitePayload
       },
       'dd:beforeEach': (test) => {
         const { testName, testSuite } = test
@@ -500,7 +559,7 @@ class CypressPlugin {
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
       'dd:afterEach': ({ test, coverage }) => {
-        const { state, error, isRUMActive, testSourceLine, testSuite, testName } = test
+        const { state, error, isRUMActive, testSourceLine, testSuite, testName, isNew, isEfdRetry } = test
         if (this.activeTestSpan) {
           if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
             const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -529,6 +588,12 @@ class CypressPlugin {
           }
           if (testSourceLine) {
             this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          }
+          if (isNew) {
+            this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
+            if (isEfdRetry) {
+              this.activeTestSpan.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+            }
           }
           const finishedTest = {
             testName,
