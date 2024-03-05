@@ -148,6 +148,19 @@ describe('IAST Index', () => {
         mockIast.disable()
         expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
       })
+
+      it('should start global context only once when calling enable multiple times', () => {
+        mockIast.enable(config)
+        mockIast.enable(config)
+
+        expect(mockOverheadController.startGlobalContext).to.have.been.calledOnce
+      })
+
+      it('should not finish global context if not enabled before ', () => {
+        mockIast.disable(config)
+
+        expect(mockOverheadController.finishGlobalContext).to.have.been.not.called
+      })
     })
 
     describe('managing vulnerability reporter', () => {

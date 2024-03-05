@@ -74,7 +74,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.enableRewriter()
 
-      const testPrepareStackTrace = function (_, callsites) {
+      const testPrepareStackTrace = (_, callsites) => {
         // do nothing
       }
       Error.prepareStackTrace = testPrepareStackTrace
@@ -89,7 +89,7 @@ describe('IAST Rewriter', () => {
     it('Should keep original prepareStackTrace fn when calling disable only', () => {
       const orig = Error.prepareStackTrace
 
-      const testPrepareStackTrace = function (_, callsites) {
+      const testPrepareStackTrace = (_, callsites) => {
         // do nothing
       }
       Error.prepareStackTrace = testPrepareStackTrace
