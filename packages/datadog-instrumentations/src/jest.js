@@ -140,14 +140,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // Function that receives a list of known tests for a test service and
     // returns the ones that belong to the current suite
     getKnownTestsForSuite (knownTests) {
+      if (this.knownTestsForThisSuite) {
+        return this.knownTestsForThisSuite
+      }
       let knownTestsForSuite = knownTests
-      // If jest runs in band, the known tests are not serialized, so they're an array.
-      if (!Array.isArray(knownTests)) {
+      // If jest is using workers, known tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof knownTestsForSuite === 'string') {
         knownTestsForSuite = JSON.parse(knownTestsForSuite)
       }
-      return knownTestsForSuite
-        .filter(test => test.includes(this.testSuite))
-        .map(test => test.replace(`jest.${this.testSuite}.`, '').trim())
+      return knownTestsForSuite.jest?.[this.testSuite] || []
     }
 
     // Add the `add_test` event we don't have the test object yet, so
