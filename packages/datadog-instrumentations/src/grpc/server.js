@@ -92,7 +92,9 @@ function createWrapEmit (call, ctx, onCancel) {
           finishChannel.publish(ctx)
           call.removeListener('cancelled', onCancel)
           break
-        case 'finish':
+        // Streams are always cancelled before `finish` since 1.10.0 so we have
+        // to use `prefinish` instead to avoid cancellation false positives.
+        case 'prefinish':
           if (call.status) {
             updateChannel.publish(call.status)
           }
