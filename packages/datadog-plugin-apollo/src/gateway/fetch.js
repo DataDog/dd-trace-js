@@ -1,14 +1,10 @@
 'use strict'
 
-const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../../datadog-core')
+const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
-class ApolloGatewayFetchPlugin extends TracingPlugin {
-  static get id () { return 'apollo.gateway' }
+class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
   static get operation () { return 'fetch' }
-  static get type () { return 'web' }
-  static get kind () { return 'server' }
-
   static get prefix () {
     return 'tracing:apm:apollo:gateway:fetch'
   }
@@ -19,8 +15,7 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
 
     const spanData = {
       childOf,
-      service: this.serviceName(
-        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
+      service: this.getServiceName(),
       type: this.constructor.type,
       meta: {}
     }
@@ -29,8 +24,7 @@ class ApolloGatewayFetchPlugin extends TracingPlugin {
 
     if (serviceName) { spanData.meta['serviceName'] = serviceName }
 
-    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` })
-      , spanData, false)
+    const span = this.startSpan(this.getOperationName(), spanData, false)
 
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }

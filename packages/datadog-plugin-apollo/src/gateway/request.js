@@ -1,18 +1,15 @@
 'use strict'
 
-const TracingPlugin = require('../../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../../datadog-core')
+const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')
 
 let tools
 
 const OPERATION_DEFINITION = 'OperationDefinition'
 const FRAGMENT_DEFINITION = 'FragmentDefinition'
 
-class ApolloGatewayRequestPlugin extends TracingPlugin {
-  static get id () { return 'apollo.gateway' }
+class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
   static get operation () { return 'request' }
-  static get type () { return 'web' }
-  static get kind () { return 'server' }
   static get prefix () {
     return 'tracing:apm:apollo:gateway:request'
   }
@@ -60,8 +57,8 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
       spanData['resource'] = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
-    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` })
-      , spanData, false)
+    const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }),
+      spanData, false)
 
     ctx.parentStore = store
     ctx.currentStore = { ...store, span }
@@ -78,6 +75,10 @@ class ApolloGatewayRequestPlugin extends TracingPlugin {
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
+  }
+
+  end () {
+    // do nothing to avoid ApolloBasePlugin's end method
   }
 }
 

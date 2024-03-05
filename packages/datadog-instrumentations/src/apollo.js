@@ -50,11 +50,10 @@ function wrapRecordExceptions (recordExceptions) {
 function wrapStartActiveSpan (startActiveSpan) {
   return function (...args) {
     const firstArg = args[0]
-    if (typeof firstArg !== 'string') return startActiveSpan.apply(this, args)
-
     const cb = args[args.length - 1]
-    const method = CHANNELS[firstArg]
+    if (typeof firstArg !== 'string' || typeof cb !== 'function') return startActiveSpan.apply(this, args)
 
+    const method = CHANNELS[firstArg]
     let ctx = {}
     if (firstArg === 'gateway.fetch') {
       ctx = { attributes: args[1].attributes }
@@ -77,8 +76,6 @@ function wrapStartActiveSpan (startActiveSpan) {
         }
         break
       }
-      default:
-        return startActiveSpan.apply(this, args)
     }
     return startActiveSpan.apply(this, args)
   }
@@ -86,8 +83,9 @@ function wrapStartActiveSpan (startActiveSpan) {
 
 addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', versions: ['>=2.3.0'] },
   (obj) => {
-    shimmer.wrap(Object.getPrototypeOf(obj.tracer), 'startActiveSpan', wrapStartActiveSpan)
-    return obj
+    const newObj = { ...obj }
+    shimmer.wrap(Object.getPrototypeOf(newObj.tracer), 'startActiveSpan', wrapStartActiveSpan)
+    return newObj
   })
 
 addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', versions: ['>=2.6.0'] },
