@@ -51,7 +51,7 @@ class DatabasePlugin extends StoragePlugin {
     const mode = this.config.dbmPropagationMode
     const dbmService = this.getDbmServiceName(span, serviceName)
 
-    if (mode === 'disabled') {
+    if (mode === 'disabled' || mode === 'none') {
       return query
     }
 
@@ -64,6 +64,8 @@ class DatabasePlugin extends StoragePlugin {
       const traceparent = span._spanContext.toTraceparent()
       return `/*${servicePropagation},traceparent='${traceparent}'*/ ${query}`
     }
+
+    return query
   }
 
   maybeTruncate (query) {
