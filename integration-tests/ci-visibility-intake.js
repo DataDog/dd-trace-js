@@ -187,7 +187,7 @@ class FakeCiVisIntake extends FakeAgent {
       const data = JSON.stringify({
         data: {
           attributes: {
-            test_full_names: knownTests
+            tests: knownTests
           }
         }
       })
