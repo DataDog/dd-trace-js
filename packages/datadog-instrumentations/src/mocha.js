@@ -106,7 +106,10 @@ function getTestFullName (test) {
 }
 
 function isNewTest (test) {
-  return !knownTests.includes(getTestFullName(test))
+  const testSuite = getTestSuitePath(test.file, process.cwd())
+  const testName = removeEfdStringFromTestName(test.fullTitle())
+  const testsForSuite = knownTests.mocha?.[testSuite] || []
+  return !testsForSuite.includes(testName)
 }
 
 function retryTest (test) {
