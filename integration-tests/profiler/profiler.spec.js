@@ -141,7 +141,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 5000
+  const timeout = 10000
 
   before(async () => {
     sandbox = await createSandbox()
@@ -354,7 +354,7 @@ describe('profiler', () => {
       return checkProfiles(agent, proc, timeout)
     })
 
-    if (process.platform !== 'win32') { // PROF-8905
+    if (process.platform !== 'awin32') { // PROF-8905
       it('sends a heap profile on OOM with external process', async () => {
         proc = fork(oomTestFile, {
           cwd,

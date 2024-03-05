@@ -132,7 +132,7 @@ class Config {
     ], this)
 
     // OOM monitoring does not work well on Windows, so it is disabled by default.
-    const oomMonitoringSupported = process.platform !== 'win32'
+    const oomMonitoringSupported = true//process.platform !== 'win32'
 
     const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
       DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, oomMonitoringSupported))
