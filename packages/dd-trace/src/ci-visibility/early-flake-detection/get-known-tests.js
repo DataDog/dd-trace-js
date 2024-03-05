@@ -70,7 +70,7 @@ function getKnownTests ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { test_full_names: knownTests } } } = JSON.parse(res)
+        const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
         log.debug(() => `Number of received known tests: ${Object.keys(knownTests).length}`)
         done(null, knownTests)
       } catch (err) {
