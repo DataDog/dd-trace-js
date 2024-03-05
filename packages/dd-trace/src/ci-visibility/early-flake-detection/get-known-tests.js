@@ -1,6 +1,5 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
-const log = require('../../log')
 
 function getKnownTests ({
   url,
