@@ -15,7 +15,8 @@ async function runCypress () {
           import('dd-trace/ci/cypress/plugin').then(module => {
             module.default(on, config)
           })
-        }
+        },
+        specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
       },
       video: false,
       screenshotOnRunFailure: false
