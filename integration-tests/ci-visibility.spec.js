@@ -29,7 +29,8 @@ const {
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
-  TEST_NAME
+  TEST_NAME,
+  JEST_DISPLAY_NAME
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -593,6 +594,41 @@ testFrameworks.forEach(({
 
         childProcess.on('exit', () => {
           assert.include(testOutput, 'Running shard with a custom sequencer')
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('grabs the jest displayName config and sets tag in tests and suites', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 4) // two per display name
+            const nodeTests = tests.filter(test => test.meta[JEST_DISPLAY_NAME] === 'node')
+            assert.equal(nodeTests.length, 2)
+
+            const standardTests = tests.filter(test => test.meta[JEST_DISPLAY_NAME] === 'standard')
+            assert.equal(standardTests.length, 2)
+
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.equal(suites.length, 4)
+
+            const nodeSuites = suites.filter(suite => suite.meta[JEST_DISPLAY_NAME] === 'node')
+            assert.equal(nodeSuites.length, 2)
+
+            const standardSuites = suites.filter(suite => suite.meta[JEST_DISPLAY_NAME] === 'standard')
+            assert.equal(standardSuites.length, 2)
+          })
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --config config-jest-multiproject.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+        childProcess.on('exit', () => {
           eventsPromise.then(() => {
             done()
           }).catch(done)
