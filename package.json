@@ -73,7 +73,7 @@
     "@datadog/native-iast-rewriter": "2.2.3",
     "@datadog/native-iast-taint-tracking": "1.7.0",
     "@datadog/native-metrics": "^2.0.0",
-    "@datadog/pprof": "5.0.0",
+    "@datadog/pprof": "5.1.0",
     "@datadog/sketches-js": "^2.1.0",
     "@opentelemetry/api": "^1.0.0",
     "@opentelemetry/core": "^1.14.0",
