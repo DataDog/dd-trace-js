@@ -4,7 +4,7 @@ const pkg = require('../../../../package.json')
 const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-const { encodePathwayContext } = require('./pathway')
+const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
@@ -13,7 +13,6 @@ const { PATHWAY_HASH } = require('../../../../ext/tags')
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -285,7 +284,7 @@ class DataStreamsProcessor {
       // Add the header for this now, as the callee doesn't have access to context when producing
       // - 1 to account for extra byte for {
       const ddInfoContinued = {}
-      ddInfoContinued[CONTEXT_PROPAGATION_KEY] = encodePathwayContext(dataStreamsContext).toJSON()
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfoContinued)
       payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
     }
     const checkpoint = {
@@ -364,6 +363,5 @@ module.exports = {
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
-  ENTRY_PARENT_HASH,
-  CONTEXT_PROPAGATION_KEY
+  ENTRY_PARENT_HASH
 }
