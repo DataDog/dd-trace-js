@@ -6,7 +6,7 @@ function getDataStreamsContext () {
 }
 
 function setDataStreamsContext (dataStreamsContext) {
-  storage.enterWith({ ...(storage.getStore()), dataStreamsContext })
+  if (dataStreamsContext) storage.enterWith({ ...(storage.getStore()), dataStreamsContext })
 }
 
 module.exports = {
