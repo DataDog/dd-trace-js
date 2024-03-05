@@ -269,6 +269,10 @@
     {
       "name": "bson",
       "versions": ["4.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["6.3.0"]
     }
   ],
   "mongoose": [
@@ -342,6 +346,12 @@
     {
       "name": "redis",
       "versions": ["^4"]
+    }
+  ],
+  "sequelize": [
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ]
 }
