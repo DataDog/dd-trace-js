@@ -900,9 +900,6 @@ moduleType.forEach(({
         }
       )
 
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
-
       childProcess.on('exit', () => {
         receiverPromise.then(() => {
           done()

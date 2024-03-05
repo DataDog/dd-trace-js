@@ -92,7 +92,8 @@ function getStatusFromResultLatest (result) {
 }
 
 function isNewTest (testSuite, testName) {
-  return !knownTests.includes(`cucumber.${testSuite}.${testName}`)
+  const testsForSuite = knownTests.cucumber?.[testSuite] || []
+  return !testsForSuite.includes(testName)
 }
 
 function getTestStatusFromRetries (testStatuses) {
