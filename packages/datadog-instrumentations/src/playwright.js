@@ -1,12 +1,16 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { parseAnnotations } = require('../../dd-trace/src/plugins/util/test')
+const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
+
+const libraryConfigurationCh = channel('ci:playwright:library-configuration')
+const knownTestsCh = channel('ci:playwright:known-tests')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -26,6 +30,9 @@ const STATUS_TO_TEST_STATUS = {
 }
 
 let remainingTestsByFile = {}
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let knownTests = []
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
@@ -309,6 +316,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
 function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
+    let onDone
+
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
     const rootDir = getRootDir(this)
 
@@ -317,6 +326,44 @@ function runnerHook (runnerExport, playwrightVersion) {
     testSessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
+
+    debugger
+    const configurationPromise = new Promise((resolve) => {
+      onDone = resolve
+    })
+
+    testSessionAsyncResource.runInAsyncScope(() => {
+      libraryConfigurationCh.publish({ onDone })
+    })
+
+    try {
+      const { err, libraryConfig } = await configurationPromise
+      if (!err) {
+        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+      }
+    } catch (e) {
+      log.error(e)
+    }
+
+    if (isEarlyFlakeDetectionEnabled) {
+      const knownTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+      testSessionAsyncResource.runInAsyncScope(() => {
+        knownTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+        if (!err) {
+          knownTests = receivedKnownTests
+        }
+      } catch (err) {
+        log.error(err)
+      }
+    }
+
     const projects = getProjectsFromRunner(this)
 
     const runAllTestsReturn = await runAllTests.apply(this, arguments)
@@ -334,7 +381,6 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
-    let onDone
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
