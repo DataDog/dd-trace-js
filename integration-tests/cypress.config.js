@@ -25,7 +25,8 @@ module.exports = {
           return ddAfterSpec(...args)
         })
       }
-    }
+    },
+    specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
   },
   video: false,
   screenshotOnRunFailure: false

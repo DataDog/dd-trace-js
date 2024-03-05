@@ -33,7 +33,8 @@ async function runCypress () {
               })
             })
           }
-        }
+        },
+        specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
       },
       video: false,
       screenshotOnRunFailure: false
