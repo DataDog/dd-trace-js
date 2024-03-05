@@ -143,6 +143,8 @@ describe('IAST Index', () => {
       })
 
       it('should finish global context refresher on iast disabled', () => {
+        mockIast.enable(config)
+
         mockIast.disable()
         expect(mockOverheadController.finishGlobalContext).to.have.been.calledOnce
       })
@@ -156,6 +158,8 @@ describe('IAST Index', () => {
       })
 
       it('should stop vulnerability reporter on iast disabled', () => {
+        mockIast.enable(config)
+
         mockIast.disable()
         expect(mockVulnerabilityReporter.stop).to.have.been.calledOnce
       })
