@@ -735,7 +735,7 @@ describe('updateConfig', () => {
     }
   })
 
-  it('should set configWithOrigin on initial call', () => {
+  it('should return full list of configuration values on initial call', () => {
     const initialChanges = [
       {
         name: 'test',
@@ -747,7 +747,7 @@ describe('updateConfig', () => {
     expect(sendDataStub.called).to.be.false
   })
 
-  it('should modify configWithOrigin after initial call', () => {
+  it('should return updated list of configuration values after initial call', () => {
     const changes = [
       {
         name: 'test',
@@ -759,10 +759,10 @@ describe('updateConfig', () => {
     expect(sendDataStub).to.be.calledOnce
   })
 
-  it('should modify entry name', () => {
+  it('should return configuration list containing entry with modified name', () => {
     const inputChanges = [
       {
-        name: 'sampleRate',
+        name: 'sampleRate', // one of the config names that require a remapping
         value: 0,
         origin: 'code'
       }

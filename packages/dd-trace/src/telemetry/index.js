@@ -311,10 +311,10 @@ function updateConfig (changes, config) {
     tags: 'DD_TAGS'
   }
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'tags'])
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
 
   const configuration = []
-  const names = []
+  const names = [] // list of config names whose values have been changed
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
@@ -336,6 +336,7 @@ function updateConfig (changes, config) {
   if (!configWithOrigin.length) {
     configWithOrigin = configuration
   } else {
+    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     configWithOrigin = configWithOrigin.filter(isNotModified)
     configWithOrigin = configWithOrigin.concat(configuration)
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
