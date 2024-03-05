@@ -646,9 +646,11 @@ testFrameworks.forEach(({
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
           // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
-          receiver.setKnownTests([
-            `${name}.ci-visibility/test/ci-visibility-test.js.ci visibility can report tests`
-          ])
+          receiver.setKnownTests({
+            [name]: {
+              'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+            }
+          })
           const NUM_RETRIES_EFD = 3
           receiver.setSettings({
             itr_enabled: false,
@@ -728,9 +730,11 @@ testFrameworks.forEach(({
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
           // Tests from ci-visibility/test-early-flake-detection/test-parameterized.js will be considered new
-          receiver.setKnownTests([
-            `${name}.ci-visibility/test-early-flake-detection/test.js.ci visibility can report tests`
-          ])
+          receiver.setKnownTests({
+            [name]: {
+              'ci-visibility/test-early-flake-detection/test.js': ['ci visibility can report tests']
+            }
+          })
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
@@ -811,9 +815,11 @@ testFrameworks.forEach(({
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
           // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
-          receiver.setKnownTests([
-            `${name}.ci-visibility/test/ci-visibility-test.js.ci visibility can report tests`
-          ])
+          receiver.setKnownTests({
+            [name]: {
+              'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+            }
+          })
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
@@ -873,7 +879,7 @@ testFrameworks.forEach(({
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
           // Tests from ci-visibility/test/occasionally-failing-test will be considered new
-          receiver.setKnownTests([])
+          receiver.setKnownTests({})
 
           const NUM_RETRIES_EFD = 5
           receiver.setSettings({
@@ -945,7 +951,7 @@ testFrameworks.forEach(({
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
           // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
-          receiver.setKnownTests([])
+          receiver.setKnownTests({})
 
           const NUM_RETRIES_EFD = 5
           receiver.setSettings({

@@ -796,13 +796,14 @@ versions.forEach(version => {
                 }
               })
               // "cucumber.ci-visibility/features/farewell.feature.Say" whatever will be considered new
-              receiver.setKnownTests([
-                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
-                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
-                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
-                'cucumber.ci-visibility/features/greetings.feature.Say yo',
-                'cucumber.ci-visibility/features/greetings.feature.Say skip'
-              ])
+              receiver.setKnownTests(
+                {
+                  cucumber: {
+                    'ci-visibility/features/farewell.feature': ['Say farewell'],
+                    'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                  }
+                }
+              )
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
@@ -871,13 +872,12 @@ versions.forEach(version => {
                   assert.equal(newTests.length, 0)
                 })
               // cucumber.ci-visibility/features/farewell.feature.Say whatever will be considered new
-              receiver.setKnownTests([
-                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
-                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
-                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
-                'cucumber.ci-visibility/features/greetings.feature.Say yo',
-                'cucumber.ci-visibility/features/greetings.feature.Say skip'
-              ])
+              receiver.setKnownTests({
+                cucumber: {
+                  'ci-visibility/features/farewell.feature': ['Say farewell'],
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo', 'Say skip']
+                }
+              })
 
               childProcess = exec(
                 runTestsCommand,
@@ -907,7 +907,7 @@ versions.forEach(version => {
                 }
               })
               // Tests in "cucumber.ci-visibility/features-flaky/flaky.feature" will be considered new
-              receiver.setKnownTests([])
+              receiver.setKnownTests({})
 
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -959,12 +959,12 @@ versions.forEach(version => {
               })
               // "cucumber.ci-visibility/features/farewell.feature.Say whatever" will be considered new
               // "cucumber.ci-visibility/features/greetings.feature.Say skip" will be considered new
-              receiver.setKnownTests([
-                'cucumber.ci-visibility/features/farewell.feature.Say farewell',
-                'cucumber.ci-visibility/features/greetings.feature.Say greetings',
-                'cucumber.ci-visibility/features/greetings.feature.Say yeah',
-                'cucumber.ci-visibility/features/greetings.feature.Say yo'
-              ])
+              receiver.setKnownTests({
+                cucumber: {
+                  'ci-visibility/features/farewell.feature': ['Say farewell'],
+                  'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yeah', 'Say yo']
+                }
+              })
 
               const eventsPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
