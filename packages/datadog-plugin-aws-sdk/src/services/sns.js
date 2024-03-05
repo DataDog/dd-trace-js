@@ -1,6 +1,6 @@
 'use strict'
-const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
+const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
@@ -94,10 +94,7 @@ class Sns extends BaseAwsSdkPlugin {
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
-      if (dataStreamsContext) {
-        const pathwayCtx = encodePathwayContext(dataStreamsContext)
-        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
-      }
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
     if (Object.keys(ddInfo).length !== 0) {
