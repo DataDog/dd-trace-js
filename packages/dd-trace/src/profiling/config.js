@@ -21,6 +21,7 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
@@ -176,7 +177,9 @@ class Config {
     checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
+      DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
+    logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
