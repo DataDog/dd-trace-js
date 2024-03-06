@@ -37,10 +37,10 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
-        'region': awsRegion,
-        'aws_service': awsService,
+        region: awsRegion,
+        aws_service: awsService,
         'aws.service': awsService,
-        'component': 'aws-sdk'
+        component: 'aws-sdk'
       }
       if (this.requestTags) this.requestTags.set(request, tags)
 

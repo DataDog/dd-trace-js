@@ -306,7 +306,7 @@ describe('profiler', () => {
                 })
               })
             })
-            const [ port1, port2 ] = await p
+            const [port1, port2] = await p
             const args = [String(port1), String(port2), msg]
             // Invoke the profiled program, passing it the ports of the servers and
             // the expected message.

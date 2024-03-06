@@ -39,12 +39,12 @@ class WAFContextWrapper {
     }
 
     if (Object.keys(inputs).length) {
-      payload['persistent'] = inputs
+      payload.persistent = inputs
       payloadHasData = true
     }
 
     if (ephemeral && Object.keys(ephemeral).length) {
-      payload['ephemeral'] = ephemeral
+      payload.ephemeral = ephemeral
       payloadHasData = true
     }
 

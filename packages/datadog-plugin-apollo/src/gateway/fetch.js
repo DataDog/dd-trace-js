@@ -22,7 +22,7 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
 
     const serviceName = ctx?.attributes?.service
 
-    if (serviceName) { spanData.meta['serviceName'] = serviceName }
+    if (serviceName) { spanData.meta.serviceName = serviceName }
 
     const span = this.startSpan(this.getOperationName(), spanData, false)
 

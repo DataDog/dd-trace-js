@@ -37,6 +37,7 @@ describe('IAST Plugin', () => {
         addSub (channelName, handler) {
           addSubMock(channelName, handler)
         }
+
         configure (config) {
           configureMock(config)
         }
@@ -54,7 +55,7 @@ describe('IAST Plugin', () => {
           errorAndPublish: logError
         },
         './iast-context': {
-          getIastContext: getIastContext
+          getIastContext
         },
         './telemetry': {
           isEnabled: () => false
@@ -194,6 +195,7 @@ describe('IAST Plugin', () => {
         addSub (channelName, handler) {
           addSubMock(channelName, handler)
         }
+
         configure (config) {
           configureMock(config)
         }
@@ -340,7 +342,7 @@ describe('IAST Plugin', () => {
         iastPlugin.addSub({
           moduleName: 'source',
           channelName: 'datadog:source:start',
-          tag: [ 'http.source', 'http.source2', 'http.source3' ],
+          tag: ['http.source', 'http.source2', 'http.source3'],
           tagKey: SOURCE_TYPE
         }, handler)
         iastPlugin.configure(true)

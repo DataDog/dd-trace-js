@@ -26,7 +26,7 @@ class RheaConsumerPlugin extends ConsumerPlugin {
       resource: name,
       type: 'worker',
       meta: {
-        'component': 'rhea',
+        component: 'rhea',
         'amqp.link.source.address': name,
         'amqp.link.role': 'receiver'
       }

@@ -258,7 +258,7 @@ class EventsProfiler {
       sample: samples,
       location: locations,
       function: functions,
-      stringTable: stringTable
+      stringTable
     })
   }
 

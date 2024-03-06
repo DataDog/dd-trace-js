@@ -39,7 +39,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
-          process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
+          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
@@ -57,7 +57,7 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
-                'component': 'kafkajs',
+                component: 'kafkajs',
                 'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
               },
               metrics: {
@@ -100,7 +100,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: error.name,
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_STACK]: error.stack,
-                'component': 'kafkajs'
+                component: 'kafkajs'
               })
             })
 
@@ -158,7 +158,7 @@ describe('Plugin', () => {
               service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
-                'component': 'kafkajs',
+                component: 'kafkajs',
                 'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
               },
               resource: testTopic,
@@ -222,7 +222,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
                 [ERROR_STACK]: fakeError.stack,
-                'component': 'kafkajs'
+                component: 'kafkajs'
               },
               resource: testTopic,
               error: 1,

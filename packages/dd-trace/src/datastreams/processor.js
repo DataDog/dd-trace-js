@@ -273,12 +273,12 @@ class DataStreamsProcessor {
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
-      hash: hash,
-      edgeStartNs: edgeStartNs,
-      pathwayStartNs: pathwayStartNs,
+      hash,
+      edgeStartNs,
+      pathwayStartNs,
       previousDirection: direction,
-      closestOppositeDirectionHash: closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart
+      closestOppositeDirectionHash,
+      closestOppositeDirectionEdgeStart
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
@@ -289,12 +289,12 @@ class DataStreamsProcessor {
     }
     const checkpoint = {
       currentTimestamp: nowNs,
-      parentHash: parentHash,
-      hash: hash,
-      edgeTags: edgeTags,
-      edgeLatencyNs: edgeLatencyNs,
-      pathwayLatencyNs: pathwayLatencyNs,
-      payloadSize: payloadSize
+      parentHash,
+      hash,
+      edgeTags,
+      edgeLatencyNs,
+      pathwayLatencyNs,
+      payloadSize
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -320,7 +320,7 @@ class DataStreamsProcessor {
     // TimeBuckets
     const serializedBuckets = []
 
-    for (const [ timeNs, bucket ] of this.buckets.entries()) {
+    for (const [timeNs, bucket] of this.buckets.entries()) {
       const points = []
 
       // bucket: StatsBucket
@@ -354,9 +354,9 @@ class DataStreamsProcessor {
 }
 
 module.exports = {
-  DataStreamsProcessor: DataStreamsProcessor,
-  StatsPoint: StatsPoint,
-  StatsBucket: StatsBucket,
+  DataStreamsProcessor,
+  StatsPoint,
+  StatsBucket,
   Backlog,
   TimeBuckets,
   getMessageSize,

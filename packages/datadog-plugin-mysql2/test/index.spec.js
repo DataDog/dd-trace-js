@@ -57,6 +57,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
 
+            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
                 expect(results).to.not.be.null
@@ -367,7 +368,7 @@ describe('Plugin', () => {
         it('should contain comment in query text', done => {
           const connect = connection.query('SELECT 1 + 1 AS solution', (...args) => {
             try {
-              expect(connect.sql).to.equal(`/*dddbs='serviced',dde='tester',` +
+              expect(connect.sql).to.equal('/*dddbs=\'serviced\',dde=\'tester\',' +
               `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
@@ -413,7 +414,7 @@ describe('Plugin', () => {
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connect.sql).to.equal(
-                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
+                '/*dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
               `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
               done()
             } catch (e) {

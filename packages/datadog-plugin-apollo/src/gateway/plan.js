@@ -1,4 +1,3 @@
-
 'use strict'
 
 const ApolloBasePlugin = require('../../../dd-trace/src/plugins/apollo')

@@ -7,8 +7,8 @@ const get = require('../../../src/utils/src/get')
 
 describe('get', () => {
   const obj = {
-    'a': {
-      'b': 'c'
+    a: {
+      b: 'c'
     }
   }
 

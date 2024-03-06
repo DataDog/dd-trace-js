@@ -146,6 +146,7 @@ describe('Plugin', () => {
             }
           }, { rejectFirst: true })
 
+          // eslint-disable-next-line n/handle-callback-err
           const httpd = server(router, (req, res) => err => res.end()).listen(port, 'localhost')
           await once(httpd, 'listening')
           const reqPromise = axios.get(`http://localhost:${port}/foo`)

@@ -54,7 +54,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       const type = operationContext?.operation?.operation
       const name = operationContext?.operation?.name && operationContext?.operation?.name?.value
 
-      spanData['resource'] = getSignature(document, name, type, this?.config?.signature)
+      spanData.resource = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
     const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }),
