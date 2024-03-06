@@ -4,6 +4,7 @@ packages/dd-trace/src/external-logger/test/index.spec.js
 !packages/*/lib/**/*
 !packages/*/src/**/*
 !packages/*/index.js
+!scripts/preinstall.js
 !vendor/**/*
 !LICENSE
 !LICENSE-3rdparty.csv
