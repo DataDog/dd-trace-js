@@ -418,18 +418,20 @@ addHook({
 }, (loaderPackage) => {
   shimmer.wrap(loaderPackage.Loader.prototype, 'buildFileSuiteForProject', buildFileSuiteForProject =>
     function (project, suite, repeatEachIndex) {
+      // TODO: do we need to consider input repeatEachIndex?
       if (!isEarlyFlakeDetectionEnabled) {
         return buildFileSuiteForProject.apply(this, arguments)
       }
       const tests = suite.allTests()
 
-      // TODO: call more than once
       if (tests.some(isNewTest)) {
-        const newSuite = buildFileSuiteForProject.apply(this, [project, suite, repeatEachIndex + 1, (test) => {
-          return isNewTest(test)
-        }])
-        const projectSuite = projectSuiteByProject.get(project)
-        projectSuite._addSuite(newSuite)
+        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+          const newSuite = buildFileSuiteForProject.apply(this, [project, suite, repeatEachIndex + 1, (test) => {
+            return isNewTest(test)
+          }])
+          const projectSuite = projectSuiteByProject.get(project)
+          projectSuite._addSuite(newSuite)
+        }
       }
 
       return buildFileSuiteForProject.apply(this, arguments)
