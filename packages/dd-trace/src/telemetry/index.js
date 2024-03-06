@@ -342,8 +342,6 @@ function updateConfig (changes, config) {
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
-
-  return configWithOrigin // for testing using sinon
 }
 
 module.exports = {
