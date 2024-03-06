@@ -19,6 +19,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_CONFIGURATION_BROWSER_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const versions = ['1.18.0', 'latest']
 
@@ -76,6 +77,10 @@ versions.forEach((version) => {
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'browser')
+
+            assert.exists(testSessionEvent.content.meta[ERROR_MESSAGE])
+            assert.exists(testModuleEvent.content.meta[ERROR_MESSAGE])
+
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
               'test_suite.landing-page-test.js',
@@ -87,6 +92,12 @@ versions.forEach((version) => {
               'fail',
               'skip'
             ])
+
+            testSuiteEvents.forEach(testSuiteEvent => {
+              if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
+                assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
+              }
+            })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
               'landing-page-test.js.should work with passing tests',
@@ -177,6 +188,34 @@ versions.forEach((version) => {
       childProcess.stderr.on('data', chunk => {
         testOutput += chunk.toString()
       })
+    })
+
+    it('works when before all fails and step durations are negative', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+        const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+
+        assert.propertyVal(testSuiteEvent.meta, TEST_STATUS, 'fail')
+        assert.propertyVal(testSessionEvent.meta, TEST_STATUS, 'fail')
+        assert.exists(testSuiteEvent.meta[ERROR_MESSAGE])
+        assert.include(testSessionEvent.meta[ERROR_MESSAGE], 'Test suites failed: 1')
+      }).then(() => done()).catch(done)
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-error',
+            TEST_TIMEOUT: 3000
+          },
+          stdio: 'pipe'
+        }
+      )
     })
   })
 })

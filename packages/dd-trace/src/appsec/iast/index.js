@@ -21,7 +21,11 @@ const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
 
+let isEnabled = false
+
 function enable (config, _tracer) {
+  if (isEnabled) return
+
   iastTelemetry.configure(config, config.iast?.telemetryVerbosity)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
@@ -30,9 +34,15 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
+
+  isEnabled = true
 }
 
 function disable () {
+  if (!isEnabled) return
+
+  isEnabled = false
+
   iastTelemetry.stop()
   disableAllAnalyzers()
   disableTaintTracking()

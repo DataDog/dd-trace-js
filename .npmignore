@@ -15,6 +15,7 @@
 !esbuild.js
 !init.js
 !loader-hook.mjs
+!register.js
 !package.json
 !cypress/**/*
 !ci/**/*

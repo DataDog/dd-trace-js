@@ -108,7 +108,6 @@ function extractTags (trace, span) {
 
   for (const tag in tags) {
     switch (tag) {
-      case 'operation.name':
       case 'service.name':
       case 'span.type':
       case 'resource.name':

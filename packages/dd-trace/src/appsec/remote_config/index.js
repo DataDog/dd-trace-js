@@ -60,7 +60,7 @@ function enableOrDisableAppsec (action, rcConfig, config) {
 }
 
 function enableWafUpdate (appsecConfig) {
-  if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
+  if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
     const RuleManager = require('../rule_manager')
 

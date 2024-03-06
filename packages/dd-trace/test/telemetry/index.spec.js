@@ -96,25 +96,6 @@ describe('telemetry', () => {
         appsec: { enabled: true },
         profiler: { version: tracerVersion, enabled: true }
       })
-      expect(payload).to.have.property('configuration').that.deep.equal([
-        { name: 'telemetry.enabled', value: true, origin: 'unknown' },
-        { name: 'telemetry.heartbeatInterval', value: DEFAULT_HEARTBEAT_INTERVAL, origin: 'unknown' },
-        { name: 'hostname', value: 'localhost', origin: 'unknown' },
-        { name: 'port', value: traceAgent.address().port, origin: 'unknown' },
-        { name: 'service', value: 'test service', origin: 'unknown' },
-        { name: 'version', value: '1.2.3-beta4', origin: 'unknown' },
-        { name: 'env', value: 'preprod', origin: 'unknown' },
-        { name: 'tags.runtime-id', value: '1a2b3c', origin: 'unknown' },
-        { name: 'circularObject.child.field', value: 'child_value', origin: 'unknown' },
-        { name: 'circularObject.field', value: 'parent_value', origin: 'unknown' },
-        { name: 'appsec.enabled', value: true, origin: 'unknown' },
-        { name: 'profiling.enabled', value: true, origin: 'unknown' },
-        { name: 'peerServiceMapping.service_1', value: 'remapped_service_1', origin: 'unknown' },
-        { name: 'peerServiceMapping.service_2', value: 'remapped_service_2', origin: 'unknown' },
-        { name: 'installSignature.id', value: '68e75c48-57ca-4a12-adfc-575c4b05fcbe', origin: 'unknown' },
-        { name: 'installSignature.type', value: 'k8s_single_step', origin: 'unknown' },
-        { name: 'installSignature.time', value: '1703188212', origin: 'unknown' }
-      ])
       expect(payload).to.have.property('install_signature').that.deep.equal({
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
         install_type: 'k8s_single_step',

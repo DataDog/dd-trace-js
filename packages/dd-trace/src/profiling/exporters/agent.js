@@ -9,6 +9,8 @@ const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
+const os = require('os')
+const perf = require('perf_hooks').performance
 
 const containerId = docker.id()
 
@@ -50,7 +52,7 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout } = {}) {
+  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
     this._url = url
     this._logger = logger
 
@@ -58,6 +60,10 @@ class AgentExporter {
 
     this._backoffTime = backoffTime
     this._backoffTries = backoffTries
+    this._env = env
+    this._host = host
+    this._service = service
+    this._appVersion = version
   }
 
   export ({ profiles, start, end, tags }) {
@@ -83,7 +89,37 @@ class AgentExporter {
         `profiler_version:${version}`,
         'format:pprof',
         ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
-      ].join(',')
+      ].join(','),
+      info: {
+        application: {
+          env: this._env,
+          service: this._service,
+          start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
+          version: this._appVersion
+        },
+        platform: {
+          hostname: this._host,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version()
+        },
+        profiler: {
+          version
+        },
+        runtime: {
+          // Using `nodejs` for consistency with the existing `runtime` tag.
+          // Note that the event `family` property uses `node`, as that's what's
+          // proscribed by the Intake API, but that's an internal enum and is
+          // not customer visible.
+          engine: 'nodejs',
+          // strip off leading 'v'. This makes the format consistent with other
+          // runtimes (e.g. Ruby) but not with the existing `runtime_version` tag.
+          // We'll keep it like this as we want cross-engine consistency. We
+          // also aren't changing the format of the existing tag as we don't want
+          // to break it.
+          version: process.version.substring(1)
+        }
+      }
     })
 
     fields.push(['event', event, {

@@ -115,6 +115,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
 
+      this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
@@ -139,14 +140,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // Function that receives a list of known tests for a test service and
     // returns the ones that belong to the current suite
     getKnownTestsForSuite (knownTests) {
+      if (this.knownTestsForThisSuite) {
+        return this.knownTestsForThisSuite
+      }
       let knownTestsForSuite = knownTests
-      // If jest runs in band, the known tests are not serialized, so they're an array.
-      if (!Array.isArray(knownTests)) {
+      // If jest is using workers, known tests are serialized to json.
+      // If jest runs in band, they are not.
+      if (typeof knownTestsForSuite === 'string') {
         knownTestsForSuite = JSON.parse(knownTestsForSuite)
       }
-      return knownTestsForSuite
-        .filter(test => test.includes(this.testSuite))
-        .map(test => test.replace(`jest.${this.testSuite}.`, '').trim())
+      return knownTestsForSuite.jest?.[this.testSuite] || []
     }
 
     // Add the `add_test` event we don't have the test object yet, so
@@ -201,6 +204,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
+            displayName: this.displayName,
             testParameters,
             frameworkVersion: jestVersion,
             isNew: isNewTest,
@@ -252,6 +256,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             suite: this.testSuite,
             testSourceFile: this.testSourceFile,
             runner: 'jest-circus',
+            displayName: this.displayName,
             frameworkVersion: jestVersion,
             testStartLine: getTestLineStart(event.test.asyncError, this.testSuite)
           })
@@ -559,6 +564,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       testSuiteStartCh.publish({
         testSuite: environment.testSuite,
         testEnvironmentOptions: environment.testEnvironmentOptions,
+        displayName: environment.displayName,
         frameworkVersion: jestVersion
       })
       return adapter.apply(this, arguments).then(suiteResults => {

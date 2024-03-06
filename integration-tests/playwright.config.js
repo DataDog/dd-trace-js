@@ -3,7 +3,8 @@ const { devices } = require('@playwright/test')
 
 module.exports = {
   baseURL: process.env.PW_BASE_URL,
-  testDir: './ci-visibility/playwright-tests',
+  testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
+  timeout: Number(process.env.TEST_TIMEOUT) || 30000,
   reporter: 'line',
   /* Configure projects for major browsers */
   projects: [

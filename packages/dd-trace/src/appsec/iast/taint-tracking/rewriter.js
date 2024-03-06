@@ -65,16 +65,18 @@ function getRewriter (telemetryVerbosity) {
   return rewriter
 }
 
-let originalPrepareStackTrace = Error.prepareStackTrace
+let originalPrepareStackTrace
+let actualPrepareStackTrace
 function getPrepareStackTraceAccessor () {
-  let actual = getPrepareStackTrace(originalPrepareStackTrace)
+  originalPrepareStackTrace = Error.prepareStackTrace
+  actualPrepareStackTrace = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     configurable: true,
     get () {
-      return actual
+      return actualPrepareStackTrace
     },
     set (value) {
-      actual = getPrepareStackTrace(value)
+      actualPrepareStackTrace = getPrepareStackTrace(value)
       originalPrepareStackTrace = value
     }
   }
@@ -121,7 +123,18 @@ function enableRewriter (telemetryVerbosity) {
 
 function disableRewriter () {
   shimmer.unwrap(Module.prototype, '_compile')
-  Error.prepareStackTrace = originalPrepareStackTrace
+
+  if (!actualPrepareStackTrace) return
+
+  try {
+    delete Error.prepareStackTrace
+
+    Error.prepareStackTrace = originalPrepareStackTrace
+
+    actualPrepareStackTrace = undefined
+  } catch (e) {
+    iastLog.warn(e)
+  }
 }
 
 function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {
