@@ -28,6 +28,11 @@ class ApolloBasePlugin extends TracingPlugin {
     ctx?.currentStore?.span.finish()
   }
 
+  asyncStart (ctx) {
+    ctx?.currentStore?.span.finish()
+    return ctx.parentStore
+  }
+
   getServiceName () {
     return this.serviceName({
       id: `${this.constructor.id}.${this.constructor.operation}`,

@@ -58,11 +58,6 @@ class TracingPlugin extends Plugin {
     this.activeSpan?.finish()
   }
 
-  asyncStart (ctx) {
-    ctx?.currentStore?.span.finish()
-    return ctx.parentStore
-  }
-
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
       ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
