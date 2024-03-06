@@ -11,15 +11,6 @@ const ApolloGatewayFetchPlugin = require('./fetch')
 
 class ApolloGatewayPlugin extends CompositePlugin {
   static get id () { return 'gateway' }
-  constructor (...args) {
-    super(...args)
-    this.addSub('apm:apollo:gateway:general:error', (ctx) => {
-      const store = storage.getStore()
-      const span = store?.span
-      if (!span) return
-      span.setTag('error', ctx.error)
-    })
-  }
   static get plugins () {
     return {
       execute: ApolloGatewayExecutePlugin,
@@ -29,6 +20,16 @@ class ApolloGatewayPlugin extends CompositePlugin {
       fetch: ApolloGatewayFetchPlugin,
       validate: ApolloGatewayValidatePlugin
     }
+  }
+
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:apollo:gateway:general:error', (ctx) => {
+      const store = storage.getStore()
+      const span = store?.span
+      if (!span) return
+      span.setTag('error', ctx.error)
+    })
   }
 }
 
