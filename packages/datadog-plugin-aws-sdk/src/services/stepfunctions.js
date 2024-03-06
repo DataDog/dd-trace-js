@@ -5,6 +5,8 @@ const BaseAwsSdkPlugin = require('../base')
 class Stepfunctions extends BaseAwsSdkPlugin {
   static get id () { return 'stepfunctions' }
 
+  // This is the shape of StartExecutionInput, as defined in
+  // https://github.com/aws/aws-sdk-js/blob/master/apis/states-2016-11-23.normal.json
   // "StartExecutionInput": {
   //   "type": "structure",
   //   "required": [
