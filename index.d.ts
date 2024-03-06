@@ -1624,6 +1624,10 @@ declare namespace tracer {
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
       service?: string | ((params: any) => string);
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: string;
     }
 
     /**
