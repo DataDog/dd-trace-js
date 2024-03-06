@@ -311,12 +311,12 @@ describe('IAST TaintTracking Operations', () => {
         telemetry: { enabled: true, metrics: true }
       }, 'INFORMATION')
 
-      const requestTaintedAdd = sinon.stub(REQUEST_TAINTED, 'add')
+      const requestTaintedTrack = sinon.stub(REQUEST_TAINTED, 'track')
 
       taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
       taintTrackingOperations.removeTransaction(iastContext)
 
-      expect(requestTaintedAdd).to.be.calledOnceWith(iastContext, 5)
+      expect(requestTaintedTrack).to.be.calledOnceWith(iastContext, 5)
     })
   })
 

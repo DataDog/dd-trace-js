@@ -9,6 +9,8 @@ const {
   IastNamespace
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
+const { Namespace } = require('../../../../src/telemetry/metrics')
+
 const REQUEST_TAINTED = 'request.tainted'
 const EXECUTED_SINK = 'executed.sink'
 const TAG_PREFIX = '_dd.iast.telemetry'
@@ -108,6 +110,8 @@ describe('IastNamespace', () => {
   })
 
   describe('getMetric', () => {
+    beforeEach(sinon.restore)
+
     it('should register a new count type metric and store it in the map', () => {
       const namespace = new IastNamespace()
 
@@ -158,7 +162,7 @@ describe('IastNamespace', () => {
       const namespace = new IastNamespace()
 
       const metric = {}
-      const count = sinon.stub(namespace, 'count').returns(metric)
+      const count = sinon.stub(Namespace.prototype, 'count').returns(metric)
 
       namespace.getMetric('metric.name', 'key:tag1')
       namespace.getMetric('metric.name', 'key:tag1')

@@ -260,7 +260,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         loadChannel.publish({ name: 'sink' })
 
@@ -276,7 +276,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         loadChannel.publish({ name: 'sink' })
 
@@ -293,7 +293,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         loadChannel.publish({ name: 'source' })
 
@@ -310,7 +310,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
@@ -328,7 +328,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
@@ -346,7 +346,7 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricAdd = sinon.stub(metric, 'track')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()

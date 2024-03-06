@@ -43,13 +43,13 @@ class IastMetric {
     return formatTags(tags, this.tagKey)
   }
 
-  add (context, value, tags) {
+  track (context, value, tags) {
     const namespace = getNamespace(this.scope, context)
-    namespace.getMetric(this.name, tags).inc(value)
+    namespace.count(this.name, tags).track(value)
   }
 
   inc (context, tags) {
-    this.add(context, 1, tags)
+    this.track(context, 1, tags)
   }
 }
 
@@ -60,13 +60,13 @@ class NoTaggedIastMetric extends IastMetric {
     this.tags = []
   }
 
-  add (context, value) {
+  track (context, value) {
     const namespace = getNamespace(this.scope, context)
-    namespace.getMetric(this.name, this.tags).inc(value)
+    namespace.count(this.name, this.tags).track(value)
   }
 
   inc (context) {
-    this.add(context, 1)
+    this.track(context, 1)
   }
 }
 
