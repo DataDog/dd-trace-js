@@ -166,7 +166,7 @@ class Config {
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
       DD_PROFILING_TIMELINE_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('TIMELINE_ENABLED')
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
 
@@ -178,7 +178,7 @@ class Config {
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
       DD_PROFILING_CPU_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
