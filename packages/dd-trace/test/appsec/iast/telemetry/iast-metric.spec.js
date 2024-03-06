@@ -15,11 +15,11 @@ const { globalNamespace } = require('../../../../src/appsec/iast/telemetry/names
 const { Namespace } = require('../../../../src/telemetry/metrics')
 
 describe('Metrics', () => {
-  let IastMetric, NoTaggedIastMetric, reqNamespace, track, context
+  let IastMetric, NoTaggedIastMetric, reqNamespace, inc, context
   beforeEach(() => {
     context = {}
-    track = sinon.stub()
-    const metricMock = { track }
+    inc = sinon.stub()
+    const metricMock = { inc }
 
     reqNamespace = {
       count: sinon.stub(globalNamespace, 'count').returns(metricMock)
@@ -40,21 +40,21 @@ describe('Metrics', () => {
   })
 
   it('should increase by one the metric value', () => {
-    const metric = new IastMetric('test.metric', 'REQUEST')
+    const metric = new NoTaggedIastMetric('test.metric', 'REQUEST')
 
     metric.inc(context)
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
-    expect(track).to.be.calledOnceWith(1)
+    expect(inc).to.be.calledOnceWith(1)
   })
 
   it('should add by 42 the metric value', () => {
-    const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
+    const metric = new NoTaggedIastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.track(context, 42)
+    metric.inc(context, 42)
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name)
-    expect(track).to.be.calledOnceWith(42)
+    expect(inc).to.be.calledOnceWith(42)
   })
 
   it('should increase by one the metric tag value', () => {
@@ -63,22 +63,22 @@ describe('Metrics', () => {
     metric.inc(context, 'tagKey:tag1')
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
-    expect(track).to.be.calledOnceWith(1)
+    expect(inc).to.be.calledOnceWith(1)
   })
 
   it('should add by 42 the metric tag value', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.track(context, 42, 'tagKey:tag1')
+    metric.inc(context, 'tagKey:tag1', 42)
 
     expect(reqNamespace.count).to.be.calledOnceWith(metric.name, 'tagKey:tag1')
-    expect(track).to.be.calledOnceWith(42)
+    expect(inc).to.be.calledOnceWith(42)
   })
 
   it('should format tags according with its tagKey', () => {
     const metric = new IastMetric('test.metric', 'REQUEST', 'tagKey')
 
-    metric.formatTags('tag1', 'tag2').forEach(tag => metric.track(context, 42, tag))
+    metric.formatTags('tag1', 'tag2').forEach(tag => metric.inc(context, tag, 42))
 
     expect(reqNamespace.count).to.be.calledTwice
     expect(reqNamespace.count.firstCall.args).to.be.deep.equals([metric.name, ['tagKey:tag1']])
@@ -116,17 +116,17 @@ describe('Metrics', () => {
       const noTagged = new NoTaggedIastMetric('notagged', 'scope')
       noTagged.inc()
 
-      expect(track).to.be.calledOnceWith(1)
+      expect(inc).to.be.calledOnceWith(1)
     })
 
     it('should reuse previous metric when calling add multiple times', () => {
       sinon.restore()
-      const superCount = sinon.stub(Namespace.prototype, 'count').returns({ track: () => {} })
+      const superCount = sinon.stub(Namespace.prototype, 'count').returns({ inc: () => {} })
 
       const noTagged = new NoTaggedIastMetric('notagged')
 
-      noTagged.track(undefined, 42)
-      noTagged.track(undefined, 42)
+      noTagged.inc(undefined, 42)
+      noTagged.inc(undefined, 42)
 
       expect(superCount).to.be.calledOnceWith('notagged')
     })
