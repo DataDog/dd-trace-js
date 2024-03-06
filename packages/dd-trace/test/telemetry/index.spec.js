@@ -289,6 +289,7 @@ describe('Telemetry extended heartbeat', () => {
     telemetry.stop()
     traceAgent.close()
   })
+
   it('extended beat', (done) => {
     let extendedHeartbeatRequest
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
@@ -358,6 +359,7 @@ describe('Telemetry retry', () => {
       bar2: { _enabled: false }
     }
   })
+
   afterEach(() => {
     clock.restore()
   })

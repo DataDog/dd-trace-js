@@ -20,6 +20,7 @@ describe('Instrumentation', () => {
             }
           })
         })
+
         afterEach(() => client.destroy())
 
         it('should propagate context', () =>

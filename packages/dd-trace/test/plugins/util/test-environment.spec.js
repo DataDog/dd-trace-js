@@ -27,6 +27,7 @@ describe('test environment data', () => {
     const tags = getTestEnvironmentMetadata('jest', { service: 'service-name' })
     expect(tags).to.contain({ 'service.name': 'service-name' })
   })
+
   it('getCIMetadata returns an empty object if the CI is not supported', () => {
     process.env = {}
     expect(getCIMetadata()).to.eql({})

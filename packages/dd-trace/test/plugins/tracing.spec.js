@@ -32,6 +32,7 @@ describe('TracingPlugin', () => {
 
 describe('common Plugin behaviour', () => {
   before(() => agent.load())
+
   after(() => agent.close({ ritmReset: false }))
   class CommonPlugin extends TracingPlugin {
     static get id () { return 'commonPlugin' }
@@ -97,6 +98,7 @@ describe('common Plugin behaviour', () => {
         }
       )
     })
+
     it('should tag when plugin impl does not match tracer service', done => {
       makeSpan(
         done, 'suffixPlugin', {},
@@ -106,6 +108,7 @@ describe('common Plugin behaviour', () => {
         }
       )
     })
+
     it('should not tag when service matches tracer service', done => {
       makeSpan(
         done, 'commonPlugin', {},

@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const jp = require('jsonpath')
 const os = require('os')
 const uuid = require('crypto-randomuuid')
 const URL = require('url').URL
@@ -17,6 +18,7 @@ const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./
 const { updateConfig } = require('./telemetry')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -63,6 +65,26 @@ function validateNamingVersion (versionString) {
     return defaultNamingVersion
   }
   return versionString
+}
+
+/**
+ * Given a string of comma-separated paths, return the array of paths if
+ * all paths are valid JSON paths, or undefined if any path is invalid.
+ *
+ * @param {string} input
+ * @returns {[string] | undefined}
+ */
+function validJSONPathsOrUndef (input) {
+  if (input === 'all') return []
+  const rules = input.split(',')
+  for (const rule of rules) {
+    try {
+      jp.parse(rule)
+    } catch (e) {
+      return undefined
+    }
+  }
+  return rules
 }
 
 // Shallow clone with property name remapping
@@ -226,6 +248,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     const sampler = {
       rules: coalesce(
         options.samplingRules,
@@ -279,6 +321,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
+      responsesEnabled: !!(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING),
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()

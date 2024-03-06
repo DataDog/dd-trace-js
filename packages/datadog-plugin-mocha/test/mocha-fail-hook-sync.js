@@ -5,6 +5,7 @@ describe('mocha-fail-hook-sync', () => {
     const value = ''
     value.unsafe.error = ''
   })
+
   it('will not run but be reported as failed', () => {
     expect(true).to.equal(true)
   })

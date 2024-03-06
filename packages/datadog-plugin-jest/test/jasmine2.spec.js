@@ -65,6 +65,7 @@ describeFunction('Plugin', function () {
     })
     describe('jest with jasmine', function () {
       this.timeout(20000)
+
       it('instruments async, sync and integration tests', function (done) {
         const tests = [
           {

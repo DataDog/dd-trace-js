@@ -12,6 +12,7 @@ describe('fs instrumentation', () => {
       })
     })
   }
+
   it('require fs should work', () => {
     return agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       const fs = require('fs')

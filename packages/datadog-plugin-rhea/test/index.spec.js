@@ -12,6 +12,7 @@ describe('Plugin', () => {
     before(() => {
       agent.load('rhea')
     })
+
     after(() => agent.close({ ritmReset: false }))
 
     withVersions('rhea', 'rhea', version => {

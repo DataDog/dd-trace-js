@@ -4,6 +4,7 @@ describe('mocha-test-skip-describe', () => {
   before(function () {
     this.skip()
   })
+
   it('will be skipped', () => {
     expect(true).to.equal(true)
   })

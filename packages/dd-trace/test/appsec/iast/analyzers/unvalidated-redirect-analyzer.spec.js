@@ -77,6 +77,7 @@ describe('unvalidated-redirect-analyzer', () => {
   }
 
   let report
+
   beforeEach(() => {
     sinon.stub(overheadController, 'hasQuota').returns(1)
     report = sinon.stub(unvalidatedRedirectAnalyzer, '_report')

@@ -15,6 +15,7 @@ require,int64-buffer,MIT,Copyright 2015-2016 Yusuke Kawasaki
 require,ipaddr.js,MIT,Copyright 2011-2017 whitequark
 require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
 require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
+require,jsonpath,MIT,Copyright 2014-2016 David Chester
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
@@ -29,6 +30,7 @@ require,pprof-format,MIT,Copyright 2022 Stephen Belanger
 require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
 require,tlhunter-sorted-set,MIT,Copyright (c) 2023 Datadog Inc.
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
+require,rfdc,MIT,Copyright 2019 David Mark Clements
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
 require,shell-quote,mit,Copyright (c) 2013 James Halliday
 dev,@types/node,MIT,Copyright Authors

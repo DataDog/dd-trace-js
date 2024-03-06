@@ -289,6 +289,7 @@ describe('Plugin', () => {
               if (err) done(err)
             })
           })
+
           describe('errors are handled correctly in callbacks', () => {
             it('should catch error in callback for non-traced functions', done => {
               const invalidIndex = '-1'

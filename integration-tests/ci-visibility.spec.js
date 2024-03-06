@@ -327,6 +327,7 @@ testFrameworks.forEach(({
             done()
           }).catch(done)
         })
+
         it('reports tests when using agentless', (done) => {
           childProcess = fork(testFile, {
             cwd,
@@ -346,6 +347,7 @@ testFrameworks.forEach(({
             done()
           }).catch(done)
         })
+
         it('reports tests when using evp proxy', (done) => {
           childProcess = fork(testFile, {
             cwd,
@@ -1155,6 +1157,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('does not init if DD_API_KEY is not set', (done) => {
         receiver.assertMessageReceived(() => {
           done(new Error('Should not create spans'))
@@ -1183,6 +1186,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('can report git metadata', (done) => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/git/repository/search_commits'
@@ -1214,6 +1218,7 @@ testFrameworks.forEach(({
           stdio: 'pipe'
         })
       })
+
       it('can report code coverage', (done) => {
         let testOutput
         const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -1277,6 +1282,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: false,
@@ -1313,6 +1319,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1374,6 +1381,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('marks the test session as skipped if every suite is skipped', (done) => {
         receiver.setSuitesToSkip(
           [
@@ -1412,6 +1420,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1455,6 +1464,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: true,
@@ -1494,6 +1504,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip suites if suite is marked as unskippable', (done) => {
         receiver.setSuitesToSkip([
           {
@@ -1574,6 +1585,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
         receiver.setSuitesToSkip([
           {
@@ -1648,6 +1660,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1682,6 +1695,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('reports itr_correlation_id in test suites', (done) => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)
@@ -1750,6 +1764,7 @@ testFrameworks.forEach(({
           })
         })
       })
+
       it('reports errors in test sessions', (done) => {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1784,6 +1799,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('can report git metadata', (done) => {
         const infoRequestPromise = receiver.payloadReceived(({ url }) => url === '/info')
         const searchCommitsRequestPromise = receiver.payloadReceived(
@@ -1823,6 +1839,7 @@ testFrameworks.forEach(({
           stdio: 'pipe'
         })
       })
+
       it('can report code coverage', (done) => {
         let testOutput
         const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -1887,6 +1904,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: false,
@@ -1917,6 +1935,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1972,6 +1991,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('marks the test session as skipped if every suite is skipped', (done) => {
         receiver.setSuitesToSkip(
           [
@@ -2010,6 +2030,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('marks the test session as skipped if every suite is skipped', (done) => {
         receiver.setSuitesToSkip(
           [
@@ -2048,6 +2069,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
@@ -2084,6 +2106,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
@@ -2124,6 +2147,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -2158,6 +2182,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('reports itr_correlation_id in test suites', (done) => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)

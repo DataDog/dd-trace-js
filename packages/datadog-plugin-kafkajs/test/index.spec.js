@@ -28,7 +28,8 @@ const expectedConsumerHash = computePathwayHash(
 
 describe('Plugin', () => {
   describe('kafkajs', function () {
-    this.timeout(10000) // TODO: remove when new internal trace has landed
+    this.timeout(10000)
+    // TODO: remove when new internal trace has landed
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })
@@ -38,6 +39,7 @@ describe('Plugin', () => {
       let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
+
         beforeEach(async () => {
           process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
           tracer = require('../../dd-trace')
@@ -50,6 +52,7 @@ describe('Plugin', () => {
             logLevel: lib.logLevel.WARN
           })
         })
+
         describe('producer', () => {
           it('should be instrumented', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
@@ -140,8 +143,10 @@ describe('Plugin', () => {
             rawExpectedSchema.send
           )
         })
+
         describe('consumer', () => {
           let consumer
+
           beforeEach(async () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()

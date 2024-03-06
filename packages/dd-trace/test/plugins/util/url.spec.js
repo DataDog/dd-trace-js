@@ -16,6 +16,7 @@ describe('filterSensitiveInfoFromRepository', () => {
       expect(filterSensitiveInfoFromRepository(url)).to.equal(url)
     })
   })
+
   it('returns the scrubbed url if credentials are present', () => {
     const sensitiveUrls = [
       'https://username:password@datadog.com/repository.git',
@@ -26,6 +27,7 @@ describe('filterSensitiveInfoFromRepository', () => {
     expect(filterSensitiveInfoFromRepository(sensitiveUrls[1])).to.equal('ssh://host.xz:port/path/to/repo.git/')
     expect(filterSensitiveInfoFromRepository(sensitiveUrls[2])).to.equal('https://datadog.com/repository.git')
   })
+
   it('does not crash for empty or invalid repository URLs', () => {
     const invalidUrls = [
       null,

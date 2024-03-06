@@ -79,6 +79,7 @@ describe('sql-injection-analyzer with pg', () => {
 
           describe('with pool', () => {
             let pool
+
             beforeEach(() => {
               pool = new pg.Pool({
                 host: '127.0.0.1',

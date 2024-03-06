@@ -28,6 +28,7 @@ describe('Plugin', () => {
           oracledb = require(`../../../versions/oracledb@${version}`).get()
           tracer = require('../../dd-trace')
         })
+
         after(async () => {
           await agent.close({ ritmReset: false })
         })
@@ -36,6 +37,7 @@ describe('Plugin', () => {
           before(async () => {
             connection = await oracledb.getConnection(config)
           })
+
           after(async () => {
             await connection.close()
           })
@@ -68,6 +70,7 @@ describe('Plugin', () => {
               `
             })
           })
+
           after(async () => {
             await connection.close()
           })
@@ -165,6 +168,7 @@ describe('Plugin', () => {
             pool = await oracledb.createPool(config)
             connection = await pool.getConnection()
           })
+
           after(async () => {
             await connection.close()
             await pool.close()
@@ -194,6 +198,7 @@ describe('Plugin', () => {
             })
             connection = await pool.getConnection()
           })
+
           after(async () => {
             await connection.close()
             await pool.close()
@@ -262,12 +267,15 @@ describe('Plugin', () => {
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })
+
           before(async () => {
             connection = await oracledb.getConnection(config)
           })
+
           after(async () => {
             await connection.close()
           })
+
           after(async () => {
             await agent.close({ ritmReset: false })
           })
@@ -284,6 +292,7 @@ describe('Plugin', () => {
               }
             }
           )
+
           it('should set the service name', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
@@ -292,18 +301,22 @@ describe('Plugin', () => {
             connection.execute(dbQuery)
           })
         })
+
         describe('with service function', () => {
           before(async () => {
             await agent.load('oracledb', { service: connAttrs => `${connAttrs.connectString}` })
             oracledb = require(`../../../versions/oracledb@${version}`).get()
             tracer = require('../../dd-trace')
           })
+
           before(async () => {
             connection = await oracledb.getConnection(config)
           })
+
           after(async () => {
             await connection.close()
           })
+
           after(async () => {
             await agent.close({ ritmReset: false })
           })
@@ -320,6 +333,7 @@ describe('Plugin', () => {
               }
             }
           )
+
           it('should set the service name', done => {
             agent.use(traces => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)

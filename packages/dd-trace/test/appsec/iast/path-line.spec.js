@@ -37,6 +37,7 @@ describe('path-line', function () {
     'diagnostics_channel'
   ]
   let mockPath, pathLine, mockProcess
+
   beforeEach(() => {
     mockPath = {}
     mockProcess = {}
@@ -45,6 +46,7 @@ describe('path-line', function () {
       'process': mockProcess
     })
   })
+
   describe('getFirstNonDDPathAndLine', () => {
     it('call does not fail', () => {
       const obj = pathLine.getFirstNonDDPathAndLine()

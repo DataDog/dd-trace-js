@@ -142,6 +142,7 @@ describe('Plugin', () => {
         mocha.addFile(testFilePath)
         mocha.run()
       })
+
       it('works with failing tests', (done) => {
         const testFilePath = path.join(__dirname, 'mocha-test-fail.js')
         const testSuite = testFilePath.replace(`${process.cwd()}/`, '')
@@ -178,6 +179,7 @@ describe('Plugin', () => {
         mocha.addFile(testFilePath)
         mocha.run()
       })
+
       it('works with skipping tests', (done) => {
         const testFilePath = path.join(__dirname, 'mocha-test-skip.js')
         const testNames = [

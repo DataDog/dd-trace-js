@@ -44,6 +44,7 @@ describe('WAF Manager', () => {
     webContext = {}
     sinon.stub(web, 'getContext').returns(webContext)
   })
+
   afterEach(() => {
     sinon.restore()
     waf.destroy()
