@@ -3,7 +3,7 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 
 class Stepfunctions extends BaseAwsSdkPlugin {
-  static get id () { return 'sfn' }
+  static get id () { return 'stepfunctions' }
 
   // "StartExecutionInput": {
   //   "type": "structure",
