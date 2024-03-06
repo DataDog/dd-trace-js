@@ -1,6 +1,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations } = require('../../dd-trace/src/plugins/util/test')
+const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -20,6 +20,8 @@ const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 
+const projectSuiteByProject = new Map()
+
 let startedSuites = []
 
 const STATUS_TO_TEST_STATUS = {
@@ -33,6 +35,14 @@ let remainingTestsByFile = {}
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
+let rootDir = ''
+
+function isNewTest (test) {
+  const testSuite = getTestSuitePath(test._requireFile, rootDir)
+  const testsForSuite = knownTests?.playwright?.[testSuite] || []
+
+  return !testsForSuite.includes(test.title)
+}
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
@@ -160,8 +170,11 @@ function getTestSuiteError (testSuiteAbsolutePath) {
 function testBeginHandler (test, browserName) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    title: testName, _type,
-    location: { line: testSourceLine }
+    title: testName,
+    _type,
+    location: {
+      line: testSourceLine
+    }
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
@@ -319,7 +332,8 @@ function runnerHook (runnerExport, playwrightVersion) {
     let onDone
 
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-    const rootDir = getRootDir(this)
+
+    rootDir = getRootDir(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -327,7 +341,6 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
 
-    debugger
     const configurationPromise = new Promise((resolve) => {
       onDone = resolve
     })
@@ -397,6 +410,48 @@ function runnerHook (runnerExport, playwrightVersion) {
 
   return runnerExport
 }
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/loader.js',
+  versions: ['>=1.18.0']
+}, (loaderPackage) => {
+  shimmer.wrap(loaderPackage.Loader.prototype, 'buildFileSuiteForProject', buildFileSuiteForProject =>
+    function (project, suite, repeatEachIndex) {
+      if (!isEarlyFlakeDetectionEnabled) {
+        return buildFileSuiteForProject.apply(this, arguments)
+      }
+      const tests = suite.allTests()
+
+      // TODO: call more than once
+      if (tests.some(isNewTest)) {
+        const newSuite = buildFileSuiteForProject.apply(this, [project, suite, repeatEachIndex + 1, (test) => {
+          return isNewTest(test)
+        }])
+        const projectSuite = projectSuiteByProject.get(project)
+        projectSuite._addSuite(newSuite)
+      }
+
+      return buildFileSuiteForProject.apply(this, arguments)
+    })
+  return loaderPackage
+})
+
+addHook({
+  name: '@playwright/test',
+  file: 'lib/test.js',
+  versions: ['>=1.18.0']
+}, (testPackage) => {
+  shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
+    if (suite._type === 'project') {
+      // we need to keep a reference to the project suite to add the new suite to it
+      projectSuiteByProject.set(suite._projectConfig, suite)
+    }
+
+    return _addSuite.apply(this, arguments)
+  })
+  return testPackage
+})
 
 addHook({
   name: '@playwright/test',
