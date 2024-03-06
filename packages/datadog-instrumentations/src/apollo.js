@@ -83,9 +83,10 @@ function wrapStartActiveSpan (startActiveSpan) {
 
 addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', versions: ['>=2.3.0'] },
   (obj) => {
-    const newObj = { ...obj }
-    shimmer.wrap(newObj.tracer, 'startActiveSpan', wrapStartActiveSpan)
-    return newObj
+    const newTracerObj = Object.create(obj.tracer)
+    shimmer.wrap(newTracerObj, 'startActiveSpan', wrapStartActiveSpan)
+    obj.tracer = newTracerObj
+    return obj
   })
 
 addHook({ name: '@apollo/gateway', file: 'dist/utilities/opentelemetry.js', versions: ['>=2.6.0'] },
