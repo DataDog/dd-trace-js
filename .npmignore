@@ -7,6 +7,7 @@
 !vendor/**/*
 !LICENSE
 !LICENSE-3rdparty.csv
+!README.md
 !index.d.ts
 !index.js
 !esbuild.js
