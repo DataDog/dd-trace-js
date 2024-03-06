@@ -14,7 +14,7 @@ const telemetryRewriter = {
 
     const metrics = response.metrics
     if (metrics && metrics.instrumentedPropagation) {
-      INSTRUMENTED_PROPAGATION.inc(null, metrics.instrumentedPropagation)
+      INSTRUMENTED_PROPAGATION.inc(undefined, metrics.instrumentedPropagation)
     }
 
     return response
