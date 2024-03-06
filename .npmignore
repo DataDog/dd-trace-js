@@ -1,5 +1,4 @@
 *
-packages/dd-trace/src/external-logger/test/index.spec.js
 !ext/**/*
 !packages/*/lib/**/*
 !packages/*/src/**/*
