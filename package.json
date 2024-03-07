@@ -103,6 +103,7 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
+    "@tapjs/mocha-globals": "^1.1.18",
     "@types/node": ">=18",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
@@ -138,7 +139,7 @@
     "rimraf": "^3.0.0",
     "sinon": "^15.2.0",
     "sinon-chai": "^3.7.0",
-    "tap": "^16.3.7",
+    "tap": "^18.7.0",
     "tape": "^5.6.5"
   }
 }

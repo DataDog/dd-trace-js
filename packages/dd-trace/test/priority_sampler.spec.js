@@ -349,7 +349,7 @@ describe('PrioritySampler', () => {
       expect(context._trace.tags).to.have.property(DECISION_MAKER_KEY, '-3')
     })
 
-    it.skip('should remove the decision maker tag when dropping the trace', () => { })
+    // it.skip('should remove the decision maker tag when dropping the trace', () => { })
 
     it('should not crash on prototype-free tags objects', () => {
       context._tags = Object.create(null)

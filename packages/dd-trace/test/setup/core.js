@@ -8,13 +8,13 @@ const proxyquire = require('../proxyquire')
 chai.use(sinonChai)
 chai.use(require('../asserts/profile'))
 
-global.sinon = sinon
-global.expect = chai.expect
-global.proxyquire = proxyquire
+globalThis.sinon = sinon
+globalThis.expect = chai.expect
+globalThis.proxyquire = proxyquire
 
-if (global.describe && typeof global.describe.skip !== 'function') {
-  global.describe.skip = function (name, fn, opts = {}) {
-    return global.describe(name, fn, { skip: true, ...opts })
+if (globalThis.describe && typeof globalThis.describe.skip !== 'function') {
+  globalThis.describe.skip = function (name, fn, opts = {}) {
+    return globalThis.describe(name, fn, { skip: true, ...opts })
   }
 }
 
