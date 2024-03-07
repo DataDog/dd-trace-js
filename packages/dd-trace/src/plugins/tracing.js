@@ -58,8 +58,12 @@ class TracingPlugin extends Plugin {
     this.activeSpan?.finish()
   }
 
-  error (error) {
-    this.addError(error)
+  error (ctxOrError) {
+    if (ctxOrError?.currentStore) {
+      ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
+      return
+    }
+    this.addError(ctxOrError)
   }
 
   addTraceSubs () {
