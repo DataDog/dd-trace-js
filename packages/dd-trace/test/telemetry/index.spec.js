@@ -280,16 +280,17 @@ describe('Telemetry extended heartbeat', () => {
   let pluginsByName
   let clock
 
-  before(() => {
+  beforeEach(() => {
     clock = sinon.useFakeTimers()
   })
 
-  after(() => {
+  afterEach(() => {
     clock.restore()
     telemetry.stop()
     traceAgent.close()
   })
-  it('extended beat', (done) => {
+
+  it('should be sent every 24 hours', (done) => {
     let extendedHeartbeatRequest
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
@@ -335,6 +336,86 @@ describe('Telemetry extended heartbeat', () => {
     expect(beats).to.equal(1)
     clock.tick(86400000)
     expect(beats).to.equal(2)
+    done()
+  })
+
+  it('be sent with up-to-date configuration values', (done) => {
+    let configuration
+    const sendDataRequest = {
+      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+        if (reqType === 'app-extended-heartbeat') {
+          configuration = payload.configuration
+        }
+      }
+
+    }
+    telemetry = proxyquire('../../src/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        }
+      },
+      './send-data': sendDataRequest
+    })
+
+    const config = {
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { enabled: true },
+      profiling: { enabled: true },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c'
+      }
+    }
+
+    telemetry.start(config, { _pluginsByName: pluginsByName })
+
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal([])
+
+    const changes = [
+      {
+        name: 'test',
+        value: true,
+        origin: 'code'
+      }
+    ]
+    telemetry.updateConfig(changes, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(changes)
+
+    const updatedChanges = [
+      {
+        name: 'test',
+        value: false,
+        origin: 'code'
+      }
+    ]
+    telemetry.updateConfig(updatedChanges, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(updatedChanges)
+
+    const changeNeedingNameRemapping = [
+      {
+        name: 'sampleRate', // one of the config names that require a remapping
+        value: 0,
+        origin: 'code'
+      }
+    ]
+    const expectedConfigList = [
+      updatedChanges[0],
+      {
+        ...changeNeedingNameRemapping[0],
+        name: 'DD_TRACE_SAMPLE_RATE' // remapped name
+      }
+    ]
+    telemetry.updateConfig(changeNeedingNameRemapping, config)
+    clock.tick(86400000)
+    expect(configuration).to.deep.equal(expectedConfigList)
     done()
   })
 })
