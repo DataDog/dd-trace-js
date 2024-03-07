@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
+const EventsProfiler = require('../../src/profiling/profilers/events')
 
 describe('profiler', function () {
   let Profiler
@@ -137,11 +138,11 @@ describe('profiler', function () {
     it('should allow configuring profilers by string or string arrays', async () => {
       const checks = [
         ['space', SpaceProfiler],
-        ['wall', WallProfiler],
-        ['space,wall', SpaceProfiler, WallProfiler],
-        ['wall,space', WallProfiler, SpaceProfiler],
-        [['space', 'wall'], SpaceProfiler, WallProfiler],
-        [['wall', 'space'], WallProfiler, SpaceProfiler]
+        ['wall', WallProfiler, EventsProfiler],
+        ['space,wall', SpaceProfiler, WallProfiler, EventsProfiler],
+        ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
+        [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
+        [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
       ]
 
       for (const [profilers, ...expected] of checks) {
