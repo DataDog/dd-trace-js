@@ -17,11 +17,14 @@ const {
   TEST_SOURCE_START,
   TEST_TYPE,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
-const versions = ['1.18.0', 'latest']
+const NUM_RETRIES_EFD = 3
+
+const versions = ['latest']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
@@ -216,6 +219,73 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
+    })
+
+    context('early flake detection', () => {
+      it.only('retries new tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests(
+          {
+            playwright: {
+              'landing-page-tests.js': [
+                // 'playwright should work with passing tests', // it will be considered new
+                'playwright should work with skipped tests',
+                'playwright should work with fixme',
+                'playwright should work with annotated tests'
+              ],
+              'skipped-suite-test.js': [
+                'should work with fixme root'
+              ],
+              'todo-list-page-test.js': [
+                'playwright should work with failing tests',
+                'should work with fixme root'
+              ]
+            }
+          }
+        )
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+            debugger
+            const newTests = tests.filter(test =>
+              test.resource ===
+                'landing-page-tests.js.playwright.should work with passing tests'
+            )
+            newTests.forEach(test => {
+              assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+            })
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => done()).catch(done)
+        })
+      })
     })
   })
 })

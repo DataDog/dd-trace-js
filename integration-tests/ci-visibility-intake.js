@@ -229,6 +229,16 @@ class FakeCiVisIntake extends FakeAgent {
     return super.stop()
   }
 
+  getEventsFromPayloads (payloads) {
+    return payloads.flatMap(({ payload }) => payload.events)
+  }
+
+  getTestLevelEventsFromPayloads (payloads, testLevel = 'test') {
+    return this.getEventsFromPayloads(payloads)
+      .filter(event => event.type === testLevel)
+      .map(event => event.content)
+  }
+
   // Similar to gatherPayloads but resolves if enough payloads have been gathered
   // to make the assertions pass. It times out after maxGatheringTime so it should
   // always be faster or as fast as gatherPayloads
@@ -237,7 +247,11 @@ class FakeCiVisIntake extends FakeAgent {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         try {
-          onPayload(payloads)
+          onPayload(
+            payloads,
+            this.getEventsFromPayloads(payloads),
+            this.getTestLevelEventsFromPayloads(payloads, 'test')
+          )
           resolve()
         } catch (e) {
           reject(e)
@@ -249,7 +263,11 @@ class FakeCiVisIntake extends FakeAgent {
         if (!payloadMatch || payloadMatch(message)) {
           payloads.push(message)
           try {
-            onPayload(payloads)
+            onPayload(
+              payloads,
+              this.getEventsFromPayloads(payloads),
+              this.getTestLevelEventsFromPayloads(payloads, 'test')
+            )
             clearTimeout(timeoutId)
             this.off('message', messageHandler)
             resolve()
