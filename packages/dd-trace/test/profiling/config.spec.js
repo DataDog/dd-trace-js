@@ -9,6 +9,7 @@ const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
+const EventsProfiler = require('../../src/profiling/profilers/events')
 const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 
 const samplingContextsAvailable = process.platform !== 'win32'
@@ -54,7 +55,7 @@ describe('config', () => {
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
     expect(config.profilers[1]).to.be.an.instanceof(SpaceProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).true
-    expect(config.cpuProfilingEnabled).false
+    expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
 
   it('should support configuration options', () => {
@@ -86,10 +87,11 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
+    expect(config.profilers.length).to.equal(3)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[1].codeHotspotsEnabled()).false
+    expect(config.profilers[2]).to.be.an.instanceOf(EventsProfiler)
   })
 
   it('should filter out invalid profilers', () => {
@@ -145,9 +147,10 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
+    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
     expect(config.v8ProfilerBugWorkaroundEnabled).false
     expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
@@ -181,8 +184,9 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
+    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
   })
 
   it('should prioritize options over env variables', () => {
@@ -204,10 +208,11 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[0].endpointCollectionEnabled()).false
+    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
   })
 
   it('should prioritize non-experimental env variables and warn about experimental ones', () => {
@@ -245,10 +250,11 @@ describe('config', () => {
       'Use DD_PROFILING_CODEHOTSPOTS_ENABLED instead.')
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(1)
+    expect(config.profilers.length).to.equal(2)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).false
     expect(config.profilers[0].endpointCollectionEnabled()).false
+    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
   })
 
   function optionOnlyWorksWithGivenCondition (property, name, condition) {
