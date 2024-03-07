@@ -20,6 +20,9 @@ const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 
+let applyRepeatEachIndex = null
+
+// weakmap?
 const projectSuiteByProject = new Map()
 
 let startedSuites = []
@@ -261,6 +264,7 @@ function dispatcherRunWrapper (run) {
 }
 
 function dispatcherRunWrapperNew (run) {
+  debugger
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
@@ -304,6 +308,7 @@ function getTestByTestId (dispatcher, testId) {
 }
 
 function dispatcherHookNew (dispatcherExport, runWrapper) {
+  debugger
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
@@ -376,6 +381,9 @@ function runnerHook (runnerExport, playwrightVersion) {
         log.error(err)
       }
     }
+    debugger
+    console.log('knownTests', knownTests)
+    console.log('isEarlyFlakeDetectionEnabled', isEarlyFlakeDetectionEnabled)
 
     const projects = getProjectsFromRunner(this)
 
@@ -411,6 +419,7 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
+// works at 1.28.1
 addHook({
   name: '@playwright/test',
   file: 'lib/loader.js',
@@ -437,6 +446,71 @@ addHook({
       return buildFileSuiteForProject.apply(this, arguments)
     })
   return loaderPackage
+})
+
+addHook({
+  name: 'playwright',
+  file: 'lib/common/suiteUtils.js',
+  versions: ['>=1.40.0'] //testing in 1.42.1
+}, suiteUtilsPackage => {
+  // we grab the applyRepeatEachIndex function to use it later
+  // applyRepeatEachIndex needs to be applied to a clone suite
+  applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
+  return suiteUtilsPackage
+})
+
+addHook({
+  name: 'playwright',
+  file: 'lib/common/test.js',
+  versions: ['>=1.40.0'] //testing in 1.42.1
+}, (testPackage) => {
+  shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
+    if (suite._type === 'project') {
+      // we need to keep a reference to the project suite to add the new suite to it
+      projectSuiteByProject.set(suite._projectConfig, suite)
+    }
+
+    return _addSuite.apply(this, arguments)
+  })
+  return testPackage
+})
+
+const getFileSuite = (test) => {
+  let suite = test.parent
+  while (suite && suite._type !== 'file') {
+    suite = suite.parent
+  }
+  return suite
+}
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/loadUtils.js',
+  versions: ['>=1.40.0'] // testing in 1.42.1
+}, (loadUtilsPackage) => {
+  const oldCreateRootSuite = loadUtilsPackage.createRootSuite
+
+  async function newCreateRootSuite (testRun) {
+    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+
+    rootSuite.suites.forEach(projectSuite => {
+      const newProjectTests = projectSuite.allTests().filter(isNewTest)
+      newProjectTests.forEach(newTest => {
+        const fileSuite = getFileSuite(newTest)
+        const copyFileSuite = fileSuite._deepClone()
+        // TODO: increase repeatIndex for each retry
+        // TODO: only copy new tests, not all
+        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, 1)
+        projectSuite._addSuite(copyFileSuite)
+      })
+    })
+
+    return rootSuite
+  }
+
+  loadUtilsPackage.createRootSuite = newCreateRootSuite
+
+  return loadUtilsPackage
 })
 
 addHook({
