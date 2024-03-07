@@ -167,6 +167,82 @@ describe('Plugin', () => {
         })
       })
 
+      describe('graphql-yoga', () => {
+        withVersions(plugin, 'graphql-yoga', version => {
+          let graphqlYoga
+          let server
+          let port
+
+          before(() => {
+            tracer = require('../../dd-trace')
+            return agent.load('graphql')
+              .then(() => {
+                graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
+
+                const typeDefs = `
+                  type Query {
+                    hello(name: String): String
+                  }
+                `
+
+                const resolvers = {
+                  Query: {
+                    hello: (_, { name }) => {
+                      return `Hello, ${name || 'world'}!`
+                    }
+                  }
+                }
+
+                const schema = graphqlYoga.createSchema({
+                  typeDefs, resolvers
+                })
+
+                const yoga = graphqlYoga.createYoga({ schema })
+
+                server = http.createServer(yoga)
+
+                getPort().then(newPort => {
+                  port = newPort
+                  server.listen(port)
+                })
+              })
+          })
+
+          after(() => {
+            server.close()
+            return agent.close({ ritmReset: false })
+          })
+
+          it('should instrument graphql-yoga execution', done => {
+            agent
+              .use(traces => {
+                const spans = sort(traces[0])
+
+                expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
+                expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
+                expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
+                expect(spans[0]).to.have.property('type', 'graphql')
+                expect(spans[0]).to.have.property('error', 0)
+                expect(spans[0].meta).to.not.have.property('graphql.source')
+                expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
+                expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
+                expect(spans[0].meta).to.have.property('component', 'graphql')
+              })
+              .then(done)
+
+            const query = `
+              query MyQuery {
+                hello(name: "world")
+              }
+            `
+
+            axios.post(`http://localhost:${port}/graphql`, {
+              query
+            }).catch(done)
+          })
+        })
+      })
+
       describe('without configuration', () => {
         before(() => {
           return agent.load('graphql')
@@ -1649,80 +1725,6 @@ describe('Plugin', () => {
             runQuery(params)
               .catch(done)
           })
-        })
-      })
-
-      withVersions(plugin, 'graphql-yoga', version => {
-        let graphqlYoga
-        let server
-        let port
-
-        before(() => {
-          tracer = require('../../dd-trace')
-          return agent.load('graphql')
-            .then(() => {
-              graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
-
-              const typeDefs = `
-                  type Query {
-                    hello(name: String): String
-                  }
-                `
-
-              const resolvers = {
-                Query: {
-                  hello: (_, { name }) => {
-                    return `Hello, ${name || 'world'}!`
-                  }
-                }
-              }
-
-              const schema = graphqlYoga.createSchema({
-                typeDefs, resolvers
-              })
-
-              const yoga = graphqlYoga.createYoga({ schema })
-
-              server = http.createServer(yoga)
-
-              getPort().then(newPort => {
-                port = newPort
-                server.listen(port)
-              })
-            })
-        })
-
-        after(() => {
-          server.close()
-          return agent.close({ ritmReset: false })
-        })
-
-        it('should instrument graphql-yoga execution', done => {
-          agent
-            .use(traces => {
-              const spans = sort(traces[0])
-
-              expect(spans[0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(spans[0]).to.have.property('name', expectedSchema.server.opName)
-              expect(spans[0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
-              expect(spans[0]).to.have.property('type', 'graphql')
-              expect(spans[0]).to.have.property('error', 0)
-              expect(spans[0].meta).to.not.have.property('graphql.source')
-              expect(spans[0].meta).to.have.property('graphql.operation.type', 'query')
-              expect(spans[0].meta).to.have.property('graphql.operation.name', 'MyQuery')
-              expect(spans[0].meta).to.have.property('component', 'graphql')
-            })
-            .then(done)
-
-          const query = `
-              query MyQuery {
-                hello(name: "world")
-              }
-            `
-
-          axios.post(`http://localhost:${port}/graphql`, {
-            query
-          }).catch(done)
         })
       })
     })
