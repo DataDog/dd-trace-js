@@ -16,7 +16,7 @@ const { Profile } = require('pprof-format')
 const semver = require('semver')
 
 function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
+  expectedProfileTypes = ['wall', 'space', 'events'], expectBadExit = false, multiplicity = 1) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   const resultPromise = agent.assertMessageReceived(({ headers, payload, files }) => {
     assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
