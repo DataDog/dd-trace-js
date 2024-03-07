@@ -194,19 +194,22 @@ class EventsProfiler {
     })()
 
     const decorators = {}
-    for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
-      const decorator = new DecoratorCtor(stringTable)
-      decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
-      decorators[eventType] = decorator
-    }
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
 
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
     const lateEntries = []
     const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
-      const decorator = decorators[item.entryType]
+      let decorator = decorators[item.entryType]
       if (!decorator) {
+        const eventType = item.entryType
+        const DecoratorCtor = decoratorTypes[eventType]
+        if (DecoratorCtor) {
+          decorator = new DecoratorCtor(stringTable)
+          decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
+          decorators[eventType] = decorator
+        }
+      } else {
         // Shouldn't happen but it's better to not rely on observer only getting
         // requested event types.
         return null
