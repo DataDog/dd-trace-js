@@ -291,8 +291,9 @@ function ensureProfilers (profilers, options) {
     }
   }
 
-  // Events profiler is a profiler for timeline events
-  if (options.timelineEnabled) {
+  // Events profiler is a profiler that produces timeline events. It is only
+  // added if timeline is enabled and there's a wall profiler.
+  if (options.timelineEnabled && profilers.some(p => p instanceof WallProfiler)) {
     profilers.push(new EventsProfiler(options))
   }
 
