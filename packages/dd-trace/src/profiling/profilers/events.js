@@ -177,11 +177,6 @@ class EventsProfiler {
   }
 
   profile (restart, startDate, endDate) {
-    if (this.entries.length === 0) {
-      // No events in the period; don't produce a profile
-      return null
-    }
-
     const stringTable = new StringTable()
     const locations = []
     const functions = []
