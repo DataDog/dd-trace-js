@@ -172,7 +172,7 @@ class TextMapPropagator {
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
-        // SpanContext was created by a ddtrace span. 
+        // SpanContext was created by a ddtrace span.
         // Last datadog span id should be set to the current span.
         state.set('p', spanContext._spanId)
       } else if (spanContext._trace.tags['_dd.parent_id']) {
