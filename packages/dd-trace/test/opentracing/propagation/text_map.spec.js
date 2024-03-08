@@ -23,6 +23,7 @@ describe('TextMapPropagator', () => {
     const spanContext = new SpanContext({
       traceId: id('123', 10),
       spanId: id('456', 10),
+      isRemote: true,
       baggageItems,
       ...params,
       trace: {
@@ -326,6 +327,7 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems['foo']).to.equal(carrier['ot-baggage-foo'])
+      expect(spanContext._isRemote).to.equal(true)
     })
 
     it('should convert signed IDs to unsigned', () => {
