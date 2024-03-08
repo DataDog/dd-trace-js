@@ -36,6 +36,17 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'accept-language'
 ], 'http.request.headers.')
 
+const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+  'x-amzn-trace-id',
+  'cloudfront-viewer-ja3-fingerprint',
+  'cf-ray',
+  'x-cloud-trace-context',
+  'x-appgw-trace-id',
+  'x-sigsci-requestid',
+  'x-sigsci-tags',
+  'akamai-user-risk'
+], 'http.request.headers.')
+
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
 
 function mapHeaderAndTags (headerList, tagPrefix) {
@@ -168,6 +179,9 @@ function finishRequest (req, res) {
   }
 
   incrementWafRequestsMetric(req)
+
+  // collect some headers even when no attack is detected
+  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
 
   if (!rootSpan.context()._tags['appsec.event']) return
 
