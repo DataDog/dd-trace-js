@@ -279,7 +279,8 @@ class TextMapPropagator {
         return new DatadogSpanContext({
           traceId: id(),
           spanId: null,
-          sampling: { priority }
+          sampling: { priority },
+          isRemote: true
         })
       }
 
@@ -327,6 +328,7 @@ class TextMapPropagator {
       const spanContext = new DatadogSpanContext({
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
+        isRemote: true,
         sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
         traceparent,
         tracestate
@@ -379,7 +381,8 @@ class TextMapPropagator {
 
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
-        spanId: id(carrier[spanKey], radix)
+        spanId: id(carrier[spanKey], radix),
+        isRemote: true
       })
     }
 

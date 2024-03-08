@@ -66,6 +66,7 @@ describe('Span', () => {
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._spanId).to.deep.equal('123')
+    expect(span.context()._isRemote).to.deep.equal(false)
   })
 
   it('should add itself to the context trace started spans', () => {
@@ -148,6 +149,7 @@ describe('Span', () => {
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace).to.equal(parent._trace)
+    expect(span.context()._isRemote).to.equal(false)
   })
 
   it('should generate a 128-bit trace ID when configured', () => {
