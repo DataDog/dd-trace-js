@@ -47,6 +47,9 @@ jobs:
       - name: Run
         run: ./run.sh TRACER_ESSENTIAL_SCENARIOS
 
+      - name: Run Cross Tracer Propagation Tests
+        run: ./run.sh CROSSED_TRACING_LIBRARIES 
+
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
