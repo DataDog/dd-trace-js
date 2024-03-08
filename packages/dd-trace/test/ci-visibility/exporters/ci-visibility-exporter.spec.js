@@ -689,7 +689,12 @@ describe('CI Visibility Exporter', () => {
           .reply(200, JSON.stringify({
             data: {
               attributes: {
-                test_full_names: ['suite1.test1', 'suite2.test2']
+                tests: {
+                  'jest': {
+                    'suite1': ['test1'],
+                    'suite2': ['test2']
+                  }
+                }
               }
             }
           }))
@@ -700,7 +705,12 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._libraryConfig = { isEarlyFlakeDetectionEnabled: true }
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
-          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(knownTests).to.eql({
+            'jest': {
+              'suite1': ['test1'],
+              'suite2': ['test2']
+            }
+          })
           expect(scope.isDone()).to.be.true
           done()
         })
@@ -727,7 +737,16 @@ describe('CI Visibility Exporter', () => {
             requestHeaders = this.req.headers
 
             return zlib.gzipSync(JSON.stringify({
-              data: { attributes: { test_full_names: ['suite1.test1', 'suite2.test2'] } }
+              data: {
+                attributes: {
+                  tests: {
+                    'jest': {
+                      'suite1': ['test1'],
+                      'suite2': ['test2']
+                    }
+                  }
+                }
+              }
             }))
           }, {
             'content-encoding': 'gzip'
@@ -740,7 +759,12 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isGzipCompatible = true
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
-          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(knownTests).to.eql({
+            'jest': {
+              'suite1': ['test1'],
+              'suite2': ['test2']
+            }
+          })
           expect(scope.isDone()).to.be.true
           expect(requestHeaders['accept-encoding']).to.equal('gzip')
           done()
@@ -754,7 +778,16 @@ describe('CI Visibility Exporter', () => {
             requestHeaders = this.req.headers
 
             return JSON.stringify({
-              data: { attributes: { test_full_names: ['suite1.test1', 'suite2.test2'] } }
+              data: {
+                attributes: {
+                  tests: {
+                    'jest': {
+                      'suite1': ['test1'],
+                      'suite2': ['test2']
+                    }
+                  }
+                }
+              }
             })
           })
 
@@ -767,7 +800,12 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
-          expect(knownTests).to.eql(['suite1.test1', 'suite2.test2'])
+          expect(knownTests).to.eql({
+            'jest': {
+              'suite1': ['test1'],
+              'suite2': ['test2']
+            }
+          })
           expect(scope.isDone()).to.be.true
           expect(requestHeaders['accept-encoding']).not.to.equal('gzip')
           done()

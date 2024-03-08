@@ -108,7 +108,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
-    expect(config).to.have.nested.property('appsec.customRulesProvided', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
@@ -180,7 +179,6 @@ describe('Config', () => {
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
-      { name: 'appsec.customRulesProvided', value: false, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
@@ -369,7 +367,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
-    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
@@ -428,7 +425,6 @@ describe('Config', () => {
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
-      { name: 'appsec.customRulesProvided', value: true, origin: 'env_var' },
       { name: 'appsec.rateLimit', value: 42, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: 42, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML, origin: 'env_var' },
@@ -966,7 +962,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
-    expect(config).to.have.nested.property('appsec.customRulesProvided', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
@@ -1034,7 +1029,6 @@ describe('Config', () => {
     expect(config).to.have.deep.property('appsec', {
       enabled: true,
       rules: undefined,
-      customRulesProvided: false,
       rateLimit: 42,
       wafTimeout: 42,
       obfuscatorKeyRegex: '.*',
@@ -1343,7 +1337,6 @@ describe('Config', () => {
 
     expect(config.appsec.enabled).to.be.true
     expect(config.appsec.rules).to.eq('path/to/rules.json')
-    expect(config.appsec.customRulesProvided).to.be.true
     expect(config.appsec.blockedTemplateHtml).to.be.undefined
     expect(config.appsec.blockedTemplateJson).to.be.undefined
     expect(config.appsec.blockedTemplateGraphql).to.be.undefined

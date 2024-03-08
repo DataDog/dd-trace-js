@@ -3,8 +3,8 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
+const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -192,13 +192,13 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && parsedAttributes[CONTEXT_PROPAGATION_KEY]) {
+      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
         const payloadSize = getHeadersSize({
           Body: message.Body,
           MessageAttributes: message.MessageAttributes
         })
         const queue = params.QueueUrl.split('/').pop()
-        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes[CONTEXT_PROPAGATION_KEY]))
+        this.tracer.decodeDataStreamsContext(parsedAttributes)
         this.tracer
           .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
@@ -252,9 +252,7 @@ class Sqs extends BaseAwsSdkPlugin {
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
       if (dataStreamsContext) {
-        const pathwayCtx = encodePathwayContext(dataStreamsContext)
-        ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
-
+        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
         params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
       }
     }
