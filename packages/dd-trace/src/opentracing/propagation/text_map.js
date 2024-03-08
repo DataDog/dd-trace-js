@@ -171,7 +171,14 @@ class TextMapPropagator {
     carrier[traceparentKey] = spanContext.toTraceparent()
 
     ts.forVendor('dd', state => {
-      state.set('p', spanContext._spanId)
+      if (!spanContext._isRemote) {
+        // SpanContext was created by a ddtrace span. 
+        // Last datadog span id should be set to the current span.
+        state.set('p', spanContext._spanId)
+      } else if (spanContext._trace.tags['_dd.parent_id']) {
+        // Propagate the last Datadog span id set on the remote span.
+        state.set('p', spanContext._trace.tags['_dd.parent_id'])
+      }
       state.set('s', priority)
       if (mechanism) {
         state.set('t.dm', `-${mechanism}`)
