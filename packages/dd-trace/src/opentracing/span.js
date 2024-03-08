@@ -266,6 +266,8 @@ class DatadogSpan {
     if (startTime) {
       spanContext._trace.startTime = startTime
     }
+    // SpanContext was NOT propagated from a remote parent
+    spanContext._isRemote = false
 
     return spanContext
   }
