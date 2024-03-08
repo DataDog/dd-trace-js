@@ -18,24 +18,22 @@ let limiter = new Limiter(100)
 const metricsQueue = new Map()
 
 const contentHeaderList = [
-  'content-encoding',
-  'content-language',
   'content-length',
-  'content-type'
+  'content-type',
+  'content-encoding',
+  'content-language'
 ]
 
 const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  ...ipHeaderList,
+  'forwarded',
+  'via',
+  ...contentHeaderList,
+  'host',
+  'user-agent',
   'accept',
   'accept-encoding',
-  'accept-language',
-  'host',
-  'forwarded',
-  'user-agent',
-  'via',
-  'x-amzn-trace-id',
-
-  ...ipHeaderList,
-  ...contentHeaderList
+  'accept-language'
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
