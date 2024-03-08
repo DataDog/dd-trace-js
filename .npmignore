@@ -3,12 +3,10 @@
 !packages/*/lib/**/*
 !packages/*/src/**/*
 !packages/*/index.js
-!scripts/**/*
+!scripts/preinstall.js
 !vendor/**/*
-!CONTRIBUTING.md
 !LICENSE
 !LICENSE-3rdparty.csv
-!MIGRATING.md
 !README.md
 !index.d.ts
 !index.js
