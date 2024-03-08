@@ -70,7 +70,7 @@ describe('SpanContext', () => {
       _traceId: '123',
       _spanId: '456',
       _parentId: null,
-      _isRemote: null,
+      _isRemote: true,
       _name: undefined,
       _isFinished: false,
       _tags: {},

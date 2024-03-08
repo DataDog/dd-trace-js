@@ -11,7 +11,7 @@ class DatadogSpanContext {
 
     this._traceId = props.traceId
     this._spanId = props.spanId
-    this._isRemote = props.isRemote || null
+    this._isRemote = props.isRemote ?? true
     this._parentId = props.parentId || null
     this._name = props.name
     this._isFinished = props.isFinished || false
