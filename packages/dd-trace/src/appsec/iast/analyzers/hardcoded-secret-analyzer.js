@@ -2,16 +2,22 @@
 
 const { HARDCODED_SECRET } = require('../vulnerabilities')
 
-const secretRules = require('./hardcoded-secrets-rules')
 const HardcodedBaseAnalyzer = require('./hardcoded-base-analyzer')
+
+const ALL_RULES = require('./hardcoded-secrets-rules')
+const VALUE_ONLY_RULES = ALL_RULES.filter(rule => rule.mode === 'ValueOnly')
 
 class HardcodedSecretAnalyzer extends HardcodedBaseAnalyzer {
   constructor () {
     super(HARDCODED_SECRET)
   }
 
-  get rules () {
-    return secretRules
+  getAllRules () {
+    return ALL_RULES
+  }
+
+  getValueOnlyRules () {
+    return VALUE_ONLY_RULES
   }
 }
 

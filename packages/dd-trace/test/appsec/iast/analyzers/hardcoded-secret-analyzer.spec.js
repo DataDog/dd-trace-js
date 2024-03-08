@@ -29,13 +29,17 @@ describe('Hardcoded Secret Analyzer', () => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
         it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+          const value = sample.join('')
+          const ident = testCase.mode === 'NameAndValue' ? value.split(' = ')[0] : undefined
+
           hardcodedSecretAnalyzer.analyze({
             file,
             literals: [{
-              value: sample.join(''),
+              value,
               locations: [{
                 line,
-                column
+                column,
+                ident
               }]
             }]
           })

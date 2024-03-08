@@ -8,14 +8,19 @@ module.exports = class HardcodedBaseAnalyzer extends Analyzer {
     this.addSub('datadog:secrets:result', (secrets) => { this.analyze(secrets) })
   }
 
-  get rules () {
+  getAllRules () {
+    return []
+  }
+
+  getValueOnlyRules () {
     return []
   }
 
   analyze (secrets) {
     if (!secrets?.file || !secrets.literals) return
 
-    const { rules } = this
+    const allRules = this.getAllRules()
+    const valueOnlyRules = this.getValueOnlyRules()
 
     const matches = []
     for (const literal of secrets.literals) {
@@ -23,8 +28,13 @@ module.exports = class HardcodedBaseAnalyzer extends Analyzer {
       if (!value || !locations) continue
 
       for (const location of locations) {
-        const fullValue = location.ident ? `${location.ident}=${value}` : value
-        const match = rules.find(rule => fullValue.match(rule.regex))
+        let match
+        if (location.ident) {
+          const fullValue = `${location.ident}=${value}`
+          match = allRules.find(rule => fullValue.match(rule.regex))
+        } else {
+          match = valueOnlyRules.find(rule => value.match(rule.regex))
+        }
 
         if (match) {
           matches.push({ location, ruleId: match.id })
