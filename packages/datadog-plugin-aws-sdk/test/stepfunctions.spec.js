@@ -3,6 +3,19 @@
 
 const Stepfunctions = require('../src/services/stepfunctions')
 const tracer = require('../../dd-trace')
+const agent = require('../../dd-trace/test/plugins/agent')
+
+const helloWorldSMD = {
+  'Comment': 'A Hello World example of the Amazon States Language using a Pass state',
+  'StartAt': 'HelloWorld',
+  'States': {
+    'HelloWorld': {
+      'Type': 'Pass',
+      'Result': 'Hello World!',
+      'End': true
+    }
+  }
+}
 
 describe('Sfn', () => {
   let span
@@ -10,6 +23,39 @@ describe('Sfn', () => {
     let traceId
     let parentId
     let spanId
+    let client
+    let stateMachineArn
+
+    function getClient (moduleName) {
+      if (moduleName === '@aws-sdk/smithy-client') {
+        const { SFNClient } = require(`../../../versions/@aws-sdk/client-sfn@${version}`).get()
+        return SFNClient
+      } else {
+        const { StepFunctions } = require(`../../../versions/aws-sdk@${version}`).get()
+        return StepFunctions
+      }
+    }
+
+    function createStateMachine (name, definition, xargs, done) {
+      client = getClient({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
+      client.createStateMachine({
+        definition: JSON.stringify(definition),
+        name: name,
+        ...xargs
+      }, (err, data) => {
+        if (err) {
+          done(err)
+        }
+        stateMachineArn = data.stateMachineArn
+      })
+    }
+
+    function deleteStateMachine (arn, done) {
+      client.deleteStateMachine({ stateMachineArn: arn }, (err, data) => {
+        if (err) done(err)
+      })
+    }
+
     before(() => {
       tracer.init()
       span = {
@@ -43,6 +89,24 @@ describe('Sfn', () => {
       tracer._tracer.startSpan = sinon.spy(() => {
         return span
       })
+    })
+
+    beforeEach(done => createStateMachine('helloWorld', helloWorldSMD, done))
+
+    afterEach(done => deleteStateMachine(stateMachineArn, done))
+
+    it('is instrumented', done => {
+      agent.use(traces => {
+        const span = traces[0][0]
+
+        expect(span).to.have.property('name', 'aws.stepfunctions')
+      })
+
+      client.startExecution({
+        stateMachineArn,
+        name: 'helloWorldExecution',
+        input: JSON.stringify({})
+      }, err => err && done(err))
     })
 
     it('generates tags for a start_execution', () => {
