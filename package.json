@@ -69,7 +69,6 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@aws-sdk/client-sfn": "^3.529.1",
     "@datadog/native-appsec": "7.0.0",
     "@datadog/native-iast-rewriter": "2.2.3",
     "@datadog/native-iast-taint-tracking": "1.7.0",
