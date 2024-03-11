@@ -91,9 +91,9 @@ describe('Sfn', () => {
       })
     })
 
-    beforeEach(done => createStateMachine('helloWorld', helloWorldSMD, done))
+    beforeEach(done => { createStateMachine('helloWorld', helloWorldSMD, done) })
 
-    afterEach(done => deleteStateMachine(stateMachineArn, done))
+    afterEach(done => { deleteStateMachine(stateMachineArn, done) })
 
     it('is instrumented', done => {
       agent.use(traces => {
