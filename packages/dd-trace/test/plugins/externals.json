@@ -13,6 +13,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-sfn",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-sns",
       "versions": [">=3"]
     },
