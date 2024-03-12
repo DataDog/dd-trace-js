@@ -200,9 +200,9 @@ class EventsProfiler {
     const lateEntries = []
     const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
-      let decorator = decorators[item.entryType]
+      const eventType = item.entryType
+      let decorator = decorators[eventType]
       if (!decorator) {
-        const eventType = item.entryType
         const DecoratorCtor = decoratorTypes[eventType]
         if (DecoratorCtor) {
           decorator = new DecoratorCtor(stringTable)
