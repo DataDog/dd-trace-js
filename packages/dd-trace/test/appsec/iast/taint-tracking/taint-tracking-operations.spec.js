@@ -324,12 +324,12 @@ describe('IAST TaintTracking Operations', () => {
         telemetry: { enabled: true, metrics: true }
       }, 'INFORMATION')
 
-      const requestTaintedAdd = sinon.stub(REQUEST_TAINTED, 'add')
+      const requestTaintedInc = sinon.stub(REQUEST_TAINTED, 'inc')
 
       taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
       taintTrackingOperations.removeTransaction(iastContext)
 
-      expect(requestTaintedAdd).to.be.calledOnceWith(5, null, iastContext)
+      expect(requestTaintedInc).to.be.calledOnceWith(iastContext, 5)
     })
   })
 
@@ -395,7 +395,7 @@ describe('IAST TaintTracking Operations', () => {
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).to.be.called
 
-      expect(executedPropagationIncrease).to.be.calledOnceWith(null, context)
+      expect(executedPropagationIncrease).to.be.calledOnceWith(context)
     })
   })
 
