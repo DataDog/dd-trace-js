@@ -30,7 +30,7 @@ describe('Hardcoded Secret Analyzer', () => {
         // sample values are arrays containing the parts of the original token
         it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
           const value = sample.join('')
-          const ident = testCase.mode === 'NameAndValue' ? value.split(' = ')[0] : undefined
+          const ident = testCase.type === 'NameAndValue' ? value.split(' = ')[0] : undefined
 
           hardcodedSecretAnalyzer.analyze({
             file,
@@ -44,7 +44,7 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
-          expect(['NameAndValue', 'ValueOnly']).to.be.include(testCase.mode)
+          expect(['NameAndValue', 'ValueOnly']).to.be.include(testCase.type)
           expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
         })
       })

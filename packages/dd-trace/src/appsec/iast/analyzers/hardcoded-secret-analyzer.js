@@ -8,7 +8,7 @@ const allRules = require('./hardcoded-secrets-rules')
 
 class HardcodedSecretAnalyzer extends HardcodedBaseAnalyzer {
   constructor () {
-    super(HARDCODED_SECRET, allRules, allRules.filter(rule => rule.mode === 'ValueOnly'))
+    super(HARDCODED_SECRET, allRules, allRules.filter(rule => rule.type === 'ValueOnly'))
   }
 }
 
