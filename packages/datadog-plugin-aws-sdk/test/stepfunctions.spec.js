@@ -2,8 +2,9 @@
 'use strict'
 
 const Stepfunctions = require('../src/services/stepfunctions')
-const tracer = require('../../dd-trace')
+const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { setup } = require('./spec_helpers')
 
 const helloWorldSMD = {
   'Comment': 'A Hello World example of the Amazon States Language using a Pass state',
@@ -19,44 +20,14 @@ const helloWorldSMD = {
 
 describe('Sfn', () => {
   let span
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
-    let traceId
-    let parentId
-    let spanId
-    let client
-    let stateMachineArn
+  let tracer
+  let traceId
+  let parentId
+  let spanId
 
-    function getClient (moduleName) {
-      if (moduleName === '@aws-sdk/smithy-client') {
-        const { SFNClient } = require(`../../../versions/@aws-sdk/client-sfn@${version}`).get()
-        return SFNClient
-      } else {
-        const { StepFunctions } = require(`../../../versions/aws-sdk@${version}`).get()
-        return StepFunctions
-      }
-    }
-
-    function createStateMachine (name, definition, xargs, done) {
-      client = getClient({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' })
-      client.createStateMachine({
-        definition: JSON.stringify(definition),
-        name: name,
-        ...xargs
-      }, (err, data) => {
-        if (err) {
-          done(err)
-        }
-        stateMachineArn = data.stateMachineArn
-      })
-    }
-
-    function deleteStateMachine (arn, done) {
-      client.deleteStateMachine({ stateMachineArn: arn }, (err, data) => {
-        if (err) done(err)
-      })
-    }
-
+  describe('Injection behaviour', () => {
     before(() => {
+      tracer = require('../../dd-trace')
       tracer.init()
       span = {
         finish: sinon.spy(() => {}),
@@ -89,24 +60,6 @@ describe('Sfn', () => {
       tracer._tracer.startSpan = sinon.spy(() => {
         return span
       })
-    })
-
-    beforeEach(done => { createStateMachine('helloWorld', helloWorldSMD, done) })
-
-    afterEach(done => { deleteStateMachine(stateMachineArn, done) })
-
-    it('is instrumented', done => {
-      agent.use(traces => {
-        const span = traces[0][0]
-
-        expect(span).to.have.property('name', 'aws.stepfunctions')
-      })
-
-      client.startExecution({
-        stateMachineArn,
-        name: 'helloWorldExecution',
-        input: JSON.stringify({})
-      }, err => err && done(err))
     })
 
     it('generates tags for a start_execution', () => {
@@ -147,44 +100,131 @@ describe('Sfn', () => {
       sfn.requestInject(span.context(), request)
       expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
     })
+
+    it('injects trace context into StepFunction start_sync_execution requests', () => {
+      const sfn = new Stepfunctions(tracer)
+      const request = {
+        params: {
+          input: JSON.stringify({ 'foo': 'bar' })
+        },
+        operation: 'startSyncExecution'
+      }
+
+      sfn.requestInject(span.context(), request)
+      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
+    })
+
+    it('will not inject trace context if the input is a number', () => {
+      const sfn = new Stepfunctions(tracer)
+      const request = {
+        params: {
+          input: JSON.stringify(1024)
+        },
+        operation: 'startSyncExecution'
+      }
+
+      sfn.requestInject(span.context(), request)
+      expect(request.params).to.deep.equal({ 'input': '1024' })
+    })
+
+    it('will not inject trace context if the input is a boolean', () => {
+      const sfn = new Stepfunctions(tracer)
+      const request = {
+        params: {
+          input: JSON.stringify(true)
+        },
+        operation: 'startSyncExecution'
+      }
+
+      sfn.requestInject(span.context(), request)
+      expect(request.params).to.deep.equal({ 'input': 'true' })
+    })
   })
 
-  it('injects trace context into StepFunction start_sync_execution requests', () => {
-    const sfn = new Stepfunctions(tracer)
-    const request = {
-      params: {
-        input: JSON.stringify({ 'foo': 'bar' })
-      },
-      operation: 'startSyncExecution'
+  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    let stateMachineArn
+    let client
+
+    setup()
+
+    before(() => {
+      client = getClient()
+    })
+
+    function getClient () {
+      const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
+      if (moduleName === '@aws-sdk/smithy-client') {
+        const lib = require(`../../../versions/@aws-sdk/client-sfn@${version}`).get()
+        const client = new lib.SFNClient(params)
+        return {
+          client,
+          createStateMachine: function () {
+            const req = new lib.CreateStateMachineCommand(...arguments)
+            return client.send(req)
+          },
+          deleteStateMachine: function () {
+            const req = new lib.DeleteStateMachineCommand(...arguments)
+            return client.send(req)
+          },
+          startExecution: function () {
+            const req = new lib.StartExecutionCommand(...arguments)
+            return client.send(req)
+          }
+        }
+      } else {
+        const { StepFunctions } = require(`../../../versions/aws-sdk@${version}`).get()
+        const client = new StepFunctions(params)
+        return {
+          client,
+          createStateMachine: function () { return client.createStateMachine(...arguments).promise() },
+          deleteStateMachine: function () { return client.deleteStateMachine(...arguments).promise() },
+          startExecution: function () { return client.startExecution(...arguments).promise() }
+        }
+      }
     }
 
-    sfn.requestInject(span.context(), request)
-    expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
-  })
-
-  it('will not inject trace context if the input is a number', () => {
-    const sfn = new Stepfunctions(tracer)
-    const request = {
-      params: {
-        input: JSON.stringify(1024)
-      },
-      operation: 'startSyncExecution'
+    async function createStateMachine (name, definition, xargs) {
+      return client.createStateMachine({
+        definition: JSON.stringify(definition),
+        name: name,
+        roleArn: 'arn:aws:iam::123456:role/test',
+        ...xargs
+      })
     }
 
-    sfn.requestInject(span.context(), request)
-    expect(request.params).to.deep.equal({ 'input': '1024' })
-  })
-
-  it('will not inject trace context if the input is a boolean', () => {
-    const sfn = new Stepfunctions(tracer)
-    const request = {
-      params: {
-        input: JSON.stringify(true)
-      },
-      operation: 'startSyncExecution'
+    async function deleteStateMachine (arn) {
+      return client.deleteStateMachine({ stateMachineArn: arn })
     }
 
-    sfn.requestInject(span.context(), request)
-    expect(request.params).to.deep.equal({ 'input': 'true' })
+    before(() => {
+      tracer = require('../../dd-trace')
+      tracer.use('aws-sdk')
+    })
+
+    // aws-sdk v2 doesn't support StepFunctions below 2.7.10
+    // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
+    if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
+      beforeEach(async () => {
+        const data = await createStateMachine('helloWorld', helloWorldSMD, {})
+        stateMachineArn = data.stateMachineArn
+      })
+
+      afterEach(async () => {
+        await deleteStateMachine(stateMachineArn)
+      })
+
+      it('is instrumented', async () => {
+        agent.use(traces => {
+          const span = traces[0][0]
+
+          expect(span).to.have.property('name', 'aws.stepfunctions')
+        })
+
+        await client.startExecution({
+          stateMachineArn,
+          input: JSON.stringify({})
+        })
+      })
+    }
   })
 })
