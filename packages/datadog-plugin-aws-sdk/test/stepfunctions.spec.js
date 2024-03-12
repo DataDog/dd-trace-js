@@ -205,11 +205,14 @@ describe('Sfn', () => {
     // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
     if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
       beforeEach(async () => {
+        agent.load('aws-sdk')
+        tracer.use('aws-sdk')
         const data = await createStateMachine('helloWorld', helloWorldSMD, {})
         stateMachineArn = data.stateMachineArn
       })
 
       afterEach(async () => {
+        agent.close({ ritmReset: false })
         await deleteStateMachine(stateMachineArn)
       })
 
