@@ -171,6 +171,14 @@ class TextMapPropagator {
     carrier[traceparentKey] = spanContext.toTraceparent()
 
     ts.forVendor('dd', state => {
+      if (!spanContext._isRemote) {
+        // SpanContext was created by a ddtrace span.
+        // Last datadog span id should be set to the current span.
+        state.set('p', spanContext._spanId)
+      } else if (spanContext._trace.tags['_dd.parent_id']) {
+        // Propagate the last Datadog span id set on the remote span.
+        state.set('p', spanContext._trace.tags['_dd.parent_id'])
+      }
       state.set('s', priority)
       if (mechanism) {
         state.set('t.dm', `-${mechanism}`)
@@ -339,6 +347,10 @@ class TextMapPropagator {
       tracestate.forVendor('dd', state => {
         for (const [key, value] of state.entries()) {
           switch (key) {
+            case 'p': {
+              spanContext._trace.tags['_dd.parent_id'] = value
+              break
+            }
             case 's': {
               const priority = parseInt(value, 10)
               if (!Number.isInteger(priority)) continue
@@ -368,6 +380,10 @@ class TextMapPropagator {
           }
         }
       })
+
+      if (!spanContext._trace.tags['_dd.parent_id']) {
+        spanContext._trace.tags['_dd.parent_id'] = '0000000000000000'
+      }
 
       this._extractBaggageItems(carrier, spanContext)
       return spanContext
