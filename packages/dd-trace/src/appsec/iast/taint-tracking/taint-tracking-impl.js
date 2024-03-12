@@ -40,7 +40,7 @@ function getContextDefault () {
 
 function getContextDebug () {
   const iastContext = getContextDefault()
-  EXECUTED_PROPAGATION.inc(null, iastContext)
+  EXECUTED_PROPAGATION.inc(iastContext)
   return iastContext
 }
 
