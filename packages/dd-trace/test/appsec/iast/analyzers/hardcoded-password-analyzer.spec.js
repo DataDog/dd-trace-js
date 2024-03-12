@@ -13,7 +13,7 @@ const iast = require('../../../../src/appsec/iast')
 
 const suite = [
   {
-    id: 'generic-password',
+    id: 'hardcoded-password',
     samples: [
       { ident: 'hashpwd', value: 'hpu0-ig=3o5slyr0rkqszidgxw-bc23tivq8e1-qvt.4191vlwm8ddk.ce64m4q0kga' },
       { ident: 'passphrase', value: '8jqqn=-5k9fnu4ukjzg5ar-=yw4r3_no=cn25zpegfh3.ndid5lp04iknqwvz92npuniksena2sz9w1bipd_g_oyx2ij3xi7cyh8=y.pv_f_gnbupl' },
