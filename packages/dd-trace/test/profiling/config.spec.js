@@ -87,11 +87,13 @@ describe('config', () => {
     expect(config.exporters[0]._url.toString()).to.equal(options.url)
     expect(config.exporters[1]).to.be.an.instanceof(FileExporter)
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(3)
+    expect(config.profilers.length).to.equal(2 + samplingContextsAvailable)
     expect(config.profilers[0]).to.be.an.instanceOf(SpaceProfiler)
     expect(config.profilers[1]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[1].codeHotspotsEnabled()).false
-    expect(config.profilers[2]).to.be.an.instanceOf(EventsProfiler)
+    if (samplingContextsAvailable) {
+      expect(config.profilers[2]).to.be.an.instanceOf(EventsProfiler)
+    }
   })
 
   it('should filter out invalid profilers', () => {
@@ -147,10 +149,12 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
+    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
     expect(config.profilers[0].codeHotspotsEnabled()).to.equal(samplingContextsAvailable)
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    if (samplingContextsAvailable) {
+      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    }
     expect(config.v8ProfilerBugWorkaroundEnabled).false
     expect(config.cpuProfilingEnabled).to.equal(samplingContextsAvailable)
   })
@@ -184,9 +188,11 @@ describe('config', () => {
     const config = new Config(options)
 
     expect(config.profilers).to.be.an('array')
-    expect(config.profilers.length).to.equal(2)
+    expect(config.profilers.length).to.equal(1 + samplingContextsAvailable)
     expect(config.profilers[0]).to.be.an.instanceOf(WallProfiler)
-    expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    if (samplingContextsAvailable) {
+      expect(config.profilers[1]).to.be.an.instanceOf(EventsProfiler)
+    }
   })
 
   it('should prioritize options over env variables', () => {
