@@ -69,6 +69,7 @@ class IastNamespace extends Namespace {
       metrics = new Map()
       this.iastMetrics.set(name, metrics)
     }
+
     return metrics
   }
 
