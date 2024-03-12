@@ -184,6 +184,9 @@ describe('IAST Plugin', () => {
   })
 
   describe('with appsec telemetry enabled', () => {
+    const vulnTags = [`${VULNERABILITY_TYPE}:injection`]
+    const sourceTags = [`${SOURCE_TYPE}:http.source`]
+
     let iastTelemetry
 
     beforeEach(() => {
@@ -257,11 +260,11 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
       })
 
       it('should register and increment a sink metric when a sink module is loaded using a tracingChannel', () => {
@@ -273,11 +276,11 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         loadChannel.publish({ name: 'sink' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
       })
 
       it('should register an pluginSubscription and increment a source metric when a source module is loaded', () => {
@@ -290,11 +293,11 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getInstrumentedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         loadChannel.publish({ name: 'source' })
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'http.source')
+        expect(metricInc).to.be.calledOnceWith(undefined, sourceTags)
       })
 
       it('should increment a sink metric when event is received', () => {
@@ -307,12 +310,12 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(VULNERABILITY_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'injection')
+        expect(metricInc).to.be.calledOnceWith(undefined, vulnTags)
       })
 
       it('should increment a source metric when event is received', () => {
@@ -325,12 +328,12 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, 'http.source')
+        expect(metricInc).to.be.calledOnceWith(undefined, sourceTags)
       })
 
       it('should increment a source metric when event is received for every tag', () => {
@@ -343,12 +346,15 @@ describe('IAST Plugin', () => {
         iastPlugin.configure(true)
 
         const metric = getExecutedMetric(SOURCE_TYPE)
-        const metricAdd = sinon.stub(metric, 'add')
+        const metricInc = sinon.stub(metric, 'inc')
 
         const telemetryHandler = addSubMock.secondCall.args[1]
         telemetryHandler()
 
-        expect(metricAdd).to.be.calledOnceWith(1, [ 'http.source', 'http.source2', 'http.source3' ])
+        expect(metricInc).to.be.calledThrice
+        expect(metricInc.firstCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source`])
+        expect(metricInc.secondCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source2`])
+        expect(metricInc.thirdCall).to.be.calledWith(undefined, [`${SOURCE_TYPE}:http.source3`])
       })
     })
 
@@ -377,17 +383,17 @@ describe('IAST Plugin', () => {
         const metric = {
           inc: sinon.spy()
         }
-        const tag = 'tag1'
+        const tags = 'tag1'
         const iastContext = {}
         iastPlugin._execHandlerAndIncMetric({
           handler,
           metric,
-          tag,
+          tags,
           iastContext
         })
 
         expect(handler).to.be.calledOnce
-        expect(metric.inc).to.be.calledOnceWithExactly(tag, iastContext)
+        expect(metric.inc).to.be.calledOnceWithExactly(iastContext, tags)
       })
     })
   })
