@@ -44,6 +44,7 @@ describe('Hardcoded Secret Analyzer', () => {
             }]
           })
 
+          expect(['NameAndValue', 'ValueOnly']).to.be.include(testCase.mode)
           expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
         })
       })

@@ -3,7 +3,7 @@
 const { HARDCODED_PASSWORD } = require('../vulnerabilities')
 const HardcodedBaseAnalyzer = require('./hardcoded-base-analyzer')
 
-const ALL_RULES = [
+const allRules = [
   {
     id: 'generic-password',
 
@@ -13,19 +13,9 @@ const ALL_RULES = [
   }
 ]
 
-const VALUE_ONLY_RULES = []
-
 class HardcodedPasswordAnalyzer extends HardcodedBaseAnalyzer {
   constructor () {
-    super(HARDCODED_PASSWORD)
-  }
-
-  getAllRules () {
-    return ALL_RULES
-  }
-
-  getValueOnlyRules () {
-    return VALUE_ONLY_RULES
+    super(HARDCODED_PASSWORD, allRules)
   }
 }
 

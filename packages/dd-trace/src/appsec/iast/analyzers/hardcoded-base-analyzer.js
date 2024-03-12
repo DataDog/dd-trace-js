@@ -4,23 +4,21 @@ const Analyzer = require('./vulnerability-analyzer')
 const { getRelativePath } = require('../path-line')
 
 module.exports = class HardcodedBaseAnalyzer extends Analyzer {
+  constructor (type, allRules = [], valueOnlyRules = []) {
+    super(type)
+
+    this.allRules = allRules
+    this.valueOnlyRules = valueOnlyRules
+  }
+
   onConfigure () {
     this.addSub('datadog:secrets:result', (secrets) => { this.analyze(secrets) })
-  }
-
-  getAllRules () {
-    return []
-  }
-
-  getValueOnlyRules () {
-    return []
   }
 
   analyze (secrets) {
     if (!secrets?.file || !secrets.literals) return
 
-    const allRules = this.getAllRules()
-    const valueOnlyRules = this.getValueOnlyRules()
+    const { allRules, valueOnlyRules } = this
 
     const matches = []
     for (const literal of secrets.literals) {
