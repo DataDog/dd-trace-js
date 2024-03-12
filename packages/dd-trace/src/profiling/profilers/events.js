@@ -208,11 +208,11 @@ class EventsProfiler {
           decorator = new DecoratorCtor(stringTable)
           decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
           decorators[eventType] = decorator
+        } else {
+          // Shouldn't happen but it's better to not rely on observer only getting
+          // requested event types.
+          return null
         }
-      } else {
-        // Shouldn't happen but it's better to not rely on observer only getting
-        // requested event types.
-        return null
       }
       const { startTime, duration } = item
       if (startTime >= perfEndDate) {
