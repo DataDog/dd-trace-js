@@ -177,7 +177,13 @@ describe('Sfn', () => {
         return {
           client,
           createStateMachine: function () { return client.createStateMachine(...arguments).promise() },
-          deleteStateMachine: function () { return client.deleteStateMachine(arguments).promise() },
+          deleteStateMachine: function () {
+            // eslint-disable-next-line no-console
+            console.log('AGOCS')
+            // eslint-disable-next-line no-console
+            console.log(arguments)
+            return client.deleteStateMachine(arguments).promise()
+          },
           startExecution: function () { return client.startExecution(...arguments).promise() }
         }
       }
