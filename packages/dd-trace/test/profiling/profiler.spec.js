@@ -9,6 +9,8 @@ const SpaceProfiler = require('../../src/profiling/profilers/space')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const EventsProfiler = require('../../src/profiling/profilers/events')
 
+const samplingContextsAvailable = process.platform !== 'win32'
+
 describe('profiler', function () {
   let Profiler
   let profiler
@@ -143,7 +145,7 @@ describe('profiler', function () {
         ['wall,space', WallProfiler, SpaceProfiler, EventsProfiler],
         [['space', 'wall'], SpaceProfiler, WallProfiler, EventsProfiler],
         [['wall', 'space'], WallProfiler, SpaceProfiler, EventsProfiler]
-      ]
+      ].map(profilers => profilers.filter(profiler => samplingContextsAvailable || profiler !== EventsProfiler))
 
       for (const [profilers, ...expected] of checks) {
         await profiler._start({
