@@ -216,7 +216,7 @@ describe('Sfn', () => {
       })
 
       it('is instrumented', async () => {
-        const checkTraces = agent.use(traces => {
+        const checkTraces = agent.use((traces) => {
           const span = traces[0][0]
           // eslint-disable-next-line no-console
           console.log(span)
