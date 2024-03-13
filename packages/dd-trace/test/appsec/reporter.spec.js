@@ -349,8 +349,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.addTags).to.have.been.calledTwice
-      expect(span.addTags.firstCall).to.have.been.calledWithExactly({ a: 1, b: 2 })
+      expect(span.addTags).to.have.been.calledWithExactly({ a: 1, b: 2 })
       expect(Reporter.metricsQueue).to.be.empty
     })
 
