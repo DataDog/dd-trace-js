@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "typedoc.js",
   "scripts": {
-    "build": "typedoc ../index.d.ts",
+    "build": "typedoc ../index.d.ts && ./add-redirects.sh",
     "pretest": "tsc -p . && tsc test",
     "test": "node test"
   },
