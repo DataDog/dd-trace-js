@@ -199,6 +199,8 @@ describe('Sfn', () => {
     }
 
     before(() => {
+      process.env.DD_TRACE_ENABLED = 'true'
+      process.env.DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED = 'true'
       tracer = require('../../dd-trace')
       tracer.use('aws-sdk')
     })
