@@ -17,6 +17,7 @@ let limiter = new Limiter(100)
 
 const metricsQueue = new Map()
 
+// following headers lists are ordered in the same way the spec orders them, it doesn't matter but it's easier to compare
 const contentHeaderList = [
   'content-length',
   'content-type',
