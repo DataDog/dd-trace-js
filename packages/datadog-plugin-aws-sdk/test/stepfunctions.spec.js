@@ -216,6 +216,13 @@ describe('Sfn', () => {
       })
 
       it('is instrumented', async () => {
+        let span
+        agent.use(traces => {
+          span = traces[0][0]
+          // eslint-disable-next-line no-console
+          console.log(span)
+          expect(span).to.have.property('name', 'aws.stepfunctions')
+        })
         expect(1).to.equal(2)
 
         await client.startExecution({
