@@ -221,9 +221,8 @@ describe('Sfn', () => {
           span = traces[0][0]
           // eslint-disable-next-line no-console
           console.log(span)
-          expect(span).to.have.property('name', 'aws.stepfunctions')
+          expect(span).to.have.property('name', 'aws.stepfunctions.THIS_TEST_SHOULD_FAIL')
         })
-        expect(1).to.equal(2)
 
         await client.startExecution({
           stateMachineArn,
