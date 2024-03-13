@@ -36,14 +36,21 @@ describe('IAST Rewriter', () => {
         unwrap: sinon.spy()
       }
 
+      const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
+
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': {
           Rewriter,
           getPrepareStackTrace: function (fn) {
-            return function testWrappedPrepareStackTrace (_, callsites) {
+            const testWrap = function testWrappedPrepareStackTrace (_, callsites) {
               return fn(_, callsites)
             }
-          }
+            Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
+              value: true
+            })
+            return testWrap
+          },
+          kSymbolPrepareStackTrace
         },
         '../../../../../datadog-shimmer': shimmer,
         '../../telemetry': iastTelemetry
