@@ -107,6 +107,26 @@ describe('IAST Rewriter', () => {
 
       Error.prepareStackTrace = orig
     })
+
+    it('Should keep original prepareStackTrace fn when calling disable if not marked with the Symbol', () => {
+      const orig = Error.prepareStackTrace
+
+      rewriter.enableRewriter()
+
+      // remove iast property to avoid wrapping the new testPrepareStackTrace fn
+      delete Error.prepareStackTrace
+
+      const testPrepareStackTrace = (_, callsites) => {
+        // do nothing
+      }
+      Error.prepareStackTrace = testPrepareStackTrace
+
+      rewriter.disableRewriter()
+
+      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+
+      Error.prepareStackTrace = orig
+    })
   })
 
   describe('getOriginalPathAndLineFromSourceMap', () => {

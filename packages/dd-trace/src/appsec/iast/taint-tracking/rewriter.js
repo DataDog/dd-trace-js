@@ -68,17 +68,16 @@ function getRewriter (telemetryVerbosity) {
 }
 
 let originalPrepareStackTrace
-let actualPrepareStackTrace
 function getPrepareStackTraceAccessor () {
   originalPrepareStackTrace = Error.prepareStackTrace
-  actualPrepareStackTrace = getPrepareStackTrace(originalPrepareStackTrace)
+  let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     configurable: true,
     get () {
-      return actualPrepareStackTrace
+      return actual
     },
     set (value) {
-      actualPrepareStackTrace = getPrepareStackTrace(value)
+      actual = getPrepareStackTrace(value)
       originalPrepareStackTrace = value
     }
   }
@@ -126,14 +125,12 @@ function enableRewriter (telemetryVerbosity) {
 function disableRewriter () {
   shimmer.unwrap(Module.prototype, '_compile')
 
-  if (!actualPrepareStackTrace || !actualPrepareStackTrace[kSymbolPrepareStackTrace]) return
+  if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
 
   try {
     delete Error.prepareStackTrace
 
     Error.prepareStackTrace = originalPrepareStackTrace
-
-    actualPrepareStackTrace = undefined
   } catch (e) {
     iastLog.warn(e)
   }
