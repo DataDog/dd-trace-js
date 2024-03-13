@@ -216,9 +216,7 @@ describe('Sfn', () => {
       })
 
       it('is instrumented', async () => {
-        agent.use(traces => {
-          expect(1).to.equal(2)
-        })
+        expect(1).to.equal(2)
 
         await client.startExecution({
           stateMachineArn,
