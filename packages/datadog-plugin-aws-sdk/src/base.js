@@ -28,9 +28,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       awsRegion,
       awsService
     }) => {
-      if (!this.isEnabled(request)) {
-        return
-      }
+      // if (!this.isEnabled(request)) {
+      //   return
+      // }
       const childOf = this.tracer.scope().active()
       const tags = {
         'span.kind': 'client',
