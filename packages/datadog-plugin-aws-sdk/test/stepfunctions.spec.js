@@ -219,10 +219,10 @@ describe('Sfn', () => {
         let span
         agent.use(traces => {
           span = traces[0][0]
-          // eslint-disable-next-line no-console
-          console.log(span)
-          expect(span).to.have.property('name', 'aws.stepfunctions.THIS_TEST_SHOULD_FAIL')
         })
+        // eslint-disable-next-line no-console
+        console.log(span)
+        expect(span).to.have.property('name', 'aws.stepfunctions.THIS_TEST_SHOULD_FAIL')
 
         await client.startExecution({
           stateMachineArn,
