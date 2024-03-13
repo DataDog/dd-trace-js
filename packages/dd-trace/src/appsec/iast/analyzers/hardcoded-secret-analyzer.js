@@ -1,10 +1,9 @@
 'use strict'
 
 const { HARDCODED_SECRET } = require('../vulnerabilities')
-
 const HardcodedBaseAnalyzer = require('./hardcoded-base-analyzer')
 
-const allRules = require('./hardcoded-secrets-rules')
+const allRules = require('./hardcoded-secret-rules')
 
 class HardcodedSecretAnalyzer extends HardcodedBaseAnalyzer {
   constructor () {
