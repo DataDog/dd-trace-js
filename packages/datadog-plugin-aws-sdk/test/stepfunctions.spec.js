@@ -216,19 +216,17 @@ describe('Sfn', () => {
       })
 
       it('is instrumented', async () => {
+        await client.startExecution({
+          stateMachineArn,
+          input: JSON.stringify({})
+        })
         const checkTraces = agent.use((traces) => {
           const span = traces[0][0]
           // eslint-disable-next-line no-console
           console.log(span)
           expect(span).to.have.property('name', 'aws.stepfunctions.THIS_TEST_SHOULD_FAIL')
         })
-
         await checkTraces
-
-        await client.startExecution({
-          stateMachineArn,
-          input: JSON.stringify({})
-        })
       })
     }
   })
