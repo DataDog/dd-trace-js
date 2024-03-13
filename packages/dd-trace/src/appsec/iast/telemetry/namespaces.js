@@ -10,13 +10,13 @@ const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 function initRequestNamespace (context) {
   if (!context) return
 
-  const namespace = new Namespace('iast')
+  const namespace = new IastNamespace()
   context[DD_IAST_METRICS_NAMESPACE] = namespace
   return namespace
 }
 
 function getNamespaceFromContext (context) {
-  return context && context[DD_IAST_METRICS_NAMESPACE]
+  return context?.[DD_IAST_METRICS_NAMESPACE]
 }
 
 function finalizeRequestNamespace (context, rootSpan) {
@@ -40,11 +40,14 @@ function finalizeRequestNamespace (context, rootSpan) {
 }
 
 function merge (metrics) {
-  metrics.forEach(metric => metric.points.forEach(point => {
-    globalNamespace
-      .count(metric.metric, getTagsObject(metric.tags))
-      .inc(point[1])
-  }))
+  metrics.forEach(metric => {
+    const { metric: metricName, type, tags, points } = metric
+
+    if (points?.length && type === 'count') {
+      const gMetric = globalNamespace.count(metricName, getTagsObject(tags))
+      points.forEach(point => gMetric.inc(point[1]))
+    }
+  })
 }
 
 function getTagsObject (tags) {
@@ -56,11 +59,34 @@ function getTagsObject (tags) {
 class IastNamespace extends Namespace {
   constructor () {
     super('iast')
+
+    this.iastMetrics = new Map()
   }
 
-  reset () {
-    this.metrics.clear()
-    this.distributions.clear()
+  getIastMetrics (name) {
+    let metrics = this.iastMetrics.get(name)
+    if (!metrics) {
+      metrics = new Map()
+      this.iastMetrics.set(name, metrics)
+    }
+
+    return metrics
+  }
+
+  getMetric (name, tags, type = 'count') {
+    const metrics = this.getIastMetrics(name)
+
+    let metric = metrics.get(tags)
+    if (!metric) {
+      metric = super[type](name, Array.isArray(tags) ? [...tags] : tags)
+      metrics.set(tags, metric)
+    }
+
+    return metric
+  }
+
+  count (name, tags) {
+    return this.getMetric(name, tags, 'count')
   }
 }
 
@@ -72,5 +98,7 @@ module.exports = {
   finalizeRequestNamespace,
   globalNamespace,
 
-  DD_IAST_METRICS_NAMESPACE
+  DD_IAST_METRICS_NAMESPACE,
+
+  IastNamespace
 }

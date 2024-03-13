@@ -19,7 +19,7 @@ let onRemoveTransaction = (transactionId, iastContext) => {}
 function onRemoveTransactionInformationTelemetry (transactionId, iastContext) {
   const metrics = TaintedUtils.getMetrics(transactionId, iastTelemetry.verbosity)
   if (metrics?.requestCount) {
-    REQUEST_TAINTED.add(metrics.requestCount, null, iastContext)
+    REQUEST_TAINTED.inc(iastContext, metrics.requestCount)
   }
 }
 
