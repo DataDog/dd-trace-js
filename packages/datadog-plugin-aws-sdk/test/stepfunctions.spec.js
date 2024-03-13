@@ -222,7 +222,7 @@ describe('Sfn', () => {
           // eslint-disable-next-line no-console
           console.log(span)
 
-          expect(span).to.have.property('name', 'aws.stepfunctions')
+          // expect(span).to.have.property('name', 'aws.stepfunctions')
           expect(1).to.equal(2)
         })
 
