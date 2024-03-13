@@ -88,10 +88,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
     )
   }
 
-  shouldRequestLibraryConfiguration () {
-    return this._config.isIntelligentTestRunnerEnabled
-  }
-
   canReportSessionTraces () {
     return this._canUseCiVisProtocol
   }
@@ -141,9 +137,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
     this.sendGitMetadata(repositoryUrl)
-    if (!this.shouldRequestLibraryConfiguration()) {
-      return callback(null, {})
-    }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
