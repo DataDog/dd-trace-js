@@ -223,6 +223,7 @@ describe('Sfn', () => {
           console.log(span)
 
           expect(span).to.have.property('name', 'aws.stepfunctions')
+          expect(1).to.equal(2)
         })
 
         await client.startExecution({
