@@ -27,7 +27,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
   TEST_NAME,
   JEST_DISPLAY_NAME
@@ -688,7 +688,7 @@ testFrameworks.forEach(({
               newTests.forEach(test => {
                 assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
               })
-              const retriedTests = newTests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+              const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               // all but one has been retried
               assert.equal(
                 newTests.length - 1,
@@ -777,12 +777,12 @@ testFrameworks.forEach(({
               // all but one have been retried
               assert.equal(
                 testsForFirstParameter.length - 1,
-                testsForFirstParameter.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true').length
+                testsForFirstParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
               )
 
               assert.equal(
                 testsForSecondParameter.length - 1,
-                testsForSecondParameter.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true').length
+                testsForSecondParameter.filter(test => test.meta[TEST_IS_RETRY] === 'true').length
               )
             })
 
@@ -903,7 +903,7 @@ testFrameworks.forEach(({
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              const retriedTests = tests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
               // all but one has been retried
               assert.equal(
                 tests.length - 1,
@@ -979,14 +979,14 @@ testFrameworks.forEach(({
                 test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
               )
               assert.equal(newSkippedTests.length, 1)
-              assert.notProperty(newSkippedTests[0].meta, TEST_EARLY_FLAKE_IS_RETRY)
+              assert.notProperty(newSkippedTests[0].meta, TEST_IS_RETRY)
 
               if (name === 'jest') {
                 const newTodoTests = tests.filter(
                   test => test.meta[TEST_NAME] === 'ci visibility todo will not be retried'
                 )
                 assert.equal(newTodoTests.length, 1)
-                assert.notProperty(newTodoTests[0].meta, TEST_EARLY_FLAKE_IS_RETRY)
+                assert.notProperty(newTodoTests[0].meta, TEST_IS_RETRY)
               }
             })
 
