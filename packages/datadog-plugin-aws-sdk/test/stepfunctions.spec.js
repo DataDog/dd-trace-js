@@ -182,7 +182,7 @@ describe('Sfn', () => {
             console.log('AGOCS')
             // eslint-disable-next-line no-console
             console.log(arguments)
-            return client.deleteStateMachine(arguments).promise()
+            return client.deleteStateMachine(...arguments).promise()
           },
           startExecution: function () { return client.startExecution(...arguments).promise() }
         }
