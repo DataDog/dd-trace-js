@@ -433,7 +433,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(span.addTags.secondCall).to.have.been.calledWithExactly({
+      expect(span.addTags).to.have.been.calledWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
