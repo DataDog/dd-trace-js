@@ -202,7 +202,8 @@ describe('Sfn', () => {
       process.env.DD_TRACE_ENABLED = 'true'
       process.env.DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED = 'true'
       tracer = require('../../dd-trace')
-      tracer.use('aws-sdk')
+      tracer.init()
+      return agent.load('aws-sdk')
     })
 
     // aws-sdk v2 doesn't support StepFunctions below 2.7.10
