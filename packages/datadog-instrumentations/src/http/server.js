@@ -72,7 +72,7 @@ function wrapEnd (end) {
 }
 
 function wrapWriteHead (writeHead) {
-  return function (statusCode) {
+  return function (statusCode, reason, obj) {
     if (this.finished) return this
 
     if (requestEndedSet.has(this)) {
@@ -83,7 +83,11 @@ function wrapWriteHead (writeHead) {
 
     const abortController = new AbortController()
 
-    const responseHeaders = this.getHeaders()
+    if (typeof reason !== 'string') {
+      obj = obj ?? reason
+    }
+
+    const responseHeaders = Object.assign(this.getHeaders(), obj)
 
     endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
 
