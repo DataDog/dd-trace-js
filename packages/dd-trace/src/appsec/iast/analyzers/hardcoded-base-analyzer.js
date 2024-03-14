@@ -3,7 +3,7 @@
 const Analyzer = require('./vulnerability-analyzer')
 const { getRelativePath } = require('../path-line')
 
-module.exports = class HardcodedBaseAnalyzer extends Analyzer {
+class HardcodedBaseAnalyzer extends Analyzer {
   constructor (type, allRules = [], valueOnlyRules = []) {
     super(type)
 
@@ -66,3 +66,5 @@ module.exports = class HardcodedBaseAnalyzer extends Analyzer {
     }
   }
 }
+
+module.exports = HardcodedBaseAnalyzer
