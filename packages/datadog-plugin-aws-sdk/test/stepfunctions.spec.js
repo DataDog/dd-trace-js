@@ -107,7 +107,7 @@ describe('Sfn', () => {
         params: {
           input: JSON.stringify({ 'foo': 'bar' })
         },
-        operation: 'startSyncExecution'
+        operation: 'startExecution'
       }
 
       sfn.requestInject(span.context(), request)
@@ -120,7 +120,7 @@ describe('Sfn', () => {
         params: {
           input: JSON.stringify(1024)
         },
-        operation: 'startSyncExecution'
+        operation: 'startExecution'
       }
 
       sfn.requestInject(span.context(), request)
@@ -133,7 +133,7 @@ describe('Sfn', () => {
         params: {
           input: JSON.stringify(true)
         },
-        operation: 'startSyncExecution'
+        operation: 'startExecution'
       }
 
       sfn.requestInject(span.context(), request)
@@ -149,6 +149,8 @@ describe('Sfn', () => {
 
     before(() => {
       client = getClient()
+      tracer = require('../../dd-trace')
+      tracer.use('aws-sdk')
     })
 
     function getClient () {
@@ -198,39 +200,37 @@ describe('Sfn', () => {
       return client.deleteStateMachine({ 'stateMachineArn': arn })
     }
 
-    before(() => {
-      process.env.DD_TRACE_ENABLED = 'true'
-      process.env.DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED = 'true'
-      tracer = require('../../dd-trace')
-      tracer.init()
-      return agent.load('aws-sdk')
+    describe('Traces', () => {
+      // aws-sdk v2 doesn't support StepFunctions below 2.7.10
+      // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
+      if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
+        beforeEach(() => { return agent.load('aws-sdk') })
+        beforeEach(async () => {
+          const data = await createStateMachine('helloWorld', helloWorldSMD, {})
+          stateMachineArn = data.stateMachineArn
+        })
+
+        afterEach(() => { return agent.close({ ritmReset: false }) })
+
+        afterEach(async () => {
+          await deleteStateMachine(stateMachineArn)
+        })
+
+        it('is instrumented', async function () {
+          const expectSpanPromise = agent.use(traces => {
+            const span = traces[0][0]
+            expect(span).to.deep.equal('true')
+            expect(span).to.have.property('yolo', 'aws.stepfunctions')
+          })
+
+          await client.startExecution({
+            stateMachineArn,
+            input: JSON.stringify({})
+          })
+
+          return expectSpanPromise.then(() => console.log('done'))
+        })
+      }
     })
-
-    // aws-sdk v2 doesn't support StepFunctions below 2.7.10
-    // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
-    if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
-      beforeEach(async () => {
-        const data = await createStateMachine('helloWorld', helloWorldSMD, {})
-        stateMachineArn = data.stateMachineArn
-      })
-
-      afterEach(async () => {
-        await deleteStateMachine(stateMachineArn)
-      })
-
-      it('is instrumented', async () => {
-        const checkTraces = agent.use((traces) => {
-          const span = traces[0][0]
-          // eslint-disable-next-line no-console
-          console.log(span)
-          expect(span).to.have.property('name', 'aws.stepfunctions.THIS_TEST_SHOULD_FAIL')
-        })
-        await client.startExecution({
-          stateMachineArn,
-          input: JSON.stringify({})
-        })
-        await checkTraces
-      })
-    }
   })
 })
