@@ -91,19 +91,20 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
+function setOrAddTag (rootSpan, metricName, value) {
+  if (value) {
+    value += rootSpan.context()?._tags[metricName] || 0
+    rootSpan.setTag(metricName, value)
+  }
+}
+
 function reportMetrics (metrics) {
-  // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
 
-  if (metrics.duration) {
-    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
-  }
-
-  if (metrics.durationExt) {
-    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
-  }
+  setOrAddTag(rootSpan, '_dd.appsec.waf.duration', metrics.duration)
+  setOrAddTag(rootSpan, '_dd.appsec.waf.duration_ext', metrics.durationExt)
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
