@@ -11,12 +11,15 @@ describe('reporter', () => {
   let telemetry
 
   beforeEach(() => {
+    const tags = {}
     span = {
       context: sinon.stub().returns({
-        _tags: {}
+        _tags: tags
       }),
       addTags: sinon.stub(),
-      setTag: sinon.stub()
+      setTag: sinon.stub().callsFake((tagName, value) => {
+        tags[tagName] = value
+      })
     }
 
     web = {
@@ -147,11 +150,29 @@ describe('reporter', () => {
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
     })
 
+    it('should add duration metrics on multiple calls', () => {
+      Reporter.reportMetrics({ duration: 1337 })
+      Reporter.reportMetrics({ duration: 663 })
+
+      expect(span.setTag).to.have.been.calledTwice
+      expect(span.setTag.firstCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(span.setTag.secondCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 2000)
+    })
+
     it('should set ext duration metrics if set', () => {
       Reporter.reportMetrics({ durationExt: 42 })
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
+    })
+
+    it('should add ext duration metrics on multiple calls', () => {
+      Reporter.reportMetrics({ durationExt: 42 })
+      Reporter.reportMetrics({ durationExt: 24 })
+
+      expect(span.setTag).to.have.been.calledTwice
+      expect(span.setTag.firstCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
+      expect(span.setTag.secondCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 66)
     })
 
     it('should set rulesVersion if set', () => {
