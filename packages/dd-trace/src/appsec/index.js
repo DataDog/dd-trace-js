@@ -62,6 +62,7 @@ function enable (_config) {
 
     isEnabled = true
     config = _config
+    require('./iast/iast-basics').enable()
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
@@ -249,6 +250,7 @@ function disable () {
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  require('./iast/iast-basics').disable()
 }
 
 module.exports = {

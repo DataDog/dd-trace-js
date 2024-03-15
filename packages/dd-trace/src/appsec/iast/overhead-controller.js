@@ -51,10 +51,10 @@ function _resetGlobalContext () {
   Object.assign(GLOBAL_OCE_CONTEXT, _getNewContext())
 }
 
-function acquireRequest (rootSpan) {
+function acquireRequest (rootSpan, defaultSampling = 30) {
   if (availableRequest > 0 && rootSpan) {
     const sampling = config && typeof config.requestSampling === 'number'
-      ? config.requestSampling : 30
+      ? config.requestSampling : defaultSampling
     if (rootSpan.context().toSpanId().slice(-2) <= sampling) {
       availableRequest--
       return true
