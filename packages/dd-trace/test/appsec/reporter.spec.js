@@ -11,15 +11,12 @@ describe('reporter', () => {
   let telemetry
 
   beforeEach(() => {
-    const tags = {}
     span = {
       context: sinon.stub().returns({
-        _tags: tags
+        _tags: {}
       }),
       addTags: sinon.stub(),
-      setTag: sinon.stub().callsFake((tagName, value) => {
-        tags[tagName] = value
-      })
+      setTag: sinon.stub()
     }
 
     web = {

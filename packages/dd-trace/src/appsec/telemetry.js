@@ -52,16 +52,12 @@ function getVersionsTags (wafVersion, rulesVersion) {
   }
 }
 
-function trackWafDurations (store, metrics, versionsTags) {
+function trackWafDurations (metrics, versionsTags) {
   if (metrics.duration) {
     appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
-
-    store[DD_TELEMETRY_REQUEST_METRICS].duration += metrics.duration
   }
   if (metrics.durationExt) {
     appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
-
-    store[DD_TELEMETRY_REQUEST_METRICS].durationExt += metrics.durationExt
   }
 }
 
@@ -81,13 +77,18 @@ function getOrCreateMetricTags (store, versionsTags) {
 }
 
 function updateWafRequestsMetricTags (metrics, req) {
-  if (!req || !enabled) return
-
-  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+  if (!req) return
 
   const store = getStore(req)
 
-  trackWafDurations(store, metrics, versionsTags)
+  // it does not depend on whether telemetry is enabled or not
+  addRequestMetrics(store, metrics)
+
+  if (!enabled) return
+
+  const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  trackWafDurations(metrics, versionsTags)
 
   const metricTags = getOrCreateMetricTags(store, versionsTags)
 
@@ -133,6 +134,11 @@ function incrementWafRequestsMetric (req) {
   }
 
   metricsStoreMap.delete(req)
+}
+
+function addRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
 }
 
 function getRequestMetrics (req) {
