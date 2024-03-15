@@ -30,7 +30,8 @@ describe('reporter', () => {
       incrementWafInitMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
-      incrementWafRequestsMetric: sinon.stub()
+      incrementWafRequestsMetric: sinon.stub(),
+      getRequestMetrics: sinon.stub()
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
@@ -144,35 +145,19 @@ describe('reporter', () => {
     })
 
     it('should set duration metrics if set', () => {
-      Reporter.reportMetrics({ duration: 1337 })
+      const metrics = { duration: 1337 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
-    })
-
-    it('should add duration metrics on multiple calls', () => {
-      Reporter.reportMetrics({ duration: 1337 })
-      Reporter.reportMetrics({ duration: 663 })
-
-      expect(span.setTag).to.have.been.calledTwice
-      expect(span.setTag.firstCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
-      expect(span.setTag.secondCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 2000)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
     })
 
     it('should set ext duration metrics if set', () => {
-      Reporter.reportMetrics({ durationExt: 42 })
+      const metrics = { durationExt: 42 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
-    })
-
-    it('should add ext duration metrics on multiple calls', () => {
-      Reporter.reportMetrics({ durationExt: 42 })
-      Reporter.reportMetrics({ durationExt: 24 })
-
-      expect(span.setTag).to.have.been.calledTwice
-      expect(span.setTag.firstCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
-      expect(span.setTag.secondCall).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 66)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
     })
 
     it('should set rulesVersion if set', () => {
@@ -466,6 +451,15 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
+    })
+
+    it('should set waf.duration tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ duration: 1337, durationExt: 42 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
     })
   })
 })

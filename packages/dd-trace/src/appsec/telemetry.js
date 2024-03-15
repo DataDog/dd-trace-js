@@ -5,6 +5,7 @@ const telemetryMetrics = require('../telemetry/metrics')
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
+const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
 
 const tags = {
   REQUEST_BLOCKED: 'request_blocked',
@@ -26,10 +27,19 @@ function disable () {
   enabled = false
 }
 
+function newStore () {
+  return {
+    [DD_TELEMETRY_REQUEST_METRICS]: {
+      duration: 0,
+      durationExt: 0
+    }
+  }
+}
+
 function getStore (req) {
   let store = metricsStoreMap.get(req)
   if (!store) {
-    store = {}
+    store = newStore()
     metricsStoreMap.set(req, store)
   }
   return store
@@ -42,18 +52,20 @@ function getVersionsTags (wafVersion, rulesVersion) {
   }
 }
 
-function trackWafDurations (metrics, versionsTags) {
+function trackWafDurations (store, metrics, versionsTags) {
   if (metrics.duration) {
     appsecMetrics.distribution('waf.duration', versionsTags).track(metrics.duration)
+
+    store[DD_TELEMETRY_REQUEST_METRICS].duration += metrics.duration
   }
   if (metrics.durationExt) {
     appsecMetrics.distribution('waf.duration_ext', versionsTags).track(metrics.durationExt)
+
+    store[DD_TELEMETRY_REQUEST_METRICS].durationExt += metrics.durationExt
   }
 }
 
-function getOrCreateMetricTags (req, versionsTags) {
-  const store = getStore(req)
-
+function getOrCreateMetricTags (store, versionsTags) {
   let metricTags = store[DD_TELEMETRY_WAF_RESULT_TAGS]
   if (!metricTags) {
     metricTags = {
@@ -73,9 +85,11 @@ function updateWafRequestsMetricTags (metrics, req) {
 
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
-  trackWafDurations(metrics, versionsTags)
+  const store = getStore(req)
 
-  const metricTags = getOrCreateMetricTags(req, versionsTags)
+  trackWafDurations(store, metrics, versionsTags)
+
+  const metricTags = getOrCreateMetricTags(store, versionsTags)
 
   const { blockTriggered, ruleTriggered, wafTimeout } = metrics
 
@@ -121,6 +135,13 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
+function getRequestMetrics (req) {
+  if (req) {
+    const store = getStore(req)
+    return store?.[DD_TELEMETRY_REQUEST_METRICS]
+  }
+}
+
 module.exports = {
   enable,
   disable,
@@ -128,5 +149,7 @@ module.exports = {
   updateWafRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
-  incrementWafRequestsMetric
+  incrementWafRequestsMetric,
+
+  getRequestMetrics
 }

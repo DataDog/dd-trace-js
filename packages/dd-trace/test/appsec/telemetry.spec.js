@@ -142,6 +142,25 @@ describe('Appsec Telemetry metrics', () => {
 
         expect(track).to.have.been.calledTwice
       })
+
+      it('should sum waf.duration metrics', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+          ...metrics
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25,
+          ...metrics
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
     })
 
     describe('incWafInitMetric', () => {
