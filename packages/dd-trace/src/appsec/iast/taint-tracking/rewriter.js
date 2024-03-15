@@ -12,6 +12,7 @@ const dc = require('dc-polyfill')
 const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let getPrepareStackTrace
+let kSymbolPrepareStackTrace
 
 let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
   return { path, line, column }
@@ -44,6 +45,7 @@ function getRewriter (telemetryVerbosity) {
       const iastRewriter = require('@datadog/native-iast-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
+      kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
 
       const chainSourceMap = isFlagPresent('--enable-source-maps')
       const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
@@ -66,17 +68,16 @@ function getRewriter (telemetryVerbosity) {
 }
 
 let originalPrepareStackTrace
-let actualPrepareStackTrace
 function getPrepareStackTraceAccessor () {
   originalPrepareStackTrace = Error.prepareStackTrace
-  actualPrepareStackTrace = getPrepareStackTrace(originalPrepareStackTrace)
+  let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     configurable: true,
     get () {
-      return actualPrepareStackTrace
+      return actual
     },
     set (value) {
-      actualPrepareStackTrace = getPrepareStackTrace(value)
+      actual = getPrepareStackTrace(value)
       originalPrepareStackTrace = value
     }
   }
@@ -124,14 +125,12 @@ function enableRewriter (telemetryVerbosity) {
 function disableRewriter () {
   shimmer.unwrap(Module.prototype, '_compile')
 
-  if (!actualPrepareStackTrace) return
+  if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
 
   try {
     delete Error.prepareStackTrace
 
     Error.prepareStackTrace = originalPrepareStackTrace
-
-    actualPrepareStackTrace = undefined
   } catch (e) {
     iastLog.warn(e)
   }
