@@ -57,7 +57,7 @@ describe('Plugin', function () {
   this.timeout(10000)
   withVersions('cucumber', '@cucumber/cucumber', version => {
     const specificVersion = require(`../../../versions/@cucumber/cucumber@${version}`).version()
-    if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=10')) return
+    if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=10')) return // CONSIDER VERSION HERE
 
     afterEach(() => {
       // > If you want to run tests multiple times, you may need to clear Node's require cache

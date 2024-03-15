@@ -10,7 +10,7 @@ const { assert } = require('chai')
 const { NODE_MAJOR } = require('../../../../version')
 
 // newer packages are not supported on older node versions
-const range = NODE_MAJOR < 16 ? '<3' : '>=4.4.0'
+const range = NODE_MAJOR < 16 ? '<3' : '>=4.4.0' // CONSIDER VERSION HERE
 
 describe('esm', () => {
   let agent

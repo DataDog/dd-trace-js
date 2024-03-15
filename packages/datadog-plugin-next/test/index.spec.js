@@ -14,7 +14,7 @@ const { rawExpectedSchema } = require('./naming')
 const BUILD_COMMAND = NODE_MAJOR < 18
   ? 'yarn exec next build' : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
 let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
-VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
+VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1' // CONSIDER VERSION HERE
 
 describe('Plugin', function () {
   let server
