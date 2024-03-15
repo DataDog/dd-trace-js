@@ -36,14 +36,21 @@ describe('IAST Rewriter', () => {
         unwrap: sinon.spy()
       }
 
+      const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
+
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/native-iast-rewriter': {
           Rewriter,
           getPrepareStackTrace: function (fn) {
-            return function testWrappedPrepareStackTrace (_, callsites) {
+            const testWrap = function testWrappedPrepareStackTrace (_, callsites) {
               return fn(_, callsites)
             }
-          }
+            Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
+              value: true
+            })
+            return testWrap
+          },
+          kSymbolPrepareStackTrace
         },
         '../../../../../datadog-shimmer': shimmer,
         '../../telemetry': iastTelemetry
@@ -88,6 +95,26 @@ describe('IAST Rewriter', () => {
 
     it('Should keep original prepareStackTrace fn when calling disable only', () => {
       const orig = Error.prepareStackTrace
+
+      const testPrepareStackTrace = (_, callsites) => {
+        // do nothing
+      }
+      Error.prepareStackTrace = testPrepareStackTrace
+
+      rewriter.disableRewriter()
+
+      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+
+      Error.prepareStackTrace = orig
+    })
+
+    it('Should keep original prepareStackTrace fn when calling disable if not marked with the Symbol', () => {
+      const orig = Error.prepareStackTrace
+
+      rewriter.enableRewriter()
+
+      // remove iast property to avoid wrapping the new testPrepareStackTrace fn
+      delete Error.prepareStackTrace
 
       const testPrepareStackTrace = (_, callsites) => {
         // do nothing
