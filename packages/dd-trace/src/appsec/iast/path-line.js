@@ -29,13 +29,16 @@ function getCallSiteInfo () {
   const previousStackTraceLimit = Error.stackTraceLimit
   let callsiteList
   Error.stackTraceLimit = 100
-  Error.prepareStackTrace = function (_, callsites) {
-    callsiteList = callsites
+  try {
+    Error.prepareStackTrace = function (_, callsites) {
+      callsiteList = callsites
+    }
+    const e = new Error()
+    e.stack
+  } finally {
+    Error.prepareStackTrace = previousPrepareStackTrace
+    Error.stackTraceLimit = previousStackTraceLimit
   }
-  const e = new Error()
-  e.stack
-  Error.prepareStackTrace = previousPrepareStackTrace
-  Error.stackTraceLimit = previousStackTraceLimit
   return callsiteList
 }
 
