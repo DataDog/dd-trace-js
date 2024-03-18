@@ -221,7 +221,14 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   const testResult = results[results.length - 1]
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
-    testFinishCh.publish({ testStatus, steps: testResult.steps, error, extraTags: annotationTags })
+    testFinishCh.publish({
+      testStatus,
+      steps: testResult.steps,
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isEfdRetry: test._ddIsEfdRetry
+    })
   })
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
@@ -264,7 +271,6 @@ function dispatcherRunWrapper (run) {
 }
 
 function dispatcherRunWrapperNew (run) {
-  debugger
   return function () {
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
@@ -308,7 +314,6 @@ function getTestByTestId (dispatcher, testId) {
 }
 
 function dispatcherHookNew (dispatcherExport, runWrapper) {
-  debugger
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
     const dispatcher = this
@@ -381,9 +386,6 @@ function runnerHook (runnerExport, playwrightVersion) {
         log.error(err)
       }
     }
-    debugger
-    console.log('knownTests', knownTests)
-    console.log('isEarlyFlakeDetectionEnabled', isEarlyFlakeDetectionEnabled)
 
     const projects = getProjectsFromRunner(this)
 
@@ -475,12 +477,30 @@ addHook({
   return testPackage
 })
 
-const getFileSuite = (test) => {
+const getSuiteType = (test, type) => {
   let suite = test.parent
-  while (suite && suite._type !== 'file') {
+  while (suite && suite._type !== type) {
     suite = suite.parent
   }
   return suite
+}
+
+// copy of Suite#_deepClone but with a filter function
+function deepCloneSuite (suite, filterTest) {
+  const copy = suite._clone()
+  for (const entry of suite._entries) {
+    if (entry.constructor.name === 'Suite') {
+      copy._addSuite(deepCloneSuite(entry, filterTest))
+    } else {
+      if (filterTest(entry)) {
+        const copiedTest = entry._clone()
+        copiedTest._ddIsNew = true
+        copiedTest._ddIsEfdRetry = true
+        copy._addTest(copiedTest)
+      }
+    }
+  }
+  return copy
 }
 
 addHook({
@@ -490,19 +510,21 @@ addHook({
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
-  async function newCreateRootSuite (testRun) {
+  async function newCreateRootSuite () {
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+    if (!isEarlyFlakeDetectionEnabled) {
+      return rootSuite
+    }
+    const newProjectTests = rootSuite.allTests().filter(isNewTest)
 
-    rootSuite.suites.forEach(projectSuite => {
-      const newProjectTests = projectSuite.allTests().filter(isNewTest)
-      newProjectTests.forEach(newTest => {
-        const fileSuite = getFileSuite(newTest)
-        const copyFileSuite = fileSuite._deepClone()
-        // TODO: increase repeatIndex for each retry
-        // TODO: only copy new tests, not all
-        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, 1)
-        projectSuite._addSuite(copyFileSuite)
-      })
+    newProjectTests.forEach(newTest => {
+      newTest._ddIsNew = true
+      const fileSuite = getSuiteType(newTest, 'file')
+      const projectSuite = getSuiteType(newTest, 'project')
+      const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+      // TODO: increase repeatIndex for each retry
+      applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, 1)
+      projectSuite._addSuite(copyFileSuite)
     })
 
     return rootSuite
