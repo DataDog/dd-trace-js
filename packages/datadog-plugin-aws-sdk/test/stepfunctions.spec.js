@@ -149,7 +149,7 @@ describe('Sfn', () => {
 
     before(() => {
       client = getClient()
-      tracer = require('../../dd-trace')
+      tracer = require('../../dd-trace').init()
       tracer.use('aws-sdk')
     })
 
