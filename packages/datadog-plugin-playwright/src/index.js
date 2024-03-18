@@ -11,7 +11,9 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_EARLY_FLAKE_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -109,7 +111,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -121,6 +123,12 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (extraTags) {
         span.addTags(extraTags)
+      }
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+        }
       }
 
       steps.forEach(step => {

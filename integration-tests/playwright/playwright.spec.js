@@ -222,7 +222,7 @@ versions.forEach((version) => {
     })
 
     context('early flake detection', () => {
-      it.only('retries new tests', (done) => {
+      it('retries new tests', (done) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -238,17 +238,17 @@ versions.forEach((version) => {
         receiver.setKnownTests(
           {
             playwright: {
-              'landing-page-tests.js': [
-                // 'playwright should work with passing tests', // it will be considered new
-                'playwright should work with skipped tests',
-                'playwright should work with fixme',
-                'playwright should work with annotated tests'
+              'landing-page-test.js': [
+                // 'should work with passing tests', // it will be considered new
+                'should work with skipped tests',
+                'should work with fixme',
+                'should work with annotated tests'
               ],
               'skipped-suite-test.js': [
                 'should work with fixme root'
               ],
               'todo-list-page-test.js': [
-                'playwright should work with failing tests',
+                'should work with failing tests',
                 'should work with fixme root'
               ]
             }
@@ -257,10 +257,9 @@ versions.forEach((version) => {
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
-            debugger
             const newTests = tests.filter(test =>
               test.resource ===
-                'landing-page-tests.js.playwright.should work with passing tests'
+                'landing-page-test.js.should work with passing tests'
             )
             newTests.forEach(test => {
               assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
