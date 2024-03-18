@@ -3,6 +3,7 @@ let isEarlyFlakeDetectionEnabled = false
 let knownTestsForSuite = []
 let suiteTests = []
 let earlyFlakeDetectionNumRetries = 0
+let hasRunAfterEach = false
 
 function isNewTest (test) {
   return !knownTestsForSuite.includes(test.fullTitle())
@@ -23,6 +24,7 @@ function retryTest (test, suiteTests) {
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
+  debugger
   if (!isEarlyFlakeDetectionEnabled) {
     return oldRunTests.apply(this, arguments)
   }
@@ -87,6 +89,29 @@ afterEach(function () {
     if (win.DD_RUM) {
       testInfo.isRUMActive = true
     }
-    cy.task('dd:afterEach', { test: testInfo, coverage: win.__coverage__ })
+    cy.task('dd:afterEach', { test: testInfo, coverage: win.__coverage__ }).then(() => {
+      hasRunAfterEach = true
+    })
   })
 })
+
+const _onRunnableRun = Cypress.runner.onRunnableRun;
+
+Cypress.runner.onRunnableRun = function (runnableRun, runnable, args) {
+  debugger
+  const isHook = runnable.type === "hook";
+  const isBeforeHook = isHook && runnable.hookName.match(/before/);
+
+  const next = args[0];
+
+  const newNext = function (error) {
+    if (error && !hasRunAfterEach) {
+      debugger
+    }
+    return next.call(this, error)
+  }
+
+  args[0] = newNext
+
+  return _onRunnableRun.apply(this, [runnableRun, runnable, args]);
+}
