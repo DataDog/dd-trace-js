@@ -29,7 +29,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_EARLY_FLAKE_IS_ENABLED,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
@@ -818,7 +818,7 @@ versions.forEach(version => {
                   newTests.forEach(test => {
                     assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
                   })
-                  const retriedTests = newTests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+                  const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                   // all but one has been retried
                   assert.equal(
                     newTests.length - 1,
