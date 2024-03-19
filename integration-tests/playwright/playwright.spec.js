@@ -258,7 +258,10 @@ versions.forEach((version) => {
           )
 
           const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
               const newTests = tests.filter(test =>
                 test.resource ===
                   'landing-page-test.js.should work with passing tests'
@@ -325,7 +328,10 @@ versions.forEach((version) => {
           )
 
           const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
               const newTests = tests.filter(test =>
                 test.resource ===
                   'landing-page-test.js.should work with passing tests'
@@ -390,7 +396,10 @@ versions.forEach((version) => {
           )
 
           const receiverPromise = receiver
-            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
               const newTests = tests.filter(test =>
                 test.resource ===
                   'landing-page-test.js.should work with skipped tests' ||
