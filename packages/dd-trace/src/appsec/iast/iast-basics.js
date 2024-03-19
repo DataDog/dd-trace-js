@@ -1,4 +1,5 @@
 'use strict'
+
 const dc = require('dc-polyfill')
 const { enableBasicAnalyzers, disableBasicAnalyzers } = require('./analyzers/basics')
 const { storage } = require('../../../../datadog-core')

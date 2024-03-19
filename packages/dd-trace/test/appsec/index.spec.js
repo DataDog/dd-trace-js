@@ -90,6 +90,7 @@ describe('AppSec Index', () => {
     apiSecuritySampler = require('../../src/appsec/api_security_sampler')
     sinon.spy(apiSecuritySampler, 'sampleRequest')
     sinon.spy(apiSecuritySampler, 'isSampled')
+    const iastBasics = require('../../src/appsec/iast/iast-basics')
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
@@ -98,7 +99,8 @@ describe('AppSec Index', () => {
       './passport': passport,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler
+      './api_security_sampler': apiSecuritySampler,
+      './iast/iast-basics': iastBasics
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -123,8 +125,8 @@ describe('AppSec Index', () => {
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
       expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+        .to.have.been.calledWithExactly(AppSec.incomingHttpStartTranslator)
+      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledWithExactly(AppSec.incomingHttpEndTranslator)
       expect(graphql.enable).to.have.been.calledOnceWithExactly()
     })
 
@@ -193,8 +195,8 @@ describe('AppSec Index', () => {
 
       expect(RuleManager.clearAllRules).to.have.been.calledOnce
       expect(incomingHttpRequestStart.unsubscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
+        .to.have.been.calledWithExactly(AppSec.incomingHttpStartTranslator)
+      expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledWithExactly(AppSec.incomingHttpEndTranslator)
       expect(graphql.disable).to.have.been.calledOnceWithExactly()
     })
 
