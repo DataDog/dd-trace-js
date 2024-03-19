@@ -22,9 +22,6 @@ const testSuiteToErrors = new Map()
 
 let applyRepeatEachIndex = null
 
-// weakmap?
-const projectSuiteByProject = new Map()
-
 let startedSuites = []
 
 const STATUS_TO_TEST_STATUS = {
@@ -45,6 +42,14 @@ function isNewTest (test) {
   const testsForSuite = knownTests?.playwright?.[testSuite] || []
 
   return !testsForSuite.includes(test.title)
+}
+
+function getSuiteType (test, type) {
+  let suite = test.parent
+  while (suite && suite._type !== type) {
+    suite = suite.parent
+  }
+  return suite
 }
 
 function getTestsBySuiteFromTestGroups (testGroups) {
@@ -421,69 +426,16 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-// works at 1.28.1
-addHook({
-  name: '@playwright/test',
-  file: 'lib/loader.js',
-  versions: ['>=1.18.0']
-}, (loaderPackage) => {
-  shimmer.wrap(loaderPackage.Loader.prototype, 'buildFileSuiteForProject', buildFileSuiteForProject =>
-    function (project, suite, repeatEachIndex) {
-      // TODO: do we need to consider input repeatEachIndex?
-      if (!isEarlyFlakeDetectionEnabled) {
-        return buildFileSuiteForProject.apply(this, arguments)
-      }
-      const tests = suite.allTests()
-
-      if (tests.some(isNewTest)) {
-        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-          const newSuite = buildFileSuiteForProject.apply(this, [project, suite, repeatEachIndex + 1, (test) => {
-            return isNewTest(test)
-          }])
-          const projectSuite = projectSuiteByProject.get(project)
-          projectSuite._addSuite(newSuite)
-        }
-      }
-
-      return buildFileSuiteForProject.apply(this, arguments)
-    })
-  return loaderPackage
-})
-
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.40.0'] //testing in 1.42.1
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
   // we grab the applyRepeatEachIndex function to use it later
   // applyRepeatEachIndex needs to be applied to a clone suite
   applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
   return suiteUtilsPackage
 })
-
-addHook({
-  name: 'playwright',
-  file: 'lib/common/test.js',
-  versions: ['>=1.40.0'] //testing in 1.42.1
-}, (testPackage) => {
-  shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
-    if (suite._type === 'project') {
-      // we need to keep a reference to the project suite to add the new suite to it
-      projectSuiteByProject.set(suite._projectConfig, suite)
-    }
-
-    return _addSuite.apply(this, arguments)
-  })
-  return testPackage
-})
-
-const getSuiteType = (test, type) => {
-  let suite = test.parent
-  while (suite && suite._type !== type) {
-    suite = suite.parent
-  }
-  return suite
-}
 
 // copy of Suite#_deepClone but with a filter function
 function deepCloneSuite (suite, filterTest) {
@@ -503,10 +455,11 @@ function deepCloneSuite (suite, filterTest) {
   return copy
 }
 
+// Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.40.0'] // testing in 1.42.1
+  versions: ['>=1.38.0']
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
@@ -515,16 +468,17 @@ addHook({
     if (!isEarlyFlakeDetectionEnabled) {
       return rootSuite
     }
-    const newProjectTests = rootSuite.allTests().filter(isNewTest)
+    const newTests = rootSuite.allTests().filter(isNewTest)
 
-    newProjectTests.forEach(newTest => {
+    newTests.forEach(newTest => {
       newTest._ddIsNew = true
       const fileSuite = getSuiteType(newTest, 'file')
       const projectSuite = getSuiteType(newTest, 'project')
-      const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-      // TODO: increase repeatIndex for each retry
-      applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, 1)
-      projectSuite._addSuite(copyFileSuite)
+      for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+        const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+        projectSuite._addSuite(copyFileSuite)
+      }
     })
 
     return rootSuite
@@ -533,22 +487,6 @@ addHook({
   loadUtilsPackage.createRootSuite = newCreateRootSuite
 
   return loadUtilsPackage
-})
-
-addHook({
-  name: '@playwright/test',
-  file: 'lib/test.js',
-  versions: ['>=1.18.0']
-}, (testPackage) => {
-  shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
-    if (suite._type === 'project') {
-      // we need to keep a reference to the project suite to add the new suite to it
-      projectSuiteByProject.set(suite._projectConfig, suite)
-    }
-
-    return _addSuite.apply(this, arguments)
-  })
-  return testPackage
 })
 
 addHook({
