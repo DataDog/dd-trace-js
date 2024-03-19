@@ -38,9 +38,14 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
 
     this.getAgentInfo((err, agentInfo) => {
       this._isInitialized = true
-      const latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
+      let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
       const isGzipCompatible = latestEvpProxyVersion >= 4
+
+      // v3 does not work well citestcycle, so we downgrade to v2
+      if (latestEvpProxyVersion === 3) {
+        latestEvpProxyVersion = 2
+      }
 
       const evpProxyPrefix = `${AGENT_EVP_PROXY_PATH_PREFIX}${latestEvpProxyVersion}`
       if (isEvpCompatible) {
