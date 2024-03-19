@@ -52,6 +52,24 @@ function getSuiteType (test, type) {
   return suite
 }
 
+// Copy of Suite#_deepClone but with a function to filter tests
+function deepCloneSuite (suite, filterTest) {
+  const copy = suite._clone()
+  for (const entry of suite._entries) {
+    if (entry.constructor.name === 'Suite') {
+      copy._addSuite(deepCloneSuite(entry, filterTest))
+    } else {
+      if (filterTest(entry)) {
+        const copiedTest = entry._clone()
+        copiedTest._ddIsNew = true
+        copiedTest._ddIsEfdRetry = true
+        copy._addTest(copiedTest)
+      }
+    }
+  }
+  return copy
+}
+
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
     if (acc[requireFile]) {
@@ -427,69 +445,6 @@ function runnerHook (runnerExport, playwrightVersion) {
 }
 
 addHook({
-  name: 'playwright',
-  file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.38.0']
-}, suiteUtilsPackage => {
-  // we grab the applyRepeatEachIndex function to use it later
-  // applyRepeatEachIndex needs to be applied to a clone suite
-  applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
-  return suiteUtilsPackage
-})
-
-// copy of Suite#_deepClone but with a filter function
-function deepCloneSuite (suite, filterTest) {
-  const copy = suite._clone()
-  for (const entry of suite._entries) {
-    if (entry.constructor.name === 'Suite') {
-      copy._addSuite(deepCloneSuite(entry, filterTest))
-    } else {
-      if (filterTest(entry)) {
-        const copiedTest = entry._clone()
-        copiedTest._ddIsNew = true
-        copiedTest._ddIsEfdRetry = true
-        copy._addTest(copiedTest)
-      }
-    }
-  }
-  return copy
-}
-
-// Hook used for early flake detection. EFD only works from >=1.38.0
-addHook({
-  name: 'playwright',
-  file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.38.0']
-}, (loadUtilsPackage) => {
-  const oldCreateRootSuite = loadUtilsPackage.createRootSuite
-
-  async function newCreateRootSuite () {
-    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
-    if (!isEarlyFlakeDetectionEnabled) {
-      return rootSuite
-    }
-    const newTests = rootSuite.allTests().filter(isNewTest)
-
-    newTests.forEach(newTest => {
-      newTest._ddIsNew = true
-      const fileSuite = getSuiteType(newTest, 'file')
-      const projectSuite = getSuiteType(newTest, 'project')
-      for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-        const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-        projectSuite._addSuite(copyFileSuite)
-      }
-    })
-
-    return rootSuite
-  }
-
-  loadUtilsPackage.createRootSuite = newCreateRootSuite
-
-  return loadUtilsPackage
-})
-
-addHook({
   name: '@playwright/test',
   file: 'lib/runner.js',
   versions: ['>=1.18.0 <=1.30.0']
@@ -531,3 +486,50 @@ addHook({
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+// Hook used for early flake detection. EFD only works from >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/common/suiteUtils.js',
+  versions: ['>=1.38.0']
+}, suiteUtilsPackage => {
+  // We grab `applyRepeatEachIndex` to use it later
+  // `applyRepeatEachIndex` needs to be applied to a cloned suite
+  applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
+  return suiteUtilsPackage
+})
+
+// Hook used for early flake detection. EFD only works from >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/loadUtils.js',
+  versions: ['>=1.38.0']
+}, (loadUtilsPackage) => {
+  const oldCreateRootSuite = loadUtilsPackage.createRootSuite
+
+  async function newCreateRootSuite () {
+    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+    if (!isEarlyFlakeDetectionEnabled) {
+      return rootSuite
+    }
+    const newTests = rootSuite.allTests().filter(isNewTest)
+
+    newTests.forEach(newTest => {
+      newTest._ddIsNew = true
+      const fileSuite = getSuiteType(newTest, 'file')
+      const projectSuite = getSuiteType(newTest, 'project')
+      for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+        const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+        projectSuite._addSuite(copyFileSuite)
+      }
+    })
+
+    return rootSuite
+  }
+
+  loadUtilsPackage.createRootSuite = newCreateRootSuite
+
+  return loadUtilsPackage
+})
+
