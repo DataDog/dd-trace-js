@@ -74,13 +74,16 @@ function isDirectory (path) {
 }
 
 function isShallowRepository () {
-  return sanitizedExec(
+  console.log('checking shallow')
+  const res = sanitizedExec(
     'git',
     ['rev-parse', '--is-shallow-repository'],
     { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
     { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
     { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } }
   ) === 'true'
+  console.log('is shallow', res)
+  return res
 }
 
 function getGitVersion () {
