@@ -19,7 +19,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY
+  TEST_IS_RETRY
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -267,7 +267,7 @@ versions.forEach((version) => {
                 assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
               })
 
-              const retriedTests = tests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
 
               assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 

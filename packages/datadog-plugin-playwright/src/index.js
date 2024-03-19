@@ -13,7 +13,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY
+  TEST_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -127,7 +127,7 @@ class PlaywrightPlugin extends CiPlugin {
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
         if (isEfdRetry) {
-          span.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+          span.setTag(TEST_IS_RETRY, 'true')
         }
       }
 
