@@ -64,7 +64,6 @@ function enable (_config) {
     config = _config
     require('./iast/iast-basics').enable()
   } catch (err) {
-    console.error(err)
     log.error('Unable to start AppSec')
     log.error(err)
 
