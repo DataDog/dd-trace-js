@@ -421,14 +421,16 @@ function runnerHook (runnerExport, playwrightVersion) {
   return runnerExport
 }
 
-// works at 1.28.1
 addHook({
   name: '@playwright/test',
   file: 'lib/loader.js',
-  versions: ['>=1.18.0']
-}, (loaderPackage) => {
+  versions: ['>=1.18.0'] // works in 1.25.0, doesn't work in 1.20.0
+}, (loaderPackage, version) => {
+  debugger
   shimmer.wrap(loaderPackage.Loader.prototype, 'buildFileSuiteForProject', buildFileSuiteForProject =>
     function (project, suite, repeatEachIndex) {
+      debugger
+      console.log('version', version)
       // TODO: do we need to consider input repeatEachIndex?
       if (!isEarlyFlakeDetectionEnabled) {
         return buildFileSuiteForProject.apply(this, arguments)
@@ -441,7 +443,7 @@ addHook({
             return isNewTest(test)
           }])
           const projectSuite = projectSuiteByProject.get(project)
-          projectSuite._addSuite(newSuite)
+          projectSuite?._addSuite(newSuite)
         }
       }
 
@@ -453,20 +455,28 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.40.0'] //testing in 1.42.1
+  versions: ['>=1.38.0']
 }, suiteUtilsPackage => {
+  debugger
   // we grab the applyRepeatEachIndex function to use it later
   // applyRepeatEachIndex needs to be applied to a clone suite
   applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
   return suiteUtilsPackage
 })
 
+// maybe it is actually needed???
+// probably not needed, as it's only used by older hooks
 addHook({
   name: 'playwright',
   file: 'lib/common/test.js',
-  versions: ['>=1.40.0'] //testing in 1.42.1
+  versions: ['>=1.18.0'] // works in 1.23.0. works in 1.38.0
 }, (testPackage) => {
   shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
+    if (!isEarlyFlakeDetectionEnabled) {
+      return _addSuite.apply(this, arguments)
+    }
+    debugger
+    // it seems there are no suite._type in 1.23.0
     if (suite._type === 'project') {
       // we need to keep a reference to the project suite to add the new suite to it
       projectSuiteByProject.set(suite._projectConfig, suite)
@@ -506,10 +516,11 @@ function deepCloneSuite (suite, filterTest) {
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.40.0'] // testing in 1.42.1
+  versions: ['>=1.35.0'] // testing in 1.42.1. Doesn't work in 1.35.0
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
+  debugger
   async function newCreateRootSuite () {
     const rootSuite = await oldCreateRootSuite.apply(this, arguments)
     if (!isEarlyFlakeDetectionEnabled) {
@@ -521,10 +532,11 @@ addHook({
       newTest._ddIsNew = true
       const fileSuite = getSuiteType(newTest, 'file')
       const projectSuite = getSuiteType(newTest, 'project')
-      const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-      // TODO: increase repeatIndex for each retry
-      applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, 1)
-      projectSuite._addSuite(copyFileSuite)
+      for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+        const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+        projectSuite._addSuite(copyFileSuite)
+      }
     })
 
     return rootSuite
@@ -538,10 +550,14 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/test.js',
-  versions: ['>=1.18.0']
+  versions: ['>=1.18.0'] // tested in 1.30.0
 }, (testPackage) => {
   shimmer.wrap(testPackage.Suite.prototype, '_addSuite', _addSuite => function (suite) {
-    if (suite._type === 'project') {
+    if (!isEarlyFlakeDetectionEnabled) {
+      return _addSuite.apply(this, arguments)
+    }
+    if (suite._type === 'project' || (suite._projectConfig && !suite._requireFile)) {
+      debugger
       // we need to keep a reference to the project suite to add the new suite to it
       projectSuiteByProject.set(suite._projectConfig, suite)
     }
