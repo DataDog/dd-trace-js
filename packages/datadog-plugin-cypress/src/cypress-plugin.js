@@ -27,7 +27,7 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
@@ -592,7 +592,7 @@ class CypressPlugin {
           if (isNew) {
             this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
             if (isEfdRetry) {
-              this.activeTestSpan.setTag(TEST_EARLY_FLAKE_IS_RETRY, 'true')
+              this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             }
           }
           const finishedTest = {
