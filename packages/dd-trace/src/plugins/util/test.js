@@ -52,7 +52,7 @@ const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
 const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 // Early flake detection
 const TEST_IS_NEW = 'test.is_new'
-const TEST_EARLY_FLAKE_IS_RETRY = 'test.early_flake.is_retry'
+const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
 
 const CI_APP_ORIGIN = 'ciapp-test'
@@ -101,7 +101,7 @@ module.exports = {
   TEST_SKIPPED_BY_ITR,
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
   getTestEnvironmentMetadata,
   getTestParametersString,
