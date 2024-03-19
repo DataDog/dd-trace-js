@@ -1,3 +1,5 @@
+const semver = require('semver')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
@@ -392,7 +394,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error(e)
     }
 
-    if (isEarlyFlakeDetectionEnabled) {
+    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, '1.38.0')) {
       const knownTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
@@ -512,16 +514,20 @@ addHook({
     if (!isEarlyFlakeDetectionEnabled) {
       return rootSuite
     }
-    const newTests = rootSuite.allTests().filter(isNewTest)
+    const newTests = rootSuite
+      .allTests()
+      .filter(isNewTest)
 
     newTests.forEach(newTest => {
       newTest._ddIsNew = true
-      const fileSuite = getSuiteType(newTest, 'file')
-      const projectSuite = getSuiteType(newTest, 'project')
-      for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
-        const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
-        applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
-        projectSuite._addSuite(copyFileSuite)
+      if (newTest.expectedStatus !== 'skipped') {
+        const fileSuite = getSuiteType(newTest, 'file')
+        const projectSuite = getSuiteType(newTest, 'project')
+        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+          projectSuite._addSuite(copyFileSuite)
+        }
       }
     })
 
@@ -532,4 +538,3 @@ addHook({
 
   return loadUtilsPackage
 })
-

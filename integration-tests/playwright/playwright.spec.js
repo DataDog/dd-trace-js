@@ -291,6 +291,138 @@ versions.forEach((version) => {
             receiverPromise.then(() => done()).catch(done)
           })
         })
+        it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTests(
+            {
+              playwright: {
+                'landing-page-test.js': [
+                  // 'should work with passing tests', // it will be considered new
+                  'should work with skipped tests',
+                  'should work with fixme',
+                  'should work with annotated tests'
+                ],
+                'skipped-suite-test.js': [
+                  'should work with fixme root'
+                ],
+                'todo-list-page-test.js': [
+                  'should work with failing tests',
+                  'should work with fixme root'
+                ]
+              }
+            }
+          )
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+              const newTests = tests.filter(test =>
+                test.resource ===
+                  'landing-page-test.js.should work with passing tests'
+              )
+              newTests.forEach(test => {
+                assert.notProperty(test.meta, TEST_IS_NEW)
+              })
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+        it('does not retry tests that are skipped', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTests(
+            {
+              playwright: {
+                'landing-page-test.js': [
+                  'should work with passing tests',
+                  // 'should work with skipped tests', // new but not retried because it's skipped
+                  // 'should work with fixme', // new but not retried because it's skipped
+                  'should work with annotated tests'
+                ],
+                'skipped-suite-test.js': [
+                  'should work with fixme root'
+                ],
+                'todo-list-page-test.js': [
+                  'should work with failing tests',
+                  'should work with fixme root'
+                ]
+              }
+            }
+          )
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads, events, tests) => {
+              const newTests = tests.filter(test =>
+                test.resource ===
+                  'landing-page-test.js.should work with skipped tests' ||
+                test.resource === 'landing-page-test.js.should work with fixme'
+              )
+              // no retries
+              assert.equal(newTests.length, 2)
+              newTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
       })
     }
   })
