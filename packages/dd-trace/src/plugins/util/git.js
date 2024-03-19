@@ -121,12 +121,14 @@ function unshallowRepository () {
 
   incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
   const start = Date.now()
+  console.log('unshallowing start', new Date().toString())
   try {
     cp.execFileSync('git', [
       ...baseGitOptions,
       revParseHead
     ], { stdio: 'pipe' })
   } catch (err) {
+    console.log('failed once')
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     log.error(err)
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'unshallow', exitCode: err.status })
@@ -137,6 +139,7 @@ function unshallowRepository () {
         upstreamRemote
       ], { stdio: 'pipe' })
     } catch (err) {
+      console.log('failed twice')
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
       log.error(err)
       incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'unshallow', exitCode: err.status })
@@ -150,6 +153,7 @@ function unshallowRepository () {
       )
     }
   }
+  console.log('unshallowing finish', new Date().toString())
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
 }
 
