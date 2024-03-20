@@ -1,5 +1,6 @@
 'use strict'
 
+const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
@@ -43,6 +44,7 @@ class PrioritySampler {
   configure (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
     this._rules = this._normalizeRules(rules, sampleRate, rateLimit)
+    this._limiter = new RateLimiter(rateLimit)
 
     setSamplingRules(this._rules)
   }
@@ -136,14 +138,17 @@ class PrioritySampler {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
 
-    const sampled = rule.sample()
-    const priority = sampled ? USER_KEEP : USER_REJECT
+    return rule.sample() && this._isSampledByRateLimit(context)
+      ? USER_KEEP
+      : USER_REJECT
+  }
 
-    if (sampled) {
-      context._trace[SAMPLING_LIMIT_DECISION] = rule.effectiveRate
-    }
+  _isSampledByRateLimit (context) {
+    const allowed = this._limiter.isAllowed()
 
-    return priority
+    context._trace[SAMPLING_LIMIT_DECISION] = this._limiter.effectiveRate()
+
+    return allowed
   }
 
   _getPriorityByAgent (context) {
