@@ -256,6 +256,7 @@ function disable () {
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (iastBasicsEnabled) {
     require('./iast/iast-basics').disable()
+    iastBasicsEnabled = false
   }
 }
 
