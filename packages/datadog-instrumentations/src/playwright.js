@@ -38,6 +38,7 @@ let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
 let rootDir = ''
+const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
 
 function isNewTest (test) {
   const testSuite = getTestSuitePath(test._requireFile, rootDir)
@@ -394,7 +395,7 @@ function runnerHook (runnerExport, playwrightVersion) {
       log.error(e)
     }
 
-    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, '1.38.0')) {
+    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
       const knownTestsPromise = new Promise((resolve) => {
         onDone = resolve
       })
@@ -493,7 +494,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.38.0']
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -505,7 +506,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.38.0']
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
