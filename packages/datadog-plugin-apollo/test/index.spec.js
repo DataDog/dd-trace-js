@@ -145,7 +145,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('graphql.operation.name', operationName)
-              expect(traces[0][0].meta).to.have.property('graphql.source', source)
+              expect(traces[0][0].meta).to.not.have.property('graphql.source')
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
               expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
 
@@ -198,7 +198,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', '{hello(name:"")}')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('graphql.source', source)
+              expect(traces[0][0].meta).to.not.have.property('graphql.source')
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
               expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
             })
@@ -230,7 +230,7 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('resource', '{human{address{civicNumber street}name}}')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('graphql.source', source)
+              expect(traces[0][0].meta).to.not.have.property('graphql.source')
               expect(traces[0][0].meta).to.have.property('graphql.operation.type', 'query')
               expect(traces[0][0].meta).to.have.property('component', 'apollo.gateway')
             })
@@ -459,7 +459,7 @@ describe('Plugin', () => {
 
         describe('with configuration', () => {
           before(() => {
-            return agent.load('apollo', { service: 'custom' })
+            return agent.load('apollo', { service: 'custom', source: true, signature: false })
           })
 
           it('should be configured with the correct values', done => {
@@ -470,6 +470,8 @@ describe('Plugin', () => {
               .use((traces) => {
                 expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
                 expect(traces[0][0]).to.have.property('service', 'custom')
+                expect(traces[0][0]).to.have.property('resource', `query ${operationName}`)
+                expect(traces[0][0].meta).to.have.property('graphql.source', source)
 
                 expect(traces[0][1]).to.have.property('name', 'apollo.gateway.validate')
                 expect(traces[0][1]).to.have.property('service', 'custom')

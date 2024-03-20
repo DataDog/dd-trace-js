@@ -42,7 +42,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     if (requestContext?.operationName) {
       spanData.meta['graphql.operation.name'] = requestContext.operationName
     }
-    if (gateway?.config?.telemetry?.includeDocument !== false && requestContext?.source) {
+    if ((this.config.source || gateway?.config?.telemetry?.includeDocument) && requestContext?.source) {
       spanData.meta['graphql.source'] = requestContext.source
     }
 
