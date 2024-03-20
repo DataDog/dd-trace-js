@@ -1,12 +1,18 @@
+const semver = require('semver')
+
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations } = require('../../dd-trace/src/plugins/util/test')
+const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
 
 const testSessionStartCh = channel('ci:playwright:session:start')
 const testSessionFinishCh = channel('ci:playwright:session:finish')
+
+const libraryConfigurationCh = channel('ci:playwright:library-configuration')
+const knownTestsCh = channel('ci:playwright:known-tests')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
@@ -15,6 +21,8 @@ const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
+
+let applyRepeatEachIndex = null
 
 let startedSuites = []
 
@@ -26,6 +34,44 @@ const STATUS_TO_TEST_STATUS = {
 }
 
 let remainingTestsByFile = {}
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let knownTests = []
+let rootDir = ''
+const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
+
+function isNewTest (test) {
+  const testSuite = getTestSuitePath(test._requireFile, rootDir)
+  const testsForSuite = knownTests?.playwright?.[testSuite] || []
+
+  return !testsForSuite.includes(test.title)
+}
+
+function getSuiteType (test, type) {
+  let suite = test.parent
+  while (suite && suite._type !== type) {
+    suite = suite.parent
+  }
+  return suite
+}
+
+// Copy of Suite#_deepClone but with a function to filter tests
+function deepCloneSuite (suite, filterTest) {
+  const copy = suite._clone()
+  for (const entry of suite._entries) {
+    if (entry.constructor.name === 'Suite') {
+      copy._addSuite(deepCloneSuite(entry, filterTest))
+    } else {
+      if (filterTest(entry)) {
+        const copiedTest = entry._clone()
+        copiedTest._ddIsNew = true
+        copiedTest._ddIsEfdRetry = true
+        copy._addTest(copiedTest)
+      }
+    }
+  }
+  return copy
+}
 
 function getTestsBySuiteFromTestGroups (testGroups) {
   return testGroups.reduce((acc, { requireFile, tests }) => {
@@ -153,8 +199,11 @@ function getTestSuiteError (testSuiteAbsolutePath) {
 function testBeginHandler (test, browserName) {
   const {
     _requireFile: testSuiteAbsolutePath,
-    title: testName, _type,
-    location: { line: testSourceLine }
+    title: testName,
+    _type,
+    location: {
+      line: testSourceLine
+    }
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
@@ -198,7 +247,14 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   const testResult = results[results.length - 1]
   const testAsyncResource = testToAr.get(test)
   testAsyncResource.runInAsyncScope(() => {
-    testFinishCh.publish({ testStatus, steps: testResult.steps, error, extraTags: annotationTags })
+    testFinishCh.publish({
+      testStatus,
+      steps: testResult.steps,
+      error,
+      extraTags: annotationTags,
+      isNew: test._ddIsNew,
+      isEfdRetry: test._ddIsEfdRetry
+    })
   })
 
   if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
@@ -309,14 +365,54 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
 function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
+    let onDone
+
     const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-    const rootDir = getRootDir(this)
+
+    rootDir = getRootDir(this)
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionAsyncResource.runInAsyncScope(() => {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
+
+    const configurationPromise = new Promise((resolve) => {
+      onDone = resolve
+    })
+
+    testSessionAsyncResource.runInAsyncScope(() => {
+      libraryConfigurationCh.publish({ onDone })
+    })
+
+    try {
+      const { err, libraryConfig } = await configurationPromise
+      if (!err) {
+        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+      }
+    } catch (e) {
+      log.error(e)
+    }
+
+    if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
+      const knownTestsPromise = new Promise((resolve) => {
+        onDone = resolve
+      })
+      testSessionAsyncResource.runInAsyncScope(() => {
+        knownTestsCh.publish({ onDone })
+      })
+
+      try {
+        const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+        if (!err) {
+          knownTests = receivedKnownTests
+        }
+      } catch (err) {
+        log.error(err)
+      }
+    }
+
     const projects = getProjectsFromRunner(this)
 
     const runAllTestsReturn = await runAllTests.apply(this, arguments)
@@ -334,7 +430,6 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
-    let onDone
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
@@ -394,3 +489,53 @@ addHook({
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0']
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+// Hook used for early flake detection. EFD only works from >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/common/suiteUtils.js',
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+}, suiteUtilsPackage => {
+  // We grab `applyRepeatEachIndex` to use it later
+  // `applyRepeatEachIndex` needs to be applied to a cloned suite
+  applyRepeatEachIndex = suiteUtilsPackage.applyRepeatEachIndex
+  return suiteUtilsPackage
+})
+
+// Hook used for early flake detection. EFD only works from >=1.38.0
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/loadUtils.js',
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+}, (loadUtilsPackage) => {
+  const oldCreateRootSuite = loadUtilsPackage.createRootSuite
+
+  async function newCreateRootSuite () {
+    const rootSuite = await oldCreateRootSuite.apply(this, arguments)
+    if (!isEarlyFlakeDetectionEnabled) {
+      return rootSuite
+    }
+    const newTests = rootSuite
+      .allTests()
+      .filter(isNewTest)
+
+    newTests.forEach(newTest => {
+      newTest._ddIsNew = true
+      if (newTest.expectedStatus !== 'skipped') {
+        const fileSuite = getSuiteType(newTest, 'file')
+        const projectSuite = getSuiteType(newTest, 'project')
+        for (let repeatEachIndex = 0; repeatEachIndex < earlyFlakeDetectionNumRetries; repeatEachIndex++) {
+          const copyFileSuite = deepCloneSuite(fileSuite, isNewTest)
+          applyRepeatEachIndex(projectSuite._fullProject, copyFileSuite, repeatEachIndex + 1)
+          projectSuite._addSuite(copyFileSuite)
+        }
+      }
+    })
+
+    return rootSuite
+  }
+
+  loadUtilsPackage.createRootSuite = newCreateRootSuite
+
+  return loadUtilsPackage
+})
