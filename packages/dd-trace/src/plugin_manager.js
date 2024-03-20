@@ -4,7 +4,6 @@ const { channel } = require('dc-polyfill')
 const { isFalse } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const Nomenclature = require('./service-naming')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -102,7 +101,7 @@ module.exports = class PluginManager {
   // like instrumenter.enable()
   configure (config = {}) {
     this._tracerConfig = config
-    Nomenclature.configure(config)
+    this._tracer._nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)

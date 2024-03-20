@@ -6,6 +6,7 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
+const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
@@ -17,6 +18,7 @@ class Tracer extends NoopProxy {
     super()
 
     this._initialized = false
+    this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
     this._tracingInitialized = false

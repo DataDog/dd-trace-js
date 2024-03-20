@@ -4,7 +4,6 @@ const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
 const { COMPONENT } = require('../constants')
-const Nomenclature = require('../service-naming')
 
 class TracingPlugin extends Plugin {
   constructor (...args) {
@@ -29,7 +28,7 @@ class TracingPlugin extends Plugin {
       kind = this.constructor.kind
     } = opts
 
-    return Nomenclature.serviceName(type, kind, id, opts)
+    return this._tracer._nomenclature.serviceName(type, kind, id, opts)
   }
 
   operationName (opts = {}) {
@@ -39,7 +38,7 @@ class TracingPlugin extends Plugin {
       kind = this.constructor.kind
     } = opts
 
-    return Nomenclature.opName(type, kind, id, opts)
+    return this._tracer._nomenclature.opName(type, kind, id, opts)
   }
 
   configure (config) {
