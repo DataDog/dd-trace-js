@@ -121,7 +121,7 @@ function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
-        tools = tools || require('./tools')
+        tools = tools || require('../../../datadog-plugin-graphql/src/tools')
       } catch (e) {
         tools = false
         throw e

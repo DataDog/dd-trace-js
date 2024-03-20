@@ -134,15 +134,14 @@ describe('Plugin', () => {
         })
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
-          const resource = `query ${operationName}`
-          const source = `${resource} { hello(name: "world") }`
+          const source = `query ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
             .use((traces) => {
               // the spans are in order of execution
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', resource)
+              expect(traces[0][0]).to.have.property('resource', 'query MyQuery{hello(name:"")}')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('graphql.operation.name', operationName)
@@ -196,7 +195,7 @@ describe('Plugin', () => {
             .use((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'query')
+              expect(traces[0][0]).to.have.property('resource', '{hello(name:"")}')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('graphql.source', source)
@@ -228,7 +227,7 @@ describe('Plugin', () => {
             .use((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
               expect(traces[0][0]).to.have.property('service', expectedSchema.server.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'query')
+              expect(traces[0][0]).to.have.property('resource', '{human{address{civicNumber street}name}}')
               expect(traces[0][0]).to.have.property('type', 'web')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('graphql.source', source)
@@ -315,8 +314,7 @@ describe('Plugin', () => {
         it('should instrument plan failure', done => {
           let error
           const operationName = 'MyQuery'
-          const resource = `subscription ${operationName}`
-          const source = `${resource} { hello(name: "world") }`
+          const source = `subscription ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
             .use((traces) => {
@@ -350,8 +348,7 @@ describe('Plugin', () => {
         it('should instrument fetch failure', done => {
           let error
           const operationName = 'MyQuery'
-          const resource = `query ${operationName}`
-          const source = `${resource} { hello(name: "world") }`
+          const source = `query ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
           agent
             .use((traces) => {
@@ -410,8 +407,7 @@ describe('Plugin', () => {
 
         it('should run spans in the correct context', done => {
           const operationName = 'MyQuery'
-          const resource = `query ${operationName}`
-          const source = `${resource} { hello(name: "world") }`
+          const source = `query ${operationName} { hello(name: "world") }`
           const variableValues = { who: 'world' }
 
           agent
@@ -446,8 +442,7 @@ describe('Plugin', () => {
         withNamingSchema(
           () => {
             const operationName = 'MyQuery'
-            const resource = `query ${operationName}`
-            const source = `${resource} { hello(name: "world") }`
+            const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
             gateway()
               .then(({ executor }) => {
@@ -469,8 +464,7 @@ describe('Plugin', () => {
 
           it('should be configured with the correct values', done => {
             const operationName = 'MyQuery'
-            const resource = `query ${operationName}`
-            const source = `${resource} { hello(name: "world") }`
+            const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
             agent
               .use((traces) => {
