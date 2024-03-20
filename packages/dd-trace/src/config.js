@@ -397,7 +397,7 @@ class Config {
     this._setValue(defaults, 'headerTags', [])
     this._setValue(defaults, 'hostname', '127.0.0.1')
     this._setValue(defaults, 'iast.deduplicationEnabled', true)
-    this._setValue(defaults, 'iast.enabled', false)
+    this._setValue(defaults, 'iast.enabled', undefined)
     this._setValue(defaults, 'iast.maxConcurrentRequests', 2)
     this._setValue(defaults, 'iast.maxContextOperations', 2)
     this._setValue(defaults, 'iast.redactionEnabled', true)

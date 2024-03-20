@@ -121,7 +121,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
-    expect(config).to.have.nested.property('iast.enabled', false)
+    expect(config).to.have.nested.property('iast.enabled', undefined)
     expect(config).to.have.nested.property('iast.redactionEnabled', true)
     expect(config).to.have.nested.property('iast.redactionNamePattern', null)
     expect(config).to.have.nested.property('iast.redactionValuePattern', null)
