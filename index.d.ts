@@ -1124,7 +1124,26 @@ declare namespace tracer {
      * This module uses graphql operations to service requests & thus generates graphql spans.
      * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
      */
-    interface apollo extends Instrumentation {}
+    interface apollo extends Instrumentation {
+      /**
+       * Whether to include the source of the operation within the query as a tag
+       * on every span. This may contain sensitive information and should only be
+       * enabled if sensitive data is always sent as variables and not in the
+       * query text.
+       *
+       * @default false
+       */
+      source?: boolean;
+
+      /**
+       * Whether to enable signature calculation for the resource name. This can
+       * be disabled if your apollo/gateway operations always have a name. Note that when
+       * disabled all queries will need to be named for this to work properly.
+       *
+       * @default true
+       */
+      signature?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
