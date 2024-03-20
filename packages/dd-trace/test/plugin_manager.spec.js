@@ -6,7 +6,7 @@ const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
-const Nomenclature = require('../../dd-trace/src/service-naming')
+const nomenclature = require('../../dd-trace/src/service-naming')
 
 describe('Plugin Manager', () => {
   let tracer
@@ -19,7 +19,9 @@ describe('Plugin Manager', () => {
   let pm
 
   beforeEach(() => {
-    tracer = {}
+    tracer = {
+      _nomenclature: nomenclature
+    }
     instantiated = []
     class FakePlugin {
       constructor (aTracer) {
@@ -249,7 +251,7 @@ describe('Plugin Manager', () => {
       let configureSpy
 
       beforeEach(() => {
-        configureSpy = sinon.spy(Nomenclature, 'configure')
+        configureSpy = sinon.spy(tracer._nomenclature, 'configure')
       })
 
       afterEach(() => {
