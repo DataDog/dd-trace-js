@@ -28,6 +28,7 @@ const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
 
 let isEnabled = false
+let iastBasicsEnabled = false
 let config
 
 function enable (_config) {
@@ -62,7 +63,10 @@ function enable (_config) {
 
     isEnabled = true
     config = _config
-    require('./iast/iast-basics').enable()
+    if (_config.iast.enabled === undefined) {
+      require('./iast/iast-basics').enable()
+      iastBasicsEnabled = true
+    }
   } catch (err) {
     log.error('Unable to start AppSec')
     log.error(err)
@@ -250,7 +254,9 @@ function disable () {
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
-  require('./iast/iast-basics').disable()
+  if (iastBasicsEnabled) {
+    require('./iast/iast-basics').disable()
+  }
 }
 
 module.exports = {
