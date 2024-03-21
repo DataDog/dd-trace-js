@@ -10,6 +10,8 @@ const options = {
   flushInterval: isJestWorker ? 0 : 5000
 }
 
+console.log('init!')
+
 let shouldInit = true
 
 const isAgentlessEnabled = isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)

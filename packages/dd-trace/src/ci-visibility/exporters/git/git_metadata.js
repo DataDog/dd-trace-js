@@ -104,9 +104,9 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
-    log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
+    log.warn(`There are ${alreadySeenCommits.length} commits to exclude.`)
     const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
-    log.debug(`There are ${commitsToInclude.length} commits to include.`)
+    log.warn(`There are ${commitsToInclude.length} commits to include.`)
 
     if (!commitsToInclude.length) {
       return callback(null, [])
@@ -191,11 +191,11 @@ function generateAndUploadPackFiles ({
   repositoryUrl,
   headCommit
 }, callback) {
-  log.debug(`There are ${commitsToUpload.length} commits to upload`)
+  log.warn(`There are ${commitsToUpload.length} commits to upload`)
 
   const packFilesToUpload = generatePackFilesForCommits(commitsToUpload)
 
-  log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
+  log.warn(`Uploading ${packFilesToUpload.length} packfiles.`)
 
   if (!packFilesToUpload.length) {
     return callback(new Error('Failed to generate packfiles'))
@@ -241,19 +241,20 @@ function generateAndUploadPackFiles ({
  * This function uploads git metadata to CI Visibility's backend.
 */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+  console.log('sending git metadata 1')
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
   }
 
-  log.debug(`Uploading git history for repository ${repositoryUrl}`)
+  log.warn(`Uploading git history for repository ${repositoryUrl}`)
 
   if (!repositoryUrl) {
     return callback(new Error('Repository URL is empty'))
   }
 
   const latestCommits = getLatestCommits()
-  log.debug(`There were ${latestCommits.length} commits since last month.`)
+  log.warn(`There were ${latestCommits.length} commits since last month.`)
   const [headCommit] = latestCommits
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
@@ -262,7 +263,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
 
     if (!commitsToUpload.length) {
-      log.debug('No commits to upload')
+      log.warn('No commits to upload')
       return callback(null)
     }
 
@@ -278,7 +279,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
       }, callback)
     }
     // Otherwise we unshallow and get commits to upload again
-    log.debug('It is shallow clone, unshallowing...')
+    log.warn('It is shallow clone, unshallowing...')
     unshallowRepository()
     getCommitsToUpload({
       url,
