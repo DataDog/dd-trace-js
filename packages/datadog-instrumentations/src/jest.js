@@ -63,11 +63,11 @@ let hasFilteredSkippableSuites = false
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 const specStatusToTestStatus = {
-  'pending': 'skip',
-  'disabled': 'skip',
-  'todo': 'skip',
-  'passed': 'pass',
-  'failed': 'fail'
+  pending: 'skip',
+  disabled: 'skip',
+  todo: 'skip',
+  passed: 'pass',
+  failed: 'fail'
 }
 
 const asyncResources = new WeakMap()

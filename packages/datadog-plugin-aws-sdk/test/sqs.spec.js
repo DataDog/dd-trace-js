@@ -12,7 +12,7 @@ const getQueueParams = (queueName) => {
   return {
     QueueName: queueName,
     Attributes: {
-      'MessageRetentionPeriod': '86400'
+      MessageRetentionPeriod: '86400'
     }
   }
 }
@@ -117,7 +117,7 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              'queuename': 'SQS_QUEUE_NAME'
+              queuename: 'SQS_QUEUE_NAME'
             })
 
             parentId = span.span_id.toString()
@@ -269,9 +269,9 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'queuename': 'SQS_QUEUE_NAME',
-              'aws_service': 'SQS',
-              'region': 'us-east-1'
+              queuename: 'SQS_QUEUE_NAME',
+              aws_service: 'SQS',
+              region: 'us-east-1'
             })
             total++
           }).catch(() => {}, { timeoutMs: 100 })

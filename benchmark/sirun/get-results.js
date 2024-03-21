@@ -7,13 +7,13 @@ const { execSync } = require('child_process')
 
 const { CIRCLE_TOKEN, GITHUB_STATUS_TOKEN } = process.env
 
-const circleHeaders = CIRCLE_TOKEN ? {
-  'circle-token': CIRCLE_TOKEN
-} : {}
+const circleHeaders = CIRCLE_TOKEN
+  ? { 'circle-token': CIRCLE_TOKEN }
+  : {}
 
-const githubHeaders = GITHUB_STATUS_TOKEN ? {
-  Authorization: `token ${GITHUB_STATUS_TOKEN}`
-} : {}
+const githubHeaders = GITHUB_STATUS_TOKEN
+  ? { Authorization: `token ${GITHUB_STATUS_TOKEN}` }
+  : {}
 
 const statusUrl = (ref, page) =>
   `https://api.github.com/repos/DataDog/dd-trace-js/commits/${ref}/statuses?per_page=100&page=${page}`

@@ -12,13 +12,13 @@ const { getCIMetadata } = require('../../../src/plugins/util/ci')
 const { CI_ENV_VARS, CI_NODE_LABELS } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
-  'child_process': {
-    'execFileSync': execFileSyncStub
+  child_process: {
+    execFileSync: execFileSyncStub
   }
 })
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
   './git': {
-    'getGitMetadata': getGitMetadata
+    getGitMetadata
   }
 })
 

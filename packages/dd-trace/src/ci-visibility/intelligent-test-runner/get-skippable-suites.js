@@ -102,7 +102,8 @@ function getSkippableSuites ({
         const { meta: { correlation_id: correlationId } } = parsedResponse
         incrementCountMetric(
           testLevel === 'test'
-            ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
+            ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
+            : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
           {},
           skippableSuites.length
         )

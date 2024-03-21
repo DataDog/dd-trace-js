@@ -2,7 +2,7 @@
 
 const cloudwatchlogs = {}
 
-cloudwatchlogs['create'] = {
+cloudwatchlogs.create = {
   logGroupName: 'example_cw_log_group'
 }
 

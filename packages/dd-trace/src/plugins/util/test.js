@@ -288,7 +288,8 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     return sourceRoot
   }
   const testSuitePath = testSuiteAbsolutePath === sourceRoot
-    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+    ? testSuiteAbsolutePath
+    : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replace(path.sep, '/')
 }

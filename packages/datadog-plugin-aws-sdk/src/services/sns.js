@@ -23,7 +23,7 @@ class Sns extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.TopicArn || response.data.TopicArn}`,
       'aws.sns.topic_arn': TopicArn,
-      'topicname': topicName
+      topicname: topicName
     }
 
     // TODO: should arn be sanitized or quantized in some way here,

@@ -77,8 +77,8 @@ describe('WAF Manager', () => {
           loaded: ['rule_1'],
           failed: ['rule_2', 'rule_3'],
           errors: {
-            'error_1': ['invalid_1'],
-            'error_2': ['invalid_2', 'invalid_3']
+            error_1: ['invalid_1'],
+            error_2: ['invalid_2', 'invalid_3']
           }
         }
       }
@@ -124,7 +124,7 @@ describe('WAF Manager', () => {
 
     it('should call ddwaf.update', () => {
       const rules = {
-        'rules_data': [
+        rules_data: [
           {
             id: 'blocked_users',
             type: 'data_with_expiration',
@@ -145,7 +145,7 @@ describe('WAF Manager', () => {
 
     it('should call Reporter.reportWafUpdate', () => {
       const rules = {
-        'rules_data': [
+        rules_data: [
           {
             id: 'blocked_users',
             type: 'data_with_expiration',
@@ -174,7 +174,7 @@ describe('WAF Manager', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -215,7 +215,7 @@ describe('WAF Manager', () => {
 
         wafContextWrapper.run({
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' },
+            'server.request.headers.no_cookies': { header: 'value' },
             'server.request.uri.raw': 'https://testurl',
             'processor.address': { 'extract-schema': true }
           }
@@ -223,7 +223,7 @@ describe('WAF Manager', () => {
 
         expect(ddwafContext.run).to.be.calledOnceWithExactly({
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' },
+            'server.request.headers.no_cookies': { header: 'value' },
             'server.request.uri.raw': 'https://testurl',
             'processor.address': { 'extract-schema': true }
           }
@@ -240,7 +240,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' }
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
@@ -259,7 +259,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' }
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
@@ -275,7 +275,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1 })
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' }
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
@@ -288,7 +288,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [] })
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' }
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
@@ -299,11 +299,11 @@ describe('WAF Manager', () => {
 
       it('should return the actions', () => {
         const actions = ['block']
-        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions: actions })
+        ddwafContext.run.returns({ totalRuntime: 1, durationExt: 1, events: [], actions })
 
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': { 'header': 'value' }
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
