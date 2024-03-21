@@ -271,7 +271,7 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
-        'Location': '/you-have-been-blocked'
+        Location: '/you-have-been-blocked'
       })
       expect(res.end).to.have.been.calledOnce
     })

@@ -172,12 +172,12 @@ describe('sql-injection-analyzer', () => {
     const sqlInjectionAnalyzer = require('../../../../src/appsec/iast/analyzers/sql-injection-analyzer')
 
     const knexDialects = {
-      'mssql': 'MSSQL',
-      'oracle': 'ORACLE',
-      'mysql': 'MYSQL',
-      'redshift': 'REDSHIFT',
-      'postgresql': 'POSTGRES',
-      'sqlite3': 'SQLITE'
+      mssql: 'MSSQL',
+      oracle: 'ORACLE',
+      mysql: 'MYSQL',
+      redshift: 'REDSHIFT',
+      postgresql: 'POSTGRES',
+      sqlite3: 'SQLITE'
     }
 
     Object.keys(knexDialects).forEach((knexDialect) => {

@@ -72,8 +72,8 @@ describe('telemetry', () => {
       appsec: { enabled: true },
       profiling: { enabled: true },
       peerServiceMapping: {
-        'service_1': 'remapped_service_1',
-        'service_2': 'remapped_service_2'
+        service_1: 'remapped_service_1',
+        service_2: 'remapped_service_2'
       },
       installSignature: {
         id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
@@ -426,7 +426,7 @@ describe('Telemetry retry', () => {
         }
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
+          payload,
           reqType: 'app-integrations-change'
         })
       }
@@ -461,7 +461,7 @@ describe('Telemetry retry', () => {
     telemetry.updateIntegrations()
     expect(capturedRequestType).to.equal('app-integrations-change')
     expect(capturedPayload).to.deep.equal({
-      'integrations': [{
+      integrations: [{
         name: 'boo3',
         enabled: true,
         auto_enabled: true
@@ -474,7 +474,7 @@ describe('Telemetry retry', () => {
     expect(capturedPayload).to.deep.equal([{
       request_type: 'app-integrations-change',
       payload: {
-        'integrations': [{
+        integrations: [{
           name: 'boo5',
           enabled: true,
           auto_enabled: true
@@ -484,7 +484,7 @@ describe('Telemetry retry', () => {
     }, {
       request_type: 'app-integrations-change',
       payload: {
-        'integrations': [{
+        integrations: [{
           name: 'boo3',
           enabled: true,
           auto_enabled: true
@@ -512,8 +512,8 @@ describe('Telemetry retry', () => {
         }
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: reqType
+          payload,
+          reqType
         })
       }
 
@@ -551,7 +551,7 @@ describe('Telemetry retry', () => {
     }, {
       request_type: 'app-integrations-change',
       payload: {
-        'integrations': [{
+        integrations: [{
           name: 'foo2',
           enabled: true,
           auto_enabled: true
@@ -581,7 +581,7 @@ describe('Telemetry retry', () => {
 
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
+          payload,
           reqType: 'app-integrations-change'
         })
       }
@@ -619,7 +619,7 @@ describe('Telemetry retry', () => {
     expect(capturedRequestType).to.equal('app-integrations-change')
 
     expect(capturedPayload).to.deep.equal({
-      'integrations': [{
+      integrations: [{
         name: 'zoo1',
         enabled: true,
         auto_enabled: true
@@ -641,8 +641,8 @@ describe('Telemetry retry', () => {
 
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: reqType
+          payload,
+          reqType
         })
       }
 
@@ -683,7 +683,7 @@ describe('Telemetry retry', () => {
     expect(capturedPayload).to.deep.equal([{
       request_type: 'app-integrations-change',
       payload: {
-        'integrations': [{
+        integrations: [{
           name: 'zoo1',
           enabled: true,
           auto_enabled: true
@@ -693,7 +693,7 @@ describe('Telemetry retry', () => {
     }, {
       request_type: 'app-integrations-change',
       payload: {
-        'integrations': [{
+        integrations: [{
           name: 'foo1',
           enabled: true,
           auto_enabled: true
@@ -723,8 +723,8 @@ describe('Telemetry retry', () => {
 
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
-          reqType: reqType
+          payload,
+          reqType
         })
       }
 
@@ -761,7 +761,7 @@ describe('Telemetry retry', () => {
     clock.tick(86400000)
     expect(extendedHeartbeatRequest).to.equal('app-extended-heartbeat')
     expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
-    expect(extendedHeartbeatPayload['integrations']).to.deep.include({
+    expect(extendedHeartbeatPayload.integrations).to.deep.include({
       integrations: [
         { name: 'foo2', enabled: true, auto_enabled: true },
         { name: 'bar2', enabled: false, auto_enabled: true }
@@ -776,7 +776,7 @@ async function testSeq (seqId, reqType, validatePayload) {
   }
   const req = traceAgent.reqs[seqId - 1]
   expect(req.method).to.equal('POST')
-  expect(req.url).to.equal(`/telemetry/proxy/api/v2/apmtelemetry`)
+  expect(req.url).to.equal('/telemetry/proxy/api/v2/apmtelemetry')
   expect(req.headers).to.include({
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',

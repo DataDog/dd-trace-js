@@ -117,8 +117,8 @@ describe('Serverless', () => {
     })
 
     expect(path).to.be.equal(
-      `/home/site/wwwroot/node_modules/@datadog/sma/\
-datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent`
+      '/home/site/wwwroot/node_modules/@datadog/sma/' +
+      'datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent'
     )
   })
 
@@ -130,8 +130,8 @@ datadog-serverless-agent-linux-amd64/datadog-serverless-trace-mini-agent`
     })
 
     expect(path).to.be.equal(
-      `/home/site/wwwroot/node_modules/@datadog/sma/\
-datadog-serverless-agent-windows-amd64/datadog-serverless-trace-mini-agent.exe`
+      '/home/site/wwwroot/node_modules/@datadog/sma/' +
+      'datadog-serverless-agent-windows-amd64/datadog-serverless-trace-mini-agent.exe'
     )
   })
 })

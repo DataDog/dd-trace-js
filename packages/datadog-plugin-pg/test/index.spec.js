@@ -437,7 +437,7 @@ describe('Plugin', () => {
           if (clientDBM.queryQueue[0] !== undefined) {
             try {
               expect(clientDBM.queryQueue[0].text).to.equal(
-                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
+                '/*dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
                 `ddps='test',ddpv='${ddpv}'*/ SELECT $1::text as message`)
               done()
             } catch (e) {
@@ -626,7 +626,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
-              `*/ SELECT $1::text as message`)
+              '*/ SELECT $1::text as message')
           }).then(done, done)
 
           client.query(query, ['Hello world!'], (err) => {
@@ -650,7 +650,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
-              `*/ SELECT $1::text as message`)
+              '*/ SELECT $1::text as message')
           }).then(done, done)
 
           client.query(query, ['Hello world!'], (err) => {
@@ -684,7 +684,7 @@ describe('Plugin', () => {
           agent.use(traces => {
             expect(queryText).to.equal(
               `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'` +
-              `*/ SELECT $1::text as greeting`)
+              '*/ SELECT $1::text as greeting')
           }).then(done, done)
 
           client.query(query, ['Goodbye'], (err) => {

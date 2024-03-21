@@ -25,7 +25,7 @@ describe('id', () => {
     sinon.stub(Math, 'random')
 
     id = proxyquire('../src/id', {
-      'crypto': crypto
+      crypto
     })
   })
 

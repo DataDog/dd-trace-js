@@ -9,7 +9,7 @@ const getPort = require('get-port')
 
 const accounts = require('./fixtures.js')
 
-const graphqlTag = require(`../../../versions/graphql-tag/index.js`).get()
+const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
 const gql = graphqlTag.gql
 accounts.typeDefs = gql(accounts.typeDefs)
 
@@ -63,7 +63,7 @@ describe('Plugin', () => {
       before(() => {
         require('../../dd-trace/index.js')
         const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-        const subgraph = require(`../../../versions/@apollo/subgraph`).get()
+        const subgraph = require('../../../versions/@apollo/subgraph').get()
         buildSubgraphSchema = subgraph.buildSubgraphSchema
         ApolloGateway = apollo.ApolloGateway
         LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
@@ -123,7 +123,7 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.post(`http://localhost:${port}/`, {
-            query: query
+            query
           })
         })
       })
@@ -190,7 +190,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument schema resolver', done => {
-          const source = `{ hello(name: "world") }`
+          const source = '{ hello(name: "world") }'
           agent
             .use((traces) => {
               expect(traces[0][0]).to.have.property('name', expectedSchema.server.opName)
@@ -244,7 +244,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument mutations', done => {
-          const source = `mutation { human { name } }`
+          const source = 'mutation { human { name } }'
 
           agent
             .use((traces) => {
@@ -260,7 +260,7 @@ describe('Plugin', () => {
         })
 
         it('should handle a circular schema', done => {
-          const source = `{ human { pets { owner { name } } } }`
+          const source = '{ human { pets { owner { name } } } }'
 
           gateway()
             .then(({ executor }) => {

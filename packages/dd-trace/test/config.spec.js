@@ -335,7 +335,7 @@ describe('Config', () => {
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
-    expect(config.tags).to.include({ service: 'service', 'version': '1.0.0', 'env': 'test' })
+    expect(config.tags).to.include({ service: 'service', version: '1.0.0', env: 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
       sampleRate: 0.5,
       rateLimit: '-1',
@@ -502,7 +502,7 @@ describe('Config', () => {
   it('should initialize from the options', () => {
     const logger = {}
     const tags = {
-      'foo': 'bar'
+      foo: 'bar'
     }
     const logLevel = 'error'
     const config = new Config({
@@ -552,7 +552,7 @@ describe('Config', () => {
       runtimeMetrics: true,
       reportHostname: true,
       plugins: false,
-      logLevel: logLevel,
+      logLevel,
       tracePropagationStyle: {
         inject: ['datadog'],
         extract: ['datadog']

@@ -483,7 +483,7 @@ addHook({
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options.parallel) {
-      log.warn(`Unable to initialize CI Visibility because Mocha is running in parallel mode.`)
+      log.warn('Unable to initialize CI Visibility because Mocha is running in parallel mode.')
       return run.apply(this, arguments)
     }
 

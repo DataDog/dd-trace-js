@@ -143,7 +143,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
           expect(scope.isDone()).to.be.true
           expect(customConfig).to.eql({
-            'my_custom_config': 'my_custom_config_value'
+            my_custom_config: 'my_custom_config_value'
           })
           done()
         })
@@ -362,7 +362,7 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getSkippableSuites({}, () => {
           expect(scope.isDone()).to.be.true
           expect(customConfig).to.eql({
-            'my_custom_config_2': 'my_custom_config_value_2'
+            my_custom_config_2: 'my_custom_config_value_2'
           })
           done()
         })
@@ -690,9 +690,9 @@ describe('CI Visibility Exporter', () => {
             data: {
               attributes: {
                 tests: {
-                  'jest': {
-                    'suite1': ['test1'],
-                    'suite2': ['test2']
+                  jest: {
+                    suite1: ['test1'],
+                    suite2: ['test2']
                   }
                 }
               }
@@ -706,9 +706,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql({
-            'jest': {
-              'suite1': ['test1'],
-              'suite2': ['test2']
+            jest: {
+              suite1: ['test1'],
+              suite2: ['test2']
             }
           })
           expect(scope.isDone()).to.be.true
@@ -740,9 +740,9 @@ describe('CI Visibility Exporter', () => {
               data: {
                 attributes: {
                   tests: {
-                    'jest': {
-                      'suite1': ['test1'],
-                      'suite2': ['test2']
+                    jest: {
+                      suite1: ['test1'],
+                      suite2: ['test2']
                     }
                   }
                 }
@@ -760,9 +760,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql({
-            'jest': {
-              'suite1': ['test1'],
-              'suite2': ['test2']
+            jest: {
+              suite1: ['test1'],
+              suite2: ['test2']
             }
           })
           expect(scope.isDone()).to.be.true
@@ -781,9 +781,9 @@ describe('CI Visibility Exporter', () => {
               data: {
                 attributes: {
                   tests: {
-                    'jest': {
-                      'suite1': ['test1'],
-                      'suite2': ['test2']
+                    jest: {
+                      suite1: ['test1'],
+                      suite2: ['test2']
                     }
                   }
                 }
@@ -801,9 +801,9 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
           expect(err).to.be.null
           expect(knownTests).to.eql({
-            'jest': {
-              'suite1': ['test1'],
-              'suite2': ['test2']
+            jest: {
+              suite1: ['test1'],
+              suite2: ['test2']
             }
           })
           expect(scope.isDone()).to.be.true

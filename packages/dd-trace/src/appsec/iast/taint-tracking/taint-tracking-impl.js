@@ -107,7 +107,7 @@ function csiMethodsOverrides (getContext) {
           return TaintedUtils.concat(transactionId, res, op1, op2)
         }
       } catch (e) {
-        iastLog.error(`Error invoking CSI plusOperator`)
+        iastLog.error('Error invoking CSI plusOperator')
           .errorAndPublish(e)
       }
       return res

@@ -43,8 +43,8 @@ const moduleType = [
     runTestsWithCoverageCommand:
       './node_modules/nyc/bin/nyc.js -r=text-summary ' +
       'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
-    parallelModeCommand: `./node_modules/.bin/cucumber-js ` +
-    `ci-visibility/features/farewell.feature --parallel 2 --publish-quiet`,
+    parallelModeCommand: './node_modules/.bin/cucumber-js ' +
+    'ci-visibility/features/farewell.feature --parallel 2 --publish-quiet',
     featuresPath: 'ci-visibility/features/',
     fileExtension: 'js'
   }

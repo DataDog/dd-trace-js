@@ -37,7 +37,7 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
         })
 
         resolve({
-          headers: headers,
+          headers,
           status: abortData.statusCode,
           body: {
             kind: 'complete',

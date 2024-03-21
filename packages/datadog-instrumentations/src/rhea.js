@@ -45,7 +45,9 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
     const { host, port } = getHostAndPort(this.connection)
 
     const targetAddress = this.options && this.options.target &&
-      this.options.target.address ? this.options.target.address : undefined
+      this.options.target.address
+      ? this.options.target.address
+      : undefined
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     return asyncResource.runInAsyncScope(() => {
@@ -187,7 +189,8 @@ function patchCircularBuffer (proto, Session) {
               if (shouldPop) {
                 const remoteState = entry.remote_state
                 const state = remoteState && remoteState.constructor
-                  ? entry.remote_state.constructor.composite_type : undefined
+                  ? entry.remote_state.constructor.composite_type
+                  : undefined
                 asyncResource.runInAsyncScope(() => {
                   exports.beforeFinish(entry, state)
                   finishSendCh.publish()

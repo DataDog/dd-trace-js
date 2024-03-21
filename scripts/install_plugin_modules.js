@@ -80,7 +80,8 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+  const versions = process.env.PACKAGE_VERSION_RANGE
+    ? [process.env.PACKAGE_VERSION_RANGE]
     : [].concat(instrumentation.versions || [])
 
   for (const version of versions) {
@@ -134,7 +135,7 @@ async function assertPackage (name, version, dependency, external) {
   if (!external) {
     if (name === 'aerospike') {
       pkg.installConfig = {
-        'hoistingLimits': 'workspaces'
+        hoistingLimits: 'workspaces'
       }
     } else {
       pkg.workspaces = {
