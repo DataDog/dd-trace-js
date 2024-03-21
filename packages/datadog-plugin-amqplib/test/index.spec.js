@@ -276,6 +276,7 @@ describe('Plugin', () => {
                 channel.assertQueue('', {}, (err, ok) => {
                   if (err) return
                   channel.sendToQueue(ok.queue, Buffer.from('content'))
+                  // eslint-disable-next-line n/handle-callback-err
                   channel.consume(ok.queue, () => {}, {}, (err, ok) => {})
                 })
               },

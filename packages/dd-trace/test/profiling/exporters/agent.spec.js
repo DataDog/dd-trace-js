@@ -37,7 +37,7 @@ function wait (ms) {
 }
 
 async function createProfile (periodType) {
-  const [ type ] = periodType
+  const [type] = periodType
   const profiler = type === 'wall' ? new WallProfiler() : new SpaceProfiler()
   profiler.start({
     // Throw errors in test rather than logging them
@@ -45,6 +45,7 @@ async function createProfile (periodType) {
       error (err) {
         throw err
       },
+      // eslint-disable-next-line n/handle-callback-err
       warn (err) {
       }
     }
@@ -152,7 +153,7 @@ describe('exporters/agent', function () {
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
       '../../exporters/common/docker': docker,
-      'http': http
+      http
     })
     AgentExporter = agent.AgentExporter
     computeRetries = agent.computeRetries
@@ -197,7 +198,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -240,7 +241,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -323,7 +324,7 @@ describe('exporters/agent', function () {
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -378,7 +379,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])

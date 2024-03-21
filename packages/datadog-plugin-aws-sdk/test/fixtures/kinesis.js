@@ -2,7 +2,7 @@
 
 const kinesis = {}
 
-kinesis['describe'] = {
+kinesis.describe = {
   StreamName: 'test_aws_stream'
 }
 

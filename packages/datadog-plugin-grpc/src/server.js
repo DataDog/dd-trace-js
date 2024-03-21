@@ -8,7 +8,7 @@ const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
 class GrpcServerPlugin extends ServerPlugin {
   static get id () { return 'grpc' }
   static get operation () { return 'server:request' }
-  static get prefix () { return `apm:grpc:server:request` }
+  static get prefix () { return 'apm:grpc:server:request' }
 
   constructor (...args) {
     super(...args)
@@ -39,7 +39,7 @@ class GrpcServerPlugin extends ServerPlugin {
       kind: 'server',
       type: 'web',
       meta: {
-        'component': 'grpc',
+        component: 'grpc',
         'grpc.method.kind': method.kind,
         'grpc.method.path': method.path,
         'grpc.method.name': method.name,

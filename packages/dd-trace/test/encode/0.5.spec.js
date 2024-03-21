@@ -73,7 +73,7 @@ describe('encode 0.5', () => {
     const traceIdVal = `${rootTid}${rootT64}`
 
     const encodedLink = `[{"trace_id":"${traceIdVal}","span_id":"1234abcd1234abcd",` +
-    `"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]`
+    '"attributes":{"foo":"bar"},"tracestate":"dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar","flags":1}]'
 
     data[0].meta['_dd.span_links'] = encodedLink
 

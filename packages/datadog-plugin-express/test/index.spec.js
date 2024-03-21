@@ -65,6 +65,7 @@ describe('Plugin', () => {
           const app = express()
 
           app.use(() => { throw new Error('boom') })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => {
             res.status(200).send()
           })
@@ -309,6 +310,7 @@ describe('Plugin', () => {
             next = _next
           })
           app.use(() => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((err, req, res, next) => next())
           app.get('/user/:id', (req, res) => {
             res.status(200).send()
@@ -1128,6 +1130,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res, next) => next(error))
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           getPort().then(port => {
@@ -1164,6 +1167,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           getPort().then(port => {
@@ -1611,6 +1615,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
           getPort().then(port => {

@@ -7,3 +7,5 @@ versions
 acmeair-nodejs
 vendor
 integration-tests/esbuild/out.js
+integration-tests/esbuild/aws-sdk-out.js
+packages/dd-trace/src/appsec/blocked_templates.js

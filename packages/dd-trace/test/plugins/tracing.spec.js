@@ -54,7 +54,7 @@ describe('common Plugin behaviour', () => {
     }
   }
 
-  const testPlugins = { 'commonPlugin': CommonPlugin, 'suffixPlugin': SuffixPlugin }
+  const testPlugins = { commonPlugin: CommonPlugin, suffixPlugin: SuffixPlugin }
   const loadChannel = channel('dd-trace:instrumentation:load')
 
   before(() => {
