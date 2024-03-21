@@ -58,11 +58,11 @@ class SpanProcessor {
     }
 
     if (this._killAll) {
-      started.map(startedSpan => {
+      for (const startedSpan of started) {
         if (!startedSpan._finished) {
           startedSpan.finish()
         }
-      })
+      }
     }
   }
 

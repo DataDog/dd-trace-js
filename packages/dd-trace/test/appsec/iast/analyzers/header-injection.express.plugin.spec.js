@@ -242,7 +242,7 @@ describe('Header injection vulnerability', () => {
 
         testThatRequestHasNoVulnerability({
           fn: (req, res) => {
-            setHeaderFunction('Access-Control-Allow-Origin', req.headers['origin'], res)
+            setHeaderFunction('Access-Control-Allow-Origin', req.headers.origin, res)
             setHeaderFunction('Access-Control-Allow-Headers', req.headers['access-control-request-headers'], res)
             setHeaderFunction('Access-Control-Allow-Methods', req.headers['access-control-request-methods'], res)
           },
@@ -263,7 +263,7 @@ describe('Header injection vulnerability', () => {
           makeRequest: (done, config) => {
             return axios.options(`http://localhost:${config.port}/`, {
               headers: {
-                'origin': 'http://custom-origin',
+                origin: 'http://custom-origin',
                 'Access-Control-Request-Headers': 'TestHeader',
                 'Access-Control-Request-Methods': 'GET'
               }

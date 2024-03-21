@@ -328,8 +328,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
-          'language': 'javascript',
-          'library_version': ddTraceVersion
+          language: 'javascript',
+          library_version: ddTraceVersion
         }
       },
       events: []

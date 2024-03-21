@@ -17,7 +17,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
-  static get prefix () { return `apm:http:client:request` }
+  static get prefix () { return 'apm:http:client:request' }
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -227,7 +227,7 @@ function hasAmazonSignature (options) {
       return true
     }
 
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }

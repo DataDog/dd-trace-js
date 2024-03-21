@@ -51,11 +51,11 @@ class ExternalLogger {
 
     const payload = {
       ...log,
-      'timestamp': Date.now(),
-      'hostname': log.hostname || this.hostname,
-      'ddsource': log.ddsource || this.ddsource,
-      'service': log.service || this.service,
-      'ddtags': logTags || undefined
+      timestamp: Date.now(),
+      hostname: log.hostname || this.hostname,
+      ddsource: log.ddsource || this.ddsource,
+      service: log.service || this.service,
+      ddtags: logTags || undefined
     }
 
     this.enqueue(payload)

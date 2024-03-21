@@ -238,12 +238,15 @@ function captureHistograms () {
  *
  * performance.eventLoopUtilization available in Node.js >= v14.10, >= v12.19, >= v16
  */
-const captureELU = ('eventLoopUtilization' in performance) ? () => {
-  // if elu is undefined (first run) the measurement is from start of process
-  elu = performance.eventLoopUtilization(elu)
+let captureELU = () => {}
+if ('eventLoopUtilization' in performance) {
+  captureELU = () => {
+    // if elu is undefined (first run) the measurement is from start of process
+    elu = performance.eventLoopUtilization(elu)
 
-  client.gauge('runtime.node.event_loop.utilization', elu.utilization)
-} : () => {}
+    client.gauge('runtime.node.event_loop.utilization', elu.utilization)
+  }
+}
 
 function captureCommonMetrics () {
   captureMemoryUsage()

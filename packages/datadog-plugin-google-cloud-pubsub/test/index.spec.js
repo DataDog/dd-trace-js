@@ -39,7 +39,7 @@ describe('Plugin', () => {
         })
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          gax = require(`../../../versions/google-gax@3.5.7`).get()
+          gax = require('../../../versions/google-gax@3.5.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
@@ -60,7 +60,7 @@ describe('Plugin', () => {
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
-                'component': 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub'
               }
             })
             await pubsub.createTopic(topicName)
@@ -82,7 +82,7 @@ describe('Plugin', () => {
               meta: {
                 'pubsub.method': 'createTopic',
                 'span.kind': 'client',
-                'component': 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub'
               }
             })
             const name = `projects/${project}/topics/${topicName}`
@@ -99,7 +99,7 @@ describe('Plugin', () => {
               error: 1,
               meta: {
                 'pubsub.method': 'createTopic',
-                'component': 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub'
               }
             })
             const publisher = new v1.PublisherClient({ projectId: project })
@@ -130,7 +130,7 @@ describe('Plugin', () => {
                 'pubsub.topic': resource,
                 'pubsub.method': 'publish',
                 'span.kind': 'producer',
-                'component': 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -165,7 +165,7 @@ describe('Plugin', () => {
               service: expectedSchema.receive.serviceName,
               type: 'worker',
               meta: {
-                'component': 'google-cloud-pubsub',
+                component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource
               },
@@ -215,7 +215,7 @@ describe('Plugin', () => {
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_TYPE]: error.name,
                 [ERROR_STACK]: error.stack,
-                'component': 'google-cloud-pubsub'
+                component: 'google-cloud-pubsub'
               }
             })
             const [topic] = await pubsub.createTopic(topicName)
@@ -327,7 +327,7 @@ describe('Plugin', () => {
           service,
           error: 0,
           meta: {
-            'component': 'google-cloud-pubsub',
+            component: 'google-cloud-pubsub',
             'gcloud.project_id': project
           }
         }, expected)

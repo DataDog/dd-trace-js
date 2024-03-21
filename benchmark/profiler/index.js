@@ -60,7 +60,7 @@ function benchmark (url, maxConnectionRequests) {
 }
 
 function compare (result1, result2) {
-  title(`Comparison (disabled VS enabled)`)
+  title('Comparison (disabled VS enabled)')
 
   compareNet(result1.net, result2.net)
   compareCpu(result1.cpu, result2.cpu)

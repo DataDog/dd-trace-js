@@ -293,7 +293,7 @@ describe('reporter', () => {
     })
 
     it('should call addTags', () => {
-      const schemaValue = [{ 'key': [8] }]
+      const schemaValue = [{ key: [8] }]
       const derivatives = {
         '_dd.appsec.s.req.headers': schemaValue,
         '_dd.appsec.s.req.query': schemaValue,

@@ -62,7 +62,8 @@ versions.forEach((version) => {
       context(`reporting via ${reportMethod}`, () => {
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
           receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {

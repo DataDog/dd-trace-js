@@ -63,8 +63,8 @@ describe('dogstatsd', () => {
     })
 
     const dogstatsd = proxyquire('../src/dogstatsd', {
-      'dgram': dgram,
-      'dns': dns
+      dgram,
+      dns
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -337,7 +337,7 @@ describe('dogstatsd', () => {
 
     // host exists but port does not, ECONNREFUSED
     client = new DogStatsDClient({
-      metricsProxyUrl: `http://localhost:32700`,
+      metricsProxyUrl: 'http://localhost:32700',
       host: 'localhost',
       port: 8125
     })
