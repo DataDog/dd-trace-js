@@ -60,9 +60,9 @@ function createDummySpans () {
     }
 
     if (idx === 9) {
-      spanContext._tags['tagged'] = 'yup'
-      spanContext._tags['and'] = 'this'
-      spanContext._tags['not'] = 'this'
+      spanContext._tags.tagged = 'yup'
+      spanContext._tags.and = 'this'
+      spanContext._tags.not = 'this'
     }
 
     if (idx === 10) {

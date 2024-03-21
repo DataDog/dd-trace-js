@@ -10,6 +10,7 @@ function wrapVerifiedAndPublish (username, password, verified, type) {
     return verified
   }
 
+  // eslint-disable-next-line n/handle-callback-err
   return shimmer.wrap(verified, function (err, user, info) {
     const credentials = { type, username }
     passportVerifyChannel.publish({ credentials, user })

@@ -35,11 +35,11 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'component': 'aws-sdk',
+              component: 'aws-sdk',
               'aws.region': 'us-east-1',
-              'region': 'us-east-1',
+              region: 'us-east-1',
               'aws.service': 'S3',
-              'aws_service': 'S3',
+              aws_service: 'S3',
               'aws.operation': 'listBuckets'
             })
           }).then(done, done)
@@ -102,11 +102,11 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'component': 'aws-sdk',
+              component: 'aws-sdk',
               'aws.region': 'us-east-1',
-              'region': 'us-east-1',
+              region: 'us-east-1',
               'aws.service': 'S3',
-              'aws_service': 'S3',
+              aws_service: 'S3',
               'aws.operation': 'listBuckets'
             })
           }).then(done, done)
@@ -130,7 +130,7 @@ describe('Plugin', () => {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              'component': 'aws-sdk'
+              component: 'aws-sdk'
             })
             if (semver.intersects(version, '>=2.3.4')) {
               expect(span.meta['aws.response.request_id']).to.match(/[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
@@ -217,7 +217,7 @@ describe('Plugin', () => {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)
                 span.addTags({
-                  'error': 0
+                  error: 0
                 })
               }
             }
@@ -245,7 +245,7 @@ describe('Plugin', () => {
             expect(span).to.have.property('error', 0)
             expect(span.meta).to.include({
               'hook.operation': 'listBuckets',
-              'component': 'aws-sdk'
+              component: 'aws-sdk'
             })
           }).then(done, done)
 

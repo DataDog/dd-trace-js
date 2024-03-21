@@ -45,7 +45,7 @@ class ChildProcessPlugin extends TracingPlugin {
     const property = (shell === true) ? 'cmd.shell' : 'cmd.exec'
 
     const meta = {
-      'component': 'subprocess',
+      component: 'subprocess',
       [property]: (shell === true) ? cmdFields.join(' ') : JSON.stringify(cmdFields)
     }
 

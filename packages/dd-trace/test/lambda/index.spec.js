@@ -209,7 +209,7 @@ describe('lambda', () => {
       return closeAgent()
     })
 
-    it(`doesnt crash when spans are finished early and reached impending timeout`, async () => {
+    it('doesnt crash when spans are finished early and reached impending timeout', async () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.finishSpansEarlyTimeoutHandler'
       await loadAgent()
 

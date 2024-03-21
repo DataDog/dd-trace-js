@@ -56,13 +56,13 @@ if (semver.satisfies(process.versions.node, '>=17.8.0')) {
         bound = this.runInAsyncScope.bind(this, fn, thisArg)
       }
       Object.defineProperties(bound, {
-        'length': {
+        length: {
           configurable: true,
           enumerable: false,
           value: fn.length,
           writable: false
         },
-        'asyncResource': {
+        asyncResource: {
           configurable: true,
           enumerable: true,
           value: this,

@@ -568,7 +568,7 @@ describe('Plugin', () => {
                 expect(spans[1].resource).to.match(/^dispatch/)
                 expect(spans[1].meta).to.include({
                   [ERROR_TYPE]: error.name,
-                  'component': 'koa'
+                  component: 'koa'
                 })
                 expect(spans[1].error).to.equal(1)
               })
@@ -588,7 +588,7 @@ describe('Plugin', () => {
             let ws
 
             beforeEach(() => {
-              WebSocket = require(`../../../versions/ws@6.1.0`).get()
+              WebSocket = require('../../../versions/ws@6.1.0').get()
               websockify = require(`../../../versions/koa-websocket@${wsVersion}`).get()
             })
 

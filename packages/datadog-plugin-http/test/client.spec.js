@@ -125,7 +125,7 @@ describe('Plugin', () => {
           })
         })
 
-        it(`should also support get()`, done => {
+        it('should also support get()', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -231,8 +231,8 @@ describe('Plugin', () => {
                 hostname: 'localhost',
                 path: '/user',
                 headers: {
-                  'Connection': 'Upgrade',
-                  'Upgrade': 'websocket'
+                  Connection: 'Upgrade',
+                  Upgrade: 'websocket'
                 }
               })
 
@@ -1357,9 +1357,9 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-                expect(meta).to.have.property(`http.baz`, 'baz')
+                expect(meta).to.have.property('http.baz', 'baz')
                 expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
-                expect(meta).to.have.property(`http.bar`, 'bar')
+                expect(meta).to.have.property('http.bar', 'bar')
               })
               .then(done)
               .catch(done)
@@ -1388,7 +1388,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar')
               })
               .then(done)
               .catch(done)
@@ -1416,7 +1416,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar1,bar2`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar1,bar2')
               })
               .then(done)
               .catch(done)

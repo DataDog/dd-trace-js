@@ -35,7 +35,7 @@ function updateRetryData (error, retryObj) {
     if (retryObj.reqType === 'message-batch') {
       const payload = retryObj.payload[0].payload
       const reqType = retryObj.payload[0].request_type
-      retryData = { payload: payload, reqType: reqType }
+      retryData = { payload, reqType }
 
       // Since this payload failed twice it now gets save in to the extended heartbeat
       const failedPayload = retryObj.payload[1].payload
@@ -43,17 +43,17 @@ function updateRetryData (error, retryObj) {
 
       // save away the dependencies and integration request for extended heartbeat.
       if (failedReqType === 'app-integrations-change') {
-        if (extendedHeartbeatPayload['integrations']) {
-          extendedHeartbeatPayload['integrations'].push(failedPayload)
+        if (extendedHeartbeatPayload.integrations) {
+          extendedHeartbeatPayload.integrations.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['integrations'] = [failedPayload]
+          extendedHeartbeatPayload.integrations = [failedPayload]
         }
       }
       if (failedReqType === 'app-dependencies-loaded') {
-        if (extendedHeartbeatPayload['dependencies']) {
-          extendedHeartbeatPayload['dependencies'].push(failedPayload)
+        if (extendedHeartbeatPayload.dependencies) {
+          extendedHeartbeatPayload.dependencies.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['dependencies'] = [failedPayload]
+          extendedHeartbeatPayload.dependencies = [failedPayload]
         }
       }
     } else {
@@ -187,12 +187,11 @@ function getTelemetryData () {
 }
 
 function createBatchPayload (payload) {
-  const batchPayload = []
-  payload.map(item => {
-    batchPayload.push({
+  const batchPayload = payload.map(item => {
+    return {
       request_type: item.reqType,
       payload: item.payload
-    })
+    }
   })
 
   return batchPayload
@@ -202,10 +201,10 @@ function createPayload (currReqType, currPayload = {}) {
   if (getRetryData()) {
     const payload = { reqType: currReqType, payload: currPayload }
     const batchPayload = createBatchPayload([payload, retryData])
-    return { 'reqType': 'message-batch', 'payload': batchPayload }
+    return { reqType: 'message-batch', payload: batchPayload }
   }
 
-  return { 'reqType': currReqType, 'payload': currPayload }
+  return { reqType: currReqType, payload: currPayload }
 }
 
 function heartbeat (config, application, host) {

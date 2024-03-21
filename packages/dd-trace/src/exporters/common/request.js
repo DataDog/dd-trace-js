@@ -6,6 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+// eslint-disable-next-line n/no-deprecated-api
 const { parse: urlParse } = require('url')
 const zlib = require('zlib')
 

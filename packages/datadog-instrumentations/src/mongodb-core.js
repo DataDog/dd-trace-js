@@ -7,9 +7,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel(`apm:mongodb:query:start`)
-const finishCh = channel(`apm:mongodb:query:finish`)
-const errorCh = channel(`apm:mongodb:query:error`)
+const startCh = channel('apm:mongodb:query:start')
+const finishCh = channel('apm:mongodb:query:finish')
+const errorCh = channel('apm:mongodb:query:error')
 
 addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   const serverProto = Server.Server.prototype

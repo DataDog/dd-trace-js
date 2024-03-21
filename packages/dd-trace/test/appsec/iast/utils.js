@@ -296,14 +296,14 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
-      const bodyParser = require(`../../../../../versions/body-parser`).get()
+      const bodyParser = require('../../../../../versions/body-parser').get()
       const expressApp = express()
 
       if (loadMiddlewares) loadMiddlewares(expressApp)
 
       expressApp.use(bodyParser.json())
       try {
-        const cookieParser = require(`../../../../../versions/cookie-parser`).get()
+        const cookieParser = require('../../../../../versions/cookie-parser').get()
         expressApp.use(cookieParser())
       } catch (e) {
         // do nothing, in some scenarios we don't have cookie-parser dependency available, and we don't need
