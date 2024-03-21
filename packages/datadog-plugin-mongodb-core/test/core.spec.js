@@ -62,7 +62,7 @@ describe('Plugin', () => {
           const Server = getServer()
 
           server = new Server({
-            host: 'localhost',
+            host: '127.0.0.1',
             port: 27017,
             reconnect: false
           })
@@ -86,7 +86,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
-                expect(span.meta).to.have.property('out.host', 'localhost')
+                expect(span.meta).to.have.property('out.host', '127.0.0.1')
                 expect(span.meta).to.have.property('component', 'mongodb')
               })
               .then(done)
@@ -360,7 +360,7 @@ describe('Plugin', () => {
           const Server = getServer()
 
           server = new Server({
-            host: 'localhost',
+            host: '127.0.0.1',
             port: 27017,
             reconnect: false
           })
