@@ -9,7 +9,7 @@ function waitForMongo () {
 
     operation.attempt(currentAttempt => {
       const server = new mongo.Server({
-        host: 'localhost',
+        host: '127.0.0.1',
         port: 27017,
         reconnect: false
       })
