@@ -197,7 +197,7 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
 
     const promise = command.apply(ctx, args)
 
-    promise.then(function (res) {
+    return promise.then(function (res) {
       finishCh.publish()
       return res
     }, function (err) {
@@ -206,7 +206,5 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
 
       return Promise.reject(err)
     })
-
-    return promise
   })
 }
