@@ -108,11 +108,12 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
     log.warn(`There are ${commitsToInclude.length} commits to include.`)
 
-    if (!commitsToInclude.length) {
-      return callback(null, [])
-    }
+    // if (!commitsToInclude.length) {
+    //   return callback(null, [])
+    // }
 
-    const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
+    log.warn('Forcing upload and unshallow')
+    const commitsToUpload = getCommitsRevList([], commitsToInclude)
 
     callback(null, commitsToUpload)
   })
