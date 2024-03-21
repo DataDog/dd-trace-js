@@ -3,14 +3,14 @@
 const childProcess = require('child_process')
 const ORIGIN = 'origin/'
 
-let releaseBranch = process.env['GITHUB_BASE_REF'] // 'origin/v3.x'
+let releaseBranch = process.env.GITHUB_BASE_REF // 'origin/v3.x'
 let releaseVersion = releaseBranch
 if (releaseBranch.startsWith(ORIGIN)) {
   releaseVersion = releaseBranch.substring(ORIGIN.length)
 } else {
   releaseBranch = ORIGIN + releaseBranch
 }
-let currentBranch = process.env['GITHUB_HEAD_REF'] // 'ugaitz/workflow-to-verify-dont-land-on-v3.x'
+let currentBranch = process.env.GITHUB_HEAD_REF // 'ugaitz/workflow-to-verify-dont-land-on-v3.x'
 if (!currentBranch.startsWith(ORIGIN)) {
   currentBranch = ORIGIN + currentBranch
 }
@@ -56,11 +56,8 @@ ${withoutExclusionStderr}
         }
         const commitsHashesWithoutExclusions = withoutExclusionStdout.split('\n')
         if (commitsHashesWithExclusions.length !== commitsHashesWithoutExclusions.length) {
-          const commitsWithInvalidLabels = []
-          commitsHashesWithoutExclusions.filter(c1 => {
-            if (!commitsHashesWithExclusions.some(c2 => c2 === c1)) {
-              commitsWithInvalidLabels.push(c1)
-            }
+          const commitsWithInvalidLabels = commitsHashesWithoutExclusions.filter(c1 => {
+            return !commitsHashesWithExclusions.some(c2 => c2 === c1)
           })
           console.error('Some excluded label added in the release proposal', commitsWithInvalidLabels)
           process.exit(1)

@@ -433,6 +433,7 @@ describe('Plugin', () => {
             it('should handle reply exceptions', done => {
               let error
 
+              // eslint-disable-next-line n/handle-callback-err
               app.setErrorHandler((error, request, reply) => {
                 reply.statusCode = 500
                 reply.send()
@@ -466,6 +467,7 @@ describe('Plugin', () => {
             })
 
             it('should ignore reply exceptions if the request succeeds', done => {
+              // eslint-disable-next-line n/handle-callback-err
               app.setErrorHandler((error, request, reply) => {
                 reply.statusCode = 200
                 reply.send()

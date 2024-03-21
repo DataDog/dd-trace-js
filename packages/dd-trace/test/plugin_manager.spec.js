@@ -245,7 +245,7 @@ describe('Plugin Manager', () => {
     })
     describe('service naming schema manager', () => {
       const config = {
-        foo: { 'bar': 1 },
+        foo: { bar: 1 },
         baz: 2
       }
       let configureSpy

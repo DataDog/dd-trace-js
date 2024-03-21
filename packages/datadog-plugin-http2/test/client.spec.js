@@ -563,6 +563,7 @@ describe('Plugin', () => {
               .catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`)
+              // eslint-disable-next-line n/handle-callback-err
               .on('error', (err) => {})
 
             const req = client.request({ ':path': '/user' })
@@ -660,7 +661,7 @@ describe('Plugin', () => {
                   .on('error', done)
                   .end()
 
-                client.request({ ':path': `/user?test=2` })
+                client.request({ ':path': '/user?test=2' })
                   .on('error', done)
                   .end()
 

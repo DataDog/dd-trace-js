@@ -168,9 +168,9 @@ describe('getJestSuitesToRun', () => {
     const rootDir = __dirname
 
     getJestSuitesToRun(skippableSuites, tests, rootDir)
-    expect(globalConfig.testEnvironmentOptions['_ddUnskippable'])
+    expect(globalConfig.testEnvironmentOptions._ddUnskippable)
       .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
-    expect(globalConfig.testEnvironmentOptions['_ddForcedToRun'])
+    expect(globalConfig.testEnvironmentOptions._ddForcedToRun)
       .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
   })
 })

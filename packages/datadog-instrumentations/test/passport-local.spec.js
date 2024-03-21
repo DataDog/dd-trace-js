@@ -15,7 +15,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
     before((done) => {
       const express = require('../../../versions/express').get()
-      const passport = require(`../../../versions/passport`).get()
+      const passport = require('../../../versions/passport').get()
       const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
       const app = express()
 

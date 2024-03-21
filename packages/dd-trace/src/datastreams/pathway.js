@@ -22,7 +22,7 @@ function computeHash (service, env, edgeTags, parentHash) {
     return cache.get(key)
   }
   const currentHash = shaHash(`${service}${env}` + edgeTags.join(''))
-  const buf = Buffer.concat([ currentHash, parentHash ], 16)
+  const buf = Buffer.concat([currentHash, parentHash], 16)
   const val = shaHash(buf.toString())
   cache.set(key, val)
   return val

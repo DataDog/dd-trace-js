@@ -128,9 +128,9 @@ describe('Kinesis', function () {
         agent.use(traces => {
           const span = traces[0][0]
           expect(span.meta).to.include({
-            'streamname': streamName,
-            'aws_service': 'Kinesis',
-            'region': 'us-east-1'
+            streamname: streamName,
+            aws_service: 'Kinesis',
+            region: 'us-east-1'
           })
           expect(span.resource).to.equal(`putRecord ${streamName}`)
           expect(span.meta).to.have.property('streamname', streamName)

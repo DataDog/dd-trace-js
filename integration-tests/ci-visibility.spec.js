@@ -641,7 +641,8 @@ testFrameworks.forEach(({
       context(`early flake detection when reporting by ${reportingOption}`, () => {
         it('retries new tests', (done) => {
           const envVars = reportingOption === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
@@ -725,7 +726,8 @@ testFrameworks.forEach(({
         })
         it('handles parameterized tests as a single unit', (done) => {
           const envVars = reportingOption === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
@@ -810,7 +812,8 @@ testFrameworks.forEach(({
         })
         it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
           const envVars = reportingOption === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
@@ -874,7 +877,8 @@ testFrameworks.forEach(({
         })
         it('retries flaky tests', (done) => {
           const envVars = reportingOption === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
@@ -946,7 +950,8 @@ testFrameworks.forEach(({
         })
         it('does not retry new tests that are skipped', (done) => {
           const envVars = reportingOption === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }

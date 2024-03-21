@@ -19,7 +19,7 @@ class RheaProducerPlugin extends ProducerPlugin {
     this.startSpan({
       resource: name,
       meta: {
-        'component': 'rhea',
+        component: 'rhea',
         'amqp.link.target.address': name,
         'amqp.link.role': 'sender',
         'out.host': host,
