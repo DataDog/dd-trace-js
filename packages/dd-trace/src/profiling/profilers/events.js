@@ -15,6 +15,8 @@ const MS_TO_NS = 1000000
 const pprofValueType = 'timeline'
 const pprofValueUnit = 'nanoseconds'
 
+const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
+
 function labelFromStr (stringTable, key, valStr) {
   return new Label({ key, str: stringTable.dedup(valStr) })
 }
@@ -146,6 +148,76 @@ if (node16) {
   decoratorTypes.net = NetDecorator
 }
 
+// Translates performance entries into pprof samples.
+class EventSerializer {
+  constructor () {
+    this.stringTable = new StringTable()
+    this.samples = []
+    this.locations = []
+    this.functions = []
+    this.decorators = {}
+
+    // A synthetic single-frame location to serve as the location for timeline
+    // samples. We need these as the profiling backend (mimicking official pprof
+    // tool's behavior) ignores these.
+    const fn = new Function({ id: this.functions.length + 1, name: this.stringTable.dedup('') })
+    this.functions.push(fn)
+    const line = new Line({ functionId: fn.id })
+    const location = new Location({ id: this.locations.length + 1, line: [line] })
+    this.locations.push(location)
+    this.locationId = [location.id]
+
+    this.timestampLabelKey = this.stringTable.dedup(END_TIMESTAMP_LABEL)
+  }
+
+  addEvent (item) {
+    const { entryType, startTime, duration } = item
+    let decorator = this.decorators[entryType]
+    if (!decorator) {
+      const DecoratorCtor = decoratorTypes[entryType]
+      if (DecoratorCtor) {
+        decorator = new DecoratorCtor(this.stringTable)
+        decorator.eventTypeLabel = labelFromStrStr(this.stringTable, 'event', entryType)
+        this.decorators[entryType] = decorator
+      } else {
+        // Shouldn't happen but it's better to not rely on observer only getting
+        // requested event types.
+        return
+      }
+    }
+    const endTime = startTime + duration
+    const sampleInput = {
+      value: [Math.round(duration * MS_TO_NS)],
+      locationId: this.locationId,
+      label: [
+        decorator.eventTypeLabel,
+        new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
+      ]
+    }
+    decorator.decorateSample(sampleInput, item)
+    this.samples.push(new Sample(sampleInput))
+  }
+
+  createProfile (startDate, endDate) {
+    const timeValueType = new ValueType({
+      type: this.stringTable.dedup(pprofValueType),
+      unit: this.stringTable.dedup(pprofValueUnit)
+    })
+
+    return new Profile({
+      sampleType: [timeValueType],
+      timeNanos: endDate.getTime() * MS_TO_NS,
+      periodType: timeValueType,
+      period: 1,
+      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
+      sample: this.samples,
+      location: this.locations,
+      function: this.functions,
+      stringTable: this.stringTable
+    })
+  }
+}
+
 /**
  * This class generates pprof files with timeline events sourced from Node.js
  * performance measurement APIs.
@@ -155,7 +227,7 @@ class EventsProfiler {
     this.type = 'events'
     this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
     this._observer = undefined
-    this.entries = []
+    this.eventSerializer = new EventSerializer()
   }
 
   start () {
@@ -163,7 +235,9 @@ class EventsProfiler {
     if (this._observer) return
 
     function add (items) {
-      this.entries.push(...items.getEntries())
+      for (const item of items.getEntries()) {
+        this.eventSerializer.addEvent(item)
+      }
     }
     this._observer = new PerformanceObserver(add.bind(this))
     this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
@@ -177,89 +251,12 @@ class EventsProfiler {
   }
 
   profile (restart, startDate, endDate) {
-    if (this.entries.length === 0) {
-      // No events in the period; don't produce a profile
-      return null
-    }
-
-    const stringTable = new StringTable()
-    const locations = []
-    const functions = []
-
-    // A synthetic single-frame location to serve as the location for timeline
-    // samples. We need these as the profiling backend (mimicking official pprof
-    // tool's behavior) ignores these.
-    const locationId = (() => {
-      const fn = new Function({ id: functions.length + 1, name: stringTable.dedup('') })
-      functions.push(fn)
-      const line = new Line({ functionId: fn.id })
-      const location = new Location({ id: locations.length + 1, line: [line] })
-      locations.push(location)
-      return [location.id]
-    })()
-
-    const decorators = {}
-    for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
-      const decorator = new DecoratorCtor(stringTable)
-      decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
-      decorators[eventType] = decorator
-    }
-    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
-
-    const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
-    const lateEntries = []
-    const perfEndDate = endDate.getTime() - performance.timeOrigin
-    const samples = this.entries.map((item) => {
-      const decorator = decorators[item.entryType]
-      if (!decorator) {
-        // Shouldn't happen but it's better to not rely on observer only getting
-        // requested event types.
-        return null
-      }
-      const { startTime, duration } = item
-      if (startTime >= perfEndDate) {
-        // An event past the current recording end date; save it for the next
-        // profile. Not supposed to happen as long as there's no async activity
-        // between capture of the endDate value in profiler.js _collect() and
-        // here, but better be safe than sorry.
-        lateEntries.push(item)
-        return null
-      }
-      const endTime = startTime + duration
-      const sampleInput = {
-        value: [Math.round(duration * MS_TO_NS)],
-        locationId,
-        label: [
-          decorator.eventTypeLabel,
-          new Label({ key: timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
-        ]
-      }
-      decorator.decorateSample(sampleInput, item)
-      return new Sample(sampleInput)
-    }).filter(v => v)
-
-    this.entries = lateEntries
-
-    const timeValueType = new ValueType({
-      type: stringTable.dedup(pprofValueType),
-      unit: stringTable.dedup(pprofValueUnit)
-    })
-
     if (!restart) {
       this.stop()
     }
-
-    return new Profile({
-      sampleType: [timeValueType],
-      timeNanos: endDate.getTime() * MS_TO_NS,
-      periodType: timeValueType,
-      period: 1,
-      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
-      sample: samples,
-      location: locations,
-      function: functions,
-      stringTable
-    })
+    const profile = this.eventSerializer.createProfile(startDate, endDate)
+    this.eventSerializer = new EventSerializer()
+    return profile
   }
 
   encode (profile) {
