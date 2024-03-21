@@ -77,6 +77,7 @@ function getLibraryConfiguration ({
   incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS)
 
   const startTime = Date.now()
+  log.warn('Fetching library configuration...')
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
@@ -107,15 +108,15 @@ function getLibraryConfiguration ({
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
         }
 
-        log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
+        log.warn(() => `Remote settings: ${JSON.stringify(settings)}`)
 
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
           settings.isCodeCoverageEnabled = true
-          log.debug(() => 'Dangerously set code coverage to true')
+          log.warn(() => 'Dangerously set code coverage to true')
         }
         if (process.env.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
           settings.isSuitesSkippingEnabled = true
-          log.debug(() => 'Dangerously set test skipping to true')
+          log.warn(() => 'Dangerously set test skipping to true')
         }
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)

@@ -119,10 +119,14 @@ class CiVisibilityExporter extends AgentInfoExporter {
     if (!this.shouldRequestSkippableSuites()) {
       return callback(null, [])
     }
+    log.warn('Waiting for git upload to finish')
     this._gitUploadPromise.then(gitUploadError => {
+      log.warn('Git upload finished')
       if (gitUploadError) {
+        log.warn('there was a git error')
         return callback(gitUploadError, [])
       }
+      log.warn('doing skippable request now')
       getSkippableSuitesRequest(this.getRequestConfiguration(testConfiguration), callback)
     })
   }
