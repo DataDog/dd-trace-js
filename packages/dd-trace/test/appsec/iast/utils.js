@@ -10,6 +10,7 @@ const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { storage } = require('../../../../datadog-core')
 
 function testInRequest (app, tests) {
   let http
@@ -46,6 +47,7 @@ function testInRequest (app, tests) {
   })
 
   beforeEach(done => {
+    storage.enterWith(undefined)
     const server = new http.Server(listener)
     appListener = server
       .listen(config.port, 'localhost', () => done())
