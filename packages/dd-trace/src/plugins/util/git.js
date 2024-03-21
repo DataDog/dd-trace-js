@@ -28,7 +28,7 @@ const {
 const { filterSensitiveInfoFromRepository } = require('./url')
 const { storage } = require('../../../../datadog-core')
 
-const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
+const GIT_REV_LIST_MAX_BUFFER = 16 * 1024 * 1024 // 8MB
 
 function sanitizedExec (
   cmd,

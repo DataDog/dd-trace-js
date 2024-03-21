@@ -59,7 +59,8 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
+function getCommitsToUpload ({
+  url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix, isSecondTime = false }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -113,7 +114,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
     // }
 
     log.warn('Forcing upload and unshallow')
-    const commitsToUpload = getCommitsRevList([], commitsToInclude)
+    const commitsToUpload = getCommitsRevList(isSecondTime ? alreadySeenCommits : [], commitsToInclude)
 
     callback(null, commitsToUpload)
   })
@@ -242,7 +243,6 @@ function generateAndUploadPackFiles ({
  * This function uploads git metadata to CI Visibility's backend.
 */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
-  console.log('sending git metadata 1')
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
@@ -254,7 +254,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     return callback(new Error('Repository URL is empty'))
   }
 
-  const latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits()
   log.warn(`There were ${latestCommits.length} commits since last month.`)
   const [headCommit] = latestCommits
 
@@ -282,12 +282,18 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     // Otherwise we unshallow and get commits to upload again
     log.warn('It is shallow clone, unshallowing...')
     unshallowRepository()
+    // latest commits needs to change, otherwise we're not changing anything
+
+    latestCommits = getLatestCommits()
+    log.warn(`There were ${latestCommits.length} commits since last month after unshallowing.`)
+
     getCommitsToUpload({
       url,
       repositoryUrl,
       latestCommits,
       isEvpProxy,
-      evpProxyPrefix
+      evpProxyPrefix,
+      isSecondTime: true
     }, getOnFinishGetCommitsToUpload(true))
   }
 
