@@ -11,7 +11,7 @@ const { NODE_MAJOR } = require('../../../../version')
 const semver = require('semver')
 
 // newer packages are not supported on older node versions
-const range = NODE_MAJOR < 16 ? '<5' : '>=4'
+const range = NODE_MAJOR < 16 ? '<5' : '>=4' // CONSIDER VERSION HERE
 
 describe('esm', () => {
   let agent

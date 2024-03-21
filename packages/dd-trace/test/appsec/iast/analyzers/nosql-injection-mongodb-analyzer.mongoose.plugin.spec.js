@@ -13,7 +13,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
   withVersions('express', 'express', '>4.18.0', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
       const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
-      if (NODE_MAJOR === 14 && semver.satisfies(specificMongooseVersion, '>=8')) return
+      if (NODE_MAJOR === 14 && semver.satisfies(specificMongooseVersion, '>=8')) return // CONSIDER VERSION HERE
 
       const vulnerableMethodFilename = 'mongoose-vulnerable-method.js'
       let mongoose, Test, tmpFilePath

@@ -12,7 +12,7 @@ describe('Plugin', () => {
   describe('mongoose', () => {
     withVersions('mongoose', ['mongoose'], (version) => {
       const specificVersion = require(`../../../versions/mongoose@${version}`).version()
-      if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
+      if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return // CONSIDER VERSION HERE
 
       let mongoose
 

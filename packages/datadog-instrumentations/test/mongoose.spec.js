@@ -16,7 +16,7 @@ describe('mongoose instrumentations', () => {
     describe(range, () => {
       withVersions('mongoose', ['mongoose'], range, (version) => {
         const specificVersion = require(`../../../versions/mongoose@${version}`).version()
-        if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
+        if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return // CONSIDER VERSION HERE
 
         let Test, dbName, id, mongoose
 
