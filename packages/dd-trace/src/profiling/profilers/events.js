@@ -177,11 +177,6 @@ class EventsProfiler {
   }
 
   profile (restart, startDate, endDate) {
-    if (this.entries.length === 0) {
-      // No events in the period; don't produce a profile
-      return null
-    }
-
     const stringTable = new StringTable()
     const locations = []
     const functions = []
@@ -199,22 +194,25 @@ class EventsProfiler {
     })()
 
     const decorators = {}
-    for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
-      const decorator = new DecoratorCtor(stringTable)
-      decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
-      decorators[eventType] = decorator
-    }
     const timestampLabelKey = stringTable.dedup(END_TIMESTAMP_LABEL)
 
     const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
     const lateEntries = []
     const perfEndDate = endDate.getTime() - performance.timeOrigin
     const samples = this.entries.map((item) => {
-      const decorator = decorators[item.entryType]
+      const eventType = item.entryType
+      let decorator = decorators[eventType]
       if (!decorator) {
-        // Shouldn't happen but it's better to not rely on observer only getting
-        // requested event types.
-        return null
+        const DecoratorCtor = decoratorTypes[eventType]
+        if (DecoratorCtor) {
+          decorator = new DecoratorCtor(stringTable)
+          decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
+          decorators[eventType] = decorator
+        } else {
+          // Shouldn't happen but it's better to not rely on observer only getting
+          // requested event types.
+          return null
+        }
       }
       const { startTime, duration } = item
       if (startTime >= perfEndDate) {
