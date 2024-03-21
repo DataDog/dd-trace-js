@@ -28,7 +28,7 @@ const {
 
 const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
   {
-    'child_process': {
+    child_process: {
       execFileSync: execFileSyncStub
     }
   }
@@ -144,8 +144,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
         '../../log': {
@@ -162,8 +162,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
         '../../log': {
@@ -194,8 +194,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -212,8 +212,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -230,8 +230,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )

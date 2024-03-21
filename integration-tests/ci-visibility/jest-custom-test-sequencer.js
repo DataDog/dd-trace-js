@@ -12,6 +12,7 @@ class CustomSequencer extends Sequencer {
 
     return [...tests].sort((a, b) => (a.path > b.path ? 1 : -1)).slice(shardStart, shardEnd)
   }
+
   sort (tests) {
     const copyTests = [...tests]
     return copyTests.sort((testA, testB) => (testA.path > testB.path ? 1 : -1))

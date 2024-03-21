@@ -35,7 +35,7 @@ describe('Plugin', () => {
           if (semver.intersects(version, '>=8') && options.prettyPrint) {
             delete options.prettyPrint // deprecated
 
-            const pretty = require(`../../../versions/pino-pretty@8.0.0`).get()
+            const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
           }

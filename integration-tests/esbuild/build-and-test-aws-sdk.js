@@ -14,7 +14,7 @@ esbuild.build({
   plugins: [ddPlugin],
   platform: 'node',
   target: ['node16'],
-  external: [ ]
+  external: []
 }).then(() => {
   const { status, stdout, stderr } = spawnSync('node', [SCRIPT])
   if (stdout.length) {

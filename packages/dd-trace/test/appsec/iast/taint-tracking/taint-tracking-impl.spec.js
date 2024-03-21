@@ -91,8 +91,8 @@ describe('TaintTracking', () => {
         const json = '{"command":"ls -la"}'
         const jsonTainted = newTaintedString(iastContext, json, 'param', 'request.type')
 
-        const propFnInstrumented = require(instrumentedFunctionsFile)['jsonParseStr']
-        const propFnOriginal = propagationFunctions['jsonParseStr']
+        const propFnInstrumented = require(instrumentedFunctionsFile).jsonParseStr
+        const propFnOriginal = propagationFunctions.jsonParseStr
 
         const result = propFnInstrumented(jsonTainted)
         expect(isTainted(iastContext, result.command)).to.be.true

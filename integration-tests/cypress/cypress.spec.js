@@ -75,7 +75,7 @@ moduleType.forEach(({
 
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, `cypress-fail-fast@7.1.0`], true)
+      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
@@ -922,7 +922,7 @@ moduleType.forEach(({
         })
 
         receiver.setKnownTests({
-          'cypress': {
+          cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
               'other context fails'
@@ -994,7 +994,7 @@ moduleType.forEach(({
         })
 
         receiver.setKnownTests({
-          'cypress': {
+          cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
               'other context fails'

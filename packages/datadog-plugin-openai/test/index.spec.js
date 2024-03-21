@@ -83,17 +83,17 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/completions')
             .reply(200, {
-              'id': 'cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM',
-              'object': 'text_completion',
-              'created': 1684171461,
-              'model': 'text-davinci-002',
-              'choices': [{
-                'text': 'FOO BAR BAZ',
-                'index': 0,
-                'logprobs': null,
-                'finish_reason': 'length'
+              id: 'cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM',
+              object: 'text_completion',
+              created: 1684171461,
+              model: 'text-davinci-002',
+              choices: [{
+                text: 'FOO BAR BAZ',
+                index: 0,
+                logprobs: null,
+                finish_reason: 'length'
               }],
-              'usage': { 'prompt_tokens': 3, 'completion_tokens': 16, 'total_tokens': 19 }
+              usage: { prompt_tokens: 3, completion_tokens: 16, total_tokens: 19 }
             }, [
               'Date', 'Mon, 15 May 2023 17:24:22 GMT',
               'Content-Type', 'application/json',
@@ -164,7 +164,7 @@ describe('Plugin', () => {
             presence_penalty: -0.1,
             frequency_penalty: 0.11,
             best_of: 2,
-            logit_bias: { '50256': 30 },
+            logit_bias: { 50256: 30 },
             user: 'hunter2'
           })
 
@@ -252,16 +252,16 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/embeddings')
             .reply(200, {
-              'object': 'list',
-              'data': [{
-                'object': 'embedding',
-                'index': 0,
-                'embedding': [-0.0034387498, -0.026400521]
+              object: 'list',
+              data: [{
+                object: 'embedding',
+                index: 0,
+                embedding: [-0.0034387498, -0.026400521]
               }],
-              'model': 'text-embedding-ada-002-v2',
-              'usage': {
-                'prompt_tokens': 2,
-                'total_tokens': 2
+              model: 'text-embedding-ada-002-v2',
+              usage: {
+                prompt_tokens: 2,
+                total_tokens: 2
               }
             }, [
               'Date', 'Mon, 15 May 2023 20:49:06 GMT',
@@ -325,51 +325,51 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/models')
             .reply(200, {
-              'object': 'list',
-              'data': [
+              object: 'list',
+              data: [
                 {
-                  'id': 'whisper-1',
-                  'object': 'model',
-                  'created': 1677532384,
-                  'owned_by': 'openai-internal',
-                  'permission': [{
-                    'id': 'modelperm-KlsZlfft3Gma8pI6A8rTnyjs',
-                    'object': 'model_permission',
-                    'created': 1683912666,
-                    'allow_create_engine': false,
-                    'allow_sampling': true,
-                    'allow_logprobs': true,
-                    'allow_search_indices': false,
-                    'allow_view': true,
-                    'allow_fine_tuning': false,
-                    'organization': '*',
-                    'group': null,
-                    'is_blocking': false
+                  id: 'whisper-1',
+                  object: 'model',
+                  created: 1677532384,
+                  owned_by: 'openai-internal',
+                  permission: [{
+                    id: 'modelperm-KlsZlfft3Gma8pI6A8rTnyjs',
+                    object: 'model_permission',
+                    created: 1683912666,
+                    allow_create_engine: false,
+                    allow_sampling: true,
+                    allow_logprobs: true,
+                    allow_search_indices: false,
+                    allow_view: true,
+                    allow_fine_tuning: false,
+                    organization: '*',
+                    group: null,
+                    is_blocking: false
                   }],
-                  'root': 'whisper-1',
-                  'parent': null
+                  root: 'whisper-1',
+                  parent: null
                 },
                 {
-                  'id': 'babbage',
-                  'object': 'model',
-                  'created': 1649358449,
-                  'owned_by': 'openai',
-                  'permission': [{
-                    'id': 'modelperm-49FUp5v084tBB49tC4z8LPH5',
-                    'object': 'model_permission',
-                    'created': 1669085501,
-                    'allow_create_engine': false,
-                    'allow_sampling': true,
-                    'allow_logprobs': true,
-                    'allow_search_indices': false,
-                    'allow_view': true,
-                    'allow_fine_tuning': false,
-                    'organization': '*',
-                    'group': null,
-                    'is_blocking': false
+                  id: 'babbage',
+                  object: 'model',
+                  created: 1649358449,
+                  owned_by: 'openai',
+                  permission: [{
+                    id: 'modelperm-49FUp5v084tBB49tC4z8LPH5',
+                    object: 'model_permission',
+                    created: 1669085501,
+                    allow_create_engine: false,
+                    allow_sampling: true,
+                    allow_logprobs: true,
+                    allow_search_indices: false,
+                    allow_view: true,
+                    allow_fine_tuning: false,
+                    organization: '*',
+                    group: null,
+                    is_blocking: false
                   }],
-                  'root': 'babbage',
-                  'parent': null
+                  root: 'babbage',
+                  parent: null
                 }
               ]
             }, [
@@ -417,26 +417,26 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/models/gpt-4')
             .reply(200, {
-              'id': 'gpt-4',
-              'object': 'model',
-              'created': 1678604602,
-              'owned_by': 'openai',
-              'permission': [{
-                'id': 'modelperm-ffiDrbtOGIZuczdJcFuOo2Mi',
-                'object': 'model_permission',
-                'created': 1684185078,
-                'allow_create_engine': false,
-                'allow_sampling': false,
-                'allow_logprobs': false,
-                'allow_search_indices': false,
-                'allow_view': false,
-                'allow_fine_tuning': false,
-                'organization': '*',
-                'group': null,
-                'is_blocking': false
+              id: 'gpt-4',
+              object: 'model',
+              created: 1678604602,
+              owned_by: 'openai',
+              permission: [{
+                id: 'modelperm-ffiDrbtOGIZuczdJcFuOo2Mi',
+                object: 'model_permission',
+                created: 1684185078,
+                allow_create_engine: false,
+                allow_sampling: false,
+                allow_logprobs: false,
+                allow_search_indices: false,
+                allow_view: false,
+                allow_fine_tuning: false,
+                organization: '*',
+                group: null,
+                is_blocking: false
               }],
-              'root': 'gpt-4',
-              'parent': 'stevebob'
+              root: 'gpt-4',
+              parent: 'stevebob'
             }, [
               'Date', 'Mon, 15 May 2023 23:41:40 GMT',
               'Content-Type', 'application/json',
@@ -495,16 +495,16 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/edits')
             .reply(200, {
-              'object': 'edit',
-              'created': 1684267309,
-              'choices': [{
-                'text': 'What day of the week is it, Bob?\n',
-                'index': 0
+              object: 'edit',
+              created: 1684267309,
+              choices: [{
+                text: 'What day of the week is it, Bob?\n',
+                index: 0
               }],
-              'usage': {
-                'prompt_tokens': 25,
-                'completion_tokens': 28,
-                'total_tokens': 53
+              usage: {
+                prompt_tokens: 25,
+                completion_tokens: 28,
+                total_tokens: 53
               }
             }, [
               'Date', 'Tue, 16 May 2023 20:01:49 GMT',
@@ -556,13 +556,13 @@ describe('Plugin', () => {
             })
 
           const result = await openai.createEdit({
-            'model': 'text-davinci-edit-001',
-            'input': 'What day of the wek is it?',
-            'instruction': 'Fix the spelling mistakes',
-            'n': 1,
-            'temperature': 1.00001,
-            'top_p': 0.999,
-            'user': 'hunter2'
+            model: 'text-davinci-edit-001',
+            input: 'What day of the wek is it?',
+            instruction: 'Fix the spelling mistakes',
+            n: 1,
+            temperature: 1.00001,
+            top_p: 0.999,
+            user: 'hunter2'
           })
 
           expect(result.data.choices[0].text).to.eql('What day of the week is it, Bob?\n')
@@ -601,25 +601,25 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/files')
             .reply(200, {
-              'object': 'list',
-              'data': [{
-                'object': 'file',
-                'id': 'file-foofoofoo',
-                'purpose': 'fine-tune-results',
-                'filename': 'compiled_results.csv',
-                'bytes': 3460,
-                'created_at': 1684000162,
-                'status': 'processed',
-                'status_details': null
+              object: 'list',
+              data: [{
+                object: 'file',
+                id: 'file-foofoofoo',
+                purpose: 'fine-tune-results',
+                filename: 'compiled_results.csv',
+                bytes: 3460,
+                created_at: 1684000162,
+                status: 'processed',
+                status_details: null
               }, {
-                'object': 'file',
-                'id': 'file-barbarbar',
-                'purpose': 'fine-tune-results',
-                'filename': 'compiled_results.csv',
-                'bytes': 13595,
-                'created_at': 1684000508,
-                'status': 'processed',
-                'status_details': null
+                object: 'file',
+                id: 'file-barbarbar',
+                purpose: 'fine-tune-results',
+                filename: 'compiled_results.csv',
+                bytes: 13595,
+                created_at: 1684000508,
+                status: 'processed',
+                status_details: null
               }]
             }, [
               'Date', 'Wed, 17 May 2023 21:34:04 GMT',
@@ -667,14 +667,14 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/files')
             .reply(200, {
-              'object': 'file',
-              'id': 'file-268aYWYhvxWwHb4nIzP9FHM6',
-              'purpose': 'fine-tune',
-              'filename': 'dave-hal.jsonl',
-              'bytes': 356,
-              'created_at': 1684362764,
-              'status': 'uploaded',
-              'status_details': 'foo' // dummy value for testing
+              object: 'file',
+              id: 'file-268aYWYhvxWwHb4nIzP9FHM6',
+              purpose: 'fine-tune',
+              filename: 'dave-hal.jsonl',
+              bytes: 356,
+              created_at: 1684362764,
+              status: 'uploaded',
+              status_details: 'foo' // dummy value for testing
             }, [
               'Date', 'Wed, 17 May 2023 22:32:44 GMT',
               'Content-Type', 'application/json',
@@ -729,9 +729,9 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .delete('/v1/files/file-268aYWYhvxWwHb4nIzP9FHM6')
             .reply(200, {
-              'object': 'file',
-              'id': 'file-268aYWYhvxWwHb4nIzP9FHM6',
-              'deleted': true
+              object: 'file',
+              id: 'file-268aYWYhvxWwHb4nIzP9FHM6',
+              deleted: true
             }, [
               'Date', 'Wed, 17 May 2023 23:03:54 GMT',
               'Content-Type', 'application/json',
@@ -778,14 +778,14 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/files/file-fIkEUgQPWnVXNKPJsr4pEWiz')
             .reply(200, {
-              'object': 'file',
-              'id': 'file-fIkEUgQPWnVXNKPJsr4pEWiz',
-              'purpose': 'fine-tune',
-              'filename': 'dave-hal.jsonl',
-              'bytes': 356,
-              'created_at': 1684362764,
-              'status': 'uploaded',
-              'status_details': 'foo' // dummy value for testing
+              object: 'file',
+              id: 'file-fIkEUgQPWnVXNKPJsr4pEWiz',
+              purpose: 'fine-tune',
+              filename: 'dave-hal.jsonl',
+              bytes: 356,
+              created_at: 1684362764,
+              status: 'uploaded',
+              status_details: 'foo' // dummy value for testing
             }, [
               'Date', 'Wed, 17 May 2023 23:14:02 GMT',
               'Content-Type', 'application/json',
@@ -890,37 +890,37 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/fine-tunes')
             .reply(200, {
-              'object': 'fine-tune',
-              'id': 'ft-10RCfqSvgyEcauomw7VpiYco',
-              'hyperparams': {
-                'n_epochs': 5,
-                'batch_size': 3,
-                'prompt_loss_weight': 0.01,
-                'learning_rate_multiplier': 0.1
+              object: 'fine-tune',
+              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+              hyperparams: {
+                n_epochs: 5,
+                batch_size: 3,
+                prompt_loss_weight: 0.01,
+                learning_rate_multiplier: 0.1
               },
-              'organization_id': 'org-COOLORG',
-              'model': 'curie',
-              'training_files': [{
-                'object': 'file',
-                'id': 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                'purpose': 'fine-tune',
-                'filename': 'dave-hal.jsonl',
-                'bytes': 356,
-                'created_at': 1684365950,
-                'status': 'processed',
-                'status_details': null
+              organization_id: 'org-COOLORG',
+              model: 'curie',
+              training_files: [{
+                object: 'file',
+                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+                purpose: 'fine-tune',
+                filename: 'dave-hal.jsonl',
+                bytes: 356,
+                created_at: 1684365950,
+                status: 'processed',
+                status_details: null
               }],
-              'validation_files': [],
-              'result_files': [],
-              'created_at': 1684442489,
-              'updated_at': 1684442489,
-              'status': 'pending',
-              'fine_tuned_model': 'huh',
-              'events': [{
-                'object': 'fine-tune-event',
-                'level': 'info',
-                'message': 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                'created_at': 1684442489
+              validation_files: [],
+              result_files: [],
+              created_at: 1684442489,
+              updated_at: 1684442489,
+              status: 'pending',
+              fine_tuned_model: 'huh',
+              events: [{
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+                created_at: 1684442489
               }]
             }, [
               'Date', 'Thu, 18 May 2023 20:41:30 GMT',
@@ -1020,107 +1020,107 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco')
             .reply(200, {
-              'object': 'fine-tune',
-              'id': 'ft-10RCfqSvgyEcauomw7VpiYco',
-              'hyperparams': {
-                'n_epochs': 4,
-                'batch_size': 3,
-                'prompt_loss_weight': 0.01,
-                'learning_rate_multiplier': 0.1
+              object: 'fine-tune',
+              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+              hyperparams: {
+                n_epochs: 4,
+                batch_size: 3,
+                prompt_loss_weight: 0.01,
+                learning_rate_multiplier: 0.1
               },
-              'organization_id': 'org-COOLORG',
-              'model': 'curie',
-              'training_files': [{
-                'object': 'file',
-                'id': 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                'purpose': 'fine-tune',
-                'filename': 'dave-hal.jsonl',
-                'bytes': 356,
-                'created_at': 1684365950,
-                'status': 'processed',
-                'status_details': null
+              organization_id: 'org-COOLORG',
+              model: 'curie',
+              training_files: [{
+                object: 'file',
+                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+                purpose: 'fine-tune',
+                filename: 'dave-hal.jsonl',
+                bytes: 356,
+                created_at: 1684365950,
+                status: 'processed',
+                status_details: null
               }],
-              'validation_files': [],
-              'result_files': [{
-                'object': 'file',
-                'id': 'file-bJyf8TM0jeSZueBo4jpodZVQ',
-                'purpose': 'fine-tune-results',
-                'filename': 'compiled_results.csv',
-                'bytes': 410,
-                'created_at': 1684442697,
-                'status': 'processed',
-                'status_details': null
+              validation_files: [],
+              result_files: [{
+                object: 'file',
+                id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
+                purpose: 'fine-tune-results',
+                filename: 'compiled_results.csv',
+                bytes: 410,
+                created_at: 1684442697,
+                status: 'processed',
+                status_details: null
               }],
-              'created_at': 1684442489,
-              'updated_at': 1684442697,
-              'status': 'succeeded',
-              'fine_tuned_model': 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
-              'events': [
+              created_at: 1684442489,
+              updated_at: 1684442697,
+              status: 'succeeded',
+              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
+              events: [
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  'created_at': 1684442489
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+                  created_at: 1684442489
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune costs $0.00',
-                  'created_at': 1684442612
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune costs $0.00',
+                  created_at: 1684442612
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune enqueued. Queue number: 0',
-                  'created_at': 1684442612
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune enqueued. Queue number: 0',
+                  created_at: 1684442612
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune started',
-                  'created_at': 1684442614
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune started',
+                  created_at: 1684442614
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 1/4',
-                  'created_at': 1684442677
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 1/4',
+                  created_at: 1684442677
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 2/4',
-                  'created_at': 1684442677
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 2/4',
+                  created_at: 1684442677
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 3/4',
-                  'created_at': 1684442678
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 3/4',
+                  created_at: 1684442678
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 4/4',
-                  'created_at': 1684442679
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 4/4',
+                  created_at: 1684442679
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  'created_at': 1684442696
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
+                  created_at: 1684442696
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  'created_at': 1684442697
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
+                  created_at: 1684442697
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune succeeded',
-                  'created_at': 1684442697
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune succeeded',
+                  created_at: 1684442697
                 }
               ]
             }, [
@@ -1180,43 +1180,43 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/fine-tunes')
             .reply(200, {
-              'object': 'list',
-              'data': [{
-                'object': 'fine-tune',
-                'id': 'ft-10RCfqSvgyEcauomw7VpiYco',
-                'hyperparams': {
-                  'n_epochs': 4,
-                  'batch_size': 3,
-                  'prompt_loss_weight': 0.01,
-                  'learning_rate_multiplier': 0.1
+              object: 'list',
+              data: [{
+                object: 'fine-tune',
+                id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+                hyperparams: {
+                  n_epochs: 4,
+                  batch_size: 3,
+                  prompt_loss_weight: 0.01,
+                  learning_rate_multiplier: 0.1
                 },
-                'organization_id': 'org-COOLORG',
-                'model': 'curie',
-                'training_files': [{
-                  'object': 'file',
-                  'id': 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                  'purpose': 'fine-tune',
-                  'filename': 'dave-hal.jsonl',
-                  'bytes': 356,
-                  'created_at': 1684365950,
-                  'status': 'processed',
-                  'status_details': null
+                organization_id: 'org-COOLORG',
+                model: 'curie',
+                training_files: [{
+                  object: 'file',
+                  id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+                  purpose: 'fine-tune',
+                  filename: 'dave-hal.jsonl',
+                  bytes: 356,
+                  created_at: 1684365950,
+                  status: 'processed',
+                  status_details: null
                 }],
-                'validation_files': [],
-                'result_files': [{
-                  'object': 'file',
-                  'id': 'file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  'purpose': 'fine-tune-results',
-                  'filename': 'compiled_results.csv',
-                  'bytes': 410,
-                  'created_at': 1684442697,
-                  'status': 'processed',
-                  'status_details': null
+                validation_files: [],
+                result_files: [{
+                  object: 'file',
+                  id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
+                  purpose: 'fine-tune-results',
+                  filename: 'compiled_results.csv',
+                  bytes: 410,
+                  created_at: 1684442697,
+                  status: 'processed',
+                  status_details: null
                 }],
-                'created_at': 1684442489,
-                'updated_at': 1684442697,
-                'status': 'succeeded',
-                'fine_tuned_model': 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
+                created_at: 1684442489,
+                updated_at: 1684442697,
+                status: 'succeeded',
+                fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
               }]
             })
         })
@@ -1254,73 +1254,73 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .get('/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco/events')
             .reply(200, {
-              'object': 'list',
-              'data': [
+              object: 'list',
+              data: [
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  'created_at': 1684442489
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+                  created_at: 1684442489
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune costs $0.00',
-                  'created_at': 1684442612
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune costs $0.00',
+                  created_at: 1684442612
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune enqueued. Queue number: 0',
-                  'created_at': 1684442612
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune enqueued. Queue number: 0',
+                  created_at: 1684442612
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune started',
-                  'created_at': 1684442614
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune started',
+                  created_at: 1684442614
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 1/4',
-                  'created_at': 1684442677
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 1/4',
+                  created_at: 1684442677
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 2/4',
-                  'created_at': 1684442677
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 2/4',
+                  created_at: 1684442677
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 3/4',
-                  'created_at': 1684442678
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 3/4',
+                  created_at: 1684442678
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Completed epoch 4/4',
-                  'created_at': 1684442679
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Completed epoch 4/4',
+                  created_at: 1684442679
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  'created_at': 1684442696
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
+                  created_at: 1684442696
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  'created_at': 1684442697
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
+                  created_at: 1684442697
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune succeeded',
-                  'created_at': 1684442697
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune succeeded',
+                  created_at: 1684442697
                 }
               ]
             }, [
@@ -1367,9 +1367,9 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .delete('/v1/models/ft-10RCfqSvgyEcauomw7VpiYco')
             .reply(200, { // guessing on response format here since my key lacks permissions
-              'object': 'model',
-              'id': 'ft-10RCfqSvgyEcauomw7VpiYco',
-              'deleted': true
+              object: 'model',
+              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+              deleted: true
             }, [
               'Date', 'Thu, 18 May 2023 22:59:08 GMT',
               'Content-Type', 'application/json',
@@ -1416,44 +1416,44 @@ describe('Plugin', () => {
           scope = nock('https://api.openai.com:443')
             .post('/v1/fine-tunes/ft-TVpNqwlvermMegfRVqSOyPyS/cancel')
             .reply(200, {
-              'object': 'fine-tune',
-              'id': 'ft-TVpNqwlvermMegfRVqSOyPyS',
-              'hyperparams': {
-                'n_epochs': 4,
-                'batch_size': 3,
-                'prompt_loss_weight': 0.01,
-                'learning_rate_multiplier': 0.1
+              object: 'fine-tune',
+              id: 'ft-TVpNqwlvermMegfRVqSOyPyS',
+              hyperparams: {
+                n_epochs: 4,
+                batch_size: 3,
+                prompt_loss_weight: 0.01,
+                learning_rate_multiplier: 0.1
               },
-              'organization_id': 'org-COOLORG',
-              'model': 'curie',
-              'training_files': [{
-                'object': 'file',
-                'id': 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                'purpose': 'fine-tune',
-                'filename': 'dave-hal.jsonl',
-                'bytes': 356,
-                'created_at': 1684365950,
-                'status': 'processed',
-                'status_details': null
+              organization_id: 'org-COOLORG',
+              model: 'curie',
+              training_files: [{
+                object: 'file',
+                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+                purpose: 'fine-tune',
+                filename: 'dave-hal.jsonl',
+                bytes: 356,
+                created_at: 1684365950,
+                status: 'processed',
+                status_details: null
               }],
-              'validation_files': [],
-              'result_files': [],
-              'created_at': 1684452102,
-              'updated_at': 1684452103,
-              'status': 'cancelled',
-              'fine_tuned_model': 'idk',
-              'events': [
+              validation_files: [],
+              result_files: [],
+              created_at: 1684452102,
+              updated_at: 1684452103,
+              status: 'cancelled',
+              fine_tuned_model: 'idk',
+              events: [
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
-                  'created_at': 1684452102
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
+                  created_at: 1684452102
                 },
                 {
-                  'object': 'fine-tune-event',
-                  'level': 'info',
-                  'message': 'Fine-tune cancelled',
-                  'created_at': 1684452103
+                  object: 'fine-tune-event',
+                  level: 'info',
+                  message: 'Fine-tune cancelled',
+                  created_at: 1684452103
                 }
               ]
             }, [
@@ -1515,23 +1515,23 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/moderations')
               .reply(200, {
-                'id': 'modr-7HHZZZylF31ahuhmH279JrKbGTHCW',
-                'model': 'text-moderation-001',
-                'results': [{
-                  'flagged': true,
-                  'categories': {
-                    'sexual': false,
-                    'hate': false,
-                    'violence': true,
+                id: 'modr-7HHZZZylF31ahuhmH279JrKbGTHCW',
+                model: 'text-moderation-001',
+                results: [{
+                  flagged: true,
+                  categories: {
+                    sexual: false,
+                    hate: false,
+                    violence: true,
                     'self-harm': false,
                     'sexual/minors': false,
                     'hate/threatening': false,
                     'violence/graphic': false
                   },
-                  'category_scores': {
-                    'sexual': 0.0018438849,
-                    'hate': 0.069274776,
-                    'violence': 0.74101615,
+                  category_scores: {
+                    sexual: 0.0018438849,
+                    hate: 0.069274776,
+                    violence: 0.74101615,
                     'self-harm': 0.008981651,
                     'sexual/minors': 0.00070737937,
                     'hate/threatening': 0.045174375,
@@ -1617,10 +1617,10 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/images/generations')
               .reply(200, {
-                'created': 1684270747,
-                'data': [{
-                  'url': 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-foo.png',
-                  'b64_json': 'foobar==='
+                created: 1684270747,
+                data: [{
+                  url: 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-foo.png',
+                  b64_json: 'foobar==='
                 }]
               }, [
                 'Date', 'Tue, 16 May 2023 20:59:07 GMT',
@@ -1699,7 +1699,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message: 'sampled createImage',
-              prompt: [ 999, 888, 777, 666, 555 ]
+              prompt: [999, 888, 777, 666, 555]
             })
 
             await checkTraces
@@ -1725,7 +1725,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message: 'sampled createImage',
-              prompt: [ 'foo', 'bar' ]
+              prompt: ['foo', 'bar']
             })
 
             await checkTraces
@@ -1754,7 +1754,7 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message: 'sampled createImage',
-              prompt: [ [ 111, 222, 333 ], [ 444, 555, 666 ] ]
+              prompt: [[111, 222, 333], [444, 555, 666]]
             })
 
             await checkTraces
@@ -1768,10 +1768,10 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/images/edits')
               .reply(200, {
-                'created': 1684850118,
-                'data': [{
-                  'url': 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-bar.png',
-                  'b64_json': 'fOoF0f='
+                created: 1684850118,
+                data: [{
+                  url: 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-bar.png',
+                  b64_json: 'fOoF0f='
                 }]
               }, [
                 'Date', 'Tue, 23 May 2023 13:55:18 GMT',
@@ -1845,10 +1845,10 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/images/variations')
               .reply(200, {
-                'created': 1684853320,
-                'data': [{
-                  'url': 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-soup.png',
-                  'b64_json': 'foo='
+                created: 1684853320,
+                data: [{
+                  url: 'https://oaidalleapiprodscus.blob.core.windows.net/private/org-COOLORG/user-FOO/img-soup.png',
+                  b64_json: 'foo='
                 }]
               }, [
                 'Date', 'Tue, 23 May 2023 14:48:40 GMT',
@@ -1913,23 +1913,23 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
               .reply(200, {
-                'id': 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
-                'object': 'chat.completion',
-                'created': 1684188020,
-                'model': 'gpt-3.5-turbo-0301',
-                'usage': {
-                  'prompt_tokens': 37,
-                  'completion_tokens': 10,
-                  'total_tokens': 47
+                id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
+                object: 'chat.completion',
+                created: 1684188020,
+                model: 'gpt-3.5-turbo-0301',
+                usage: {
+                  prompt_tokens: 37,
+                  completion_tokens: 10,
+                  total_tokens: 47
                 },
-                'choices': [{
-                  'message': {
-                    'role': 'assistant',
-                    'content': "In that case, it's best to avoid peanut",
-                    'name': 'hunter2'
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: "In that case, it's best to avoid peanut",
+                    name: 'hunter2'
                   },
-                  'finish_reason': 'length',
-                  'index': 0
+                  finish_reason: 'length',
+                  index: 0
                 }]
               }, [
                 'Date', 'Mon, 15 May 2023 22:00:21 GMT',
@@ -1991,19 +1991,19 @@ describe('Plugin', () => {
               model: 'gpt-3.5-turbo',
               messages: [
                 {
-                  'role': 'user',
-                  'content': 'Peanut Butter or Jelly?',
-                  'name': 'hunter2'
+                  role: 'user',
+                  content: 'Peanut Butter or Jelly?',
+                  name: 'hunter2'
                 },
                 {
-                  'role': 'assistant',
-                  'content': 'Are you allergic to peanuts?',
-                  'name': 'hal'
+                  role: 'assistant',
+                  content: 'Are you allergic to peanuts?',
+                  name: 'hal'
                 },
                 {
-                  'role': 'user',
-                  'content': 'Deathly allergic!',
-                  'name': 'hunter2'
+                  role: 'user',
+                  content: 'Deathly allergic!',
+                  name: 'hunter2'
                 }
               ],
               temperature: 1.001,
@@ -2012,7 +2012,7 @@ describe('Plugin', () => {
               presence_penalty: -0.0001,
               frequency_penalty: 0.0001,
               logit_bias: {
-                '1234': -1
+                1234: -1
               },
               top_p: 4,
               n: 3,
@@ -2078,23 +2078,23 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/audio/transcriptions')
               .reply(200, {
-                'task': 'transcribe',
-                'language': 'english',
-                'duration': 2.19,
-                'segments': [{
-                  'id': 0,
-                  'seek': 0,
-                  'start': 0,
-                  'end': 2,
-                  'text': ' Hello, friend.',
-                  'tokens': [50364, 2425, 11, 1277, 13, 50464],
-                  'temperature': 0.5,
-                  'avg_logprob': -0.7777707236153739,
-                  'compression_ratio': 0.6363636363636364,
-                  'no_speech_prob': 0.043891049921512604,
-                  'transient': false
+                task: 'transcribe',
+                language: 'english',
+                duration: 2.19,
+                segments: [{
+                  id: 0,
+                  seek: 0,
+                  start: 0,
+                  end: 2,
+                  text: ' Hello, friend.',
+                  tokens: [50364, 2425, 11, 1277, 13, 50464],
+                  temperature: 0.5,
+                  avg_logprob: -0.7777707236153739,
+                  compression_ratio: 0.6363636363636364,
+                  no_speech_prob: 0.043891049921512604,
+                  transient: false
                 }],
-                'text': 'Hello, friend.'
+                text: 'Hello, friend.'
               }, [
                 'Date', 'Fri, 19 May 2023 03:19:49 GMT',
                 'Content-Type', 'text/plain; charset=utf-8',
@@ -2165,23 +2165,23 @@ describe('Plugin', () => {
             scope = nock('https://api.openai.com:443')
               .post('/v1/audio/translations')
               .reply(200, {
-                'task': 'translate',
-                'language': 'english',
-                'duration': 1.74,
-                'segments': [{
-                  'id': 0,
-                  'seek': 0,
-                  'start': 0,
-                  'end': 3,
-                  'text': ' Guten Tag!',
-                  'tokens': [50364, 42833, 11204, 0, 50514],
-                  'temperature': 0.5,
-                  'avg_logprob': -0.5626437266667684,
-                  'compression_ratio': 0.5555555555555556,
-                  'no_speech_prob': 0.01843200996518135,
-                  'transient': false
+                task: 'translate',
+                language: 'english',
+                duration: 1.74,
+                segments: [{
+                  id: 0,
+                  seek: 0,
+                  start: 0,
+                  end: 3,
+                  text: ' Guten Tag!',
+                  tokens: [50364, 42833, 11204, 0, 50514],
+                  temperature: 0.5,
+                  avg_logprob: -0.5626437266667684,
+                  compression_ratio: 0.5555555555555556,
+                  no_speech_prob: 0.01843200996518135,
+                  transient: false
                 }],
-                'text': 'Guten Tag!'
+                text: 'Guten Tag!'
               }, [
                 'Date', 'Fri, 19 May 2023 03:41:25 GMT',
                 'Content-Type', 'application/json',

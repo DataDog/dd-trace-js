@@ -58,7 +58,7 @@ class NextPlugin extends ServerPlugin {
     if (!store) return
 
     const span = store.span
-    const error = span.context()._tags['error']
+    const error = span.context()._tags.error
     const requestError = req.error || nextRequest.error
 
     if (requestError) {

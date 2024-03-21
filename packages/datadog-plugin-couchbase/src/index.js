@@ -16,7 +16,7 @@ class CouchBasePlugin extends StoragePlugin {
   startSpan (operation, customTags, store, { bucket, collection, seedNodes }) {
     const tags = {
       'db.type': 'couchbase',
-      'component': 'couchbase',
+      component: 'couchbase',
       'resource.name': `couchbase.${operation}`,
       'span.kind': this.constructor.kind,
       'db.couchbase.seed.nodes': seedNodes
@@ -61,6 +61,7 @@ class CouchBasePlugin extends StoragePlugin {
     this._addCommandSubs('append')
     this._addCommandSubs('prepend')
   }
+
   _addCommandSubs (name) {
     this.addSubs(name, ({ bucket, collection, seedNodes }) => {
       const store = storage.getStore()

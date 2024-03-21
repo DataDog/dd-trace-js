@@ -19,7 +19,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'restify@${version}'`],
-        false, [`./packages/datadog-plugin-restify/test/integration-test/*`])
+        false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
     })
 
     after(async () => {

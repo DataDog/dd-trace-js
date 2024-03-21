@@ -85,9 +85,9 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'bucketname': bucketName,
-              'aws_service': 'S3',
-              'region': 'us-east-1'
+              bucketname: bucketName,
+              aws_service: 'S3',
+              region: 'us-east-1'
             })
 
             total++

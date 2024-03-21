@@ -30,9 +30,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
         const iastContext = getIastContext(storage.getStore())
-        if (iastContext && iastContext['body'] !== req.body) {
+        if (iastContext && iastContext.body !== req.body) {
           this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-          iastContext['body'] = req.body
+          iastContext.body = req.body
         }
       }
     )
@@ -47,9 +47,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ req }) => {
         if (req && req.body && typeof req.body === 'object') {
           const iastContext = getIastContext(storage.getStore())
-          if (iastContext && iastContext['body'] !== req.body) {
+          if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-            iastContext['body'] = req.body
+            iastContext.body = req.body
           }
         }
       }

@@ -92,9 +92,9 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('invoke')).to.equal(true)
             expect(span.meta).to.include({
-              'functionname': 'ironmaiden',
-              'aws_service': 'Lambda',
-              'region': 'us-east-1'
+              functionname: 'ironmaiden',
+              aws_service: 'Lambda',
+              region: 'us-east-1'
             })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
