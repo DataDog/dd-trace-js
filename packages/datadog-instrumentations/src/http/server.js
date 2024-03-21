@@ -11,8 +11,10 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
+const endResponseCh = channel('apm:http:server:response:end:start') // TODO: fix the name
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
+const requestEndedSet = new WeakSet()
 const requestFinishedSet = new WeakSet()
 
 const httpNames = ['http', 'node:http']
@@ -21,6 +23,9 @@ const httpsNames = ['https', 'node:https']
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
+  shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
+  shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   return http
 })
 
@@ -29,6 +34,70 @@ addHook({ name: httpsNames }, http => {
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })
+
+// just a safety net to avoid calling write when request is finished
+function wrapWrite (write) {
+  return function wrappedWrite () {
+    if (this.finished || requestEndedSet.has(this)) {
+      return this
+    }
+
+    return write.apply(this, arguments)
+  }
+}
+
+function wrapEnd (end) {
+  return function () {
+    if (this.finished) return this
+
+    if (requestEndedSet.has(this)) {
+      return end.apply(this, arguments)
+    }
+
+    requestEndedSet.add(this)
+
+    const abortController = new AbortController()
+
+    // TODO: this doesn't support headers sent with res.writeHead()
+    const responseHeaders = this.getHeaders()
+
+    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
+
+    if (abortController.signal.aborted) {
+      return
+    }
+
+    return end.apply(this, arguments)
+  }
+}
+
+function wrapWriteHead (writeHead) {
+  return function (statusCode, reason, obj) {
+    if (this.finished) return this
+
+    if (requestEndedSet.has(this)) {
+      return writeHead.apply(this, arguments)
+    }
+
+    requestEndedSet.add(this)
+
+    const abortController = new AbortController()
+
+    if (typeof reason !== 'string') {
+      obj = obj ?? reason
+    }
+
+    const responseHeaders = Object.assign(this.getHeaders(), obj)
+
+    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
+
+    if (abortController.signal.aborted) {
+      return
+    }
+
+    return writeHead.apply(this, arguments)
+  }
+}
 
 function wrapResponseEmit (emit) {
   return function (eventName, event) {
