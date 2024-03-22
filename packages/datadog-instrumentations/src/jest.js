@@ -190,6 +190,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
+            console.log('is new test test_start', testName)
+            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
@@ -211,11 +213,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
       if (event.name === 'add_test') {
+        if (this.testSuite.includes('ci-search-bar-new-suite.helpers.unit.ts')) {
+          console.log('this.knownTestsForThisSuite for helpers', this.knownTestsForThisSuite)
+        }
         if (this.isEarlyFlakeDetectionEnabled) {
           const testName = this.getTestNameFromAddTestEvent(event, state)
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
+            console.log('is new test add_test', testName)
+            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
