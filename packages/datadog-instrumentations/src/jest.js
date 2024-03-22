@@ -152,7 +152,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
-      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`)
+      const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      return removeEfdStringFromTestName(fullTestName)
     }
 
     async handleTestEvent (event, state) {
@@ -217,7 +218,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
-            console.log('is new test test_start', `"${testName}"`)
+            console.log('is new test add_test', `"${testName}"`)
             console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
