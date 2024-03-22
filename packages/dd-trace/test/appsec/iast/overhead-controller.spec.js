@@ -410,19 +410,24 @@ describe('Overhead controller', () => {
               for (let j = 0; j < traces[i].length; j++) {
                 const trace = traces[i][j]
                 if (trace.type === 'web') {
-                  counter++
                   const url = trace.meta['http.url']
                   if (url.includes(FIRST_REQUEST)) {
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    counter++
                   } else if (url.includes(SECOND_REQUEST)) {
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    counter++
                   } else if (url.includes(THIRD_REQUEST)) {
                     expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    counter++
                   } else if (url.includes(FOURTH_REQUEST)) {
                     expect(trace.meta['_dd.iast.json']).not.to.be.undefined
+                    counter++
                   } else if (url.includes(FIFTH_REQUEST)) {
                     expect(trace.meta['_dd.iast.json']).to.be.undefined
+                    counter++
                   }
+
                   if (counter === 5) {
                     done()
                     return
@@ -430,13 +435,11 @@ describe('Overhead controller', () => {
                 }
               }
             }
+
             throw new Error('Trace not found')
           }
-          agent.use(handler)
+          agent.use(handler).catch(done)
 
-          let fourthStarted = false
-          let fifthStarted = false
-          let secondResolved = false
           testRequestEventEmitter.on(TEST_REQUEST_STARTED, (url) => {
             if (url === FIRST_REQUEST) {
               axios.get(`http://localhost:${serverConfig.port}${SECOND_REQUEST}`).catch(done)
@@ -445,14 +448,9 @@ describe('Overhead controller', () => {
             } else if (url === THIRD_REQUEST) {
               requestResolvers[FIRST_REQUEST]()
             } else if (url === FOURTH_REQUEST) {
-              fourthStarted = true
+              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).catch(done)
             } else if (url === FIFTH_REQUEST) {
-              fifthStarted = true
-            }
-
-            if (fourthStarted && fifthStarted && !secondResolved) {
               requestResolvers[SECOND_REQUEST]()
-              secondResolved = true
               vulnerabilityReporter.clearCache()
             }
           })
@@ -460,7 +458,6 @@ describe('Overhead controller', () => {
           testRequestEventEmitter.on(TEST_REQUEST_FINISHED, (url) => {
             if (url === FIRST_REQUEST) {
               axios.get(`http://localhost:${serverConfig.port}${FOURTH_REQUEST}`).catch(done)
-              axios.get(`http://localhost:${serverConfig.port}${FIFTH_REQUEST}`).catch(done)
             } else if (url === SECOND_REQUEST) {
               setImmediate(() => {
                 vulnerabilityReporter.clearCache()
