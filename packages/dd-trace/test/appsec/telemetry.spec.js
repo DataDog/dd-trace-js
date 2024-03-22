@@ -146,14 +146,12 @@ describe('Appsec Telemetry metrics', () => {
       it('should sum waf.duration metrics', () => {
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
-          durationExt: 52,
-          ...metrics
+          durationExt: 52
         }, req)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 24,
-          durationExt: 25,
-          ...metrics
+          durationExt: 25
         }, req)
 
         const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
@@ -275,6 +273,33 @@ describe('Appsec Telemetry metrics', () => {
 
     describe('updateWafRequestMetricTags', () => {
       it('should sum waf.duration and waf.durationExt request metrics', () => {
+        appsecTelemetry.enable({
+          enabled: false,
+          metrics: true
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
+
+      it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
+        appsecTelemetry.enable({
+          enabled: true,
+          metrics: false
+        })
+
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
           durationExt: 52
