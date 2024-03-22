@@ -156,7 +156,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
-      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`).trim()
+      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`)
     }
 
     async handleTestEvent (event, state) {
@@ -191,12 +191,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         if (this.isEarlyFlakeDetectionEnabled) {
           const originalTestName = removeEfdStringFromTestName(testName)
+          console.log(retriedTestsToNumAttempts)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
+        const name = removeEfdStringFromTestName(testName)
+        console.log('isnewtest', {name, isNewTest})
 
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
