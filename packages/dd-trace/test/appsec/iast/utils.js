@@ -132,6 +132,12 @@ function endResponse (res, appResult) {
         res.writeHead(200)
       }
       res.end()
+    }).catch(e => {
+      console.error(e)
+      if (!res.headersSent) {
+        res.writeHead(500)
+      }
+      res.end()
     })
   } else {
     if (!res.headersSent) {
@@ -292,7 +298,13 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     before(() => {
       listener = (req, res) => {
-        endResponse(res, app && app(req, res))
+        try {
+          endResponse(res, app && app(req, res))
+        } catch (e) {
+          console.error(e)
+          res.writeHead(500)
+          res.end()
+        }
       }
     })
 
