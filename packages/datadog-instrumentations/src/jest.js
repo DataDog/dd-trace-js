@@ -191,16 +191,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         if (this.isEarlyFlakeDetectionEnabled) {
           const originalTestName = removeEfdStringFromTestName(testName)
-          console.log(retriedTestsToNumAttempts)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
-        const name = removeEfdStringFromTestName(testName)
-        console.log('isnewtest', {name, isNewTest})
-
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: removeEfdStringFromTestName(testName),
