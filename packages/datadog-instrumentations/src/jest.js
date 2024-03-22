@@ -10,7 +10,7 @@ const {
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
-  EFD_STRING,
+  addEfdStringToTestName,
   removeEfdStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 const {
@@ -101,10 +101,6 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
-function getEfdTestName (testName, numAttempt) {
-  return `${EFD_STRING} (#${numAttempt}): ${testName}`
-}
-
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -193,6 +189,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const originalTestName = removeEfdStringFromTestName(testName)
           isNewTest = retriedTestsToNumAttempts.has(originalTestName)
           if (isNewTest) {
+            console.log('is new test test_start', `"${originalTestName}"`)
+            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             numEfdRetry = retriedTestsToNumAttempts.get(originalTestName)
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
@@ -219,10 +217,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
+            console.log('is new test test_start', `"${testName}"`)
+            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
-                this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+                this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
               } else {
                 log.error('Early flake detection could not retry test because global.test is undefined')
               }
