@@ -44,7 +44,7 @@ function merge (metrics) {
     const { metric: metricName, type, tags, points } = metric
 
     if (points?.length && type === 'count') {
-      const gMetric = globalNamespace.count(metricName, getTagsObject(tags))
+      const gMetric = globalNamespace.getNamespaceMetric(metricName, getTagsObject(tags))
       points.forEach(point => gMetric.inc(point[1]))
     }
   })
@@ -73,12 +73,16 @@ class IastNamespace extends Namespace {
     return metrics
   }
 
+  getNamespaceMetric (name, tags, type = 'count') {
+    return super[type](name, tags)
+  }
+
   getMetric (name, tags, type = 'count') {
     const metrics = this.getIastMetrics(name)
 
     let metric = metrics.get(tags)
     if (!metric) {
-      metric = super[type](name, Array.isArray(tags) ? [...tags] : tags)
+      metric = this.getNamespaceMetric(name, Array.isArray(tags) ? [...tags] : tags, type)
       metrics.set(tags, metric)
     }
 

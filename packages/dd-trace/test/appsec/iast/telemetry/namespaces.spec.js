@@ -77,17 +77,35 @@ describe('IAST metric namespaces', () => {
     const metric = {
       inc: sinon.spy()
     }
-    sinon.stub(globalNamespace, 'count').returns(metric)
+    sinon.stub(globalNamespace, 'getNamespaceMetric').returns(metric)
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(globalNamespace.count).to.be.calledTwice
-    expect(globalNamespace.count.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
+    expect(globalNamespace.getNamespaceMetric).to.be.calledTwice
+    expect(globalNamespace.getNamespaceMetric.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
     expect(metric.inc).to.be.calledTwice
     expect(metric.inc.firstCall.args[0]).to.equal(10)
 
-    expect(globalNamespace.count.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
+    expect(globalNamespace.getNamespaceMetric.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
     expect(metric.inc.secondCall.args[0]).to.equal(1)
+  })
+
+  it('should not cache metrics from request namespaces', () => {
+    globalNamespace.iastMetrics.clear()
+
+    const context2 = {}
+    const namespace2 = initRequestNamespace(context2)
+    namespace2.count(REQUEST_TAINTED, { tag1: 'test' }).inc(10)
+
+    finalizeRequestNamespace(context2)
+
+    const context3 = {}
+    const namespace3 = initRequestNamespace(context3)
+    namespace3.count(REQUEST_TAINTED, { tag1: 'test' }).inc(10)
+
+    finalizeRequestNamespace(context3)
+
+    expect(globalNamespace.iastMetrics.size).to.be.eq(0)
   })
 })
 
