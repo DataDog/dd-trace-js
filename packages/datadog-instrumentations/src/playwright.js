@@ -436,7 +436,11 @@ function runnerHook (runnerExport, playwrightVersion) {
       onDone = resolve
     })
     testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: STATUS_TO_TEST_STATUS[sessionStatus], onDone })
+      testSessionFinishCh.publish({
+        status: STATUS_TO_TEST_STATUS[sessionStatus],
+        isEarlyFlakeDetectionEnabled,
+        onDone
+      })
     })
     await flushWait
 
