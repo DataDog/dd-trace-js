@@ -10,11 +10,15 @@ class ApolloGatewayValidatePlugin extends ApolloBasePlugin {
 
   end (ctx) {
     const result = ctx.result
+    const span = ctx.currentStore?.span
+
+    if (!span) return
+
     if (result instanceof Array &&
       result[result.length - 1] && result[result.length - 1].stack && result[result.length - 1].message) {
-      ctx.currentStore.span.setTag('error', result[result.length - 1])
+      span.setTag('error', result[result.length - 1])
     }
-    ctx.currentStore.span.finish()
+    span.finish()
   }
 }
 

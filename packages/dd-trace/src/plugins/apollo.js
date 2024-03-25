@@ -25,6 +25,7 @@ class ApolloBasePlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
     ctx?.currentStore?.span.finish()
   }
 
