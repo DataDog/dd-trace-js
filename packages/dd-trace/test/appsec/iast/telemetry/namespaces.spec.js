@@ -77,16 +77,16 @@ describe('IAST metric namespaces', () => {
     const metric = {
       inc: sinon.spy()
     }
-    sinon.stub(globalNamespace, 'getNamespaceMetric').returns(metric)
+    sinon.stub(globalNamespace, 'getNoCacheMetric').returns(metric)
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(globalNamespace.getNamespaceMetric).to.be.calledTwice
-    expect(globalNamespace.getNamespaceMetric.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
+    expect(globalNamespace.getNoCacheMetric).to.be.calledTwice
+    expect(globalNamespace.getNoCacheMetric.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
     expect(metric.inc).to.be.calledTwice
     expect(metric.inc.firstCall.args[0]).to.equal(10)
 
-    expect(globalNamespace.getNamespaceMetric.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
+    expect(globalNamespace.getNoCacheMetric.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
     expect(metric.inc.secondCall.args[0]).to.equal(1)
   })
 
@@ -117,7 +117,7 @@ describe('IastNamespace', () => {
       const metrics = namespace.getIastMetrics('metric.name')
 
       expect(metrics).to.not.undefined
-      expect(metrics instanceof Map).to.be.true
+      expect(metrics instanceof WeakMap).to.be.true
     })
 
     it('should reuse the same map if created before', () => {
@@ -182,10 +182,11 @@ describe('IastNamespace', () => {
       const metric = {}
       const count = sinon.stub(Namespace.prototype, 'count').returns(metric)
 
-      namespace.getMetric('metric.name', 'key:tag1')
-      namespace.getMetric('metric.name', 'key:tag1')
+      const tags = ['key:tag1']
+      namespace.getMetric('metric.name', tags)
+      namespace.getMetric('metric.name', tags)
 
-      expect(count).to.be.calledOnceWith('metric.name', 'key:tag1')
+      expect(count).to.be.calledOnceWith('metric.name', tags)
     })
 
     it('should reuse a previously created metric', () => {
