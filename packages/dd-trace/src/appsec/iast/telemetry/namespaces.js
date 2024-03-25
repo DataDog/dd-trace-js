@@ -2,7 +2,7 @@
 
 const log = require('../../../log')
 const { Namespace } = require('../../../telemetry/metrics')
-const { addMetricsToSpan, filterTags } = require('./span-tags')
+const { addMetricsToSpan } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
 
 const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
@@ -24,12 +24,11 @@ function finalizeRequestNamespace (context, rootSpan) {
     const namespace = getNamespaceFromContext(context)
     if (!namespace) return
 
-    const metrics = [...namespace.metrics.values()]
-    namespace.metrics.clear()
+    addMetricsToSpan(rootSpan, [...namespace.metrics.values()], IAST_TRACE_METRIC_PREFIX)
 
-    addMetricsToSpan(rootSpan, metrics, IAST_TRACE_METRIC_PREFIX)
+    merge(namespace)
 
-    merge(metrics)
+    namespace.clear()
   } catch (e) {
     log.error(e)
   } finally {
@@ -39,20 +38,16 @@ function finalizeRequestNamespace (context, rootSpan) {
   }
 }
 
-function merge (metrics) {
-  metrics.forEach(metric => {
-    const { metric: metricName, type, tags, points } = metric
+function merge (namespace) {
+  for (const [metricName, metricsByTagMap] of namespace.iastMetrics) {
+    for (const [tags, metric] of metricsByTagMap) {
+      const { type, points } = metric
 
-    if (points?.length && type === 'count') {
-      const gMetric = globalNamespace.getNoCacheMetric(metricName, getTagsObject(tags))
-      points.forEach(point => gMetric.inc(point[1]))
+      if (points?.length && type === 'count') {
+        const gMetric = globalNamespace.getMetric(metricName, tags)
+        points.forEach(point => gMetric.inc(point[1]))
+      }
     }
-  })
-}
-
-function getTagsObject (tags) {
-  if (tags && tags.length > 0) {
-    return filterTags(tags)
   }
 }
 
@@ -66,15 +61,11 @@ class IastNamespace extends Namespace {
   getIastMetrics (name) {
     let metrics = this.iastMetrics.get(name)
     if (!metrics) {
-      metrics = new WeakMap()
+      metrics = new Map()
       this.iastMetrics.set(name, metrics)
     }
 
     return metrics
-  }
-
-  getNoCacheMetric (name, tags, type = 'count') {
-    return super[type](name, tags)
   }
 
   getMetric (name, tags, type = 'count') {
@@ -82,10 +73,8 @@ class IastNamespace extends Namespace {
 
     let metric = metrics.get(tags)
     if (!metric) {
-      metric = this.getNoCacheMetric(name, Array.isArray(tags) ? [...tags] : tags, type)
-      if (tags) {
-        metrics.set(tags, metric)
-      }
+      metric = super[type](name, Array.isArray(tags) ? [...tags] : tags)
+      metrics.set(tags, metric)
     }
 
     return metric
@@ -93,6 +82,12 @@ class IastNamespace extends Namespace {
 
   count (name, tags) {
     return this.getMetric(name, tags, 'count')
+  }
+
+  clear () {
+    this.iastMetrics.clear()
+    this.distributions.clear()
+    this.metrics.clear()
   }
 }
 

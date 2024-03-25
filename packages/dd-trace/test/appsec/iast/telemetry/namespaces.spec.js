@@ -31,6 +31,7 @@ describe('IAST metric namespaces', () => {
   })
 
   afterEach(() => {
+    globalNamespace.clear()
     sinon.restore()
   })
 
@@ -71,28 +72,26 @@ describe('IAST metric namespaces', () => {
   })
 
   it('should merge all kind of metrics in global Namespace as gauges', () => {
-    namespace.count(REQUEST_TAINTED, { tag1: 'test' }).inc(10)
+    namespace.count(REQUEST_TAINTED, ['tag1:test']).inc(10)
     namespace.count(EXECUTED_SINK).inc(1)
 
     const metric = {
       inc: sinon.spy()
     }
-    sinon.stub(globalNamespace, 'getNoCacheMetric').returns(metric)
+    const count = sinon.stub(Namespace.prototype, 'count').returns(metric)
 
     finalizeRequestNamespace(context, rootSpan)
 
-    expect(globalNamespace.getNoCacheMetric).to.be.calledTwice
-    expect(globalNamespace.getNoCacheMetric.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
+    expect(count).to.be.calledTwice
+    expect(count.firstCall.args).to.be.deep.equal([REQUEST_TAINTED, ['tag1:test']])
     expect(metric.inc).to.be.calledTwice
     expect(metric.inc.firstCall.args[0]).to.equal(10)
 
-    expect(globalNamespace.getNoCacheMetric.secondCall.args).to.be.deep.equal([EXECUTED_SINK, []])
+    expect(count.secondCall.args).to.be.deep.equal([EXECUTED_SINK, undefined])
     expect(metric.inc.secondCall.args[0]).to.equal(1)
   })
 
-  it('should not cache metrics from request namespaces', () => {
-    globalNamespace.iastMetrics.clear()
-
+  it('should cache metrics from different request namespaces', () => {
     const context2 = {}
     const namespace2 = initRequestNamespace(context2)
     namespace2.count(REQUEST_TAINTED, { tag1: 'test' }).inc(10)
@@ -105,7 +104,18 @@ describe('IAST metric namespaces', () => {
 
     finalizeRequestNamespace(context3)
 
-    expect(globalNamespace.iastMetrics.size).to.be.eq(0)
+    expect(globalNamespace.iastMetrics.size).to.be.eq(1)
+  })
+
+  it('should clear metric and distribution collections and iast metrics cache', () => {
+    namespace.count(REQUEST_TAINTED, ['tag1:test']).inc(10)
+    namespace.distribution('test.distribution', ['tag2:test']).track(10)
+
+    finalizeRequestNamespace(context)
+
+    expect(namespace.iastMetrics.size).to.be.eq(0)
+    expect(namespace.metrics.size).to.be.eq(0)
+    expect(namespace.distributions.size).to.be.eq(0)
   })
 })
 
@@ -117,7 +127,7 @@ describe('IastNamespace', () => {
       const metrics = namespace.getIastMetrics('metric.name')
 
       expect(metrics).to.not.undefined
-      expect(metrics instanceof WeakMap).to.be.true
+      expect(metrics instanceof Map).to.be.true
     })
 
     it('should reuse the same map if created before', () => {
