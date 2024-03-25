@@ -58,7 +58,7 @@ describe('Hardcoded Password Analyzer', () => {
       })
     })
 
-    it('should not fail with an malformed secrets', () => {
+    it('should not fail with a malformed secret', () => {
       expect(() => hardcodedPasswordAnalyzer.analyze(undefined)).not.to.throw()
       expect(() => hardcodedPasswordAnalyzer.analyze({ file: undefined })).not.to.throw()
       expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
