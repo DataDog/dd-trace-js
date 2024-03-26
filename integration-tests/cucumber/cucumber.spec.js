@@ -995,6 +995,47 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+            it('does not run EFD if the known tests request fails', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+              receiver.setKnownTestsResponseCode(500)
+              receiver.setKnownTests({})
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  assert.equal(tests.length, 6)
+                  const newTests = tests.filter(test =>
+                    test.meta[TEST_IS_NEW] === 'true'
+                  )
+                  assert.equal(newTests.length, 0)
+                })
+
+              childProcess = exec(
+                runTestsCommand,
+                { cwd, env: envVars, stdio: 'pipe' }
+              )
+
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
           })
         })
       })
