@@ -211,7 +211,6 @@ describe('telemetry app-heartbeat', () => {
           beats++
         }
       }
-
     }
     telemetry = proxyquire('../../src/telemetry', {
       '../exporters/common/docker': {

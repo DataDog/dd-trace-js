@@ -1284,6 +1284,18 @@ describe('Config', () => {
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
 
+  it('should send remote config changes to telemetry', () => {
+    const config = new Config()
+
+    config.configure({
+      tracing_sampling_rate: 0
+    }, true)
+
+    expect(updateConfig.getCall(1).args[0]).to.deep.equal([
+      { name: 'sampleRate', value: 0, origin: 'remote_config' }
+    ])
+  })
+
   it('should ignore invalid iast.requestSampling', () => {
     const config = new Config({
       experimental: {
