@@ -10,7 +10,7 @@ const {
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
-  EFD_STRING,
+  addEfdStringToTestName,
   removeEfdStringFromTestName
 } = require('../../dd-trace/src/plugins/util/test')
 const {
@@ -101,10 +101,6 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
-function getEfdTestName (testName, numAttempt) {
-  return `${EFD_STRING} (#${numAttempt}): ${testName}`
-}
-
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -156,7 +152,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // we use its describe block to get the full name
     getTestNameFromAddTestEvent (event, state) {
       const describeSuffix = getJestTestName(state.currentDescribeBlock)
-      return removeEfdStringFromTestName(`${describeSuffix} ${event.testName}`).trim()
+      const fullTestName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      return removeEfdStringFromTestName(fullTestName)
     }
 
     async handleTestEvent (event, state) {
@@ -197,7 +194,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
-
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: removeEfdStringFromTestName(testName),
@@ -223,7 +219,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
-                this.global.test(getEfdTestName(event.testName, retryIndex), event.fn, event.timeout)
+                this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
               } else {
                 log.error('Early flake detection could not retry test because global.test is undefined')
               }
