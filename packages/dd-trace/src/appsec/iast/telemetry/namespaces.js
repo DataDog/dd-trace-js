@@ -77,11 +77,12 @@ class IastNamespace extends Namespace {
     if (!metric) {
       metric = super[type](name, Array.isArray(tags) ? [...tags] : tags)
 
-      if (metrics.size < this.maxMetricTagsSize) {
-        metrics.set(tags, metric)
-      } else {
-        iastLog.debug(`Tags cache max size reached for metric ${name}`)
+      if (metrics.size === this.maxMetricTagsSize) {
+        metrics.clear()
+        iastLog.warnAndPublish(`Tags cache max size reached for metric ${name}`)
       }
+
+      metrics.set(tags, metric)
     }
 
     return metric
