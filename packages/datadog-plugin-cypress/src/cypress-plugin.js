@@ -327,6 +327,7 @@ class CypressPlugin {
       )
       if (knownTestsResponse.err) {
         log.error(knownTestsResponse.err)
+        this.isEarlyFlakeDetectionEnabled = false
       } else {
         // We use TEST_FRAMEWORK_NAME for the name of the module
         this.knownTestsByTestSuite = knownTestsResponse.knownTests[TEST_FRAMEWORK_NAME]

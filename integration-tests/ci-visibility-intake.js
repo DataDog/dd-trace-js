@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
 
 const DEFAULT_SUITES_TO_SKIP = []
 const DEFAULT_GIT_UPLOAD_STATUS = 200
+const DEFAULT_KNOWN_TESTS_UPLOAD_STATUS = 200
 const DEFAULT_INFO_RESPONSE = {
   endpoints: ['/evp_proxy/v2']
 }
@@ -35,9 +36,14 @@ let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
 let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
+let knownTestsStatusCode = DEFAULT_KNOWN_TESTS_UPLOAD_STATUS
 let waitingTime = 0
 
 class FakeCiVisIntake extends FakeAgent {
+  setKnownTestsResponseCode (statusCode) {
+    knownTestsStatusCode = statusCode
+  }
+
   setKnownTests (newKnownTestsResponse) {
     knownTests = newKnownTestsResponse
   }
@@ -195,7 +201,7 @@ class FakeCiVisIntake extends FakeAgent {
       if (isGzip) {
         res.setHeader('content-encoding', 'gzip')
       }
-      res.status(200).send(isGzip ? zlib.gzipSync(data) : data)
+      res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(data) : data)
       this.emit('message', {
         headers: req.headers,
         url: req.url
@@ -220,6 +226,7 @@ class FakeCiVisIntake extends FakeAgent {
     settings = DEFAULT_SETTINGS
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
+    knownTestsStatusCode = DEFAULT_KNOWN_TESTS_UPLOAD_STATUS
     infoResponse = DEFAULT_INFO_RESPONSE
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
