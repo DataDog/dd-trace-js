@@ -14,14 +14,14 @@ const CHANNELS = {
   'gateway.postprocessing': tracingChannel('apm:apollo:gateway:postprocessing')
 }
 
-const executorCh = channel('apm:apollo:gateway:request:executor')
 const generalErrorCh = channel('apm:apollo:gateway:general:error')
 
 function wrapExecutor (executor) {
   return function (...args) {
+    const channel = CHANNELS['gateway.request']
     const ctx = { requestContext: args[0], gateway: this }
-    executorCh.publish(ctx)
-    return executor.apply(this, args)
+
+    return channel.tracePromise(executor, ctx, this, ...args)
   }
 }
 
@@ -67,7 +67,9 @@ function wrapStartActiveSpan (startActiveSpan) {
         }
         break
       }
+      // Patch `executor` instead so the requestContext can be captured.
       case 'gateway.request':
+        break
       case 'gateway.execute':
       case 'gateway.postprocessing' :
       case 'gateway.fetch': {
