@@ -211,5 +211,18 @@ describe('IastNamespace', () => {
       expect(metric2).to.be.eq(metric)
       expect(metric2.points[0][1]).to.be.eq(42)
     })
+
+    it('should not cache more than max tags for same metric', () => {
+      const namespace = new IastNamespace(1)
+
+      namespace.getMetric('metric.name', ['key:tag1'])
+
+      namespace.getMetric('metric.name', ['key:tag2'])
+
+      namespace.getMetric('metric.name', ['key:tag3'])
+
+      expect(namespace.iastMetrics.size).to.be.eq(1)
+      expect(namespace.iastMetrics.get('metric.name').size).to.be.eq(1)
+    })
   })
 })

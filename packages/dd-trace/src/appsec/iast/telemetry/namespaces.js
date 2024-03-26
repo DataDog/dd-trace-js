@@ -4,6 +4,7 @@ const log = require('../../../log')
 const { Namespace } = require('../../../telemetry/metrics')
 const { addMetricsToSpan } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
+const iastLog = require('../iast-log')
 
 const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 
@@ -52,9 +53,10 @@ function merge (namespace) {
 }
 
 class IastNamespace extends Namespace {
-  constructor () {
+  constructor (maxMetricTagsSize = 100) {
     super('iast')
 
+    this.maxMetricTagsSize = maxMetricTagsSize
     this.iastMetrics = new Map()
   }
 
@@ -74,7 +76,12 @@ class IastNamespace extends Namespace {
     let metric = metrics.get(tags)
     if (!metric) {
       metric = super[type](name, Array.isArray(tags) ? [...tags] : tags)
-      metrics.set(tags, metric)
+
+      if (metrics.size < this.maxMetricTagsSize) {
+        metrics.set(tags, metric)
+      } else {
+        iastLog.debug(`Tags cache max size reached for metric ${name}`)
+      }
     }
 
     return metric
