@@ -1142,6 +1142,66 @@ testFrameworks.forEach(({
             eventsPromise.then(() => done()).catch(done)
           })
         })
+        it('retries flaky tests and sets exit code to 0 as long as one attempt passes', (done) => {
+          const envVars = reportingOption === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
+          if (reportingOption === 'evp proxy') {
+            receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+          }
+          // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+          receiver.setKnownTests({
+            [name]: {
+              'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+            }
+          })
+          const NUM_RETRIES_EFD = 3
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          const command = name === 'jest'
+            ? 'node ./node_modules/jest/bin/jest --config config-jest.js'
+            : 'node ./node_modules/mocha/bin/mocha ci-visibility/test-early-flake-detection/occasionally-failing-test*'
+
+          childProcess = exec(
+            command,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          childProcess.on('exit', (exitCode) => {
+            if (name === 'jest') {
+              assert.include(testOutput, '2 failed, 2 passed')
+            } else {
+              assert.include(testOutput, '2 passing')
+              assert.include(testOutput, '2 failing')
+            }
+            assert.equal(exitCode, 0)
+            done()
+          })
+        })
       })
     })
 
