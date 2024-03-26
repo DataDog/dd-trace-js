@@ -10,6 +10,9 @@ const { SpanStatsProcessor } = require('./span_stats')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+const dc = require('dc-polyfill')
+const exportedCh = dc.channel('dd-trace:trace:exported')
+
 class SpanProcessor {
   constructor (exporter, prioritySampler, config) {
     this._exporter = exporter
@@ -52,6 +55,7 @@ class SpanProcessor {
 
       if (formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
+        exportedCh.publish()
       }
 
       this._erase(trace, active)
