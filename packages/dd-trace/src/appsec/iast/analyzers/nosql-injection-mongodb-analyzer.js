@@ -12,7 +12,7 @@ const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking
 const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const MONGODB_NOSQL_SECURE_MARK = getNextSecureMark()
 
-function iterateObjectStrings (target, fn, levelKeys = [], depth = 50, visited = new Set()) {
+function iterateObjectStrings (target, fn, levelKeys = [], depth = 20, visited = new Set()) {
   if (target && typeof target === 'object') {
     Object.keys(target).forEach((key) => {
       const nextLevelKeys = [...levelKeys, key]
