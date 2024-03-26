@@ -401,6 +401,9 @@ function cliWrapper (cli, jestVersion) {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
         if (!err) {
           knownTests = receivedKnownTests
+        } else {
+          // We disable EFD if there has been an error in the known tests request
+          isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
         log.error(err)
