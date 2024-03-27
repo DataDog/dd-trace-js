@@ -350,7 +350,58 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      return checkProfiles(agent, proc, timeout)
+      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
+      }, 1000, 'generate-metrics')
+      // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
+      // so throw if telemetry callback was invoked  and do nothing if it timed out
+      const checkNoTelemetry = checkTelemetry.then(
+        () => {
+          throw new Error('Received unexpected metrics')
+        }, (e) => {
+          if (e.message !== 'timeout') {
+            throw e
+          }
+        })
+      return Promise.all([checkProfiles(agent, proc, timeout), checkNoTelemetry])
+    })
+
+    it('records SSI telemetry on process exit', () => {
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_INJECTION_ENABLED: 'tracing',
+          DD_PROFILING_ENABLED: 1
+        }
+      })
+
+      function checkTags (tags) {
+        assert.include(tags, 'enablement_choice:manually_enabled')
+        assert.include(tags, 'heuristic_hypothetical_decision:no_span,short_lived')
+        assert.include(tags, 'installation:ssi')
+        // There's a race between metrics and on-shutdown profile, so tag value
+        // can be either false or true but it must be present
+        assert.isTrue(tags.some(tag => tag === 'has_sent_profiles:false' || tag === 'has_sent_profiles:true'))
+      }
+
+      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'ssi_heuristic.number_of_profiles')
+        assert.equal(series[0].type, 'count')
+        checkTags(series[0].tags)
+        // There's a race between metrics and on-shutdown profile, so metric
+        // value will be either 0 or 1
+        assert.isAtMost(series[0].points[0][1], 1)
+
+        assert.equal(series[1].metric, 'ssi_heuristic.number_of_runtime_id')
+        assert.equal(series[1].type, 'count')
+        checkTags(series[1].tags)
+        assert.equal(series[1].points[0][1], 1)
+      }, timeout, 'generate-metrics')
+      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
