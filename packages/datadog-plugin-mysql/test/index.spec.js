@@ -559,6 +559,87 @@ describe('Plugin', () => {
           })
         })
       })
+      describe('dbmPropagationMode "disabled" should not change SQL', () => {
+        let connection
+
+        before(async () => {
+          await agent.load('mysql', [{ dbmPropagationMode: 'disabled', service: 'serviced' }])
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('should pass through the SQL unchanged', done => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+      describe('dbmPropagationMode "none" should not change SQL', () => {
+        let connection
+
+        before(async () => {
+          await agent.load('mysql', [{ dbmPropagationMode: 'none', service: 'serviced' }])
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('should pass through the SQL unchanged', done => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+      describe('dbmPropagationMode "" should not change SQL', () => {
+        let connection
+
+        before(async () => {
+          await agent.load('mysql', [{ dbmPropagationMode: '', service: 'serviced' }])
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db'
+          })
+          connection.connect()
+        })
+
+        it('should pass through the SQL unchanged', done => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              expect(connection._protocol._queue[0].sql).to.equal(
+                `SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
     })
   })
 })
