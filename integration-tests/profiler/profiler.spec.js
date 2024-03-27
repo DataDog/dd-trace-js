@@ -29,8 +29,7 @@ async function checkProfiles (agent, proc, timeout,
     }
   }, timeout, multiplicity)
 
-  await processExitPromise(proc, timeout, expectBadExit)
-  return resultPromise
+  await Promise.all([processExitPromise(proc, timeout, expectBadExit), resultPromise])
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
