@@ -102,7 +102,6 @@ function getTestEnvironmentOptions (config) {
   return {}
 }
 
-// As long as one of the retries has passed, we will consider it passed
 function getEfdStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++

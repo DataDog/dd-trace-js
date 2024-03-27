@@ -1149,12 +1149,9 @@ testFrameworks.forEach(({
           if (reportingOption === 'evp proxy') {
             receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
           }
-          // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
-          receiver.setKnownTests({
-            [name]: {
-              'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-            }
-          })
+          // Tests from ci-visibility/test/occasionally-failing-test will be considered new
+          receiver.setKnownTests({})
+
           const NUM_RETRIES_EFD = 3
           receiver.setSettings({
             itr_enabled: false,
@@ -1167,6 +1164,34 @@ testFrameworks.forEach(({
               }
             }
           })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              // all but one has been retried
+              assert.equal(
+                tests.length - 1,
+                retriedTests.length
+              )
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+              // Out of NUM_RETRIES_EFD + 1 total runs, half will be passing and half will be failing,
+              // based on the global counter in the test file
+              const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+              const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.equal(passingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+              assert.equal(failingTests.length, (NUM_RETRIES_EFD + 1) / 2)
+              // Test name does not change
+              retriedTests.forEach(test => {
+                assert.equal(test.meta[TEST_NAME], 'fail occasionally fails')
+              })
+            })
 
           const command = name === 'jest'
             ? 'node ./node_modules/jest/bin/jest --config config-jest.js'
@@ -1199,7 +1224,9 @@ testFrameworks.forEach(({
               assert.include(testOutput, '2 failing')
             }
             assert.equal(exitCode, 0)
-            done()
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
           })
         })
       })
