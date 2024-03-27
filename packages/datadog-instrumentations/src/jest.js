@@ -222,9 +222,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
-            console.log('is new!!!!!', testName)
-            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
-            console.log('this.testSuite', this.testSuite)
+            console.log('new test', {
+              testSuite: this.testSuite,
+              testName,
+              knownTests: this.knownTestsForThisSuite
+            })
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
@@ -825,10 +827,13 @@ addHook({
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
-      if (config.testEnvironmentOptions._ddKnownTests) {
-        console.log('old known tests!', config.testEnvironmentOptions._ddKnownTests)
+      args[0].config = {
+        ...config,
+        testEnvironmentOptions: {
+          ...config.testEnvironmentOptions,
+          _ddKnownTests: suiteKnownTests
+        }
       }
-      config.testEnvironmentOptions._ddKnownTests = suiteKnownTests
     }
 
     return send.apply(this, arguments)
