@@ -812,7 +812,7 @@ describe('AVM OSS', () => {
       }
 
       telemetry.updateConfig(
-        [{ name: 'sca.enabled', value: false, origin: 'default' }],
+        [{ name: 'sca.enabled', value: true, origin: 'env_var' }],
         telemetryConfig
       )
 
@@ -828,18 +828,6 @@ describe('AVM OSS', () => {
     it('in app-started message', () => {
       return testSeq(1, 'app-started', payload => {
         expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'sca.enabled', value: false, origin: 'default' }
-        ])
-      }, true)
-    })
-
-    it('in app-client-configuration-change message', () => {
-      telemetry.updateConfig(
-        [{ name: 'sca.enabled', value: true, origin: 'env_var' }],
-        telemetryConfig
-      )
-      return testSeq(2, 'app-client-configuration-change', payload => {
-        expect(payload).to.have.property('configuration').that.deep.equal([
           { name: 'sca.enabled', value: true, origin: 'env_var' }
         ])
       }, true)
@@ -848,9 +836,9 @@ describe('AVM OSS', () => {
     it('in app-extended-heartbeat message', () => {
       // Skip a full day
       clock.tick(86400000)
-      return testSeq(3, 'app-extended-heartbeat', payload => {
+      return testSeq(2, 'app-extended-heartbeat', payload => {
         expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'sca.enabled', value: false, origin: 'default' }
+          { name: 'sca.enabled', value: true, origin: 'env_var' }
         ])
       }, true)
     })
