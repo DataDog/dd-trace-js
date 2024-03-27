@@ -44,7 +44,8 @@ const knownTestsCh = channel('ci:jest:known-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
-// TODO: add link to jest
+// Message sent by jest's main process to workers to run a test suite (=test file)
+// https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10000
@@ -427,8 +428,7 @@ function cliWrapper (cli, jestVersion) {
       try {
         const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
         if (!err) {
-          // TODO: REMOVE: JUST FOR TESTING PURPOSES!
-          skippableSuites = []
+          skippableSuites = receivedSkippableSuites
         }
       } catch (err) {
         log.error(err)
@@ -806,23 +806,17 @@ addHook({
     }
     const [type] = request
     if (type === CHILD_MESSAGE_CALL) {
-      // This is the message that the main process sends to the worker to run a test suite (test file)
-      // In here we modify the globalConfig.testEnvironmentOptions to include the known tests for the suite
-      // This way the size of the payload is reduced
-      const [,,, args] = request
+      // This is the message that the main process sends to the worker to run a test suite (=test file).
+      // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
+      // This way the suite only knows about the tests that are part of it.
+      const args = request[request.length - 1]
       if (!args[0]?.config) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir)
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
-      args[0].config = {
-        ...config,
-        testEnvironmentOptions: {
-          ...config.testEnvironmentOptions,
-          _ddKnownTests: suiteKnownTests
-        }
-      }
+      config.testEnvironmentOptions._ddKnownTests = suiteKnownTests
     }
 
     return send.apply(this, arguments)
