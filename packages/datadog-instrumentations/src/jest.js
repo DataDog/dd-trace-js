@@ -224,6 +224,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
             console.log('is new!!!!!', testName)
             console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
+            console.log('this.testSuite', this.testSuite)
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
@@ -814,13 +815,19 @@ addHook({
       // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request[request.length - 1]
+      if (args.length > 1) {
+        console.log('weird args!', args)
+        return send.apply(this, arguments)
+      }
       if (!args[0]?.config) {
-        console.log('not working', args)
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests.jest?.[testSuite] || []
+      if (config.testEnvironmentOptions._ddKnownTests) {
+        console.log('old known tests!', config.testEnvironmentOptions._ddKnownTests)
+      }
       config.testEnvironmentOptions._ddKnownTests = suiteKnownTests
     }
 
