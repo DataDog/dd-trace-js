@@ -266,6 +266,29 @@ describe('PrioritySampler', () => {
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
     })
 
+    it('should support a global rate limit', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 1,
+        rateLimit: 1,
+        rules: [{
+          service: 'test',
+          sampleRate: 1,
+          rateLimit: 1000
+        }]
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+
+      delete context._sampling.priority
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+    })
+
     it('should support disabling the rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,

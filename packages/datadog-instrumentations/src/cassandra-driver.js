@@ -10,7 +10,7 @@ const shimmer = require('../../datadog-shimmer')
 const startCh = channel('apm:cassandra-driver:query:start')
 const finishCh = channel('apm:cassandra-driver:query:finish')
 const errorCh = channel('apm:cassandra-driver:query:error')
-const connectCh = channel(`apm:cassandra-driver:query:connect`)
+const connectCh = channel('apm:cassandra-driver:query:connect')
 
 addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
   shimmer.wrap(cassandra.Client.prototype, 'batch', batch => function (queries, options, callback) {

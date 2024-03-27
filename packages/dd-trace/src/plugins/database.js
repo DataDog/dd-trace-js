@@ -20,6 +20,7 @@ class DatabasePlugin extends StoragePlugin {
       encodedDdpv: ''
     }
   }
+
   encodingServiceTags (serviceTag, encodeATag, spanConfig) {
     if (serviceTag !== spanConfig) {
       this.serviceTags[serviceTag] = spanConfig

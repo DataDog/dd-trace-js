@@ -210,7 +210,7 @@ class DatadogSpan {
           // Wrap the value as a string if it's not already a string
           sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
         } else {
-          log.warn(`Dropping span link attribute. It is not of an allowed type`)
+          log.warn('Dropping span link attribute. It is not of an allowed type')
         }
       }
     }
@@ -266,6 +266,8 @@ class DatadogSpan {
     if (startTime) {
       spanContext._trace.startTime = startTime
     }
+    // SpanContext was NOT propagated from a remote parent
+    spanContext._isRemote = false
 
     return spanContext
   }

@@ -90,7 +90,7 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          'Authorization': 'Basic dGVzdDoxMjM0'
+          Authorization: 'Basic dGVzdDoxMjM0'
         }
       })
 
@@ -108,7 +108,7 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          'Authorization': 'Basic dGVzdDoxMjM0'
+          Authorization: 'Basic dGVzdDoxMjM0'
         }
       })
 
@@ -126,7 +126,7 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1
-          'Authorization': 'Basic dGVzdDox'
+          Authorization: 'Basic dGVzdDox'
         }
       })
 

@@ -137,8 +137,10 @@ interface Tracer extends opentracing.Tracer {
 // is doesn't need to be exported for Tracer
 /** @hidden */
 interface Plugins {
+  "aerospike": tracer.plugins.aerospike;
   "amqp10": tracer.plugins.amqp10;
   "amqplib": tracer.plugins.amqplib;
+  "apollo": tracer.plugins.apollo;
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -1100,6 +1102,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aerospike](https://github.com/aerospike/aerospike-client-nodejs) for module versions >= v3.16.2.
+     */
+    interface aerospike extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [amqp10](https://github.com/noodlefrenzy/node-amqp10) module.
      */
     interface amqp10 extends Instrumentation {}
@@ -1109,6 +1117,33 @@ declare namespace tracer {
      * [amqplib](https://github.com/squaremo/amqp.node) module.
      */
     interface amqplib extends Instrumentation {}
+
+    /**
+     * Currently this plugin automatically instruments
+     * [@apollo/gateway](https://github.com/apollographql/federation) for module versions >= v2.3.0.
+     * This module uses graphql operations to service requests & thus generates graphql spans.
+     * We recommend disabling the graphql plugin if you only want to trace @apollo/gateway
+     */
+    interface apollo extends Instrumentation {
+      /**
+       * Whether to include the source of the operation within the query as a tag
+       * on every span. This may contain sensitive information and should only be
+       * enabled if sensitive data is always sent as variables and not in the
+       * query text.
+       *
+       * @default false
+       */
+      source?: boolean;
+
+      /**
+       * Whether to enable signature calculation for the resource name. This can
+       * be disabled if your apollo/gateway operations always have a name. Note that when
+       * disabled all queries will need to be named for this to work properly.
+       *
+       * @default true
+       */
+      signature?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
@@ -1624,6 +1659,10 @@ declare namespace tracer {
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
       service?: string | ((params: any) => string);
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: string;
     }
 
     /**

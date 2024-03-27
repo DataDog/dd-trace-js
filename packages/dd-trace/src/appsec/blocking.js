@@ -28,7 +28,7 @@ function getBlockWithRedirectData (rootSpan) {
     statusCode = 303
   }
   const headers = {
-    'Location': blockingConfiguration.parameters.location
+    Location: blockingConfiguration.parameters.location
   }
 
   rootSpan.addTags({

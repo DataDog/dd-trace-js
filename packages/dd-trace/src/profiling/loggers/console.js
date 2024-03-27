@@ -12,7 +12,7 @@ const mapping = {
 
 class ConsoleLogger {
   constructor (options = {}) {
-    this._level = mapping[options.level] || mapping['error']
+    this._level = mapping[options.level] || mapping.error
   }
 
   debug (message) {

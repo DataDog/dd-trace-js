@@ -17,7 +17,7 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED,
   JEST_DISPLAY_NAME
 } = require('../../dd-trace/src/plugins/util/test')
@@ -51,6 +51,7 @@ class JestPlugin extends CiPlugin {
     }
     return this.unskippableSuites
   }
+
   getForcedToRunSuites (forcedToRunSuitesList) {
     if (!this.forcedToRunSuites) {
       this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
@@ -339,7 +340,7 @@ class JestPlugin extends CiPlugin {
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
-        extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
+        extraTags[TEST_IS_RETRY] = 'true'
       }
     }
 

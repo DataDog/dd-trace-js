@@ -3,7 +3,7 @@
 const exec = require('./helpers/exec')
 const title = require('./helpers/title')
 
-title(`Publishing API documentation to GitHub Pages`)
+title('Publishing API documentation to GitHub Pages')
 
 const msg = process.argv[2]
 

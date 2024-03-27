@@ -24,6 +24,6 @@ test('mongodb-core plugin should not leak', t => {
   server.connect()
 
   function operation (done) {
-    server.insert(`test.1234`, [{ a: 1 }], {}, done)
+    server.insert('test.1234', [{ a: 1 }], {}, done)
   }
 })

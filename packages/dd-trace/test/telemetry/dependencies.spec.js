@@ -382,7 +382,7 @@ describe('dependencies', () => {
         capturedRequestType = reqType
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
-          payload: payload,
+          payload,
           reqType: 'app-integrations-change'
         })
       }
@@ -430,7 +430,7 @@ describe('dependencies', () => {
       getRetryData.returns({
         request_type: 'app-integrations-change',
         payload: {
-          'integrations': [{
+          integrations: [{
             name: 'zoo1',
             enabled: true,
             auto_enabled: true

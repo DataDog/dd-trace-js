@@ -132,7 +132,8 @@ function wrapRun (pl, isLatestVersion) {
         promise.finally(() => {
           const result = this.getWorstStepResult()
           const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+            ? getStatusFromResultLatest(result)
+            : getStatusFromResult(result)
 
           if (lastStatusByPickleId.has(this.pickle.id)) {
             lastStatusByPickleId.get(this.pickle.id).push(status)
@@ -177,7 +178,8 @@ function wrapRun (pl, isLatestVersion) {
 
         promise.then((result) => {
           const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+            ? getStatusFromResultLatest(result)
+            : getStatusFromResult(result)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
         })
@@ -290,6 +292,8 @@ function getWrappedStart (start, frameworkVersion) {
       const knownTestsResponse = await knownTestsPromise
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
+      } else {
+        isEarlyFlakeDetectionEnabled = false
       }
     }
 

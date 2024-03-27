@@ -28,6 +28,7 @@ describe('Instrumentation', () => {
         const store = 'store'
 
         storage.run(store, () => {
+          // eslint-disable-next-line n/handle-callback-err
           pool.acquire((err, resource) => {
             pool.release(resource)
             expect(storage.getStore()).to.equal(store)

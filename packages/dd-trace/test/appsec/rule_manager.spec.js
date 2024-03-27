@@ -290,16 +290,16 @@ describe('AppSec Rule Manager', () => {
       it('should apply new rules', () => {
         const testRules = {
           version: '2.2',
-          metadata: { 'rules_version': '1.5.0' },
+          metadata: { rules_version: '1.5.0' },
           rules: [{
-            'id': 'test-id',
-            'name': 'test-name',
-            'tags': {
-              'type': 'security_scanner',
-              'category': 'attack_attempt',
-              'confidence': '1'
+            id: 'test-id',
+            name: 'test-name',
+            tags: {
+              type: 'security_scanner',
+              category: 'attack_attempt',
+              confidence: '1'
             },
-            'conditions': []
+            conditions: []
           }],
           processors: [{
             id: 'test-processor-id',
@@ -350,16 +350,16 @@ describe('AppSec Rule Manager', () => {
         }
         const testRules = {
           version: '2.2',
-          metadata: { 'rules_version': '1.5.0' },
+          metadata: { rules_version: '1.5.0' },
           rules: [{
-            'id': 'test-id',
-            'name': 'test-name',
-            'tags': {
-              'type': 'security_scanner',
-              'category': 'attack_attempt',
-              'confidence': '1'
+            id: 'test-id',
+            name: 'test-name',
+            tags: {
+              type: 'security_scanner',
+              category: 'attack_attempt',
+              confidence: '1'
             },
-            'conditions': []
+            conditions: []
           }],
           processors: [{
             id: 'test-processor-id',
@@ -413,14 +413,14 @@ describe('AppSec Rule Manager', () => {
           id: 'rules1',
           file: {
             version: '2.2',
-            metadata: { 'rules_version': '1.5.0' },
+            metadata: { rules_version: '1.5.0' },
             rules: [{
-              'id': 'test-id',
-              'name': 'test-name',
-              'tags': {
-                'type': 'security_scanner',
-                'category': 'attack_attempt',
-                'confidence': '1'
+              id: 'test-id',
+              name: 'test-name',
+              tags: {
+                type: 'security_scanner',
+                category: 'attack_attempt',
+                confidence: '1'
               },
               conditions: [
                 {
@@ -442,14 +442,14 @@ describe('AppSec Rule Manager', () => {
           id: 'rules2',
           file: {
             version: '2.2',
-            metadata: { 'rules_version': '1.5.0' },
+            metadata: { rules_version: '1.5.0' },
             rules: [{
-              'id': 'test-id',
-              'name': 'test-name',
-              'tags': {
-                'type': 'security_scanner',
-                'category': 'attack_attempt',
-                'confidence': '1'
+              id: 'test-id',
+              name: 'test-name',
+              tags: {
+                type: 'security_scanner',
+                category: 'attack_attempt',
+                confidence: '1'
               },
               conditions: [
                 {
@@ -480,13 +480,13 @@ describe('AppSec Rule Manager', () => {
     describe('ASM', () => {
       it('should apply both rules_override and exclusions', () => {
         const asm = {
-          'exclusions': [{
+          exclusions: [{
             ekey: 'eValue'
           }],
-          'rules_override': [{
+          rules_override: [{
             roKey: 'roValue'
           }],
-          'custom_rules': [{
+          custom_rules: [{
             piKey: 'piValue'
           }]
         }
@@ -575,13 +575,13 @@ describe('AppSec Rule Manager', () => {
 
       it('should ignore other properties', () => {
         const asm = {
-          'exclusions': [{
+          exclusions: [{
             ekey: 'eValue'
           }],
-          'rules_override': [{
+          rules_override: [{
             roKey: 'roValue'
           }],
-          'not_supported': [{
+          not_supported: [{
             nsKey: 'nsValue'
           }]
         }
@@ -597,8 +597,8 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly({
-          'exclusions': asm['exclusions'],
-          'rules_override': asm['rules_override']
+          exclusions: asm.exclusions,
+          rules_override: asm.rules_override
         })
       })
     })

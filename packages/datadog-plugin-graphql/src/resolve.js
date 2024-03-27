@@ -126,7 +126,7 @@ function getResolverInfo (info, args) {
   if (Array.isArray(directives)) {
     for (const directive of directives) {
       const argList = {}
-      for (const argument of directive['arguments']) {
+      for (const argument of directive.arguments) {
         argList[argument.name.value] = argument.value.value
       }
 

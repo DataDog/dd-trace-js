@@ -93,7 +93,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
 
     // remove incorrect headers
-    delete req.headers['host']
+    delete req.headers.host
     delete req.headers['content-type']
     delete req.headers['content-length']
 

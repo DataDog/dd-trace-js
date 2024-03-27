@@ -13,7 +13,7 @@ class Redshift extends BaseAwsSdkPlugin {
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.ClusterIdentifier}`,
       'aws.redshift.cluster_identifier': params.ClusterIdentifier,
-      'clusteridentifier': params.ClusterIdentifier
+      clusteridentifier: params.ClusterIdentifier
     })
   }
 }

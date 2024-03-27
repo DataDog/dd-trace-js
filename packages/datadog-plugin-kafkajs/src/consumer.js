@@ -70,7 +70,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       resource: topic,
       type: 'worker',
       meta: {
-        'component': 'kafkajs',
+        component: 'kafkajs',
         'kafka.topic': topic,
         'kafka.message.offset': message.offset
       },

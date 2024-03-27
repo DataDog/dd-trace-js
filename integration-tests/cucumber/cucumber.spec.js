@@ -29,7 +29,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_EARLY_FLAKE_IS_ENABLED,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
@@ -43,8 +43,8 @@ const moduleType = [
     runTestsWithCoverageCommand:
       './node_modules/nyc/bin/nyc.js -r=text-summary ' +
       'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
-    parallelModeCommand: `./node_modules/.bin/cucumber-js ` +
-    `ci-visibility/features/farewell.feature --parallel 2 --publish-quiet`,
+    parallelModeCommand: './node_modules/.bin/cucumber-js ' +
+    'ci-visibility/features/farewell.feature --parallel 2 --publish-quiet',
     featuresPath: 'ci-visibility/features/',
     fileExtension: 'js'
   }
@@ -818,7 +818,7 @@ versions.forEach(version => {
                   newTests.forEach(test => {
                     assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
                   })
-                  const retriedTests = newTests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+                  const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
                   // all but one has been retried
                   assert.equal(
                     newTests.length - 1,
@@ -989,6 +989,47 @@ versions.forEach(version => {
                   stdio: 'pipe'
                 }
               )
+              childProcess.on('exit', () => {
+                eventsPromise.then(() => {
+                  done()
+                }).catch(done)
+              })
+            })
+            it('does not run EFD if the known tests request fails', (done) => {
+              const NUM_RETRIES_EFD = 3
+              receiver.setSettings({
+                itr_enabled: false,
+                code_coverage: false,
+                tests_skipping: false,
+                early_flake_detection: {
+                  enabled: true,
+                  slow_test_retries: {
+                    '5s': NUM_RETRIES_EFD
+                  }
+                }
+              })
+              receiver.setKnownTestsResponseCode(500)
+              receiver.setKnownTests({})
+              const eventsPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
+
+                  const testSession = events.find(event => event.type === 'test_session_end').content
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                  assert.equal(tests.length, 6)
+                  const newTests = tests.filter(test =>
+                    test.meta[TEST_IS_NEW] === 'true'
+                  )
+                  assert.equal(newTests.length, 0)
+                })
+
+              childProcess = exec(
+                runTestsCommand,
+                { cwd, env: envVars, stdio: 'pipe' }
+              )
+
               childProcess.on('exit', () => {
                 eventsPromise.then(() => {
                   done()

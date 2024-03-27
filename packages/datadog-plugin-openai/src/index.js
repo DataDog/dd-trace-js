@@ -89,7 +89,7 @@ class OpenApiPlugin extends TracingPlugin {
       store.prompt = prompt
       if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
         // This is a single prompt, either String or [Number]
-        tags[`openai.request.prompt`] = normalizeStringOrTokenArray(prompt, true)
+        tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
       } else if (Array.isArray(prompt)) {
         // This is multiple prompts, either [String] or [[Number]]
         for (let i = 0; i < prompt.length; i++) {
@@ -101,7 +101,7 @@ class OpenApiPlugin extends TracingPlugin {
     // createEdit, createEmbedding, createModeration
     if ('input' in payload) {
       const normalized = normalizeStringOrTokenArray(payload.input, false)
-      tags[`openai.request.input`] = truncateText(normalized)
+      tags['openai.request.input'] = truncateText(normalized)
       store.input = normalized
     }
 
@@ -203,7 +203,7 @@ class OpenApiPlugin extends TracingPlugin {
 
     // We don't know most information about the request when it fails
 
-    const tags = [`error:1`]
+    const tags = ['error:1']
     this.metrics.distribution('openai.request.duration', span._duration * 1000, tags)
     this.metrics.increment('openai.request.error', 1, tags)
 
@@ -215,7 +215,7 @@ class OpenApiPlugin extends TracingPlugin {
       `org:${headers['openai-organization']}`,
       `endpoint:${endpoint}`, // just "/v1/models", no method
       `model:${headers['openai-model']}`,
-      `error:0`
+      'error:0'
     ]
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)

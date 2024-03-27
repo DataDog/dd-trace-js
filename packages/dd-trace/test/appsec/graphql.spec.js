@@ -128,7 +128,7 @@ describe('GraphQL', () => {
     it('Should not call waf if req is unavailable', () => {
       const context = {}
       const resolverInfo = {
-        user: [ { id: '1234' } ]
+        user: [{ id: '1234' }]
       }
 
       storage.getStore().req = undefined
@@ -142,7 +142,7 @@ describe('GraphQL', () => {
       const context = {}
 
       const resolverInfo = {
-        user: [ { id: '1234' } ]
+        user: [{ id: '1234' }]
       }
 
       startGraphqlResolve.publish({ context, resolverInfo })
@@ -180,7 +180,7 @@ describe('GraphQL', () => {
       }
 
       const resolverInfo = {
-        user: [ { id: '1234' } ]
+        user: [{ id: '1234' }]
       }
 
       const abortController = {}
@@ -210,7 +210,7 @@ describe('GraphQL', () => {
       }
 
       const resolverInfo = {
-        user: [ { id: '1234' } ]
+        user: [{ id: '1234' }]
       }
 
       const abortController = context.abortController

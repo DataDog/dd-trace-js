@@ -227,7 +227,7 @@ describe('Plugin', () => {
             .catch(done)
 
           appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user?foo=bar`, { headers: { 'foo': 'bar' } })
+            fetch(`http://localhost:${port}/user?foo=bar`, { headers: { foo: 'bar' } })
           })
         })
       })
@@ -619,7 +619,7 @@ describe('Plugin', () => {
             .use(traces => {
               const meta = traces[0][0].meta
 
-              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-baz`, `qux`)
+              expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-baz`, 'qux')
               expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'bar')
             })
             .then(done)

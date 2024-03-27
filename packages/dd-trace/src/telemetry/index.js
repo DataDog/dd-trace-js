@@ -35,7 +35,7 @@ function updateRetryData (error, retryObj) {
     if (retryObj.reqType === 'message-batch') {
       const payload = retryObj.payload[0].payload
       const reqType = retryObj.payload[0].request_type
-      retryData = { payload: payload, reqType: reqType }
+      retryData = { payload, reqType }
 
       // Since this payload failed twice it now gets save in to the extended heartbeat
       const failedPayload = retryObj.payload[1].payload
@@ -43,17 +43,17 @@ function updateRetryData (error, retryObj) {
 
       // save away the dependencies and integration request for extended heartbeat.
       if (failedReqType === 'app-integrations-change') {
-        if (extendedHeartbeatPayload['integrations']) {
-          extendedHeartbeatPayload['integrations'].push(failedPayload)
+        if (extendedHeartbeatPayload.integrations) {
+          extendedHeartbeatPayload.integrations.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['integrations'] = [failedPayload]
+          extendedHeartbeatPayload.integrations = [failedPayload]
         }
       }
       if (failedReqType === 'app-dependencies-loaded') {
-        if (extendedHeartbeatPayload['dependencies']) {
-          extendedHeartbeatPayload['dependencies'].push(failedPayload)
+        if (extendedHeartbeatPayload.dependencies) {
+          extendedHeartbeatPayload.dependencies.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['dependencies'] = [failedPayload]
+          extendedHeartbeatPayload.dependencies = [failedPayload]
         }
       }
     } else {
@@ -187,12 +187,11 @@ function getTelemetryData () {
 }
 
 function createBatchPayload (payload) {
-  const batchPayload = []
-  payload.map(item => {
-    batchPayload.push({
+  const batchPayload = payload.map(item => {
+    return {
       request_type: item.reqType,
       payload: item.payload
-    })
+    }
   })
 
   return batchPayload
@@ -202,10 +201,10 @@ function createPayload (currReqType, currPayload = {}) {
   if (getRetryData()) {
     const payload = { reqType: currReqType, payload: currPayload }
     const batchPayload = createBatchPayload([payload, retryData])
-    return { 'reqType': 'message-batch', 'payload': batchPayload }
+    return { reqType: 'message-batch', payload: batchPayload }
   }
 
-  return { 'reqType': currReqType, 'payload': currPayload }
+  return { reqType: currReqType, payload: currPayload }
 }
 
 function heartbeat (config, application, host) {
@@ -304,30 +303,41 @@ function updateConfig (changes, config) {
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const names = {
+  const nameMapping = {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
     tags: 'DD_TAGS'
   }
 
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+
   const configuration = []
+  const names = [] // list of config names whose values have been changed
 
   for (const change of changes) {
-    const name = names[change.name] || change.name
+    const name = nameMapping[change.name] || change.name
+    names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }
 
     if (Array.isArray(value)) entry.value = value.join(',')
-    if (entry.name === 'DD_TAGS') entry.value = formatMapForTelemetry(entry.value)
+    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
     if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'peerServiceMapping' || entry.name === 'tags') entry.value = formatMapForTelemetry(entry.value)
 
     configuration.push(entry)
   }
+
+  function isNotModified (entry) {
+    return !names.includes(entry.name)
+  }
+
   if (!configWithOrigin.length) {
     configWithOrigin = configuration
   } else {
+    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
+    configWithOrigin = configWithOrigin.filter(isNotModified)
+    configWithOrigin = configWithOrigin.concat(configuration)
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }

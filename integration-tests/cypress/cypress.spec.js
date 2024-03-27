@@ -29,7 +29,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
+  TEST_IS_RETRY,
   TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -75,7 +75,7 @@ moduleType.forEach(({
 
     before(async () => {
       // cypress-fail-fast is required as an incompatible plugin
-      sandbox = await createSandbox([`cypress@${version}`, `cypress-fail-fast@7.1.0`], true)
+      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
@@ -922,7 +922,7 @@ moduleType.forEach(({
         })
 
         receiver.setKnownTests({
-          'cypress': {
+          cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
               'other context fails'
@@ -939,7 +939,7 @@ moduleType.forEach(({
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
 
-            const retriedTests = tests.filter(test => test.meta[TEST_EARLY_FLAKE_IS_RETRY] === 'true')
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.equal(retriedTests.length, NUM_RETRIES_EFD)
 
             newTests.forEach(newTest => {
@@ -994,7 +994,7 @@ moduleType.forEach(({
         })
 
         receiver.setKnownTests({
-          'cypress': {
+          cypress: {
             'cypress/e2e/spec.cy.js': [
               // 'context passes', // This test will be considered new
               'other context fails'
@@ -1086,6 +1086,61 @@ moduleType.forEach(({
               ...restEnvVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/skipped-test.js'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('does not run EFD if the known tests request fails', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTestsResponseCode(500)
+        receiver.setKnownTests({})
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+          })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
             },
             stdio: 'pipe'
           }
