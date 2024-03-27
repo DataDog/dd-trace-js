@@ -21,7 +21,7 @@ function finish (err) {
   finishChannel.publish(undefined)
 }
 
-addHook({ name: 'oracledb', versions: ['5'] }, oracledb => {
+addHook({ name: 'oracledb', versions: ['>=5'] }, oracledb => {
   shimmer.wrap(oracledb.Connection.prototype, 'execute', execute => {
     return function wrappedExecute (dbQuery, ...args) {
       if (!startChannel.hasSubscribers) {
