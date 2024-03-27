@@ -222,6 +222,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isNew = !this.knownTestsForThisSuite?.includes(testName)
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
+            console.log('is new!!!!!', testName)
+            console.log('this.knownTestsForThisSuite', this.knownTestsForThisSuite)
             retriedTestsToNumAttempts.set(testName, 0)
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
@@ -428,7 +430,7 @@ function cliWrapper (cli, jestVersion) {
       try {
         const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
         if (!err) {
-          skippableSuites = receivedSkippableSuites
+          skippableSuites = []
         }
       } catch (err) {
         log.error(err)
@@ -813,6 +815,7 @@ addHook({
       // This way the suite only knows about the tests that are part of it.
       const args = request[request.length - 1]
       if (!args[0]?.config) {
+        console.log('not working', args)
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
