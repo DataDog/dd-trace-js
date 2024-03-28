@@ -30,6 +30,7 @@ const defaultWafObfuscatorValueRegex =
 ken|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\
 \\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?\
 |[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}`
+const runtimeId = uuid()
 
 function maybeFile (filepath) {
   if (!filepath) return
@@ -292,7 +293,7 @@ class Config {
       service: this.service,
       env: this.env,
       version: this.version,
-      'runtime-id': uuid()
+      'runtime-id': runtimeId
     })
 
     if (this.isCiVisibility) {
@@ -823,6 +824,7 @@ class Config {
       : undefined
 
     tagger.add(tags, options.tracing_tags)
+    if (Object.keys(tags).length) tags['runtime-id'] = runtimeId
 
     this._setUnit(opts, 'sampleRate', options.tracing_sampling_rate)
     this._setBoolean(opts, 'logInjection', options.log_injection_enabled)

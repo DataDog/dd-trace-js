@@ -1296,6 +1296,17 @@ describe('Config', () => {
     ])
   })
 
+  it('should have consistent runtime-id after remote configuration updates tags', () => {
+    const config = new Config()
+    const runtimeId = config.tags['runtime-id']
+    config.configure({
+      tracing_tags: { foo: 'bar' }
+    }, true)
+
+    expect(config.tags).to.have.property('foo', 'bar')
+    expect(config.tags).to.have.property('runtime-id', runtimeId)
+  })
+
   it('should ignore invalid iast.requestSampling', () => {
     const config = new Config({
       experimental: {
