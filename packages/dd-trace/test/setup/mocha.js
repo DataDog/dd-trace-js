@@ -81,7 +81,7 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it(`should conform to the naming schema`, () => {
+        it('should conform to the naming schema', () => {
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {
@@ -120,7 +120,7 @@ function withNamingSchema (
 
       hooks('v0', true)
 
-      const { serviceName } = expected['v1']
+      const { serviceName } = expected.v1
 
       it('should pass service name through', done => {
         agent
@@ -191,7 +191,8 @@ function withVersions (plugin, modules, range, cb) {
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+        const versions = process.env.PACKAGE_VERSION_RANGE
+          ? [process.env.PACKAGE_VERSION_RANGE]
           : instrumentation.versions
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
@@ -209,7 +210,10 @@ function withVersions (plugin, modules, range, cb) {
       .sort(v => v[0].localeCompare(v[0]))
       .map(v => Object.assign({}, v[1], { version: v[0] }))
       .forEach(v => {
-        const versionPath = `${__dirname}/../../../../versions/${moduleName}@${v.test}/node_modules`
+        const versionPath = path.resolve(
+          __dirname, '../../../../versions/',
+          `${moduleName}@${v.test}/node_modules`
+        )
 
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath

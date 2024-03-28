@@ -65,7 +65,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Put`)
+                expect(span).to.have.property('resource', 'Put')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -91,7 +91,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Connect`)
+                expect(span).to.have.property('resource', 'Connect')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('component', 'aerospike')
@@ -108,7 +108,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Get`)
+                expect(span).to.have.property('resource', 'Get')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -132,7 +132,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Operate`)
+                expect(span).to.have.property('resource', 'Operate')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.key', keyString)
@@ -163,7 +163,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `IndexCreate`)
+                expect(span).to.have.property('resource', 'IndexCreate')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.namespace', ns)
@@ -177,7 +177,7 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               const index = {
-                ns: ns,
+                ns,
                 set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
@@ -195,7 +195,7 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 expect(span).to.have.property('name', expectedSchema.command.opName)
                 expect(span).to.have.property('service', expectedSchema.command.serviceName)
-                expect(span).to.have.property('resource', `Query`)
+                expect(span).to.have.property('resource', 'Query')
                 expect(span).to.have.property('type', 'aerospike')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('aerospike.namespace', ns)
@@ -207,12 +207,13 @@ describe('Plugin', () => {
 
             aerospike.connect(config).then(client => {
               const index = {
-                ns: ns,
+                ns,
                 set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
                 datatype: aerospike.indexDataType.STRING
               }
+              // eslint-disable-next-line n/handle-callback-err
               client.createIndex(index, (error, job) => {
                 job.waitUntilDone((waitError) => {
                   const query = client.query(ns, 'demo')

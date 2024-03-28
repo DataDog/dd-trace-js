@@ -216,9 +216,9 @@ describe('Sns', () => {
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
-            'topicname': 'TestTopic',
-            'aws_service': 'SNS',
-            'region': 'us-east-1'
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1'
           })
         }).then(done, done)
 

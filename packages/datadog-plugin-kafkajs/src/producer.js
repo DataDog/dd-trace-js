@@ -70,7 +70,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const span = this.startSpan({
       resource: topic,
       meta: {
-        'component': 'kafkajs',
+        component: 'kafkajs',
         'kafka.topic': topic
       },
       metrics: {

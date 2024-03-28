@@ -13,8 +13,10 @@ const { NODE_MAJOR } = require('../../../../version')
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 const BUILD_COMMAND = NODE_MAJOR < 18
-  ? 'yarn exec next build' : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
-const NODE_OPTIONS = NODE_MAJOR < 18 ? `--loader=${hookFile} --require dd-trace/init`
+  ? 'yarn exec next build'
+  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
+const NODE_OPTIONS = NODE_MAJOR < 18
+  ? `--loader=${hookFile} --require dd-trace/init`
   : `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
 
 const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'

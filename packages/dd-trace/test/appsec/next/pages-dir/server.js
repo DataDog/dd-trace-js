@@ -3,6 +3,7 @@
 const { PORT, HOSTNAME } = process.env
 
 const { createServer } = require('http')
+// eslint-disable-next-line n/no-deprecated-api
 const { parse } = require('url')
 const next = require('next') // eslint-disable-line import/no-extraneous-dependencies
 

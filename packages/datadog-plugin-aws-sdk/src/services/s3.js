@@ -14,7 +14,7 @@ class S3 extends BaseAwsSdkPlugin {
     return Object.assign(tags, {
       'resource.name': `${operation} ${params.Bucket}`,
       'aws.s3.bucket_name': params.Bucket,
-      'bucketname': params.Bucket
+      bucketname: params.Bucket
     })
   }
 }

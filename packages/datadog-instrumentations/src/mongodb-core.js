@@ -7,9 +7,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const startCh = channel(`apm:mongodb:query:start`)
-const finishCh = channel(`apm:mongodb:query:finish`)
-const errorCh = channel(`apm:mongodb:query:error`)
+const startCh = channel('apm:mongodb:query:start')
+const finishCh = channel('apm:mongodb:query:finish')
+const errorCh = channel('apm:mongodb:query:error')
 
 addHook({ name: 'mongodb-core', versions: ['2 - 3.1.9'] }, Server => {
   const serverProto = Server.Server.prototype
@@ -197,7 +197,7 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
 
     const promise = command.apply(ctx, args)
 
-    promise.then(function (res) {
+    return promise.then(function (res) {
       finishCh.publish()
       return res
     }, function (err) {
@@ -206,7 +206,5 @@ function instrumentPromise (operation, command, ctx, args, server, ns, ops, opti
 
       return Promise.reject(err)
     })
-
-    return promise
   })
 }

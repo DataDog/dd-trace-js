@@ -181,7 +181,7 @@ class SpanStatsProcessor {
     const { bucketSizeNs } = this
     const serializedBuckets = []
 
-    for (const [ timeNs, bucket ] of this.buckets.entries()) {
+    for (const [timeNs, bucket] of this.buckets.entries()) {
       const bucketAggStats = []
 
       for (const stats of bucket.values()) {

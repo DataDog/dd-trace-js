@@ -36,7 +36,7 @@ const STATUS_TO_TEST_STATUS = {
 let remainingTestsByFile = {}
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
-let knownTests = []
+let knownTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
 
@@ -407,6 +407,8 @@ function runnerHook (runnerExport, playwrightVersion) {
         const { err, knownTests: receivedKnownTests } = await knownTestsPromise
         if (!err) {
           knownTests = receivedKnownTests
+        } else {
+          isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
         log.error(err)
@@ -434,7 +436,11 @@ function runnerHook (runnerExport, playwrightVersion) {
       onDone = resolve
     })
     testSessionAsyncResource.runInAsyncScope(() => {
-      testSessionFinishCh.publish({ status: STATUS_TO_TEST_STATUS[sessionStatus], onDone })
+      testSessionFinishCh.publish({
+        status: STATUS_TO_TEST_STATUS[sessionStatus],
+        isEarlyFlakeDetectionEnabled,
+        onDone
+      })
     })
     await flushWait
 

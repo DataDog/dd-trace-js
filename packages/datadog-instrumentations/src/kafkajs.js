@@ -38,7 +38,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     constructor (options) {
       super(options)
       this._brokers = (options.brokers && typeof options.brokers !== 'function')
-        ? options.brokers.join(',') : undefined
+        ? options.brokers.join(',')
+        : undefined
     }
   }
 

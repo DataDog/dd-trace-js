@@ -76,12 +76,12 @@ describe('Plugin', () => {
     }))
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
-      plugins['fs'] = require('../../datadog-plugin-fs/src')
+      plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
     after((done) => {
       rimraf(tmpdir, realFS, done)
-      delete plugins['fs']
+      delete plugins.fs
     })
 
     describe('without parent span', () => {
@@ -177,6 +177,7 @@ describe('Plugin', () => {
 
         it('should handle errors', (done) => {
           const filename = path.join(__filename, Math.random().toString())
+          // eslint-disable-next-line n/handle-callback-err
           fs.open(filename, 'r', (err) => {
             expectOneSpan(agent, done, {
               resource: 'open',
@@ -230,6 +231,7 @@ describe('Plugin', () => {
 
           it('should handle errors', (done) => {
             const filename = path.join(__filename, Math.random().toString())
+            // eslint-disable-next-line n/handle-callback-err
             fs.promises.open(filename, 'r').catch((err) => {
               expectOneSpan(agent, done, {
                 resource: 'promises.open',
@@ -807,7 +809,7 @@ describe('Plugin', () => {
 
         it('should be instrumented', (done) => {
           expectOneSpan(agent, done, {
-            resource: resource,
+            resource,
             meta: {
               'file.descriptor': fd.toString(),
               'file.mode': mode.toString(8)
@@ -1348,11 +1350,14 @@ describe('Plugin', () => {
               'file.path': __filename
             }
           })
-          fs.exists(__filename, () => {}) // eslint-disable-line node/no-deprecated-api
+          // eslint-disable-next-line n/handle-callback-err
+          // eslint-disable-next-line n/no-deprecated-api
+          fs.exists(__filename, () => {})
         })
 
         it('should support promisification', () => {
-          const exists = util.promisify(fs.exists) // eslint-disable-line node/no-deprecated-api
+          // eslint-disable-next-line n/no-deprecated-api
+          const exists = util.promisify(fs.exists)
 
           return exists(__filename)
         })
@@ -1932,6 +1937,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
       if (err) reject(err)
       else resolve()
     }
+    // eslint-disable-next-line n/handle-callback-err
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,

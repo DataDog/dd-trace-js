@@ -1,4 +1,3 @@
-
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { isTrue } = require('../util')

@@ -14,17 +14,6 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     return 'tracing:apm:apollo:gateway:request'
   }
 
-  constructor (...args) {
-    super(...args)
-    this.addSub('apm:apollo:gateway:request:executor', (ctx) => {
-      if (ctx.requestContext || ctx.gateway) {
-        this.requestContext = ctx
-      } else {
-        this.requestContext = {}
-      }
-    })
-  }
-
   bindStart (ctx) {
     const store = storage.getStore()
     const childOf = store ? store.span : null
@@ -37,12 +26,12 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       meta: {}
     }
 
-    const { requestContext, gateway } = this.requestContext
+    const { requestContext, gateway } = ctx
 
     if (requestContext?.operationName) {
       spanData.meta['graphql.operation.name'] = requestContext.operationName
     }
-    if (gateway?.config?.telemetry?.includeDocument !== false && requestContext?.source) {
+    if ((this.config.source || gateway?.config?.telemetry?.includeDocument) && requestContext?.source) {
       spanData.meta['graphql.source'] = requestContext.source
     }
 
@@ -54,7 +43,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       const type = operationContext?.operation?.operation
       const name = operationContext?.operation?.name && operationContext?.operation?.name?.value
 
-      spanData['resource'] = getSignature(document, name, type, this?.config?.signature)
+      spanData.resource = getSignature(document, name, type, this?.config?.signature)
       spanData.meta['graphql.operation.type'] = type
     }
     const span = this.startSpan(this.operationName({ id: `${this.constructor.id}.${this.constructor.operation}` }),
@@ -75,10 +64,6 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
-  }
-
-  end () {
-    // do nothing to avoid ApolloBasePlugin's end method
   }
 }
 
@@ -121,7 +106,7 @@ function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
       try {
-        tools = tools || require('./tools')
+        tools = tools || require('../../../datadog-plugin-graphql/src/tools')
       } catch (e) {
         tools = false
         throw e

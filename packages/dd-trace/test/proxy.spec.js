@@ -80,9 +80,11 @@ describe('TracerProxy', () => {
         constructor (cfg) {
           dogstatsdConfig = cfg
         }
+
         increment () {
           dogstatsdIncrements.push(arguments)
         }
+
         flush () {
           dogstatsdFlushes++
         }

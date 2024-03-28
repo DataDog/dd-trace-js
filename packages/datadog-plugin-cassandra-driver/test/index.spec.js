@@ -146,7 +146,7 @@ describe('Plugin', () => {
           const childOf = tracer.startSpan('test')
 
           scope.activate(childOf, () => {
-            client.batch([`UPDATE test.test SET test='test' WHERE id='1234';`], () => {
+            client.batch(['UPDATE test.test SET test=\'test\' WHERE id=\'1234\';'], () => {
               expect(tracer.scope().active()).to.equal(childOf)
               done()
             })

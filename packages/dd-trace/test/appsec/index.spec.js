@@ -246,7 +246,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -293,7 +293,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -331,7 +331,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -374,7 +374,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -449,7 +449,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -484,7 +484,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -519,7 +519,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -606,7 +606,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost'
+          host: 'localhost'
         },
         method: 'POST',
         socket: {
@@ -960,7 +960,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': '*/*'
+            Accept: '*/*'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -972,7 +972,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -1030,7 +1030,7 @@ describe('IP blocking', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).then(() => {
           throw new Error('Not expected')

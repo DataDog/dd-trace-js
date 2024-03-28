@@ -52,7 +52,8 @@ describe('Plugin', function () {
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         const testSuiteFolder = semver.intersects(version, '>=10')
-          ? 'app-10' : 'app'
+          ? 'app-10'
+          : 'app'
 
         cypressExecutable.run({
           project: `./packages/datadog-plugin-cypress/test/${testSuiteFolder}`,
