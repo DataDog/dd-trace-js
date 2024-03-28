@@ -10,6 +10,7 @@ const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
 const os = require('os')
+const { urlToHttpOptions } = require('url')
 const perf = require('perf_hooks').performance
 
 const containerId = docker.id()
@@ -177,9 +178,10 @@ class AgentExporter {
         if (this._url.protocol === 'unix:') {
           options.socketPath = this._url.pathname
         } else {
-          options.protocol = this._url.protocol
-          options.hostname = this._url.hostname
-          options.port = this._url.port
+          const httpOptions = urlToHttpOptions(this._url)
+          options.protocol = httpOptions.protocol
+          options.hostname = httpOptions.hostname
+          options.port = httpOptions.port
         }
 
         this._logger.debug(() => {
