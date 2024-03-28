@@ -790,6 +790,14 @@ declare namespace tracer {
     gauge(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
 
     /**
+     * Sets a histogram value, optionally specifying tags.
+     * @param {string} stat The dot-separated metric name.
+     * @param {number} value The amount to increment the stat by.
+     * @param {[tag:string]:string|number} tags Tags to pass along, such as `{ foo: 'bar' }`. Values are combined with config.tags.
+     */
+    histogram(stat: string, value?: number, tags?: { [tag: string]: string|number }): void
+
+    /**
      * Forces any unsent metrics to be sent
      *
      * @beta This method is experimental and could be removed in future versions.
