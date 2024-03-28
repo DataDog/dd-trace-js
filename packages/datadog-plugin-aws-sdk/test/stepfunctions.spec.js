@@ -149,8 +149,6 @@ describe('Sfn', () => {
 
     before(() => {
       client = getClient()
-      tracer = require('../../dd-trace').init()
-      tracer.use('aws-sdk')
     })
 
     function getClient () {
@@ -201,6 +199,10 @@ describe('Sfn', () => {
     }
 
     describe('Traces', () => {
+      before(() => {
+        tracer = require('../../dd-trace').init()
+        tracer.use('aws-sdk')
+      })
       // aws-sdk v2 doesn't support StepFunctions below 2.7.10
       // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
       if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
@@ -225,7 +227,7 @@ describe('Sfn', () => {
 
           await client.startExecution({
             stateMachineArn,
-            input: JSON.stringify({})
+            input: JSON.stringify({ 'moduleName': moduleName })
           })
 
           return expectSpanPromise.then(() => console.log('done'))
