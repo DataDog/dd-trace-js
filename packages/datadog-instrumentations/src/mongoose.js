@@ -21,7 +21,8 @@ addHook({
   name: 'mongoose',
   versions: ['>=4.6.4 <5', '5', '6', '>=7']
 }, mongoose => {
-  if (mongoose.Promise !== global.Promise) {
+  // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
+  if (mongoose.Promise && mongoose.Promise !== global.Promise) {
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
