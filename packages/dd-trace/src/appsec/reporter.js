@@ -8,7 +8,8 @@ const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
   incrementWafUpdatesMetric,
-  incrementWafRequestsMetric
+  incrementWafRequestsMetric,
+  getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
 
@@ -92,18 +93,9 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 }
 
 function reportMetrics (metrics) {
-  // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
-
-  if (metrics.duration) {
-    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
-  }
-
-  if (metrics.durationExt) {
-    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
-  }
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
@@ -177,6 +169,15 @@ function finishRequest (req, res) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
     metricsQueue.clear()
+  }
+
+  const metrics = getRequestMetrics(req)
+  if (metrics?.duration) {
+    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+  }
+
+  if (metrics?.durationExt) {
+    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
 
   incrementWafRequestsMetric(req)
