@@ -4,10 +4,10 @@ const { storage } = require('../../../datadog-core')
 const { getChannelLogLevel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 
 const defaultLogger = {
-  debug: msg => console.debug(msg), /* eslint-disable-line no-console */
-  info: msg => console.info(msg), /* eslint-disable-line no-console */
-  warn: msg => console.warn(msg), /* eslint-disable-line no-console */
-  error: msg => console.error(msg) /* eslint-disable-line no-console */
+  debug: msg => console.debug(`${new Date().toString()}: ${msg}`), /* eslint-disable-line no-console */
+  info: msg => console.info(`${new Date().toString()}: ${msg}`), /* eslint-disable-line no-console */
+  warn: msg => console.warn(`${new Date().toString()}: ${msg}`), /* eslint-disable-line no-console */
+  error: msg => console.error(`${new Date().toString()}: ${msg}`) /* eslint-disable-line no-console */
 }
 
 let enabled = false
