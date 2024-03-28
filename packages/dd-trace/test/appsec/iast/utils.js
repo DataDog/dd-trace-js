@@ -10,6 +10,7 @@ const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
 const Config = require('../../../src/config')
 const vulnerabilityReporter = require('../../../src/appsec/iast/vulnerability-reporter')
+const { storage } = require('../../../../datadog-core')
 
 function testInRequest (app, tests) {
   let http
@@ -46,6 +47,7 @@ function testInRequest (app, tests) {
   })
 
   beforeEach(done => {
+    storage.enterWith(undefined)
     const server = new http.Server(listener)
     appListener = server
       .listen(config.port, 'localhost', () => done())
@@ -128,6 +130,12 @@ function endResponse (res, appResult) {
     appResult.then(() => {
       if (!res.headersSent) {
         res.writeHead(200)
+      }
+      res.end()
+    }).catch(e => {
+      console.error(e)
+      if (!res.headersSent) {
+        res.writeHead(500)
       }
       res.end()
     })
@@ -290,7 +298,13 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     before(() => {
       listener = (req, res) => {
-        endResponse(res, app && app(req, res))
+        try {
+          endResponse(res, app && app(req, res))
+        } catch (e) {
+          console.error(e)
+          res.writeHead(500)
+          res.end()
+        }
       }
     })
 
