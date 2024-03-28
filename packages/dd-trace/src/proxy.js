@@ -12,6 +12,7 @@ const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const spanleak = require('./spanleak')
+const { SSITelemetry } = require('./profiling/ssi-telemetry')
 
 class Tracer extends NoopProxy {
   constructor () {
@@ -72,6 +73,8 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
+      const ssiTelemetry = new SSITelemetry()
+      ssiTelemetry.start()
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
@@ -80,6 +83,8 @@ class Tracer extends NoopProxy {
         } catch (e) {
           log.error(e)
         }
+      } else if (ssiTelemetry.enabled()) {
+        require('./profiling/ssi-telemetry-mock-profiler').start(config)
       }
       if (!this._profilerStarted) {
         this._profilerStarted = Promise.resolve(false)

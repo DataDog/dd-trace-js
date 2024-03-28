@@ -4,6 +4,9 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
+const dc = require('dc-polyfill')
+
+const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
@@ -161,6 +164,7 @@ class Profiler extends EventEmitter {
         this._capture(this._timeoutInterval, endDate)
       }
       await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+      profileSubmittedChannel.publish()
       this._logger.debug('Submitted profiles')
     } catch (err) {
       this._logger.error(err)

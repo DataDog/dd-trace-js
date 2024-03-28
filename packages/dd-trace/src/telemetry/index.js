@@ -10,6 +10,7 @@ const logs = require('./logs')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
+const telemetryAppClosingChannel = dc.channel('datadog:telemetry:app-closing')
 
 let config
 let pluginManager
@@ -129,12 +130,12 @@ function appClosing () {
   if (!config?.telemetry?.enabled) {
     return
   }
+  // Give chance to listeners to update metrics before shutting down.
+  telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
-  // we flush before shutting down. Only in CI Visibility
-  if (config.isCiVisibility) {
-    metricsManager.send(config, application, host)
-  }
+  // We flush before shutting down.
+  metricsManager.send(config, application, host)
 }
 
 function onBeforeExit () {
