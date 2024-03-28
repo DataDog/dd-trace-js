@@ -55,3 +55,6 @@
 /.github/workflows/tracing.yml @DataDog/dd-trace-js
 /.gitlab/benchmarks.yml @DataDog/dd-trace-js
 /.gitlab-ci.yml @DataDog/dd-trace-js
+
+# Security
+/.gitlab/software_composition_analysis.yaml  @DataDog/software-integrity-and-trust
