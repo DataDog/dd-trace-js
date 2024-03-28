@@ -129,6 +129,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
+    expect(config).to.have.nested.property('sca.enabled', false)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -198,7 +199,8 @@ describe('Config', () => {
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' }
+      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
+      { name: 'sca.enabled', value: false, origin: 'default' }
     )
   })
 
@@ -292,6 +294,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
+    process.env.DD_APPSEC_SCA_ENABLED = true
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -394,6 +397,7 @@ describe('Config', () => {
       type: 'k8s_single_step',
       time: '1703188212'
     })
+    expect(config).to.have.nested.property('sca.enabled', true)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -439,7 +443,8 @@ describe('Config', () => {
       { name: 'iast.maxContextOperations', value: 4, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.redactionEnabled', value: false, origin: 'env_var' },
-      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' }
+      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
+      { name: 'sca.enabled', value: true, origin: 'env_var' }
     )
   })
 
