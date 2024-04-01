@@ -44,11 +44,14 @@ const knownTestsCh = channel('ci:jest:known-tests')
 
 const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 
+// Message sent by jest's main process to workers to run a test suite (=test file)
+// https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
+const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10000
 
 let skippableSuites = []
-let knownTests = []
+let knownTests = {}
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
@@ -123,9 +126,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
 
       if (this.isEarlyFlakeDetectionEnabled) {
+        const hasKnownTests = !!knownTests.jest
         earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
         try {
-          this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
+          this.knownTestsForThisSuite = hasKnownTests
+            ? (knownTests.jest[this.testSuite] || [])
+            : this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
@@ -145,7 +151,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (typeof knownTestsForSuite === 'string') {
         knownTestsForSuite = JSON.parse(knownTestsForSuite)
       }
-      return knownTestsForSuite.jest?.[this.testSuite] || []
+      return knownTestsForSuite
     }
 
     // Add the `add_test` event we don't have the test object yet, so
@@ -619,7 +625,6 @@ function configureTestEnvironment (readConfigsResult) {
   // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
   configs.forEach(config => {
     config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
-    config.testEnvironmentOptions._ddKnownTests = knownTests
   })
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
@@ -795,6 +800,38 @@ addHook({
   file: 'build/workers/ChildProcessWorker.js'
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
+  shimmer.wrap(ChildProcessWorker.prototype, 'send', send => function (request) {
+    if (!isEarlyFlakeDetectionEnabled) {
+      return send.apply(this, arguments)
+    }
+    const [type] = request
+    // eslint-disable-next-line
+    // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
+    if (type === CHILD_MESSAGE_CALL) {
+      // This is the message that the main process sends to the worker to run a test suite (=test file).
+      // In here we modify the config.testEnvironmentOptions to include the known tests for the suite.
+      // This way the suite only knows about the tests that are part of it.
+      const args = request[request.length - 1]
+      if (args.length > 1) {
+        return send.apply(this, arguments)
+      }
+      if (!args[0]?.config) {
+        return send.apply(this, arguments)
+      }
+      const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
+      const suiteKnownTests = knownTests.jest?.[testSuite] || []
+      args[0].config = {
+        ...config,
+        testEnvironmentOptions: {
+          ...config.testEnvironmentOptions,
+          _ddKnownTests: suiteKnownTests
+        }
+      }
+    }
+
+    return send.apply(this, arguments)
+  })
   shimmer.wrap(ChildProcessWorker.prototype, '_onMessage', _onMessage => function () {
     const [code, data] = arguments[0]
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
