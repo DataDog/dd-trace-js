@@ -42,7 +42,7 @@ module.exports = class CiPlugin extends Plugin {
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
-          log.error(`Intelligent Test Runner configuration could not be fetched. ${err.message}`)
+          log.error(`Library configuration could not be fetched. ${err.message}`)
         } else {
           this.libraryConfig = libraryConfig
         }
@@ -123,6 +123,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
           log.error(`Known tests could not be fetched. ${err.message}`)
+          this.libraryConfig.isEarlyFlakeDetectionEnabled = false
         }
         onDone({ err, knownTests })
       })

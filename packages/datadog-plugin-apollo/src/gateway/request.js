@@ -14,17 +14,6 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     return 'tracing:apm:apollo:gateway:request'
   }
 
-  constructor (...args) {
-    super(...args)
-    this.addSub('apm:apollo:gateway:request:executor', (ctx) => {
-      if (ctx.requestContext || ctx.gateway) {
-        this.requestContext = ctx
-      } else {
-        this.requestContext = {}
-      }
-    })
-  }
-
   bindStart (ctx) {
     const store = storage.getStore()
     const childOf = store ? store.span : null
@@ -37,7 +26,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
       meta: {}
     }
 
-    const { requestContext, gateway } = this.requestContext
+    const { requestContext, gateway } = ctx
 
     if (requestContext?.operationName) {
       spanData.meta['graphql.operation.name'] = requestContext.operationName
@@ -75,10 +64,6 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     }
     ctx.currentStore.span.finish()
     return ctx.parentStore
-  }
-
-  end () {
-    // do nothing to avoid ApolloBasePlugin's end method
   }
 }
 

@@ -1016,6 +1016,132 @@ testFrameworks.forEach(({
             }).catch(done)
           })
         })
+        it('handles spaces in test names', (done) => {
+          const envVars = reportingOption === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
+          if (reportingOption === 'evp proxy') {
+            receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+          }
+          // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
+          receiver.setKnownTests({
+            [name]: {
+              'ci-visibility/test-early-flake-detection/weird-test-names.js': [
+                'no describe can do stuff',
+                'describe  trailing space '
+              ]
+            }
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.equal(tests.length, 2)
+
+              const resourceNames = tests.map(test => test.resource)
+
+              assert.includeMembers(resourceNames,
+                [
+                  'ci-visibility/test-early-flake-detection/weird-test-names.js.no describe can do stuff',
+                  'ci-visibility/test-early-flake-detection/weird-test-names.js.describe  trailing space '
+                ]
+              )
+
+              const newTests = tests.filter(
+                test => test.meta[TEST_IS_NEW] === 'true'
+              )
+              // no new tests
+              assert.equal(newTests.length, 0)
+            })
+
+          let TESTS_TO_RUN = 'test-early-flake-detection/weird-test-names'
+          if (name === 'mocha') {
+            TESTS_TO_RUN = JSON.stringify([
+              './test-early-flake-detection/weird-test-names.js'
+            ])
+          }
+
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                TESTS_TO_RUN
+              },
+              stdio: 'inherit'
+            }
+          )
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+        it('does not run EFD if the known tests request fails', (done) => {
+          const envVars = reportingOption === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
+          if (reportingOption === 'evp proxy') {
+            receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+          }
+          receiver.setKnownTestsResponseCode(500)
+
+          const NUM_RETRIES_EFD = 5
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.equal(tests.length, 2)
+              const newTests = tests.filter(
+                test => test.meta[TEST_IS_NEW] === 'true'
+              )
+              assert.equal(newTests.length, 0)
+            })
+
+          let TESTS_TO_RUN = 'test/ci-visibility-test'
+          if (name === 'mocha') {
+            TESTS_TO_RUN = JSON.stringify([
+              './test/ci-visibility-test.js',
+              './test/ci-visibility-test-2.js'
+            ])
+          }
+
+          childProcess = exec(
+            runTestsWithCoverageCommand,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                TESTS_TO_RUN
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => done()).catch(done)
+          })
+        })
       })
     })
 
