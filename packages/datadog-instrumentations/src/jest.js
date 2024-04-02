@@ -76,6 +76,7 @@ const specStatusToTestStatus = {
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
+const newTestsTestStatuses = new Map()
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -102,6 +103,13 @@ function getTestEnvironmentOptions (config) {
     return config.testEnvironmentOptions
   }
   return {}
+}
+
+function getEfdStats (testStatuses) {
+  return testStatuses.reduce((acc, testStatus) => {
+    acc[testStatus]++
+    return acc
+  }, { pass: 0, fail: 0 })
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -248,6 +256,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
           // restore in case it is retried
           event.test.fn = originalTestFns.get(event.test)
+          // We'll store the test statuses of the retries
+          if (this.isEarlyFlakeDetectionEnabled) {
+            const testName = getJestTestName(event.test)
+            const originalTestName = removeEfdStringFromTestName(testName)
+            const isNewTest = retriedTestsToNumAttempts.has(originalTestName)
+            if (isNewTest) {
+              if (newTestsTestStatuses.has(originalTestName)) {
+                newTestsTestStatuses.get(originalTestName).push(status)
+              } else {
+                newTestsTestStatuses.set(originalTestName, [status])
+              }
+            }
+          }
         })
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
@@ -513,6 +534,28 @@ function cliWrapper (cli, jestVersion) {
     }
 
     numSkippedSuites = 0
+
+    /**
+     * If Early Flake Detection (EFD) is enabled the logic is as follows:
+     * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+     * - If just a single attempt passes, we will prevent the test process from failing.
+     * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+     * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+     */
+
+    if (isEarlyFlakeDetectionEnabled) {
+      let numFailedTestsToIgnore = 0
+      for (const testStatuses of newTestsTestStatuses.values()) {
+        const { pass, fail } = getEfdStats(testStatuses)
+        if (pass > 0) { // as long as one passes, we'll consider the test passed
+          numFailedTestsToIgnore += fail
+        }
+      }
+      // If every test that failed was an EFD retry, we'll consider the suite passed
+      if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
+        result.results.success = true
+      }
+    }
 
     return result
   })
