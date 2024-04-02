@@ -79,6 +79,7 @@ function getSkippableSuites ({
   incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS)
 
   const startTime = Date.now()
+  log.warn('Fetching skippable tests...')
 
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, Date.now() - startTime)
@@ -108,7 +109,7 @@ function getSkippableSuites ({
           skippableSuites.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
-        log.debug(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
+        log.warn(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
         done(null, skippableSuites, correlationId)
       } catch (err) {
         done(err)
