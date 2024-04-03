@@ -63,6 +63,7 @@ module.exports = {
   koa: () => require('../koa'),
   'koa-router': () => require('../koa'),
   kafkajs: () => require('../kafkajs'),
+  langchain: () => require('../langchain'),
   ldapjs: () => require('../ldapjs'),
   'limitd-client': () => require('../limitd-client'),
   mariadb: () => require('../mariadb'),

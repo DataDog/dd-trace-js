@@ -3,7 +3,7 @@
 const { SourceIastPlugin } = require('../iast-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
-const { taintObject, newTaintedString, getRanges } = require('./operations')
+const { taintObject, newTaintedString, newTaintedStringFromParent, getRanges } = require('./operations')
 const {
   HTTP_REQUEST_BODY,
   HTTP_REQUEST_COOKIE_VALUE,
@@ -77,6 +77,32 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
           this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:langchain:invoke:finish' },
+      (data) => {
+        const iastContext = getIastContext(storage.getStore())
+        const input = data.input
+        const ranges = input && getRanges(iastContext, input)
+        if (ranges?.length && data.output?.text) {
+          data.output.text =
+            newTaintedStringFromParent(iastContext, data.output.text, input)
+        }
+      }
+    )
+
+    this.addSub(
+      { channelName: 'datadog:langchain:outputparse:finish' },
+      (data) => {
+        const iastContext = getIastContext(storage.getStore())
+        const input = data.input
+        const ranges = input && getRanges(iastContext, input)
+        if (ranges?.length && data.output?.toolInput) {
+          data.output.toolInput =
+            newTaintedStringFromParent(iastContext, data.output.toolInput, input)
         }
       }
     )

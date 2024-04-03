@@ -44,6 +44,17 @@ function newTaintedString (iastContext, string, name, type) {
   return result
 }
 
+function newTaintedStringFromParent (iastContext, value, parent) {
+  let result
+  const transactionId = iastContext?.[IAST_TRANSACTION_ID]
+  if (transactionId) {
+    result = TaintedUtils.newTaintedStringFromParent(transactionId, value, parent)
+  } else {
+    result = value
+  }
+  return result
+}
+
 function newTaintedObject (iastContext, obj, name, type) {
   let result
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]
@@ -111,6 +122,7 @@ module.exports = {
   createTransaction,
   removeTransaction,
   newTaintedString,
+  newTaintedStringFromParent,
   newTaintedObject,
   taintObject,
   isTainted,
