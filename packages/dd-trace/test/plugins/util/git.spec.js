@@ -171,9 +171,33 @@ describe('getCommitsRevList', () => {
         }
       }
     )
-    const commitsToUpload = getCommitsRevList([], [])
+    getCommitsRevList([], [])
     expect(logErrorSpy).to.have.been.called
-    expect(commitsToUpload.length).to.equal(0)
+  })
+
+  it('returns null if the repository is bigger than the limit', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: (command, flags, options) =>
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
+        },
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
+  })
+
+  it('returns null if execFileSync fails for whatever reason', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: () => { throw new Error('error!') }
+        },
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
   })
 })
 
