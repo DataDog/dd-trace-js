@@ -3,7 +3,7 @@ name: Release (latest)
 on:
   push:
     branches:
-      - v4.x
+      - v5.x
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}

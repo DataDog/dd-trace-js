@@ -14,6 +14,7 @@ function enable (config) {
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
 
   const activation = Activation.fromConfig(config)
 
@@ -59,7 +60,7 @@ function enableOrDisableAppsec (action, rcConfig, config) {
 }
 
 function enableWafUpdate (appsecConfig) {
-  if (rc && appsecConfig && !appsecConfig.customRulesProvided) {
+  if (rc && appsecConfig && !appsecConfig.rules) {
     // dirty require to make startup faster for serverless
     const RuleManager = require('../rule_manager')
 

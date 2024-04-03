@@ -12,7 +12,7 @@ const savedDependenciesToSend = new Set()
 const detectedDependencyKeys = new Set()
 const detectedDependencyVersions = new Set()
 
-const FILE_URI_START = `file://`
+const FILE_URI_START = 'file://'
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 
 let immediate, config, application, host, initialLoad
@@ -21,12 +21,11 @@ let getRetryData
 let updateRetryData
 
 function createBatchPayload (payload) {
-  const batchPayload = []
-  payload.map(item => {
-    batchPayload.push({
+  const batchPayload = payload.map(item => {
+    return {
       request_type: item.reqType,
       payload: item.payload
-    })
+    }
   })
 
   return batchPayload

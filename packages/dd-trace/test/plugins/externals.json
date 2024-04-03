@@ -1,4 +1,22 @@
 {
+  "apollo": [
+    {
+      "name": "@apollo/subgraph",
+      "versions": [">=2.3.0"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^16.6.0"]
+    },
+    {
+      "name": "graphql-tag",
+      "versions": ["^2.12.6"]
+    },
+    {
+      "name": "@apollo/server",
+      "versions": ["^4.0.0"]
+    }
+  ],
   "aws-sdk": [
     {
       "name": "@aws-sdk/client-lambda",
@@ -59,6 +77,16 @@
       "versions": ["1.20.1"]
     }
   ],
+  "mquery": [
+    {
+      "name": "mquery",
+      "versions": [">=5.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["5", ">=6"]
+    }
+  ],
   "fastify": [
     {
       "name": "fastify",
@@ -85,6 +113,22 @@
     {
       "name": "apollo-server-core",
       "versions": ["1.3.6"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
+    },
+    {
+      "name": "apollo-server-express",
+      "versions": [">=3"]
+    },
+    {
+      "name": "fastify",
+      "versions": [">=3"]
+    },
+    {
+      "name": "apollo-server-fastify",
+      "versions": [">=3"]
     },
     {
       "name": "graphql-tools",
@@ -225,6 +269,10 @@
     {
       "name": "bson",
       "versions": ["4.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["6.3.0"]
     }
   ],
   "mongoose": [
@@ -298,6 +346,12 @@
     {
       "name": "redis",
       "versions": ["^4"]
+    }
+  ],
+  "sequelize": [
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ]
 }

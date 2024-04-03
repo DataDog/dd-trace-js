@@ -62,7 +62,7 @@ describe('Plugin', () => {
           const Server = getServer()
 
           server = new Server({
-            host: 'localhost',
+            host: '127.0.0.1',
             port: 27017,
             reconnect: false
           })
@@ -86,7 +86,7 @@ describe('Plugin', () => {
                 expect(span).to.have.property('type', 'mongodb')
                 expect(span.meta).to.have.property('span.kind', 'client')
                 expect(span.meta).to.have.property('db.name', `test.${collection}`)
-                expect(span.meta).to.have.property('out.host', 'localhost')
+                expect(span.meta).to.have.property('out.host', '127.0.0.1')
                 expect(span.meta).to.have.property('component', 'mongodb')
               })
               .then(done)
@@ -117,7 +117,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
-                const query = `{"_id":"?"}`
+                const query = '{"_id":"?"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -138,7 +138,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
-                const query = `{"_id":"9999999999999999999999"}`
+                const query = '{"_id":"9999999999999999999999"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -167,7 +167,7 @@ describe('Plugin', () => {
           })
 
           it('should stringify BSON objects', done => {
-            const BSON = require(`../../../versions/bson@4.0.0`).get()
+            const BSON = require('../../../versions/bson@4.0.0').get()
             const id = '123456781234567812345678'
 
             agent
@@ -195,7 +195,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
-                const query = `{"_id":"1234"}`
+                const query = '{"_id":"1234"}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -284,7 +284,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
                 const resource = `find test.${collection}`
-                const query = `{"foo":1,"bar":{"baz":[1,2,3]}}`
+                const query = '{"foo":1,"bar":{"baz":[1,2,3]}}'
 
                 expect(span).to.have.property('resource', resource)
                 expect(span.meta).to.have.property('mongodb.query', query)
@@ -360,7 +360,7 @@ describe('Plugin', () => {
           const Server = getServer()
 
           server = new Server({
-            host: 'localhost',
+            host: '127.0.0.1',
             port: 27017,
             reconnect: false
           })

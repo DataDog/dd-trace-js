@@ -17,7 +17,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
-  static get prefix () { return `apm:http:client:request` }
+  static get prefix () { return 'apm:http:client:request' }
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -122,7 +122,7 @@ class HttpClientPlugin extends ClientPlugin {
       // conditions for no error:
       // 1. not using a custom agent instance with custom timeout specified
       // 2. no invocation of `req.setTimeout`
-      if (!args.options.agent?.options.timeout && !customRequestTimeout) return
+      if (!args.options.agent?.options?.timeout && !customRequestTimeout) return
 
       span.setTag('error', 1)
     }
@@ -227,7 +227,7 @@ function hasAmazonSignature (options) {
       return true
     }
 
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }

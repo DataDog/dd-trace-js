@@ -63,8 +63,8 @@ describe('dogstatsd', () => {
     })
 
     const dogstatsd = proxyquire('../src/dogstatsd', {
-      'dgram': dgram,
-      'dns': dns
+      dgram,
+      dns
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -296,7 +296,7 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should fail over to UDP', (done) => {
+  it('should fail over to UDP when receiving HTTP 404 error from agent', (done) => {
     assertData = () => {
       setTimeout(() => {
         try {
@@ -317,6 +317,32 @@ describe('dogstatsd', () => {
     })
 
     client.increment('test.count', 10)
+
+    client.flush()
+  })
+
+  it('should fail over to UDP when receiving network error from agent', (done) => {
+    udp4.send = sinon.stub().callsFake(() => {
+      try {
+        expect(udp4.send).to.have.been.called
+        expect(udp4.send.firstCall.args[0].toString()).to.equal('test.foo:10|c\n')
+        expect(udp4.send.firstCall.args[2]).to.equal(14)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    statusCode = null
+
+    // host exists but port does not, ECONNREFUSED
+    client = new DogStatsDClient({
+      metricsProxyUrl: 'http://localhost:32700',
+      host: 'localhost',
+      port: 8125
+    })
+
+    client.increment('test.foo', 10)
 
     client.flush()
   })

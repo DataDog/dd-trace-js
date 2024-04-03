@@ -26,8 +26,9 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS
 } = require('../../ci-visibility/telemetry')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const { storage } = require('../../../../datadog-core')
 
-const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
+const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
 
 function sanitizedExec (
   cmd,
@@ -36,6 +37,9 @@ function sanitizedExec (
   durationMetric,
   errorMetric
 ) {
+  const store = storage.getStore()
+  storage.enterWith({ noop: true })
+
   let startTime
   if (operationMetric) {
     incrementCountMetric(operationMetric.name, operationMetric.tags)
@@ -49,12 +53,18 @@ function sanitizedExec (
       distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
     }
     return result
-  } catch (e) {
+  } catch (err) {
     if (errorMetric) {
-      incrementCountMetric(errorMetric.name, { ...errorMetric.tags, exitCode: e.status })
+      incrementCountMetric(errorMetric.name, {
+        ...errorMetric.tags,
+        errorType: err.code,
+        exitCode: err.status || err.errno
+      })
     }
-    log.error(e)
+    log.error(err)
     return ''
+  } finally {
+    storage.enterWith(store)
   }
 }
 
@@ -123,7 +133,10 @@ function unshallowRepository () {
   } catch (err) {
     // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
     log.error(err)
-    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'unshallow', exitCode: err.status })
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+    )
     const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
     try {
       cp.execFileSync('git', [
@@ -133,7 +146,10 @@ function unshallowRepository () {
     } catch (err) {
       // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
       log.error(err)
-      incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'unshallow', exitCode: err.status })
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMAND_ERRORS,
+        { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+      )
       // We use sanitizedExec here because if this last option fails, we'll give up.
       sanitizedExec(
         'git',
@@ -169,13 +185,16 @@ function getLatestCommits () {
     return result
   } catch (err) {
     log.error(`Get latest commits failed: ${err.message}`)
-    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'get_local_commits', errorType: err.status })
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'get_local_commits', errorType: err.status }
+    )
     return []
   }
 }
 
 function getCommitsRevList (commitsToExclude, commitsToInclude) {
-  let result = []
+  let result = null
 
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
@@ -199,7 +218,10 @@ function getCommitsRevList (commitsToExclude, commitsToInclude) {
       .filter(commit => commit)
   } catch (err) {
     log.error(`Get commits to upload failed: ${err.message}`)
-    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'get_objects', errorType: err.status })
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
+    )
   }
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, Date.now() - startTime)
   return result
@@ -239,7 +261,10 @@ function generatePackFilesForCommits (commitsToUpload) {
     result = execGitPackObjects(temporaryPath)
   } catch (err) {
     log.error(err)
-    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'pack_objects', errorType: err.status })
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+    )
     /**
      * The generation of pack files in the temporary folder (from `os.tmpdir()`)
      * sometimes fails in certain CI setups with the error message
@@ -256,7 +281,10 @@ function generatePackFilesForCommits (commitsToUpload) {
       result = execGitPackObjects(cwdPath)
     } catch (err) {
       log.error(err)
-      incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'pack_objects', errorType: err.status })
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMAND_ERRORS,
+        { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+      )
     }
   }
   distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, Date.now() - startTime)

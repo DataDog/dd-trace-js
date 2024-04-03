@@ -4,7 +4,7 @@ const pkg = require('../../../../package.json')
 const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-const { encodePathwayContext } = require('./pathway')
+const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
@@ -13,7 +13,6 @@ const { PATHWAY_HASH } = require('../../../../ext/tags')
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -125,6 +124,21 @@ function getSizeOrZero (obj) {
   if (Buffer.isBuffer(obj)) {
     return obj.length
   }
+  if (Array.isArray(obj) && obj.length > 0) {
+    if (typeof obj[0] === 'number') return Buffer.from(obj).length
+    let payloadSize = 0
+    obj.forEach(item => {
+      payloadSize += getSizeOrZero(item)
+    })
+    return payloadSize
+  }
+  if (typeof obj === 'object') {
+    try {
+      return getHeadersSize(obj)
+    } catch {
+      // pass
+    }
+  }
   return 0
 }
 
@@ -136,6 +150,11 @@ function getHeadersSize (headers) {
 function getMessageSize (message) {
   const { key, value, headers } = message
   return getSizeOrZero(key) + getSizeOrZero(value) + getHeadersSize(headers)
+}
+
+function getAmqpMessageSize (message) {
+  const { headers, content } = message
+  return getSizeOrZero(content) + getHeadersSize(headers)
 }
 
 class TimeBuckets extends Map {
@@ -157,7 +176,8 @@ class DataStreamsProcessor {
     env,
     tags,
     version,
-    service
+    service,
+    flushInterval
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
@@ -173,11 +193,13 @@ class DataStreamsProcessor {
     this.service = service || 'unnamed-nodejs-service'
     this.version = version || ''
     this.sequence = 0
+    this.flushInterval = flushInterval
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), 10000)
+      this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
+    process.once('beforeExit', () => this.onInterval())
   }
 
   onInterval () {
@@ -201,7 +223,8 @@ class DataStreamsProcessor {
    */
   bucketFromTimestamp (timestamp) {
     const bucketTime = Math.round(timestamp - (timestamp % this.bucketSizeNs))
-    return this.buckets.forTime(bucketTime)
+    const bucket = this.buckets.forTime(bucketTime)
+    return bucket
   }
 
   recordCheckpoint (checkpoint, span = null) {
@@ -250,26 +273,28 @@ class DataStreamsProcessor {
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
-      hash: hash,
-      edgeStartNs: edgeStartNs,
-      pathwayStartNs: pathwayStartNs,
+      hash,
+      edgeStartNs,
+      pathwayStartNs,
       previousDirection: direction,
-      closestOppositeDirectionHash: closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart
+      closestOppositeDirectionHash,
+      closestOppositeDirectionEdgeStart
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
-      payloadSize += getSizeOrZero(encodePathwayContext(dataStreamsContext))
-      payloadSize += CONTEXT_PROPAGATION_KEY.length
+      // - 1 to account for extra byte for {
+      const ddInfoContinued = {}
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfoContinued)
+      payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
     }
     const checkpoint = {
       currentTimestamp: nowNs,
-      parentHash: parentHash,
-      hash: hash,
-      edgeTags: edgeTags,
-      edgeLatencyNs: edgeLatencyNs,
-      pathwayLatencyNs: pathwayLatencyNs,
-      payloadSize: payloadSize
+      parentHash,
+      hash,
+      edgeTags,
+      edgeLatencyNs,
+      pathwayLatencyNs,
+      payloadSize
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -295,7 +320,7 @@ class DataStreamsProcessor {
     // TimeBuckets
     const serializedBuckets = []
 
-    for (const [ timeNs, bucket ] of this.buckets.entries()) {
+    for (const [timeNs, bucket] of this.buckets.entries()) {
       const points = []
 
       // bucket: StatsBucket
@@ -322,17 +347,21 @@ class DataStreamsProcessor {
       Stats: serializedBuckets
     }
   }
+
+  setUrl (url) {
+    this.writer.setUrl(url)
+  }
 }
 
 module.exports = {
-  DataStreamsProcessor: DataStreamsProcessor,
-  StatsPoint: StatsPoint,
-  StatsBucket: StatsBucket,
+  DataStreamsProcessor,
+  StatsPoint,
+  StatsBucket,
   Backlog,
   TimeBuckets,
   getMessageSize,
   getHeadersSize,
   getSizeOrZero,
-  ENTRY_PARENT_HASH,
-  CONTEXT_PROPAGATION_KEY
+  getAmqpMessageSize,
+  ENTRY_PARENT_HASH
 }

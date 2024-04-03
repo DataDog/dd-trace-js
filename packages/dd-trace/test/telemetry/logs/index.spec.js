@@ -165,7 +165,7 @@ describe('telemetry logs', () => {
 
       logs.send(defaultConfig, application, host)
 
-      expect(sendData).to.be.calledOnceWithExactly(defaultConfig, application, host, 'logs', { 'logs': collectedLogs })
+      expect(sendData).to.be.calledOnceWithExactly(defaultConfig, application, host, 'logs', { logs: collectedLogs })
     })
 
     it('should not drain logCollector and call sendData if not enabled', () => {

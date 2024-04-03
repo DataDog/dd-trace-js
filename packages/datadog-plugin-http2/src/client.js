@@ -25,7 +25,7 @@ const HTTP2_METHOD_GET = 'GET'
 
 class Http2ClientPlugin extends ClientPlugin {
   static get id () { return 'http2' }
-  static get prefix () { return `apm:http2:client:request` }
+  static get prefix () { return 'apm:http2:client:request' }
 
   bindStart (message) {
     const { authority, options, headers = {} } = message
@@ -122,7 +122,8 @@ function extractSessionDetails (authority, options) {
 
   const protocol = authority.protocol || options.protocol || 'https:'
   let port = '' + (authority.port !== ''
-    ? authority.port : (authority.protocol === 'http:' ? 80 : 443))
+    ? authority.port
+    : (authority.protocol === 'http:' ? 80 : 443))
   let host = authority.hostname || authority.host || 'localhost'
 
   if (protocol === 'https:' && options) {
@@ -144,7 +145,7 @@ function hasAmazonSignature (headers, path) {
       return true
     }
 
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }

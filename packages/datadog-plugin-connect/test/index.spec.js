@@ -491,6 +491,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => {
             res.statusCode = 500
             res.end()
@@ -661,6 +662,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => {
             res.statusCode = 500
             res.end()
@@ -802,6 +804,7 @@ describe('Plugin', () => {
           const error = new Error('boom')
 
           app.use((req, res) => { throw error })
+          // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => {
             res.statusCode = 500
             res.end()

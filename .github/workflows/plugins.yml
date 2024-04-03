@@ -11,16 +11,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
-  SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-  SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
 # TODO: upstream jobs
 
 
 jobs:
-  aerospike-3:
+  aerospike-node-14:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:18.04
@@ -72,9 +67,9 @@ jobs:
           yarn install --ignore-engines
           yarn test:plugins:ci
       - if: always()
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v2
 
-  aerospike-4:
+  aerospike-node-16:
     runs-on: ubuntu-latest
     services:
       aerospike:
@@ -84,7 +79,7 @@ jobs:
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '4.0.0 - 5.4.0'
+      PACKAGE_VERSION_RANGE: '>=4.0.0 <5.2.0'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -101,7 +96,7 @@ jobs:
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
       - name: Install dependencies and run tests 
-        if: env.MAJOR_VERSION != '5'
+        if: env.MAJOR_VERSION == '4'
         run: |
           yarn install --ignore-engines
           yarn test:plugins:ci
@@ -109,7 +104,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  aerospike-5:
+  aerospike-node-18-20:
     strategy:
       matrix:
         node-version: [18]
@@ -145,7 +140,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies and run tests 
-        if: env.MAJOR_VERSION == '5'
+        if: env.MAJOR_VERSION >= '5'
         run: |
           yarn install --ignore-engines
           yarn test:plugins:ci
@@ -166,6 +161,7 @@ jobs:
     env:
       PLUGINS: amqp10|rhea
       SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -191,6 +187,25 @@ jobs:
     env:
       PLUGINS: amqplib
       SERVICES: rabbitmq
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  apollo:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: apollo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -241,6 +256,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
       SERVICES: localstack localstack-legacy
+      DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -331,6 +347,22 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
+
+  child_process:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: child_process
+    steps:
+      - uses: actions/checkout@v2
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/20
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v2
 
   couchbase:
     runs-on: ubuntu-latest
@@ -998,7 +1030,7 @@ jobs:
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v2
 
   paperplane:
     runs-on: ubuntu-latest

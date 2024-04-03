@@ -1,6 +1,6 @@
-
 const request = require('../exporters/common/request')
 const log = require('../log')
+const { isTrue } = require('../util')
 
 let agentTelemetry = true
 
@@ -26,9 +26,6 @@ function getAgentlessTelemetryEndpoint (site) {
   if (site === 'datad0g.com') { // staging
     return 'https://all-http-intake.logs.datad0g.com'
   }
-  if (site === 'datadoghq.eu') {
-    return 'https://instrumentation-telemetry-intake.eu1.datadoghq.com'
-  }
   return `https://instrumentation-telemetry-intake.${site}`
 }
 
@@ -49,13 +46,12 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   const {
     hostname,
     port,
-    experimental,
     isCiVisibility
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && experimental?.exporter === 'datadog'
+  const isCiVisibilityAgentlessMode = isCiVisibility && isTrue(process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED)
 
   if (isCiVisibilityAgentlessMode) {
     try {

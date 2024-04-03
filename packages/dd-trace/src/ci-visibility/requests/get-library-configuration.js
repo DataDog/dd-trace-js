@@ -9,11 +9,14 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
   getErrorTypeFromStatusCode
-} = require('../../ci-visibility/telemetry')
+} = require('../telemetry')
 
-function getItrConfiguration ({
+const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
+
+function getLibraryConfiguration ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   env,
   service,
   repositoryUrl,
@@ -38,7 +41,7 @@ function getItrConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/libraries/tests/services/setting'
+    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
@@ -88,12 +91,21 @@ function getItrConfiguration ({
               code_coverage: isCodeCoverageEnabled,
               tests_skipping: isSuitesSkippingEnabled,
               itr_enabled: isItrEnabled,
-              require_git: requireGit
+              require_git: requireGit,
+              early_flake_detection: earlyFlakeDetectionConfig
             }
           }
         } = JSON.parse(res)
 
-        const settings = { isCodeCoverageEnabled, isSuitesSkippingEnabled, isItrEnabled, requireGit }
+        const settings = {
+          isCodeCoverageEnabled,
+          isSuitesSkippingEnabled,
+          isItrEnabled,
+          requireGit,
+          isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
+          earlyFlakeDetectionNumRetries:
+            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
+        }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
@@ -116,4 +128,4 @@ function getItrConfiguration ({
   })
 }
 
-module.exports = { getItrConfiguration }
+module.exports = { getLibraryConfiguration }
