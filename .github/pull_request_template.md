@@ -23,5 +23,4 @@
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
 
-Unsure? Have a question? Request a review!
 
