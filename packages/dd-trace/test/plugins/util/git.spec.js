@@ -181,7 +181,7 @@ describe('getCommitsRevList', () => {
         child_process: {
           execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
-        },
+        }
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
@@ -193,7 +193,7 @@ describe('getCommitsRevList', () => {
       {
         child_process: {
           execFileSync: () => { throw new Error('error!') }
-        },
+        }
       }
     )
     const commitsToUpload = getCommitsRevList([], [])
