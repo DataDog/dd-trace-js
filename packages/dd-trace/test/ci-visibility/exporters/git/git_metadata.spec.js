@@ -192,6 +192,20 @@ describe('git_metadata', () => {
     })
   })
 
+  it('should fail if the getCommitsRevList fails because the repository is too big', (done) => {
+    // returning null means that the git rev-list failed
+    getCommitsRevListStub.returns(null)
+    const scope = nock('https://api.test.com')
+      .post('/api/v2/git/repository/search_commits')
+      .reply(200, JSON.stringify({ data: [] }))
+
+    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+      expect(err.message).to.contain('git rev-list failed')
+      expect(scope.isDone()).to.be.true
+      done()
+    })
+  })
+
   it('should fire a request per packfile', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
