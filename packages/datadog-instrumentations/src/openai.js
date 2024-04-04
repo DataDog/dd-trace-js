@@ -135,34 +135,31 @@ for (const { file, targetClass, object, methods } of V4_PACKAGE_SHIMS) {
 
         let headers, method, path
 
-        shimmer.wrap(apiProm, 'then', origApiPromThen => function () {
+        // wrapping `parse` avoids problematic wrapping of `then` when trying to call
+        // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
+        shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
           return this.responsePromise
             .then(({ response, options }) => {
               headers = response.headers
               method = options.method
               path = response.url
             })
-            .then(() => origApiPromThen.apply(this, arguments))
+            .then(() => origApiPromParse.apply(this, arguments))
+            .then(body => {
+              finishCh.publish({
+                headers,
+                body,
+                path,
+                method
+              })
+
+              shimmer.unwrap(apiProm, 'parse')
+
+              return body
+            })
         })
 
         return apiProm
-          .then((response) => {
-            finishCh.publish({
-              headers,
-              body: response,
-              path,
-              method
-            })
-
-            shimmer.unwrap(apiProm, 'then')
-
-            return response
-          })
-          .catch((err) => {
-            errorCh.publish({ err })
-
-            throw err
-          })
       })
     }
     return exports
