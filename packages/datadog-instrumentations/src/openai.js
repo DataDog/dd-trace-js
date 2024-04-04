@@ -10,45 +10,6 @@ const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
 const errorCh = channel('apm:openai:request:error')
 
-addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
-  const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
-  methodNames.shift() // remove leading 'constructor' method
-
-  for (const methodName of methodNames) {
-    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
-      if (!startCh.hasSubscribers) {
-        return fn.apply(this, arguments)
-      }
-
-      startCh.publish({
-        methodName,
-        args: arguments,
-        basePath: this.basePath,
-        apiKey: this.configuration.apiKey
-      })
-
-      return fn.apply(this, arguments)
-        .then((response) => {
-          finishCh.publish({
-            headers: response.headers,
-            body: response.data,
-            path: response.request.path,
-            method: response.request.method
-          })
-
-          return response
-        })
-        .catch((err) => {
-          errorCh.publish({ err })
-
-          throw err
-        })
-    })
-  }
-
-  return exports
-})
-
 const V4_PACKAGE_SHIMS = [
   {
     file: 'resources/chat/completions.js',
@@ -102,36 +63,93 @@ const V4_PACKAGE_SHIMS = [
   }
 ]
 
-for (const packageFile of V4_PACKAGE_SHIMS) {
-  addHook({ name: 'openai', file: packageFile.file, versions: ['>=4'] }, exports => {
-    const targetPrototype = exports[packageFile.targetClass].prototype
+addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
+  const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
+  methodNames.shift() // remove leading 'constructor' method
 
-    for (const methodName of packageFile.methods) {
-      shimmer.wrap(targetPrototype, methodName, fn => function () {
+  for (const methodName of methodNames) {
+    shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
+      if (!startCh.hasSubscribers) {
+        return fn.apply(this, arguments)
+      }
+
+      startCh.publish({
+        methodName,
+        args: arguments,
+        basePath: this.basePath,
+        apiKey: this.configuration.apiKey
+      })
+
+      return fn.apply(this, arguments)
+        .then((response) => {
+          finishCh.publish({
+            headers: response.headers,
+            body: response.data,
+            path: response.request.path,
+            method: response.request.method
+          })
+
+          return response
+        })
+        .catch((err) => {
+          errorCh.publish({ err })
+
+          throw err
+        })
+    })
+  }
+
+  return exports
+})
+
+for (const { file, targetClass, methods } of V4_PACKAGE_SHIMS) {
+  addHook({ name: 'openai', file, versions: ['>=4'] }, exports => {
+    const targetPrototype = exports[targetClass].prototype
+
+    for (const methodName of methods) {
+      shimmer.wrap(targetPrototype, methodName, methodFn => function () {
         if (!startCh.hasSubscribers) {
-          return fn.apply(this, arguments)
+          return methodFn.apply(this, arguments)
         }
+
+        const client = this._client || this.client
 
         startCh.publish({
           methodName,
           args: arguments,
-          basePath: this.client.baseURL,
-          apiKey: this.client.apiKey
+          basePath: client.baseURL,
+          apiKey: client.apiKey
         })
 
-        return fn.apply(this, arguments)
+        const apiProm = methodFn.apply(this, arguments)
+
+        let headers, method, path
+
+        shimmer.wrap(apiProm, 'then', origApiPromThen => function () {
+          return this.responsePromise
+            .then(({ response, options }) => {
+              headers = response.headers
+              method = options.method
+              path = response.url
+            })
+            .then(() => origApiPromThen.apply(this, arguments))
+        })
+
+        return apiProm
           .then((response) => {
             finishCh.publish({
-              headers: response.headers,
-              body: response.data,
-              path: response.request.path,
-              method: response.request.method
+              headers,
+              body: response,
+              path,
+              method
             })
+
+            shimmer.unwrap(apiProm, 'then')
 
             return response
           })
           .catch((err) => {
-            errorCh.publish({err})
+            errorCh.publish({ err })
 
             throw err
           })
