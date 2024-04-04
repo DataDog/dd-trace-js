@@ -6,15 +6,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
-const {
-  ENTRY_PARENT_HASH,
-  DataStreamsProcessor,
-  getSizeOrZero,
-  getHeadersSize
-} = require('../../dd-trace/src/datastreams/processor')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const DataStreamsContext = require('../../dd-trace/src/data_streams_context')
-const kinesisPlugin = require('../src/services/kinesis')
 
 describe('Kinesis', function () {
   this.timeout(10000)

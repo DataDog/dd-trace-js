@@ -74,18 +74,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
   }
 
-  parseAWSTraceHeader (header) {
-    // parses AWSTraceHeader string to object
-    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;
-    const obj = {}
-    const keyValuePairs = header.split(';')
-    keyValuePairs.forEach(pair => {
-      const [key, value] = pair.split('=')
-      obj[key.toLowerCase()] = value.toLowerCase()
-    })
-    return obj
-  }
-
   requestInject (span, request) {
     // implemented by subclasses, or not
   }

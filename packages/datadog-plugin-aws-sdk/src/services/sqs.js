@@ -138,20 +138,9 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    let parsedAttributes = {}
-    if (message.MessageAttributes && message.MessageAttributes._datadog) {
-      const datadogAttribute = message.MessageAttributes._datadog
-      parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
-    }
+    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
 
-    if (message.Attributes && message.Attributes.AWSTraceHeader) {
-      parsedAttributes = {
-        ...parsedAttributes,
-        ...this.parseAWSTraceHeader(message.Attributes.AWSTraceHeader)
-      }
-    }
-    if (Object.keys(parsedAttributes).length !== 0) return this.tracer.extract('text_map', parsedAttributes)
-  }
+    const datadogAttribute = message.MessageAttributes._datadog
 
     const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
     if (parsedAttributes) {
@@ -251,20 +240,6 @@ class Sqs extends BaseAwsSdkPlugin {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)
       }
-      if (this.config.dsmEnabled) {
-        const payloadSize = getHeadersSize({
-          Body: request.params.MessageBody,
-          MessageAttributes: request.params.MessageAttributes
-        })
-        const queue = request.params.QueueUrl.split('/').pop()
-        const dataStreamsContext = this.tracer
-          .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-        if (dataStreamsContext) {
-          const pathwayCtx = encodePathwayContext(dataStreamsContext)
-          ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
-        }
-      }
-      request.params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
     }
 
     if (this.config.dsmEnabled) {
