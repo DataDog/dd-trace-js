@@ -14,51 +14,61 @@ const V4_PACKAGE_SHIMS = [
   {
     file: 'resources/chat/completions.js',
     targetClass: 'Completions',
+    object: 'chat.completions',
     methods: ['create']
   },
   {
     file: 'resources/completions.js',
     targetClass: 'Completions',
+    object: 'completions',
     methods: ['create']
   },
   {
     file: 'resources/embeddings.js',
     targetClass: 'Embeddings',
+    object: 'embeddings',
     methods: ['create']
   },
   {
     file: 'resources/files.js',
     targetClass: 'Files',
+    object: 'files',
     methods: ['create', 'del', 'list', 'retrieve', 'retrieveContent']
   },
   {
     file: 'resources/images.js',
     targetClass: 'Images',
+    object: 'images',
     methods: ['createVariation', 'edit', 'generate']
   },
   {
     file: 'resources/fine-tuning/jobs.js',
     targetClass: 'Jobs',
+    object: 'fineTuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve']
   },
   {
     file: 'resources/models.js',
     targetClass: 'Models',
+    object: 'models',
     methods: ['del', 'list', 'retrieve']
   },
   {
     file: 'resources/moderation.js',
     targetClass: 'Moderations',
+    object: 'moderation',
     methods: ['create']
   },
   {
     file: 'resources/audio/transcriptions.js',
     targetClass: 'Transcriptions',
+    object: 'audio.transcriptions',
     methods: ['create']
   },
   {
     file: 'resources/audio/translations.js',
     targetClass: 'Translations',
+    object: 'audio.translations',
     methods: ['create']
   }
 ]
@@ -102,7 +112,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-for (const { file, targetClass, methods } of V4_PACKAGE_SHIMS) {
+for (const { file, targetClass, object, methods } of V4_PACKAGE_SHIMS) {
   addHook({ name: 'openai', file, versions: ['>=4'] }, exports => {
     const targetPrototype = exports[targetClass].prototype
 
@@ -115,7 +125,7 @@ for (const { file, targetClass, methods } of V4_PACKAGE_SHIMS) {
         const client = this._client || this.client
 
         startCh.publish({
-          methodName,
+          methodName: `${object}.${methodName}`,
           args: arguments,
           basePath: client.baseURL,
           apiKey: client.apiKey
