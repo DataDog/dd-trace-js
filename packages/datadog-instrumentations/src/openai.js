@@ -10,6 +10,8 @@ const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
 const errorCh = channel('apm:openai:request:error')
 
+const completionFinishCh = channel('datadog:openai:completion:finish')
+
 addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
   const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
   methodNames.shift() // remove leading 'constructor' method
@@ -46,5 +48,31 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
     })
   }
 
+  return exports
+})
+
+addHook({ name: 'openai', file: 'resources/chat/completions.js', versions: ['>=4'] }, exports => {
+  shimmer.wrap(exports.Completions.prototype, 'create', fn => function (body) {
+    // arguments[0].messages[0].content
+    const result = fn.apply(this, arguments)
+    if (completionFinishCh.hasSubscribers) {
+      if (!body?.stream) {
+        shimmer.wrap(result, 'then', fn => function () {
+          const originalThen = arguments[0]
+          arguments[0] = shimmer.wrap(arguments[0], function (output) {
+            completionFinishCh.publish({
+              input: body,
+              output
+            })
+
+            return originalThen.apply(this, arguments)
+          })
+          return fn.apply(this, arguments)
+        })
+      }
+    }
+
+    return result
+  })
   return exports
 })

@@ -107,6 +107,33 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       }
     )
 
+    this.addSub(
+      { channelName: 'datadog:openai:completion:finish' },
+      (data) => {
+        const iastContext = getIastContext(storage.getStore())
+
+        const messages = data.input.messages
+        let taintedMessage
+        for (const message of messages) {
+          const ranges = message?.content && getRanges(iastContext, message.content)
+          if (ranges?.length) {
+            taintedMessage = message.content
+            break
+          }
+        }
+
+        if (taintedMessage) {
+          const { choices } = data.output
+          for (const choice of choices) {
+            const { message } = choice
+            if (message) {
+              message.content = newTaintedStringFromParent(iastContext, message.content, taintedMessage)
+            }
+          }
+        }
+      }
+    )
+
     // this is a special case to increment INSTRUMENTED_SOURCE metric for header
     this.addInstrumentedSource('http', [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME])
   }
