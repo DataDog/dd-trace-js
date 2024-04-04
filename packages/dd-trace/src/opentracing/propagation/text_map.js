@@ -39,6 +39,15 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 // Tag values in tracestate replace ',', '~' and ';' with '_'
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
+// AWS X-Ray specific constants
+const xrayHeaderKey = 'x-amzn-trace-id'
+const xrayRootKey = 'root'
+const xrayRootPrefix = '1-00000000'
+const xrayParentKey = 'parent'
+const xraySampledKey = 'sampled'
+const xrayE2EStartTimeKey = 't0'
+const xraySelfKey = 'self'
+const xrayOriginKey = '_dd.origin'
 
 class TextMapPropagator {
   constructor (config) {
@@ -541,45 +550,77 @@ class TextMapPropagator {
   }
 
   _extractAwsXrayContext (carrier) {
-    let traceId
-    let spanId
-    let samplingPriority
-    let ddOrigin
+    if (xrayHeaderKey in carrier) {
+      const parsedHeader = this._parseAWSTraceHeader(carrier[xrayHeaderKey])
 
-    for (const key in carrier) {
-      const value = carrier[key]
-      if (key === 'root') {
-        const awsTraceIdSegments = value.split('-')
-        for (let i = 0; i < awsTraceIdSegments.length; i++) {
-          if (awsTraceIdSegments[i] === '1') {
-            continue
-          } else if (i === 1 && awsTraceIdSegments.length === 3) {
-            continue
-          } else if (i === 2 && awsTraceIdSegments.length === 3) {
-            traceId = awsTraceIdSegments[i].substring(8)
+      let traceId
+      let spanId
+      let samplingPriority
+      let ddOrigin
+      const baggage = {}
+
+      if (!(xrayRootKey in carrier) || !(xrayRootPrefix in carrier['root'])) {
+        // header doesn't match our padded version, ignore it
+        return null
+      }
+
+      for (const key in parsedHeader) {
+        const value = parsedHeader[key]
+        if (key === xrayRootKey) {
+          const awsTraceIdSegments = value.split('-')
+          for (let i = 0; i < awsTraceIdSegments.length; i++) {
+            if (awsTraceIdSegments[i] === '1') {
+              continue
+            } else if (i === 1 && awsTraceIdSegments.length === 3) {
+              continue
+            } else if (i === 2 && awsTraceIdSegments.length === 3) {
+              // trace id padded by: "00000000"
+              traceId = awsTraceIdSegments[i].substring(8)
+            }
           }
+        } else if (key === xrayParentKey) {
+          spanId = value
+        } else if (key === xraySampledKey) {
+          samplingPriority = parseInt(value)
+        } else if (key === xrayOriginKey) {
+          ddOrigin = String(value)
+        } else if (key === xraySelfKey) {
+          // self is added by load balancers and should be ignored
+          continue
+        } else if (key === xrayE2EStartTimeKey) {
+          // startTime = parseInt(value)
+        } else {
+          baggage[key] = value
         }
-      } else if (key === 'parent') {
-        spanId = value
-      } else if (key === 'sampled') {
-        samplingPriority = parseInt(value)
-      } else if (key === '_dd.origin') {
-        ddOrigin = String(value)
       }
-    }
 
-    if (traceId && spanId) {
-      const spanContext = new DatadogSpanContext({
-        traceId: id(traceId, 16),
-        spanId: id(spanId, 16),
-        sampling: { samplingPriority }
-      })
-      if (ddOrigin) {
-        spanContext._trace.origin = ddOrigin
+      if (traceId && spanId) {
+        const spanContext = new DatadogSpanContext({
+          traceId: id(traceId, 16),
+          spanId: id(spanId, 16),
+          sampling: { samplingPriority }
+        })
+        if (ddOrigin) {
+          spanContext._trace.origin = ddOrigin
+        }
+        return spanContext
       }
-      return spanContext
+      return null
+    } else {
+      return null
     }
-    return null
+  }
+
+  _parseAWSTraceHeader (header) {
+    // parses AWSTraceHeader string to object
+    // ex: 'Root=1-00000000-00000000fffffffffffffffe;Parent=ffffffffffffffff;Sampled=1;_dd.origin=fakeOrigin;
+    const obj = {}
+    const keyValuePairs = header.split(';')
+    keyValuePairs.forEach(pair => {
+      const [key, value] = pair.split('=')
+      obj[key.toLowerCase()] = value.toLowerCase()
+    })
+    return obj
   }
 }
 
