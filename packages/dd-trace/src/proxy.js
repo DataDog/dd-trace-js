@@ -6,6 +6,7 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
+const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
@@ -17,8 +18,10 @@ class Tracer extends NoopProxy {
     super()
 
     this._initialized = false
+    this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
+    this._tracingInitialized = false
   }
 
   init (options) {
@@ -28,6 +31,7 @@ class Tracer extends NoopProxy {
 
     try {
       const config = new Config(options) // TODO: support dynamic code config
+      telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
         // Custom Metrics
@@ -36,6 +40,10 @@ class Tracer extends NoopProxy {
         setInterval(() => {
           this.dogstatsd.flush()
         }, 10 * 1000).unref()
+
+        process.once('beforeExit', () => {
+          this.dogstatsd.flush()
+        })
       }
 
       if (config.spanLeakDebug > 0) {
@@ -56,11 +64,7 @@ class Tracer extends NoopProxy {
           } else {
             config.configure(conf.lib_config, true)
           }
-
-          if (config.tracing) {
-            this._tracer.configure(config)
-            this._pluginManager.configure(config)
-          }
+          this._enableOrDisableTracing(config)
         })
       }
 
@@ -85,25 +89,9 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
+      this._enableOrDisableTracing(config)
+
       if (config.tracing) {
-        // TODO: This should probably not require tracing to be enabled.
-        telemetry.start(config, this._pluginManager)
-
-        // dirty require for now so zero appsec code is executed unless explicitly enabled
-        if (config.appsec.enabled) {
-          require('./appsec').enable(config)
-        }
-
-        this._tracer = new DatadogTracer(config)
-        this.appsec = new AppsecSdk(this._tracer, config)
-
-        if (config.iast.enabled) {
-          require('./appsec/iast').enable(config, this._tracer)
-        }
-
-        this._pluginManager.configure(config)
-        setStartupLogPluginManager(this._pluginManager)
-
         if (config.isManualApiEnabled) {
           const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
           this._testApiManualPlugin = new TestApiManualPlugin(this)
@@ -115,6 +103,32 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  _enableOrDisableTracing (config) {
+    if (config.tracing !== false) {
+      // dirty require for now so zero appsec code is executed unless explicitly enabled
+      if (config.appsec.enabled) {
+        require('./appsec').enable(config)
+      }
+      if (!this._tracingInitialized) {
+        this._tracer = new DatadogTracer(config)
+        this.appsec = new AppsecSdk(this._tracer, config)
+        this._tracingInitialized = true
+      }
+      if (config.iast.enabled) {
+        require('./appsec/iast').enable(config, this._tracer)
+      }
+    } else if (this._tracingInitialized) {
+      require('./appsec').disable()
+      require('./appsec/iast').disable()
+    }
+
+    if (this._tracingInitialized) {
+      this._tracer.configure(config)
+      this._pluginManager.configure(config)
+      setStartupLogPluginManager(this._pluginManager)
+    }
   }
 
   profilerStarted () {

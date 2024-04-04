@@ -1,4 +1,3 @@
-
 const fs = require('fs')
 const path = require('path')
 
@@ -14,6 +13,20 @@ const {
   isShallowRepository,
   unshallowRepository
 } = require('../../../plugins/util/git')
+
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
+  getErrorTypeFromStatusCode
+} = require('../../../ci-visibility/telemetry')
 
 const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
 const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
@@ -46,7 +59,7 @@ function getCommonRequestOptions (url) {
  * The response are the commits for which the backend already has information
  * This response is used to know which commits can be ignored from there on
  */
-function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, callback) {
+function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
   const commonOptions = getCommonRequestOptions(url)
 
   const options = {
@@ -59,7 +72,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/search_commits'
+    options.path = `${evpProxyPrefix}/api/v2/git/repository/search_commits`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
     delete options.headers['dd-api-key']
   }
@@ -74,8 +87,13 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
     }))
   })
 
-  request(localCommitData, options, (err, response) => {
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
+  const startTime = Date.now()
+  request(localCommitData, options, (err, response, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType })
       const error = new Error(`Error fetching commits to exclude: ${err.message}`)
       return callback(error)
     }
@@ -83,6 +101,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
     try {
       alreadySeenCommits = validateCommits(JSON.parse(response).data)
     } catch (e) {
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
       return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
     }
     log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
@@ -95,6 +114,10 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
 
     const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
 
+    if (commitsToUpload === null) {
+      return callback(new Error('git rev-list failed'))
+    }
+
     callback(null, commitsToUpload)
   })
 }
@@ -102,7 +125,7 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy }, 
 /**
  * This function uploads a git packfile
  */
-function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, headCommit }, callback) {
+function uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
   const form = new FormData()
 
   const pushedSha = JSON.stringify({
@@ -142,23 +165,32 @@ function uploadPackFile ({ url, isEvpProxy, packFileToUpload, repositoryUrl, hea
   }
 
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/git/repository/packfile'
+    options.path = `${evpProxyPrefix}/api/v2/git/repository/packfile`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
     delete options.headers['dd-api-key']
   }
 
+  incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES)
+
+  const uploadSize = form.size()
+
+  const startTime = Date.now()
   request(form, options, (err, _, statusCode) => {
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { errorType })
       const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
-      return callback(error)
+      return callback(error, uploadSize)
     }
-    callback(null)
+    callback(null, uploadSize)
   })
 }
 
 function generateAndUploadPackFiles ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
   commitsToUpload,
   repositoryUrl,
   headCommit
@@ -173,10 +205,14 @@ function generateAndUploadPackFiles ({
     return callback(new Error('Failed to generate packfiles'))
   }
 
+  distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM, {}, packFilesToUpload.length)
   let packFileIndex = 0
+  let totalUploadedBytes = 0
   // This uploads packfiles sequentially
-  const uploadPackFileCallback = (err) => {
+  const uploadPackFileCallback = (err, byteLength) => {
+    totalUploadedBytes += byteLength
     if (err || packFileIndex === packFilesToUpload.length) {
+      distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES, {}, totalUploadedBytes)
       return callback(err)
     }
     return uploadPackFile(
@@ -184,6 +220,7 @@ function generateAndUploadPackFiles ({
         packFileToUpload: packFilesToUpload[packFileIndex++],
         url,
         isEvpProxy,
+        evpProxyPrefix,
         repositoryUrl,
         headCommit
       },
@@ -196,6 +233,7 @@ function generateAndUploadPackFiles ({
       packFileToUpload: packFilesToUpload[packFileIndex++],
       url,
       isEvpProxy,
+      evpProxyPrefix,
       repositoryUrl,
       headCommit
     },
@@ -206,7 +244,7 @@ function generateAndUploadPackFiles ({
 /**
  * This function uploads git metadata to CI Visibility's backend.
 */
-function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
+function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
@@ -218,9 +256,8 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
     return callback(new Error('Repository URL is empty'))
   }
 
-  const latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits()
   log.debug(`There were ${latestCommits.length} commits since last month.`)
-  const [headCommit] = latestCommits
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
     if (err) {
@@ -234,15 +271,38 @@ function sendGitMetadata (url, isEvpProxy, configRepositoryUrl, callback) {
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
-      return generateAndUploadPackFiles({ url, isEvpProxy, commitsToUpload, repositoryUrl, headCommit }, callback)
+      const [headCommit] = latestCommits
+      return generateAndUploadPackFiles({
+        url,
+        isEvpProxy,
+        evpProxyPrefix,
+        commitsToUpload,
+        repositoryUrl,
+        headCommit
+      }, callback)
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()
-    getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(true))
+
+    // The latest commits change after unshallowing
+    latestCommits = getLatestCommits()
+    getCommitsToUpload({
+      url,
+      repositoryUrl,
+      latestCommits,
+      isEvpProxy,
+      evpProxyPrefix
+    }, getOnFinishGetCommitsToUpload(true))
   }
 
-  getCommitsToUpload({ url, repositoryUrl, latestCommits, isEvpProxy }, getOnFinishGetCommitsToUpload(false))
+  getCommitsToUpload({
+    url,
+    repositoryUrl,
+    latestCommits,
+    isEvpProxy,
+    evpProxyPrefix
+  }, getOnFinishGetCommitsToUpload(false))
 }
 
 module.exports = {

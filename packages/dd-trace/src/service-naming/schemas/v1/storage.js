@@ -1,4 +1,3 @@
-
 function configWithFallback ({ tracerService, pluginConfig }) {
   return pluginConfig.service || tracerService
 }

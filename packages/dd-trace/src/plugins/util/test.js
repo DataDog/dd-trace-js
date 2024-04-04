@@ -48,10 +48,17 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
+// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
+const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
+// Early flake detection
+const TEST_IS_NEW = 'test.is_new'
+const TEST_IS_RETRY = 'test.is_retry'
+const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
+const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
@@ -60,6 +67,7 @@ const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
+const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
@@ -67,11 +75,16 @@ const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 
+// Early flake detection util strings
+const EFD_STRING = "Retried by Datadog's Early Flake Detection"
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
+  JEST_DISPLAY_NAME,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -86,6 +99,10 @@ module.exports = {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -111,6 +128,7 @@ module.exports = {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -119,7 +137,11 @@ module.exports = {
   getTestLineStart,
   getCallSites,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  EFD_STRING,
+  EFD_TEST_NAME_REGEX,
+  removeEfdStringFromTestName,
+  addEfdStringToTestName
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -251,7 +273,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
-    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion
@@ -267,7 +288,8 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     return sourceRoot
   }
   const testSuitePath = testSuiteAbsolutePath === sourceRoot
-    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+    ? testSuiteAbsolutePath
+    : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replace(path.sep, '/')
 }
@@ -279,16 +301,36 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   '.gitlab/CODEOWNERS'
 ]
 
-function getCodeOwnersFileEntries (rootDir = process.cwd()) {
-  let codeOwnersContent
-
-  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+function readCodeOwners (rootDir) {
+  for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
-      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+      return fs.readFileSync(path.join(rootDir, location)).toString()
     } catch (e) {
       // retry with next path
     }
-  })
+  }
+  return ''
+}
+
+function getCodeOwnersFileEntries (rootDir) {
+  let codeOwnersContent
+  let usedRootDir = rootDir
+  let isTriedCwd = false
+
+  const processCwd = process.cwd()
+
+  if (!usedRootDir || usedRootDir === processCwd) {
+    usedRootDir = processCwd
+    isTriedCwd = true
+  }
+
+  codeOwnersContent = readCodeOwners(usedRootDir)
+
+  // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
+  if (!codeOwnersContent && !isTriedCwd) {
+    codeOwnersContent = readCodeOwners(processCwd)
+  }
+
   if (!codeOwnersContent) {
     return null
   }
@@ -520,4 +562,12 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+function addEfdStringToTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
+}
+
+function removeEfdStringFromTestName (testName) {
+  return testName.replace(EFD_TEST_NAME_REGEX, '')
 }

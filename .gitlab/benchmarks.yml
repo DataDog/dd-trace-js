@@ -1,5 +1,6 @@
 variables:
   BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
   UNCONFIDENCE_THRESHOLD: "5.0"
@@ -55,12 +56,6 @@ benchmark:
   extends: .benchmarks
   parallel:
     matrix:
-      - MAJOR_VERSION: 16
-        GROUP: 1
-      - MAJOR_VERSION: 16
-        GROUP: 2
-      - MAJOR_VERSION: 16
-        GROUP: 3
       - MAJOR_VERSION: 18
         GROUP: 1
       - MAJOR_VERSION: 18
@@ -69,3 +64,28 @@ benchmark:
         GROUP: 3
   variables:
     SPLITS: 3
+
+benchmark-serverless:
+  stage: benchmarks
+  image: $SLS_CI_IMAGE
+  tags: ["arch:amd64"]
+  when: on_success
+  needs:
+    - benchmark-serverless-trigger
+  script:
+    - git clone https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - ./ci/check_trigger_status.sh
+
+benchmark-serverless-trigger:
+  stage: benchmarks
+  trigger:
+    project: DataDog/serverless-tools
+    strategy: depend
+  allow_failure: true
+  variables:
+    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
+    UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
+    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
+    UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_MERGE_REQUEST_SOURCE_BRANCH_NAME: $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME

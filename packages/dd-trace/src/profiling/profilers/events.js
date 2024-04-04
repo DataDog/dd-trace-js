@@ -1,5 +1,5 @@
-const { performance, constants, PerformanceObserver } = require('node:perf_hooks')
-const { END_TIMESTAMP, THREAD_NAME, threadNamePrefix } = require('./shared')
+const { performance, constants, PerformanceObserver } = require('perf_hooks')
+const { END_TIMESTAMP_LABEL } = require('./shared')
 const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
@@ -14,6 +14,8 @@ const MS_TO_NS = 1000000
 // perf_hooks events, the emitted pprof file uses the type "timeline".
 const pprofValueType = 'timeline'
 const pprofValueUnit = 'nanoseconds'
+
+const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
 
 function labelFromStr (stringTable, key, valStr) {
   return new Label({ key, str: stringTable.dedup(valStr) })
@@ -74,39 +76,6 @@ class GCDecorator {
   }
 }
 
-// Maintains "lanes" (or virtual threads) to avoid overlaps in events. The
-// decorator starts out with no lanes, and dynamically adds them as needed.
-// Every event is put in the first lane where it doesn't overlap with the last
-// event in that lane. If there's no lane without overlaps, a new lane is
-// created.
-class Lanes {
-  constructor (stringTable, name) {
-    this.stringTable = stringTable
-    this.name = name
-    this.lanes = []
-  }
-
-  getLabelFor (item) {
-    const startTime = item.startTime
-    const endTime = startTime + item.duration
-
-    // Biases towards populating earlier lanes, but at least it's simple
-    for (const lane of this.lanes) {
-      if (lane.endTime <= startTime) {
-        lane.endTime = endTime
-        return lane.label
-      }
-    }
-    const label = labelFromStrStr(
-      this.stringTable,
-      THREAD_NAME,
-      `${this.name}-${this.lanes.length}`
-    )
-    this.lanes.push({ endTime, label })
-    return label
-  }
-}
-
 class DNSDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
@@ -114,7 +83,6 @@ class DNSDecorator {
     this.hostLabelKey = stringTable.dedup('host')
     this.addressLabelKey = stringTable.dedup('address')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} DNS`)
   }
 
   decorateSample (sampleInput, item) {
@@ -142,7 +110,6 @@ class DNSDecorator {
           addLabel(this.hostLabelKey, detail.host)
         }
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -152,7 +119,6 @@ class NetDecorator {
     this.operationNameLabelKey = stringTable.dedup('operation')
     this.hostLabelKey = stringTable.dedup('host')
     this.portLabelKey = stringTable.dedup('port')
-    this.lanes = new Lanes(stringTable, `${threadNamePrefix} Net`)
   }
 
   decorateSample (sampleInput, item) {
@@ -165,10 +131,9 @@ class NetDecorator {
     addLabel(this.operationNameLabelKey, op)
     if (op === 'connect') {
       const detail = item.detail
-      addLabel(this.stringTable, this.hostLabelKey, detail.host)
+      addLabel(this.hostLabelKey, detail.host)
       labels.push(new Label({ key: this.portLabelKey, num: detail.port }))
     }
-    labels.push(this.lanes.getLabelFor(item))
   }
 }
 
@@ -183,6 +148,76 @@ if (node16) {
   decoratorTypes.net = NetDecorator
 }
 
+// Translates performance entries into pprof samples.
+class EventSerializer {
+  constructor () {
+    this.stringTable = new StringTable()
+    this.samples = []
+    this.locations = []
+    this.functions = []
+    this.decorators = {}
+
+    // A synthetic single-frame location to serve as the location for timeline
+    // samples. We need these as the profiling backend (mimicking official pprof
+    // tool's behavior) ignores these.
+    const fn = new Function({ id: this.functions.length + 1, name: this.stringTable.dedup('') })
+    this.functions.push(fn)
+    const line = new Line({ functionId: fn.id })
+    const location = new Location({ id: this.locations.length + 1, line: [line] })
+    this.locations.push(location)
+    this.locationId = [location.id]
+
+    this.timestampLabelKey = this.stringTable.dedup(END_TIMESTAMP_LABEL)
+  }
+
+  addEvent (item) {
+    const { entryType, startTime, duration } = item
+    let decorator = this.decorators[entryType]
+    if (!decorator) {
+      const DecoratorCtor = decoratorTypes[entryType]
+      if (DecoratorCtor) {
+        decorator = new DecoratorCtor(this.stringTable)
+        decorator.eventTypeLabel = labelFromStrStr(this.stringTable, 'event', entryType)
+        this.decorators[entryType] = decorator
+      } else {
+        // Shouldn't happen but it's better to not rely on observer only getting
+        // requested event types.
+        return
+      }
+    }
+    const endTime = startTime + duration
+    const sampleInput = {
+      value: [Math.round(duration * MS_TO_NS)],
+      locationId: this.locationId,
+      label: [
+        decorator.eventTypeLabel,
+        new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
+      ]
+    }
+    decorator.decorateSample(sampleInput, item)
+    this.samples.push(new Sample(sampleInput))
+  }
+
+  createProfile (startDate, endDate) {
+    const timeValueType = new ValueType({
+      type: this.stringTable.dedup(pprofValueType),
+      unit: this.stringTable.dedup(pprofValueUnit)
+    })
+
+    return new Profile({
+      sampleType: [timeValueType],
+      timeNanos: endDate.getTime() * MS_TO_NS,
+      periodType: timeValueType,
+      period: 1,
+      durationNanos: (endDate.getTime() - startDate.getTime()) * MS_TO_NS,
+      sample: this.samples,
+      location: this.locations,
+      function: this.functions,
+      stringTable: this.stringTable
+    })
+  }
+}
+
 /**
  * This class generates pprof files with timeline events sourced from Node.js
  * performance measurement APIs.
@@ -192,100 +227,36 @@ class EventsProfiler {
     this.type = 'events'
     this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
     this._observer = undefined
-    this.entries = []
+    this.eventSerializer = new EventSerializer()
   }
 
   start () {
+    // if already started, do nothing
+    if (this._observer) return
+
     function add (items) {
-      this.entries.push(...items.getEntries())
+      for (const item of items.getEntries()) {
+        this.eventSerializer.addEvent(item)
+      }
     }
-    if (!this._observer) {
-      this._observer = new PerformanceObserver(add.bind(this))
-    }
+    this._observer = new PerformanceObserver(add.bind(this))
     this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
   }
 
   stop () {
     if (this._observer) {
       this._observer.disconnect()
+      this._observer = undefined
     }
   }
 
-  profile () {
-    if (this.entries.length === 0) {
-      // No events in the period; don't produce a profile
-      return null
+  profile (restart, startDate, endDate) {
+    if (!restart) {
+      this.stop()
     }
-
-    const stringTable = new StringTable()
-    const locations = []
-    const functions = []
-
-    // A synthetic single-frame location to serve as the location for timeline
-    // samples. We need these as the profiling backend (mimicking official pprof
-    // tool's behavior) ignores these.
-    const locationId = (() => {
-      const fn = new Function({ id: functions.length + 1, name: stringTable.dedup('') })
-      functions.push(fn)
-      const line = new Line({ functionId: fn.id })
-      const location = new Location({ id: locations.length + 1, line: [line] })
-      locations.push(location)
-      return [location.id]
-    })()
-
-    const decorators = {}
-    for (const [eventType, DecoratorCtor] of Object.entries(decoratorTypes)) {
-      const decorator = new DecoratorCtor(stringTable)
-      decorator.eventTypeLabel = labelFromStrStr(stringTable, 'event', eventType)
-      decorators[eventType] = decorator
-    }
-    const timestampLabelKey = stringTable.dedup(END_TIMESTAMP)
-
-    let durationFrom = Number.POSITIVE_INFINITY
-    let durationTo = 0
-    const dateOffset = BigInt(Math.round(performance.timeOrigin * MS_TO_NS))
-
-    const samples = this.entries.map((item) => {
-      const decorator = decorators[item.entryType]
-      if (!decorator) {
-        // Shouldn't happen but it's better to not rely on observer only getting
-        // requested event types.
-        return null
-      }
-      const { startTime, duration } = item
-      const endTime = startTime + duration
-      if (durationFrom > startTime) durationFrom = startTime
-      if (durationTo < endTime) durationTo = endTime
-      const sampleInput = {
-        value: [Math.round(duration * MS_TO_NS)],
-        locationId,
-        label: [
-          decorator.eventTypeLabel,
-          new Label({ key: timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
-        ]
-      }
-      decorator.decorateSample(sampleInput, item)
-      return new Sample(sampleInput)
-    }).filter(v => v)
-
-    this.entries = []
-
-    const timeValueType = new ValueType({
-      type: stringTable.dedup(pprofValueType),
-      unit: stringTable.dedup(pprofValueUnit)
-    })
-
-    return new Profile({
-      sampleType: [timeValueType],
-      timeNanos: dateOffset + BigInt(Math.round(durationFrom * MS_TO_NS)),
-      periodType: timeValueType,
-      period: this._flushIntervalNanos,
-      durationNanos: Math.max(0, Math.round((durationTo - durationFrom) * MS_TO_NS)),
-      sample: samples,
-      location: locations,
-      function: functions,
-      stringTable: stringTable
-    })
+    const profile = this.eventSerializer.createProfile(startDate, endDate)
+    this.eventSerializer = new EventSerializer()
+    return profile
   }
 
   encode (profile) {

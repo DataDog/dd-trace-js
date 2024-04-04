@@ -2,6 +2,11 @@
 const { AgentEncoder } = require('./0.4')
 const Chunk = require('./chunk')
 
+const {
+  distributionMetric,
+  TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+} = require('../ci-visibility/telemetry')
 const FormData = require('../exporters/common/form-data')
 
 const COVERAGE_PAYLOAD_VERSION = 2
@@ -21,8 +26,16 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   encode (coverage) {
+    const startTime = Date.now()
+
     this._coveragesCount++
     this.encodeCodeCoverage(this._coverageBytes, coverage)
+
+    distributionMetric(
+      TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+      { endpoint: 'code_coverage' },
+      Date.now() - startTime
+    )
   }
 
   encodeCodeCoverage (bytes, coverage) {
@@ -73,6 +86,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   }
 
   makePayload () {
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'code_coverage' }, this._coveragesCount)
     const bytes = this._coverageBytes
 
     const coveragesOffset = this._coveragesOffset
@@ -94,7 +108,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       'coverage1',
       buffer,
       {
-        filename: `coverage1.msgpack`,
+        filename: 'coverage1.msgpack',
         contentType: 'application/msgpack'
       }
     )

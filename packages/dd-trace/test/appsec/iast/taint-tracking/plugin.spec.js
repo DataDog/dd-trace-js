@@ -44,12 +44,13 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(5)
+    expect(taintTrackingPlugin._subscriptions).to.have.lengthOf(6)
     expect(taintTrackingPlugin._subscriptions[0]._channel.name).to.equals('datadog:body-parser:read:finish')
     expect(taintTrackingPlugin._subscriptions[1]._channel.name).to.equals('datadog:qs:parse:finish')
     expect(taintTrackingPlugin._subscriptions[2]._channel.name).to.equals('apm:express:middleware:next')
     expect(taintTrackingPlugin._subscriptions[3]._channel.name).to.equals('datadog:cookie:parse:finish')
     expect(taintTrackingPlugin._subscriptions[4]._channel.name).to.equals('datadog:express:process_params:start')
+    expect(taintTrackingPlugin._subscriptions[5]._channel.name).to.equals('apm:graphql:resolve:start')
   })
 
   describe('taint sources', () => {

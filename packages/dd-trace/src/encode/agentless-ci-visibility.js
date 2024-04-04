@@ -2,14 +2,21 @@
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const { AgentEncoder } = require('./0.4')
 const { version: ddTraceVersion } = require('../../../../package.json')
-const id = require('../../../dd-trace/src/id')
-const ENCODING_VERSION = 1
+const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const id = require('../../src/id')
+const {
+  distributionMetric,
+  TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+} = require('../ci-visibility/telemetry')
 
+const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
 const TEST_SESSION_KEYS_LENGTH = 10
+const TEST_AND_SPAN_KEYS_LENGTH = 11
 
 const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
@@ -40,7 +47,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeTestSuite (bytes, content) {
-    this._encodeMapPrefix(bytes, TEST_SUITE_KEYS_LENGTH)
+    let keysLength = TEST_SUITE_KEYS_LENGTH
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
+      keysLength++
+    }
+
+    this._encodeMapPrefix(bytes, keysLength)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
 
@@ -52,6 +65,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'test_suite_id')
     this._encodeId(bytes, content.span_id)
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
+    }
 
     this._encodeString(bytes, 'error')
     this._encodeNumber(bytes, content.error)
@@ -127,9 +146,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encodeEventContent (bytes, content) {
-    const keysLength = Object.keys(content).length
-
-    let totalKeysLength = keysLength
+    let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
     if (content.meta.test_session_id) {
       totalKeysLength = totalKeysLength + 1
     }
@@ -137,6 +154,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       totalKeysLength = totalKeysLength + 1
     }
     if (content.meta.test_suite_id) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
+    if (itrCorrelationId) {
+      totalKeysLength = totalKeysLength + 1
+    }
+    if (content.type) {
       totalKeysLength = totalKeysLength + 1
     }
     this._encodeMapPrefix(bytes, totalKeysLength)
@@ -187,6 +211,12 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       this._encodeString(bytes, 'test_suite_id')
       this._encodeId(bytes, id(content.meta.test_suite_id, 10))
       delete content.meta.test_suite_id
+    }
+
+    if (itrCorrelationId) {
+      this._encodeString(bytes, ITR_CORRELATION_ID)
+      this._encodeString(bytes, itrCorrelationId)
+      delete content.meta[ITR_CORRELATION_ID]
     }
 
     this._encodeString(bytes, 'meta')
@@ -247,6 +277,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
+    const startTime = Date.now()
+
     const rawEvents = trace.map(formatSpan)
 
     const testSessionEvents = rawEvents.filter(
@@ -261,9 +293,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     for (const event of events) {
       this._encodeEvent(bytes, event)
     }
+    distributionMetric(
+      TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
+      { endpoint: 'test_cycle' },
+      Date.now() - startTime
+    )
   }
 
   makePayload () {
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
     const bytes = this._traceBytes
     const eventsOffset = this._eventsOffset
     const eventsCount = this._eventCount
@@ -290,8 +328,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
       version: ENCODING_VERSION,
       metadata: {
         '*': {
-          'language': 'javascript',
-          'library_version': ddTraceVersion
+          language: 'javascript',
+          library_version: ddTraceVersion
         }
       },
       events: []

@@ -8,7 +8,7 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsProcessor } = require('./datastreams/processor')
-const { decodePathwayContext } = require('./datastreams/pathway')
+const { DsmPathwayCodec } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
 const DataStreamsContext = require('./data_streams_context')
 
@@ -39,11 +39,15 @@ class DatadogTracer extends Tracer {
     return ctx
   }
 
-  decodeDataStreamsContext (data) {
-    const ctx = decodePathwayContext(data)
+  decodeDataStreamsContext (carrier) {
+    const ctx = DsmPathwayCodec.decode(carrier)
     // we erase the previous context everytime we decode a new one
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
+  }
+
+  setOffset (offsetData) {
+    return this._dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {
@@ -131,6 +135,7 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
+    this._dataStreamsProcessor.setUrl(url)
   }
 
   scope () {

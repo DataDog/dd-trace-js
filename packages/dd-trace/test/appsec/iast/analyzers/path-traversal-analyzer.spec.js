@@ -273,7 +273,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   }
 
   describe('test createReadStream', () => {
-    runFsMethodTest(`test fs.createReadStream method`, 0, (args) => {
+    runFsMethodTest('test fs.createReadStream method', 0, (args) => {
       const rs = fs.createReadStream(...args)
       rs.close()
     }, __filename)
@@ -288,7 +288,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       fs.unlinkSync(filepath)
     })
 
-    runFsMethodTest(`test fs.createWriteStream method`, 0, (args) => {
+    runFsMethodTest('test fs.createWriteStream method', 0, (args) => {
       const rs = fs.createWriteStream(...args)
       return new Promise((resolve, reject) => {
         rs.close((err) => {
@@ -393,7 +393,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   describe('test realpath', () => {
     runFsMethodTestThreeWay('realpath', 0, null, __filename)
 
-    runFsMethodTest(`test fs.realpath.native method`, 0, (args) => {
+    runFsMethodTest('test fs.realpath.native method', 0, (args) => {
       fs.realpath.native(...args, () => {})
     }, __filename)
   })
@@ -472,7 +472,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     beforeEach(() => {
       fs.watchFile(__filename, listener)
     })
-    runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
+    runFsMethodTest('test fs.watchFile method', 0, (args) => {
       fs.unwatchFile(...args)
     }, __filename, listener)
   })
@@ -486,7 +486,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
   })
 
   describe('test watch', () => {
-    runFsMethodTest(`test fs.watch method`, 0, (args) => {
+    runFsMethodTest('test fs.watch method', 0, (args) => {
       const watcher = fs.watch(...args, () => {})
       watcher.close()
     }, __filename)
@@ -497,7 +497,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
     afterEach(() => {
       fs.unwatchFile(__filename, listener)
     })
-    runFsMethodTest(`test fs.watchFile method`, 0, (args) => {
+    runFsMethodTest('test fs.watchFile method', 0, (args) => {
       fs.watchFile(...args, listener)
     }, __filename)
   })

@@ -5,6 +5,7 @@ require('../../setup/tap')
 const nock = require('nock')
 const getPort = require('get-port')
 const http = require('http')
+const zlib = require('zlib')
 
 const FormData = require('../../../src/exporters/common/form-data')
 
@@ -162,6 +163,7 @@ describe('request', function () {
       hostname: 'test',
       port: 123,
       path: '/'
+    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
     })
@@ -177,6 +179,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT'
+    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -213,6 +216,7 @@ describe('request', function () {
     request(form, {
       path: '/path',
       method: 'PUT'
+    // eslint-disable-next-line n/handle-callback-err
     }, (err, res) => {
       expect(res).to.equal('OK')
       done()
@@ -242,6 +246,7 @@ describe('request', function () {
             hostname: 'localhost',
             protocol: 'http:',
             port: port2
+          // eslint-disable-next-line n/handle-callback-err
           }, (err, res) => {
             expect(res).to.equal('OK')
             shutdownFirst()
@@ -341,6 +346,62 @@ describe('request', function () {
           expect(res).to.equal('OK')
           done(err)
         })
+    })
+  })
+
+  describe('with compressed responses', () => {
+    it('can decompress gzip responses', (done) => {
+      const compressedData = zlib.gzipSync(Buffer.from(JSON.stringify({ foo: 'bar' })))
+      nock('http://test:123', {
+        reqheaders: {
+          'content-type': 'application/json',
+          'accept-encoding': 'gzip'
+        }
+      })
+        .post('/path')
+        .reply(200, compressedData, { 'content-encoding': 'gzip' })
+
+      request(Buffer.from(''), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept-encoding': 'gzip'
+        }
+      }, (err, res) => {
+        expect(res).to.equal(JSON.stringify({ foo: 'bar' }))
+        done(err)
+      })
+    })
+    it('should ignore badly compressed data and log an error', (done) => {
+      const badlyCompressedData = 'this is not actually compressed data'
+      nock('http://test:123', {
+        reqheaders: {
+          'content-type': 'application/json',
+          'accept-encoding': 'gzip'
+        }
+      })
+        .post('/path')
+        .reply(200, badlyCompressedData, { 'content-encoding': 'gzip' })
+
+      request(Buffer.from(''), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept-encoding': 'gzip'
+        }
+      }, (err, res) => {
+        expect(log.error).to.have.been.calledWith('Could not gunzip response: unexpected end of file')
+        expect(res).to.equal('')
+        done(err)
+      })
     })
   })
 })

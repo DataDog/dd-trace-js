@@ -25,15 +25,21 @@ describe('Plugin', () => {
   let appListener
   let tracer
 
-  ['http', 'https'].forEach(protocol => {
-    describe(protocol, () => {
+  ['http', 'https', 'node:http', 'node:https'].forEach(pluginToBeLoaded => {
+    const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
+    describe(pluginToBeLoaded, () => {
       function server (app, port, listener) {
         let server
-        if (protocol === 'https') {
+        if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
           server = require('https').createServer({ key, cert }, app)
-        } else {
+        } else if (pluginToBeLoaded === 'node:https') {
+          process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+          server = require('node:https').createServer({ key, cert }, app)
+        } else if (pluginToBeLoaded === 'http') {
           server = require('http').createServer(app)
+        } else {
+          server = require('node:http').createServer(app)
         }
         server.listen(port, 'localhost', listener)
         return server
@@ -55,7 +61,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http', { server: false })
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -119,7 +125,7 @@ describe('Plugin', () => {
           })
         })
 
-        it(`should also support get()`, done => {
+        it('should also support get()', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -225,8 +231,8 @@ describe('Plugin', () => {
                 hostname: 'localhost',
                 path: '/user',
                 headers: {
-                  'Connection': 'Upgrade',
-                  'Upgrade': 'websocket'
+                  Connection: 'Upgrade',
+                  Upgrade: 'websocket'
                 }
               })
 
@@ -900,45 +906,17 @@ describe('Plugin', () => {
               })
             })
           }).timeout(10000)
-
-          it('should record error if req.socket.setTimeout is used with Node 20', done => {
-            const app = express()
-
-            app.get('/user', async (req, res) => {
-              await new Promise(resolve => {
-                setTimeout(resolve, 6 * 1000)
-              })
-              res.status(200).send()
-            })
-
-            getPort().then(port => {
-              agent
-                .use(traces => {
-                  expect(traces[0][0]).to.have.property('error', 1)
-                })
-                .then(done)
-                .catch(done)
-
-              appListener = server(app, port, async () => {
-                const req = http.request(`${protocol}://localhost:${port}/user`, res => {
-                  res.on('data', () => { })
-                })
-
-                req.on('error', () => {})
-                req.on('socket', socket => {
-                  socket.setTimeout(5000)// match default timeout
-                })
-
-                req.end()
-              })
-            })
-          }).timeout(10000)
         }
 
         it('should only record a request once', done => {
           // Make sure both plugins are loaded, which could cause double-counting.
-          require('http')
-          require('https')
+          if (pluginToBeLoaded.includes('node:')) {
+            require('node:http')
+            require('node:https')
+          } else {
+            require('http')
+            require('https')
+          }
 
           const app = express()
 
@@ -1105,7 +1083,7 @@ describe('Plugin', () => {
               ch = require('dc-polyfill').channel('apm:http:client:request:start')
               sub = () => {}
               tracer = require('../../dd-trace')
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
             })
         })
 
@@ -1152,7 +1130,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1193,7 +1171,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1242,7 +1220,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1287,7 +1265,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1359,7 +1337,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1379,9 +1357,9 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.host`, `localhost:${port}`)
-                expect(meta).to.have.property(`http.baz`, 'baz')
+                expect(meta).to.have.property('http.baz', 'baz')
                 expect(meta).to.have.property(`${HTTP_RESPONSE_HEADERS}.x-foo`, 'foo')
-                expect(meta).to.have.property(`http.bar`, 'bar')
+                expect(meta).to.have.property('http.bar', 'bar')
               })
               .then(done)
               .catch(done)
@@ -1410,7 +1388,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar')
               })
               .then(done)
               .catch(done)
@@ -1438,7 +1416,7 @@ describe('Plugin', () => {
               .use(traces => {
                 const meta = traces[0][0].meta
 
-                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, `bar1,bar2`)
+                expect(meta).to.have.property(`${HTTP_REQUEST_HEADERS}.x-foo`, 'bar1,bar2')
               })
               .then(done)
               .catch(done)
@@ -1472,7 +1450,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1518,7 +1496,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })
@@ -1565,7 +1543,7 @@ describe('Plugin', () => {
 
           return agent.load('http', config)
             .then(() => {
-              http = require(protocol)
+              http = require(pluginToBeLoaded)
               express = require('express')
             })
         })

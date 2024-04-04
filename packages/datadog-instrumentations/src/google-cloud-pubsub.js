@@ -11,7 +11,7 @@ const requestStartCh = channel('apm:google-cloud-pubsub:request:start')
 const requestFinishCh = channel('apm:google-cloud-pubsub:request:finish')
 const requestErrorCh = channel('apm:google-cloud-pubsub:request:error')
 
-const receiveStartCh = channel(`apm:google-cloud-pubsub:receive:start`)
+const receiveStartCh = channel('apm:google-cloud-pubsub:receive:start')
 const receiveFinishCh = channel('apm:google-cloud-pubsub:receive:finish')
 const receiveErrorCh = channel('apm:google-cloud-pubsub:receive:error')
 

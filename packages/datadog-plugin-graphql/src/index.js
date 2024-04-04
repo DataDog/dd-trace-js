@@ -1,5 +1,6 @@
 'use strict'
 
+const pick = require('../../datadog-core/src/utils/src/pick')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
@@ -61,12 +62,6 @@ function getHooks (config) {
   const validate = config.hooks?.validate || noop
 
   return { execute, parse, validate }
-}
-
-// non-lodash pick
-
-function pick (obj, selectors) {
-  return Object.fromEntries(Object.entries(obj).filter(([key]) => selectors.includes(key)))
 }
 
 module.exports = GraphQLPlugin

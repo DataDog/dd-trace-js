@@ -1,6 +1,6 @@
 'use strict'
 
-const pick = require('lodash.pick')
+const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
@@ -180,9 +180,17 @@ class TextMapPropagator {
     carrier[traceparentKey] = spanContext.toTraceparent()
 
     ts.forVendor('dd', state => {
+      if (!spanContext._isRemote) {
+        // SpanContext was created by a ddtrace span.
+        // Last datadog span id should be set to the current span.
+        state.set('p', spanContext._spanId)
+      } else if (spanContext._trace.tags['_dd.parent_id']) {
+        // Propagate the last Datadog span id set on the remote span.
+        state.set('p', spanContext._trace.tags['_dd.parent_id'])
+      }
       state.set('s', priority)
       if (mechanism) {
-        state.set('t.dm', mechanism)
+        state.set('t.dm', `-${mechanism}`)
       }
 
       if (typeof origin === 'string') {
@@ -291,7 +299,8 @@ class TextMapPropagator {
         return new DatadogSpanContext({
           traceId: id(),
           spanId: null,
-          sampling: { priority }
+          sampling: { priority },
+          isRemote: true
         })
       }
 
@@ -324,7 +333,7 @@ class TextMapPropagator {
     }
     const matches = headerValue.trim().match(traceparentExpr)
     if (matches.length) {
-      const [ version, traceId, spanId, flags, tail ] = matches.slice(1)
+      const [version, traceId, spanId, flags, tail] = matches.slice(1)
       const traceparent = { version }
       const tracestate = TraceState.fromString(carrier.tracestate)
       if (invalidSegment.test(traceId)) return null
@@ -339,6 +348,7 @@ class TextMapPropagator {
       const spanContext = new DatadogSpanContext({
         traceId: id(traceId, 16),
         spanId: id(spanId, 16),
+        isRemote: true,
         sampling: { priority: parseInt(flags, 10) & 1 ? 1 : 0 },
         traceparent,
         tracestate
@@ -349,6 +359,10 @@ class TextMapPropagator {
       tracestate.forVendor('dd', state => {
         for (const [key, value] of state.entries()) {
           switch (key) {
+            case 'p': {
+              spanContext._trace.tags['_dd.parent_id'] = value
+              break
+            }
             case 's': {
               const priority = parseInt(value, 10)
               if (!Number.isInteger(priority)) continue
@@ -379,6 +393,10 @@ class TextMapPropagator {
         }
       })
 
+      if (!spanContext._trace.tags['_dd.parent_id']) {
+        spanContext._trace.tags['_dd.parent_id'] = '0000000000000000'
+      }
+
       this._extractBaggageItems(carrier, spanContext)
       return spanContext
     }
@@ -391,7 +409,8 @@ class TextMapPropagator {
 
       return new DatadogSpanContext({
         traceId: id(carrier[traceKey], radix),
-        spanId: id(carrier[spanKey], radix)
+        spanId: id(carrier[spanKey], radix),
+        isRemote: true
       })
     }
 

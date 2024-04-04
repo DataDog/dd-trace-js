@@ -14,9 +14,9 @@ const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
 
-addHook({ name: 'https' }, hookFn)
+const names = ['http', 'https', 'node:http', 'node:https']
 
-addHook({ name: 'http' }, hookFn)
+addHook({ name: names }, hookFn)
 
 function hookFn (http) {
   patch(http, 'request')
@@ -69,28 +69,16 @@ function patch (http, methodName) {
         try {
           const req = request.call(this, options, callback)
           const emit = req.emit
-
-          const requestSetTimeout = req.setTimeout
+          const setTimeout = req.setTimeout
 
           ctx.req = req
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-
           req.setTimeout = function () {
             customRequestTimeout = true
-            return requestSetTimeout.apply(this, arguments)
+            return setTimeout.apply(this, arguments)
           }
-
-          req.on('socket', socket => {
-            if (socket) {
-              const socketSetTimeout = socket.setTimeout
-              socket.setTimeout = function () {
-                customRequestTimeout = true
-                return socketSetTimeout.apply(this, arguments)
-              }
-            }
-          })
 
           req.emit = function (eventName, arg) {
             switch (eventName) {
@@ -167,6 +155,7 @@ function patch (http, methodName) {
       try {
         return urlToOptions(new url.URL(inputURL))
       } catch (e) {
+        // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }
     } else if (inputURL instanceof url.URL) {

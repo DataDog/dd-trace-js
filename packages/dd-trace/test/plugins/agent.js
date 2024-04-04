@@ -10,13 +10,15 @@ const path = require('path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 
-const handlers = new Set()
+const traceHandlers = new Set()
+const statsHandlers = new Set()
 let sockets = []
 let agent = null
 let listener = null
 let tracer = null
 let plugins = []
 const testedPlugins = []
+let dsmStats = []
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -27,13 +29,31 @@ function isMatchingTrace (spans, spanResourceMatch) {
 
 function ciVisRequestHandler (request, response) {
   response.status(200).send('OK')
-  handlers.forEach(({ handler, spanResourceMatch }) => {
+  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const { events } = request.body
     const spans = events.map(event => event.content)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(request.body, request)
     }
   })
+}
+
+function dsmStatsExist (agent, expectedHash) {
+  const dsmStats = agent.getDsmStats()
+  let hashFound = false
+  if (dsmStats.length !== 0) {
+    dsmStats.forEach((statsTimeBucket) => {
+      statsTimeBucket.Stats.forEach((statsBucket) => {
+        statsBucket.Stats.forEach((stats) => {
+          if (stats.Hash.toString() === expectedHash) {
+            hashFound = true
+            return hashFound
+          }
+        })
+      })
+    })
+  }
+  return hashFound
 }
 
 function addEnvironmentVariablesToHeaders (headers) {
@@ -73,7 +93,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
 
     // remove incorrect headers
-    delete req.headers['host']
+    delete req.headers.host
     delete req.headers['content-type']
     delete req.headers['content-length']
 
@@ -107,7 +127,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
   }
 
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-  handlers.forEach(({ handler, spanResourceMatch }) => {
+  traceHandlers.forEach(({ handler, spanResourceMatch }) => {
     const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
@@ -136,9 +156,67 @@ function checkAgentStatus () {
   })
 }
 
+function getDsmStats () {
+  return dsmStats
+}
+
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
 
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
+
+/**
+ * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
+ * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
+ * then the agent will wait for additional payloads up until the timeout
+ * (default 1000 ms) and if any of them succeed, the promise will resolve.
+ * Otherwise, it will reject.
+ *
+ * @param {(traces: Array<Array<object>>) => void} callback - A function that tests a payload as it's received.
+ * @param {Object} [options] - An options object
+ * @param {number} [options.timeoutMs=1000] - The timeout in ms.
+ * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
+ * @param {Set} [handlers] - Set of handlers to add the callback to.
+ * @returns {Promise<void>} A promise resolving if expectations are met
+ */
+function runCallback (callback, options, handlers) {
+  const deferred = {}
+  const promise = new Promise((resolve, reject) => {
+    deferred.resolve = resolve
+    deferred.reject = reject
+  })
+
+  const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+
+  const timeout = setTimeout(() => {
+    if (error) {
+      deferred.reject(error)
+    }
+  }, timeoutMs)
+
+  let error
+  const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
+
+  function handler () {
+    try {
+      callback.apply(null, arguments)
+      handlers.delete(handlerPayload)
+      clearTimeout(timeout)
+      deferred.resolve()
+    } catch (e) {
+      if (options && options.rejectFirst) {
+        clearTimeout(timeout)
+        deferred.reject(e)
+      } else {
+        error = error || e
+      }
+    }
+  }
+
+  handler.promise = promise
+  handlers.add(handlerPayload)
+
+  return promise
+}
 
 module.exports = {
   // Load the plugin on the tracer with an optional config and start a mock agent.
@@ -182,6 +260,16 @@ module.exports = {
     // EVP proxy endpoint
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
+    // DSM Checkpoint endpoint
+    dsmStats = []
+    agent.post('/v0.1/pipeline_stats', (req, res) => {
+      dsmStats.push(req.body)
+      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+        handler(dsmStats)
+      })
+      res.status(200).send()
+    })
+
     const port = await getPort()
 
     const server = this.server = http.createServer(agent)
@@ -204,6 +292,7 @@ module.exports = {
 
     server.on('close', () => {
       tracer = null
+      dsmStats = []
     })
 
     tracer.init(Object.assign({}, {
@@ -227,6 +316,7 @@ module.exports = {
     pluginName = [].concat(pluginName)
     plugins = pluginName
     config = [].concat(config)
+    dsmStats = []
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
@@ -235,70 +325,32 @@ module.exports = {
 
   // Register handler to be executed each agent call, multiple times
   subscribe (handler) {
-    handlers.add({ handler })
+    traceHandlers.add({ handler })
   },
 
   // Remove a handler
   unsubscribe (handler) {
-    handlers.delete(handler)
+    traceHandlers.delete(handler)
   },
 
   /**
    * Register a callback with expectations to be run on every tracing payload sent to the agent.
-   * If the callback does not throw, the returned promise resolves. If it does,
-   * then the agent will wait for additional payloads up until the timeout
-   * (default 1000 ms) and if any of them succeed, the promise will resolve.
-   * Otherwise, it will reject.
-   *
-   * @param {(traces: Array<Array<object>>) => void} callback - A function that tests trace data as it's received.
-   * @param {Object} [options] - An options object
-   * @param {number} [options.timeoutMs=1000] - The timeout in ms.
-   * @param {boolean} [options.rejectFirst=false] - If true, reject the first time the callback throws.
-   * @returns {Promise<void>} A promise resolving if expectations are met
    */
   use (callback, options) {
-    const deferred = {}
-    const promise = new Promise((resolve, reject) => {
-      deferred.resolve = resolve
-      deferred.reject = reject
-    })
+    return runCallback(callback, options, traceHandlers)
+  },
 
-    const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
-
-    const timeout = setTimeout(() => {
-      if (error) {
-        deferred.reject(error)
-      }
-    }, timeoutMs)
-
-    let error
-    const handlerPayload = { handler, spanResourceMatch: options && options.spanResourceMatch }
-
-    function handler () {
-      try {
-        callback.apply(null, arguments)
-        handlers.delete(handlerPayload)
-        clearTimeout(timeout)
-        deferred.resolve()
-      } catch (e) {
-        if (options && options.rejectFirst) {
-          clearTimeout(timeout)
-          deferred.reject(e)
-        } else {
-          error = error || e
-        }
-      }
-    }
-
-    handler.promise = promise
-    handlers.add(handlerPayload)
-
-    return promise
+  /**
+   * Register a callback with expectations to be run on every stats payload sent to the agent.
+   */
+  expectPipelineStats (callback, options) {
+    return runCallback(callback, options, statsHandlers)
   },
 
   // Unregister any outstanding expectation callbacks.
   reset () {
-    handlers.clear()
+    traceHandlers.clear()
+    statsHandlers.clear()
   },
 
   // Stop the mock agent, reset all expectations and wipe the require cache.
@@ -310,7 +362,8 @@ module.exports = {
     sockets.forEach(socket => socket.end())
     sockets = []
     agent = null
-    handlers.clear()
+    traceHandlers.clear()
+    statsHandlers.clear()
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
@@ -354,5 +407,8 @@ module.exports = {
       })
   },
 
-  testedPlugins
+  tracer,
+  testedPlugins,
+  getDsmStats,
+  dsmStatsExist
 }

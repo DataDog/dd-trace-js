@@ -17,24 +17,35 @@ let limiter = new Limiter(100)
 
 const metricsQueue = new Map()
 
+// following header lists are ordered in the same way the spec orders them, it doesn't matter but it's easier to compare
 const contentHeaderList = [
-  'content-encoding',
-  'content-language',
   'content-length',
-  'content-type'
+  'content-type',
+  'content-encoding',
+  'content-language'
 ]
 
 const REQUEST_HEADERS_MAP = mapHeaderAndTags([
-  'accept',
-  'accept-encoding',
-  'accept-language',
-  'host',
-  'user-agent',
+  ...ipHeaderList,
   'forwarded',
   'via',
+  ...contentHeaderList,
+  'host',
+  'user-agent',
+  'accept',
+  'accept-encoding',
+  'accept-language'
+], 'http.request.headers.')
 
-  ...ipHeaderList,
-  ...contentHeaderList
+const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+  'x-amzn-trace-id',
+  'cloudfront-viewer-ja3-fingerprint',
+  'cf-ray',
+  'x-cloud-trace-context',
+  'x-appgw-trace-id',
+  'x-sigsci-requestid',
+  'x-sigsci-tags',
+  'akamai-user-risk'
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
@@ -169,6 +180,9 @@ function finishRequest (req, res) {
   }
 
   incrementWafRequestsMetric(req)
+
+  // collect some headers even when no attack is detected
+  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
 
   if (!rootSpan.context()._tags['appsec.event']) return
 

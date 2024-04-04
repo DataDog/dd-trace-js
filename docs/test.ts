@@ -1,5 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
+import type { plugins } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -108,6 +109,7 @@ tracer.init({
     obfuscatorValueRegex: '.*',
     blockedTemplateHtml: './blocked.html',
     blockedTemplateJson: './blocked.json',
+    blockedTemplateGraphql: './blockedgraphql.json',
     eventTracking: {
       mode: 'safe'
     },
@@ -156,39 +158,39 @@ const httpOptions = {
   middleware: true
 };
 
-const httpServerOptions = {
+const httpServerOptions: plugins.HttpServer = {
   ...httpOptions,
   hooks: {
-    request: (span: Span, req, res) => {}
+    request: (span?: Span, req?, res?) => {}
   }
 };
 
-const httpClientOptions = {
+const httpClientOptions: plugins.HttpClient = {
   ...httpOptions,
   splitByDomain: true,
   propagationBlocklist: ['url', /url/, url => true],
   hooks: {
-    request: (span: Span, req, res) => {}
+    request: (span?: Span, req?, res?) => { }
   }
 };
 
-const http2ServerOptions = {
+const http2ServerOptions: plugins.Http2Server = {
   ...httpOptions
 };
 
-const http2ClientOptions = {
+const http2ClientOptions: plugins.Http2Client = {
   ...httpOptions,
   splitByDomain: true
 };
 
-const nextOptions = {
+const nextOptions: plugins.next = {
   service: 'test',
   hooks: {
-    request: (span: Span, params) => { },
+    request: (span?: Span, params?) => { },
   },
 };
 
-const graphqlOptions = {
+const graphqlOptions: plugins.graphql = {
   service: 'test',
   depth: 2,
   source: true,
@@ -196,24 +198,24 @@ const graphqlOptions = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span: Span, args, res) => {},
-    validate: (span: Span, document, errors) => {},
-    parse: (span: Span, source, document) => {}
+    execute: (span?: Span, args?, res?) => {},
+    validate: (span?: Span, document?, errors?) => {},
+    parse: (span?: Span, source?, document?) => {}
   }
 };
 
-const elasticsearchOptions = {
+const elasticsearchOptions: plugins.elasticsearch = {
   service: 'test',
   hooks: {
-    query: (span: Span, params) => {},
+    query: (span?: Span, params?) => {},
   },
 };
 
-const awsSdkOptions = {
+const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
   splitByAwsService: false,
   hooks: {
-    request: (span: Span, response) => {},
+    request: (span?: Span, response?) => {},
   },
   s3: false,
   sqs: {
@@ -222,33 +224,32 @@ const awsSdkOptions = {
   }
 };
 
-const redisOptions = {
+const redisOptions: plugins.redis = {
   service: 'test',
   allowlist: ['info', /auth/i, command => true],
   blocklist: ['info', /auth/i, command => true],
 };
 
-const sharedbOptions = {
+const sharedbOptions: plugins.sharedb = {
   service: 'test',
   hooks: {
-    receive: (span: Span, request) => {},
-    reply: (span: Span, request, reply) => {},
+    receive: (span?: Span, request?) => {},
+    reply: (span?: Span, request?, reply?) => {},
   },
 };
 
-const moleculerOptions = {
+const moleculerOptions: plugins.moleculer = {
   service: 'test',
   client: false,
-  params: true,
   server: {
     meta: true
   }
 };
 
-const openSearchOptions = {
+const openSearchOptions: plugins.opensearch = {
   service: 'test',
   hooks: {
-    query: (span: Span, params) => {},
+    query: (span?: Span, params?) => {},
   },
 };
 
@@ -355,8 +356,9 @@ tracer.use('express', { measured: true });
 
 span = tracer.startSpan('test');
 span = tracer.startSpan('test', {});
+span = tracer.startSpan('test', { childOf: span });
 span = tracer.startSpan('test', {
-  childOf: span || span.context(),
+  childOf: span.context(),
   references: [],
   startTime: 123456789.1234,
   tags: {
@@ -370,7 +372,7 @@ tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
 tracer.trace('test', { measured: true }, () => {})
 tracer.trace('test', (span: Span) => {})
 tracer.trace('test', (span: Span, fn: () => void) => {})
-tracer.trace('test', (span: Span, fn: (err: Error) => string) => {})
+tracer.trace('test', (span: Span, fn: (err: Error) => void) => {})
 
 promise = tracer.trace('test', () => Promise.resolve())
 
@@ -381,8 +383,9 @@ promise = tracer.wrap('test', () => Promise.resolve())()
 
 const carrier = {}
 
-tracer.inject(span || span.context(), HTTP_HEADERS, carrier);
-context = tracer.extract(HTTP_HEADERS, carrier);
+tracer.inject(span, HTTP_HEADERS, carrier);
+tracer.inject(span.context(), HTTP_HEADERS, carrier);
+context = tracer.extract(HTTP_HEADERS, carrier)!;
 
 traceId = context.toTraceId();
 spanId = context.toSpanId();
@@ -390,7 +393,7 @@ traceparent = context.toTraceparent();
 
 const scope = tracer.scope()
 
-span = scope.active();
+span = scope.active()!;
 
 const activateStringType: string = scope.activate(span, () => 'test');
 const activateVoidType: void = scope.activate(span, () => {});

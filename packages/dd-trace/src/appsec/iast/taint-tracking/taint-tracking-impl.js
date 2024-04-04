@@ -1,18 +1,26 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../iast-context')
 const iastLog = require('../iast-log')
 const { EXECUTED_PROPAGATION } = require('../telemetry/iast-metric')
 const { isDebugAllowed } = require('../telemetry/verbosity')
+const { taintObject } = require('./operations-taint-object')
+
+const mathRandomCallCh = dc.channel('datadog:random:call')
+
+const JSON_VALUE = 'json.value'
 
 function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
-  plusOperator: noop,
   concat: noop,
+  parse: noop,
+  plusOperator: noop,
+  random: noop,
   replace: noop,
   slice: noop,
   substr: noop,
@@ -22,7 +30,7 @@ const TaintTrackingNoop = {
 }
 
 function getTransactionId (iastContext) {
-  return iastContext && iastContext[iastContextFunctions.IAST_TRANSACTION_ID]
+  return iastContext?.[iastContextFunctions.IAST_TRANSACTION_ID]
 }
 
 function getContextDefault () {
@@ -32,7 +40,7 @@ function getContextDefault () {
 
 function getContextDebug () {
   const iastContext = getContextDefault()
-  EXECUTED_PROPAGATION.inc(null, iastContext)
+  EXECUTED_PROPAGATION.inc(iastContext)
   return iastContext
 }
 
@@ -99,7 +107,7 @@ function csiMethodsOverrides (getContext) {
           return TaintedUtils.concat(transactionId, res, op1, op2)
         }
       } catch (e) {
-        iastLog.error(`Error invoking CSI plusOperator`)
+        iastLog.error('Error invoking CSI plusOperator')
           .errorAndPublish(e)
       }
       return res
@@ -110,7 +118,37 @@ function csiMethodsOverrides (getContext) {
       getContext,
       String.prototype.trim,
       String.prototype.trimStart
-    )
+    ),
+
+    random: function (res, fn) {
+      if (mathRandomCallCh.hasSubscribers) {
+        mathRandomCallCh.publish({ fn })
+      }
+      return res
+    },
+
+    parse: function (res, fn, target, json) {
+      if (fn === JSON.parse) {
+        try {
+          const iastContext = getContext()
+          const transactionId = getTransactionId(iastContext)
+          if (transactionId) {
+            const ranges = TaintedUtils.getRanges(transactionId, json)
+
+            // TODO: first version.
+            // here we are losing the original source because taintObject always creates a new tainted
+            if (ranges?.length > 0) {
+              const range = ranges.find(range => range.iinfo?.type)
+              res = taintObject(iastContext, res, range?.iinfo.type || JSON_VALUE)
+            }
+          }
+        } catch (e) {
+          iastLog.error(e)
+        }
+      }
+
+      return res
+    }
   }
 }
 
