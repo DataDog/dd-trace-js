@@ -58,7 +58,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'producer',
                 component: 'kafkajs',
-                'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
+                'pathway.hash': expectedProducerHash.readBigUint64LE(0).toString()
               },
               metrics: {
                 'kafka.batch_size': messages.length
@@ -159,7 +159,7 @@ describe('Plugin', () => {
               meta: {
                 'span.kind': 'consumer',
                 component: 'kafkajs',
-                'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
+                'pathway.hash': expectedConsumerHash.readBigUint64LE(0).toString()
               },
               resource: testTopic,
               error: 0,
@@ -378,7 +378,7 @@ describe('Plugin', () => {
             it('Should set a checkpoint on produce', async () => {
               const messages = [{ key: 'consumerDSM1', value: 'test2' }]
               await sendMessages(kafka, testTopic, messages)
-              expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
+              expect(setDataStreamsContextSpy.args[0][0].hash.equals(expectedProducerHash)).to.be.true
             })
 
             it('Should set a checkpoint on consume', async () => {
@@ -391,7 +391,7 @@ describe('Plugin', () => {
               await sendMessages(kafka, testTopic, messages)
               await consumer.disconnect()
               for (const runArg of runArgs) {
-                expect(runArg.hash).to.equal(expectedConsumerHash)
+                expect(runArg.hash.equals(expectedConsumerHash)).to.be.true
               }
             })
 

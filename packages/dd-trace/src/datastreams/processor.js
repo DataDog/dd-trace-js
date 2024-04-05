@@ -234,7 +234,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64LE(0).toString())
     }
   }
 

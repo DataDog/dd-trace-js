@@ -33,17 +33,21 @@ function computeHash (service, env, tags, parentHash) {
   // console.log(node_hash)
   const nodeHashBuffer = toBufferLE(nodeHash, 8)
 
-  const parentHashBuffer = toBufferLE(BigInt(parentHash), 8)
+  if (typeof parentHash === 'bigint') {
+    parentHash = toBufferLE(parentHash, 8)
+  }
+
+  const parentHashBuffer = parentHash
 
   const combinedBuffer = Buffer.concat([nodeHashBuffer, parentHashBuffer])
-  return fnv1Base64(combinedBuffer)
+  return toBufferLE(fnv1Base64(combinedBuffer), 8)
 }
 
 function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
-    toBufferLE(BigInt(dataStreamsContext.hash), 8),
-    encodeVarInt64(BigInt(dataStreamsContext.pathway_start_sec * 1e3)),
-    encodeVarInt64(BigInt(dataStreamsContext.current_edge_start_sec * 1e3))
+    dataStreamsContext.hash,
+    encodeVarInt64(BigInt(dataStreamsContext.pathwayStartNs * 1e3)),
+    encodeVarInt64(BigInt(dataStreamsContext.edgeStartNs * 1e3))
   ])
 }
 
