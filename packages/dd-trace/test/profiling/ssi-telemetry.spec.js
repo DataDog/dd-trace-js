@@ -82,7 +82,7 @@ function testDisabledTelemetry () {
   expect(telemetry.enabled()).to.equal(false)
   // When it is disabled, the telemetry should not subscribe to any channel
   // so the preceding publishes should not have any effect.
-  expect(telemetry.profileCount).to.equal(0)
+  expect(telemetry._profileCount).to.equal(undefined)
   expect(telemetry.hasSentProfiles).to.equal(false)
   expect(telemetry.noSpan).to.equal(true)
   expect(stubs.count.notCalled).to.equal(true)
@@ -119,9 +119,9 @@ function createAndCheckMetrics (stubs, profileCount, sentProfiles, enablementCho
     `heuristic_hypothetical_decision:${heuristicDecision}`
   ]
   expect(stubs.count.calledWith('ssi_heuristic.number_of_profiles', tags)).to.equal(true)
-  expect(stubs.profileCountCountInc.calledWith(profileCount)).to.equal(true)
+  expect(stubs.profileCountCountInc.args.length).to.equal(profileCount + 1) // once at the end with 0
   expect(stubs.count.calledWith('ssi_heuristic.number_of_runtime_id', tags)).to.equal(true)
-  expect(stubs.runtimeIdCountInc.calledWith(1)).to.equal(true)
+  expect(stubs.runtimeIdCountInc.args.length).to.equal(1)
 }
 
 function testEnabledTelemetry (enablementChoice) {

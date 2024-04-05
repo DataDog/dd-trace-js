@@ -69,7 +69,6 @@ class SSITelemetry {
     this.enablementChoice = enablementChoice
     this.shortLivedThreshold = shortLivedThreshold
 
-    this.profileCount = 0
     this.hasSentProfiles = false
     this.noSpan = true
   }
@@ -104,15 +103,20 @@ class SSITelemetry {
   }
 
   _onProfileSubmitted () {
-    this.profileCount++
     this.hasSentProfiles = true
+    this._incProfileCount()
   }
 
   _onMockProfileSubmitted () {
-    this.profileCount++
+    this._incProfileCount()
   }
 
-  _onAppClosing () {
+  _incProfileCount () {
+    this._ensureProfileMetrics()
+    this._profileCount.inc()
+  }
+
+  _ensureProfileMetrics () {
     const decision = []
     if (this.noSpan) {
       decision.push('no_span')
@@ -131,8 +135,25 @@ class SSITelemetry {
       `heuristic_hypothetical_decision:${decision.join()}`
     ]
 
-    profilersNamespace.count('ssi_heuristic.number_of_profiles', tags).inc(this.profileCount)
-    profilersNamespace.count('ssi_heuristic.number_of_runtime_id', tags).inc(1)
+    this._profileCount = profilersNamespace.count('ssi_heuristic.number_of_profiles', tags)
+    this._runtimeIdCount = profilersNamespace.count('ssi_heuristic.number_of_runtime_id', tags)
+
+    if (decision.length === 0 && !this._emittedRuntimeId) {
+      // Tags won't change anymore, so we can emit the runtime ID metric now
+      this._emittedRuntimeId = true
+      this._runtimeIdCount.inc()
+    }
+  }
+
+  _onAppClosing () {
+    this._ensureProfileMetrics()
+    // Last ditch effort to emit a runtime ID count metric
+    if (!this._emittedRuntimeId) {
+      this._emittedRuntimeId = true
+      this._runtimeIdCount.inc()
+    }
+    // So we have the metrics in the final state
+    this._profileCount.inc(0)
 
     dc.unsubscribe('datadog:profiling:profile-submitted', this._onProfileSubmitted)
     dc.unsubscribe('datadog:profiling:mock-profile-submitted', this._onMockProfileSubmitted)
