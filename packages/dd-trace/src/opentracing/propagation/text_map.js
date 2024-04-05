@@ -617,7 +617,8 @@ class TextMapPropagator {
         const spanContext = new DatadogSpanContext({
           traceId: id(traceId, 16),
           spanId: id(spanId, 16),
-          sampling: { samplingPriority }
+          sampling: { samplingPriority },
+          baggage: baggage
         })
         if (ddOrigin) {
           spanContext._trace.origin = ddOrigin
