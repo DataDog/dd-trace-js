@@ -1279,7 +1279,7 @@ testFrameworks.forEach(({
               env: {
                 ...envVars,
                 TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-snapshot',
-                CI: '1', // needs to be run as CI so snapshots are not written
+                CI: '1' // needs to be run as CI so snapshots are not written
               },
               stdio: 'inherit'
             })
