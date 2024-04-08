@@ -24,7 +24,8 @@ package_version:
   #image: docker:git
   #extends: .common
   tags: ["arch:amd64"]
-  image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
+  #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
+  image: registry.ddbuild.io/images/bazel:6-gbi
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
