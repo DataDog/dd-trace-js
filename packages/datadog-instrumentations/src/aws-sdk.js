@@ -164,9 +164,7 @@ function getChannelSuffix (name) {
     's3',
     'sns',
     'sqs',
-    'stepfunctions',
-    'sfn',
-    'states'
+    'SFN'
   ].includes(name)
     ? name
     : 'default'

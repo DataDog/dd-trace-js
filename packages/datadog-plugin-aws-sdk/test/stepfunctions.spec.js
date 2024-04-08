@@ -5,15 +5,16 @@ const Stepfunctions = require('../src/services/stepfunctions')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
 const helloWorldSMD = {
-  'Comment': 'A Hello World example of the Amazon States Language using a Pass state',
-  'StartAt': 'HelloWorld',
-  'States': {
-    'HelloWorld': {
-      'Type': 'Pass',
-      'Result': 'Hello World!',
-      'End': true
+  Comment: 'A Hello World example of the Amazon States Language using a Pass state',
+  StartAt: 'HelloWorld',
+  States: {
+    HelloWorld: {
+      Type: 'Pass',
+      Result: 'Hello World!',
+      End: true
     }
   }
 }
@@ -69,7 +70,7 @@ describe('Sfn', () => {
       }
       expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
         'resource.name': 'startExecution',
-        'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
+        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
 
@@ -81,7 +82,7 @@ describe('Sfn', () => {
       }
       expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
         'resource.name': 'startExecution my-execution',
-        'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
+        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
 
@@ -89,7 +90,7 @@ describe('Sfn', () => {
       const sfn = new Stepfunctions(tracer)
       const request = {
         params: {
-          input: JSON.stringify({ 'foo': 'bar' })
+          input: JSON.stringify({ foo: 'bar' })
         },
         operation: 'startExecution'
       }
@@ -98,20 +99,20 @@ describe('Sfn', () => {
       spanId = '456853219676779160'
       parentId = '0000000000000000'
       sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
+      expect(request.params).to.deep.equal({ input: '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
     })
 
     it('injects trace context into StepFunction start_sync_execution requests', () => {
       const sfn = new Stepfunctions(tracer)
       const request = {
         params: {
-          input: JSON.stringify({ 'foo': 'bar' })
+          input: JSON.stringify({ foo: 'bar' })
         },
         operation: 'startExecution'
       }
 
       sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
+      expect(request.params).to.deep.equal({ input: '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
     })
 
     it('will not inject trace context if the input is a number', () => {
@@ -124,7 +125,7 @@ describe('Sfn', () => {
       }
 
       sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '1024' })
+      expect(request.params).to.deep.equal({ input: '1024' })
     })
 
     it('will not inject trace context if the input is a boolean', () => {
@@ -137,7 +138,7 @@ describe('Sfn', () => {
       }
 
       sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': 'true' })
+      expect(request.params).to.deep.equal({ input: 'true' })
     })
   })
 
@@ -188,21 +189,28 @@ describe('Sfn', () => {
     async function createStateMachine (name, definition, xargs) {
       return client.createStateMachine({
         definition: JSON.stringify(definition),
-        name: name,
+        name,
         roleArn: 'arn:aws:iam::123456:role/test',
         ...xargs
       })
     }
 
     async function deleteStateMachine (arn) {
-      return client.deleteStateMachine({ 'stateMachineArn': arn })
+      return client.deleteStateMachine({ stateMachineArn: arn })
     }
 
     describe('Traces', () => {
       before(() => {
-        tracer = require('../../dd-trace').init()
+        tracer = require('../../dd-trace')
         tracer.use('aws-sdk')
       })
+
+      before(() => {
+        return agent.load('aws-sdk')
+      })
+
+      afterEach(() => { return agent.close({ ritmReset: false }) })
+
       // aws-sdk v2 doesn't support StepFunctions below 2.7.10
       // https://github.com/aws/aws-sdk-js/blob/5dba638fd/CHANGELOG.md?plain=1#L18
       if (moduleName !== 'aws-sdk' || semver.intersects(version, '>=2.7.10')) {
@@ -212,13 +220,11 @@ describe('Sfn', () => {
           stateMachineArn = data.stateMachineArn
         })
 
-        afterEach(() => { return agent.close({ ritmReset: false }) })
-
         afterEach(async () => {
           await deleteStateMachine(stateMachineArn)
         })
 
-        it('is instrumented', async function () {
+        it('is instrumented', async () => {
           const expectSpanPromise = agent.use(traces => {
             const span = traces[0][0]
             expect(span).to.deep.equal('true')
@@ -227,10 +233,10 @@ describe('Sfn', () => {
 
           await client.startExecution({
             stateMachineArn,
-            input: JSON.stringify({ 'moduleName': moduleName })
+            input: JSON.stringify({ moduleName })
           })
 
-          return expectSpanPromise.then(() => console.log('done'))
+          return expectSpanPromise
         })
       }
     })
