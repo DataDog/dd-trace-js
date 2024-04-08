@@ -35,6 +35,7 @@ package_version:
       allow_failure: true
   script:
    - |
+      sudo apt install -y git-all
       if [ -z "$JS_PACKAGE_VERSION$CI_COMMIT_TAG" ]; then
         echo CI_JOB_ID=$CI_JOB_ID
         echo CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME
