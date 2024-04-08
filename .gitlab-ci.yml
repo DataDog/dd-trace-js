@@ -22,6 +22,7 @@ variables:
 
 package_version:
   #image: docker:git
+  extends: .common
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
