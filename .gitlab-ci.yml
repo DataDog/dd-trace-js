@@ -21,7 +21,7 @@ variables:
   tags: [ "runner:main", "size:large" ]
 
 package_version:
-  image: docker:git
+  #image: docker:git
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
