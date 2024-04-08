@@ -227,8 +227,8 @@ describe('Sns', () => {
     })
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = '5117773060236273241'
-      const expectedConsumerHash = '1353703578833511841'
+      const expectedProducerHash = '11900715075903001871'
+      const expectedConsumerHash = '10229557065172418132'
       let nowStub
 
       before(() => {

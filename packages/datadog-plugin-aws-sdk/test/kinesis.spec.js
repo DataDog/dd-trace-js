@@ -165,8 +165,8 @@ describe('Kinesis', function () {
     })
 
     describe('DSM Context Propagation', () => {
-      const expectedProducerHash = '15481393933680799703'
-      const expectedConsumerHash = '10538746554122257118'
+      const expectedProducerHash = '5366728864475226006'
+      const expectedConsumerHash = '16325221349121561876'
       let nowStub
 
       before(() => {

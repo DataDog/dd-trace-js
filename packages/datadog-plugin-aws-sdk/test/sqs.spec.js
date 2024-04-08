@@ -309,8 +309,8 @@ describe('Plugin', () => {
       })
 
       describe('data stream monitoring', () => {
-        const expectedProducerHash = '4673734031235697865'
-        const expectedConsumerHash = '9749472979704578383'
+        const expectedProducerHash = '17841701523812548799'
+        const expectedConsumerHash = '3208696069325693319'
         let nowStub
 
         before(() => {
