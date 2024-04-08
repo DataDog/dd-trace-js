@@ -1229,6 +1229,71 @@ testFrameworks.forEach(({
             }).catch(done)
           })
         })
+        if (name === 'jest') {
+          it('does not run early flake detection on snapshot tests', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port)
+              : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test-early-flake-detection/jest-snapshot.js will be considered new
+            // but we don't retry them because they have snapshots
+            receiver.setKnownTests({})
+
+            const NUM_RETRIES_EFD = 3
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                }
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const testSession = events.find(event => event.type === 'test_session_end').content
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                assert.equal(tests.length, 1)
+
+                const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+                assert.equal(retriedTests.length, 0)
+
+                // we still detect that it's new
+                const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+                assert.equal(newTests.length, 1)
+              })
+
+            childProcess = exec(runTestsWithCoverageCommand, {
+              cwd,
+              env: {
+                ...envVars,
+                TESTS_TO_RUN: 'ci-visibility/test-early-flake-detection/jest-snapshot',
+                CI: '1' // needs to be run as CI so snapshots are not written
+              },
+              stdio: 'inherit'
+            })
+
+            childProcess.stdout.pipe(process.stdout)
+            childProcess.stderr.pipe(process.stderr)
+
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
+            })
+          })
+        }
       })
     })
 
