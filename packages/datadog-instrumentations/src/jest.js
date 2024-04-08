@@ -121,6 +121,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
+      this.hasSnapshotTests = undefined
 
       this.displayName = config.projectConfig?.displayName?.name
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
@@ -145,6 +146,21 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.isEarlyFlakeDetectionEnabled = false
         }
       }
+    }
+
+    getHasSnapshotTests () {
+      if (this.hasSnapshotTests !== undefined) {
+        return this.hasSnapshotTests
+      }
+      let hasSnapshotTests = true
+      try {
+        const { _snapshotData } = this.context.expect.getState().snapshotState
+        hasSnapshotTests = Object.keys(_snapshotData).length > 0
+      } catch (e) {
+        // if we can't be sure, we'll err on the side of caution and assume it has snapshots
+      }
+      this.hasSnapshotTests = hasSnapshotTests
+      return hasSnapshotTests
     }
 
     // Function that receives a list of known tests for a test service and
@@ -231,6 +247,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const isSkipped = event.mode === 'todo' || event.mode === 'skip'
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testName)) {
             retriedTestsToNumAttempts.set(testName, 0)
+            // Retrying snapshots has proven to be problematic, so we'll skip them for now
+            // We'll still detect new tests, but we won't retry them.
+            // TODO: do not bail out of EFD with the whole test suite
+            if (this.getHasSnapshotTests()) {
+              log.warn('Early flake detection is disabled for suites with snapshots')
+              return
+            }
             for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
               if (this.global.test) {
                 this.global.test(addEfdStringToTestName(event.testName, retryIndex), event.fn, event.timeout)
