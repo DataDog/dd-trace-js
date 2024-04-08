@@ -54,4 +54,4 @@ onboarding_tests:
     - ls system-tests/binaries
     - cd system-tests
     - ./build.sh -i runner
-    #- timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-skip-branches ubuntu18_amd64
+    - timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-skip-branches ubuntu18_amd64

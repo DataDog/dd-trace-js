@@ -8,7 +8,7 @@ echo GIT_COMMIT_SHA=$4
 
 #Get last tag version/ last release number
 git fetch --depth=500
-LAST_TAG_VERSION=$(git tag --sort=taggerdate | grep -E '[0-9]'  | tail -1 | cut -c 8-)
+LAST_TAG_VERSION=$(git tag --sort=taggerdate | grep -E '[0-9]'  | tail -1 | cut -c 2-)
 
 git_branch="${3#refs/heads/}"
 echo git_branch="${git_branch}"
