@@ -1,7 +1,7 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
 // Message pack int encoding is done in big endian, but data streams uses little endian
-const Uint64 = require('int64-buffer').Uint64BE
+const Uint64 = require('int64-buffer').Uint64LE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
