@@ -125,6 +125,20 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
   })
 
+  it('should send histograms', () => {
+    client = new DogStatsDClient()
+
+    client.histogram('test.histogram', 10)
+    client.flush()
+
+    expect(udp4.send).to.have.been.called
+    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
+    expect(udp4.send.firstCall.args[1]).to.equal(0)
+    expect(udp4.send.firstCall.args[2]).to.equal(20)
+    expect(udp4.send.firstCall.args[3]).to.equal(8125)
+    expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+  })
+
   it('should send counters', () => {
     client = new DogStatsDClient()
 
@@ -406,6 +420,16 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\n')
+    })
+
+    it('.histogram()', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.histogram('test.histogram', 10)
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
     })
   })
 })
