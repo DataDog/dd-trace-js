@@ -23,6 +23,7 @@ variables:
 package_version:
   #image: docker:git
   #extends: .common
+  tags: ["arch:amd64"]
   image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
   stage: package
   rules:
