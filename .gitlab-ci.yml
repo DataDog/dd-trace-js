@@ -3,10 +3,12 @@ stages:
   - deploy
   - benchmarks
   - benchmarks-pr-comment
+  - single-step-instrumentation-tests
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
   - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/single-step-instrumentation-tests.yml"
 
 variables:
   JS_PACKAGE_VERSION:
@@ -18,23 +20,43 @@ variables:
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
+package_version:
+  image: docker:git
+  stage: package
+  rules:
+    - if: $JS_PACKAGE_VERSION
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: on_success
+    - if: $CI_COMMIT_BRANCH == 'robertomonteromiguel/add_onboarding_tests'
+      when: on_success
+    - when: manual
+      allow_failure: true
+  script:
+   - |
+      if [ -z "$JS_PACKAGE_VERSION$CI_COMMIT_TAG" ]; then
+        echo CI_JOB_ID=$CI_JOB_ID
+        echo CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME
+        echo CI_COMMIT_SHA=$CI_COMMIT_SHA
+        sh lib-injection/patch_dev_version.sh glci $CI_JOB_ID $CI_COMMIT_REF_NAME $CI_COMMIT_SHA
+      fi
+  artifacts:
+    reports:
+      dotenv: package_version.env
+
 package:
   extends: .package
-  rules:
-  - if: $JS_PACKAGE_VERSION
-    when: on_success
-  - if: '$CI_COMMIT_TAG =~ /^v.*/'
-    when: on_success
+  needs: 
+    - job: package_version
+      artifacts: true
   script:
     - ../.gitlab/build-deb-rpm.sh
 
 package-arm:
   extends: .package-arm
-  rules:
-  - if: $JS_PACKAGE_VERSION
-    when: on_success
-  - if: '$CI_COMMIT_TAG =~ /^v.*/'
-    when: on_success
+  needs: 
+    - job: package_version
+      artifacts: true
   script:
     - ../.gitlab/build-deb-rpm.sh
 
