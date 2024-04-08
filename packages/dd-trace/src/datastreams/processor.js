@@ -1,7 +1,7 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
 // Message pack int encoding is done in big endian, but data streams uses little endian
-const Uint64 = require('int64-buffer').Uint64LE
+const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
@@ -16,8 +16,8 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = new Uint64(hash)
-    this.parentHash = new Uint64(parentHash)
+    this.hash = new Uint64(hash.reverse())
+    this.parentHash = new Uint64(parentHash.reverse())
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
