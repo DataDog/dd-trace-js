@@ -18,6 +18,9 @@ class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
     this.hash = new Uint64(hash.reverse())
     this.parentHash = new Uint64(parentHash.reverse())
+    console.log(this.hash)
+    console.log(this.parentHash)
+    console.log(edgeTags)
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
