@@ -25,6 +25,10 @@ class StatsPoint {
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
+
+    // reverse buffers back to little endian
+    hash.reverse()
+    parentHash.reverse()
   }
 
   addLatencies (checkpoint) {
