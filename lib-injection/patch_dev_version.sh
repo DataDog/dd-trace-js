@@ -15,7 +15,8 @@ echo git_branch="${git_branch}"
 git_branch_hash=$(echo -n "$git_branch" | sha256sum| cut -c1-6)
 echo git_branch_hash="${git_branch_hash}"
 
-git_short_sha=${4:0:8}
+#git_short_sha=${4:0:8}
+git_short_sha=$(echo -n "$4" | sha256sum| cut -c1-6)
 echo git_short_sha=$git_short_sha
 
 PRE=dev
