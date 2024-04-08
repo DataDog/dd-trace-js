@@ -45,7 +45,7 @@ function dsmStatsExist (agent, expectedHash) {
     dsmStats.forEach((statsTimeBucket) => {
       statsTimeBucket.Stats.forEach((statsBucket) => {
         statsBucket.Stats.forEach((stats) => {
-          if (stats.Hash.toString() === expectedHash) {
+          if (stats.Hash.buffer.readBigUint64LE(stats.Hash.offset).toString() === expectedHash) {
             hashFound = true
             return hashFound
           }

@@ -306,8 +306,8 @@ describe('Plugin', () => {
         describe('when data streams monitoring is enabled', function () {
           this.timeout(10000)
 
-          const expectedProducerHash = '17191234428405871432'
-          const expectedConsumerHash = '18277095184718602853'
+          const expectedProducerHash = '6139677129430317969'
+          const expectedConsumerHash = '18175937909952759749'
 
           before(() => {
             tracer = require('../../dd-trace')
