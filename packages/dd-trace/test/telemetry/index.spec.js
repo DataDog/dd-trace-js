@@ -770,77 +770,107 @@ describe('Telemetry retry', () => {
 })
 
 describe('AVM OSS', () => {
-  describe('SCA configuration should be sent in telemetry messages', () => {
+  describe('SCA configuration in telemetry messages', () => {
     let telemetry
     let telemetryConfig
     let clock
 
     const HEARTBEAT_INTERVAL = 86410000
 
-    before((done) => {
-      clock = sinon.useFakeTimers()
-
-      storage.run({ noop: true }, () => {
-        traceAgent = http.createServer(async (req, res) => {
-          const chunks = []
-          for await (const chunk of req) {
-            chunks.push(chunk)
-          }
-          req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-          traceAgent.reqs.push(req)
-          traceAgent.emit('handled-req')
-          res.end()
-        }).listen(0, done)
-      })
-
-      traceAgent.reqs = []
-
-      telemetry = proxyquire('../../src/telemetry', {})
-
-      telemetryConfig = {
-        telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
-        hostname: 'localhost',
-        port: traceAgent.address().port,
-        service: 'test service',
-        version: '1.2.3-beta4',
-        env: 'preprod',
-        tags: {
-          'runtime-id': '1a2b3c'
-        },
-        appsec: { enabled: false },
-        profiling: { enabled: false }
+    const suite = [
+      {
+        scaValue: undefined,
+        testDescription: 'should not send when no env var is informed'
+      },
+      {
+        scaValue: true,
+        testDescription: 'should send when env var is true'
+      },
+      {
+        scaValue: false,
+        testDescription: 'should send when env var is false'
       }
+    ]
 
-      telemetry.updateConfig(
-        [{ name: 'sca.enabled', value: true, origin: 'env_var' }],
-        telemetryConfig
-      )
-
-      telemetry.start(telemetryConfig, { _pluginsByName: {} })
-    })
-
-    after((done) => {
-      clock.restore()
-      telemetry.stop()
-      traceAgent.close(done)
-    })
-
-    it('in app-started message', () => {
-      return testSeq(1, 'app-started', payload => {
+    function expectScaValue(payload, scaValue) {
+      if (scaValue === undefined) {
+        expect(payload.configuration.filter(c => c.name === 'sca.enabled')).is.empty
+      } else {
         expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'sca.enabled', value: true, origin: 'env_var' }
+          { name: 'sca.enabled', value: scaValue, origin: 'env_var' }
         ])
-      }, true)
-    })
+      }
+    }
 
-    it('in app-extended-heartbeat message', () => {
-      // Skip a full day
-      clock.tick(86400000)
-      return testSeq(2, 'app-extended-heartbeat', payload => {
-        expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'sca.enabled', value: true, origin: 'env_var' }
-        ])
-      }, true)
+    suite.forEach(({scaValue, testDescription}) => {
+      describe(testDescription, () => {
+        before((done) => {
+          clock = sinon.useFakeTimers()
+
+          storage.run({ noop: true }, () => {
+            traceAgent = http.createServer(async (req, res) => {
+              const chunks = []
+              for await (const chunk of req) {
+                chunks.push(chunk)
+              }
+              req.body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+              traceAgent.reqs.push(req)
+              traceAgent.emit('handled-req')
+              res.end()
+            }).listen(0, done)
+          })
+
+          traceAgent.reqs = []
+
+          delete require.cache[require.resolve('../../src/telemetry/send-data')]
+          delete require.cache[require.resolve('../../src/telemetry')]
+          telemetry = require('../../src/telemetry')
+
+          telemetryConfig = {
+            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+            hostname: 'localhost',
+            port: traceAgent.address().port,
+            service: 'test service',
+            version: '1.2.3-beta4',
+            env: 'preprod',
+            tags: {
+              'runtime-id': '1a2b3c'
+            },
+            appsec: { enabled: false },
+            profiling: { enabled: false }
+          }
+        })
+
+        before(() => {
+          if (scaValue !== undefined) {
+            telemetry.updateConfig(
+              [{ name: 'sca.enabled', value: scaValue, origin: 'env_var' }],
+              telemetryConfig
+            )
+          }
+          telemetry.start(telemetryConfig, { _pluginsByName: {} })
+        })
+
+        after((done) => {
+          clock.restore()
+          telemetry.stop()
+          traceAgent.close(done)
+        })
+
+        it('in app-started message', () => {
+          return testSeq(1, 'app-started', payload => {
+            expectScaValue(payload, scaValue)
+          }, true)
+        })
+
+        it('in app-extended-heartbeat message', () => {
+          // Skip a full day
+          clock.tick(86400000)
+          return testSeq(2, 'app-extended-heartbeat', payload => {
+            expectScaValue(payload, scaValue)
+          }, true)
+        })
+      })
     })
   })
 

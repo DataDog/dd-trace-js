@@ -495,7 +495,7 @@ class Config {
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
-    this._setValue(defaults, 'sca.enabled', false)
+    this._setValue(defaults, 'sca.enabled', undefined)
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'site', 'datadoghq.com')

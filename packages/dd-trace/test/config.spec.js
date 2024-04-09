@@ -228,7 +228,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
-    expect(config).to.have.nested.property('sca.enabled', false)
+    expect(config).to.have.nested.property('sca.enabled', undefined)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -325,7 +325,7 @@ describe('Config', () => {
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'version', value: '', origin: 'default' },
-      { name: 'sca.enabled', value: false, origin: 'default' }
+      { name: 'sca.enabled', value: undefined, origin: 'default' }
     ])
   })
 
