@@ -138,7 +138,7 @@ class SSITelemetry {
     this._profileCount = profilersNamespace.count('ssi_heuristic.number_of_profiles', tags)
     this._runtimeIdCount = profilersNamespace.count('ssi_heuristic.number_of_runtime_id', tags)
 
-    if (decision.length === 0 && !this._emittedRuntimeId) {
+    if (!this._emittedRuntimeId && decision[0] === 'triggered') {
       // Tags won't change anymore, so we can emit the runtime ID metric now
       this._emittedRuntimeId = true
       this._runtimeIdCount.inc()
