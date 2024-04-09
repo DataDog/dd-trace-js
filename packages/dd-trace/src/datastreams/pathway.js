@@ -1,5 +1,5 @@
 const { toBufferLE } = require('bigint-buffer')
-const { encodeVarInt64, decodeVarInt64 } = require('./encoding')
+const { encodeVarint, decodeVarint } = require('./encoding')
 
 const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
@@ -46,8 +46,8 @@ function computeHash (service, env, tags, parentHash) {
 function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
-    encodeVarInt64(BigInt(dataStreamsContext.pathwayStartNs * 1e3)),
-    encodeVarInt64(BigInt(dataStreamsContext.edgeStartNs * 1e3))
+    encodeVarint(dataStreamsContext.pathwayStartNs * 1e3),
+    encodeVarint(dataStreamsContext.edgeStartNs * 1e3)
   ])
 }
 
@@ -63,11 +63,11 @@ function decodePathwayContext (pathwayContext) {
   // hash and parent hash are in LE
   const pathwayHash = pathwayContext.subarray(0, 8)
   const encodedTimestamps = pathwayContext.subarray(8)
-  const [pathwayStartMs, encodedTimeSincePrev] = decodeVarInt64(encodedTimestamps)
+  const [pathwayStartMs, encodedTimeSincePrev] = decodeVarint(encodedTimestamps)
   if (pathwayStartMs === undefined) {
     return null
   }
-  const [edgeStartMs] = decodeVarInt64(encodedTimeSincePrev)
+  const [edgeStartMs] = decodeVarint(encodedTimeSincePrev)
   if (edgeStartMs === undefined) {
     return null
   }
