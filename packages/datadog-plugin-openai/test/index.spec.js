@@ -85,7 +85,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('createCompletion()', () => {
+      describe('create completion', () => {
         let scope
 
         after(() => {
@@ -217,7 +217,9 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '4.0.0') ? 'sampled completions.create' : 'sampled createCompletion',
+            message: semver.satisfies(realVersion, '>=4.0.0')
+              ? 'sampled completions.create'
+              : 'sampled createCompletion',
             prompt: 'Hello, \n\nFriend\t\tHi',
             choices: [
               {
@@ -275,7 +277,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('createEmbedding()', () => {
+      describe('create embedding', () => {
         let scope
 
         before(() => {
@@ -358,7 +360,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('listModels()', () => {
+      describe('list models', () => {
         let scope
 
         before(() => {
@@ -459,7 +461,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('retrieveModel()', () => {
+      describe('retrieve model', () => {
         let scope
 
         before(() => {
@@ -547,7 +549,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('createEdit()', () => {
+      describe('create edit', () => {
         let scope
 
         before(() => {
@@ -656,7 +658,7 @@ describe('Plugin', () => {
         }
       })
 
-      describe('listFiles()', () => {
+      describe('list files', () => {
         let scope
 
         before(() => {
@@ -733,7 +735,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('createFile()', () => {
+      describe('create file', () => {
         let scope
 
         before(() => {
@@ -808,7 +810,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('deleteFile()', () => {
+      describe('delete file', () => {
         let scope
 
         before(() => {
@@ -867,7 +869,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('retrieveFile()', () => {
+      describe('retrieve file', () => {
         let scope
 
         before(() => {
@@ -937,7 +939,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('downloadFile()', () => {
+      describe('download file', () => {
         let scope
 
         before(() => {
@@ -1009,7 +1011,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('createFineTune()', () => {
+      describe('create finetune', () => {
         let scope
 
         beforeEach(() => {
@@ -1172,7 +1174,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('retrieveFineTune()', () => {
+      describe('retrieve finetune', () => {
         let scope
 
         beforeEach(() => {
@@ -1356,7 +1358,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('listFineTunes()', () => {
+      describe('list finetunes', () => {
         let scope
 
         beforeEach(() => {
@@ -1454,7 +1456,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('listFineTuneEvents()', () => {
+      describe('list finetune events', () => {
         let scope
 
         beforeEach(() => { // beforeEach allows realVersion to be set first before nocking the call
@@ -1591,7 +1593,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe('deleteModel()', () => {
+      describe('delete model', () => {
         let scope
 
         before(() => {
@@ -1651,7 +1653,7 @@ describe('Plugin', () => {
       })
 
       // TODO check this
-      describe('cancelFineTune()', () => {
+      describe('cancel finetune', () => {
         let scope
 
         beforeEach(() => {
@@ -1774,7 +1776,7 @@ describe('Plugin', () => {
       })
 
       if (semver.intersects(version, '>=3.0.1')) {
-        describe('createModeration()', () => {
+        describe('create moderation', () => {
           let scope
 
           before(() => {
@@ -1891,7 +1893,7 @@ describe('Plugin', () => {
       }
 
       if (semver.intersects(version, '>=3.1')) {
-        describe('createImage()', () => {
+        describe('create image', () => {
           let scope
 
           beforeEach(() => {
@@ -2102,7 +2104,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('createImageEdit()', () => {
+        describe('create image edit', () => {
           let scope
 
           before(() => {
@@ -2199,7 +2201,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('createImageVariation()', () => {
+        describe('create image variation', () => {
           let scope
 
           before(() => {
@@ -2285,7 +2287,7 @@ describe('Plugin', () => {
       }
 
       if (semver.intersects('>=3.2.0', version)) {
-        describe('createChatCompletion()', () => {
+        describe('create chat completion', () => {
           let scope
 
           beforeEach(() => {
@@ -2476,7 +2478,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('createTranscription()', () => {
+        describe('create transcription', () => {
           let scope
 
           before(() => {
@@ -2583,7 +2585,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('createTranslation()', () => {
+        describe('create translation', () => {
           let scope
 
           before(() => {
