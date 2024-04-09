@@ -14,61 +14,83 @@ const V4_PACKAGE_SHIMS = [
   {
     file: 'resources/chat/completions.js',
     targetClass: 'Completions',
-    object: 'chat.completions',
+    baseResource: 'chat.completions',
     methods: ['create']
   },
   {
     file: 'resources/completions.js',
     targetClass: 'Completions',
-    object: 'completions',
+    baseResource: 'completions',
     methods: ['create']
   },
   {
     file: 'resources/embeddings.js',
     targetClass: 'Embeddings',
-    object: 'embeddings',
+    baseResource: 'embeddings',
     methods: ['create']
   },
   {
     file: 'resources/files.js',
     targetClass: 'Files',
-    object: 'files',
-    methods: ['create', 'del', 'list', 'retrieve', 'retrieveContent']
+    baseResource: 'files',
+    methods: ['create', 'del', 'list', 'retrieve']
+  },
+  {
+    file: 'resources/files.js',
+    targetClass: 'Files',
+    baseResource: 'files',
+    methods: ['retrieveContent'],
+    versions: ['>=4.0.0 <4.17.1']
+  },
+  {
+    file: 'resources/files.js',
+    targetClass: 'Files',
+    baseResource: 'files',
+    methods: ['content'], // replaced `retrieveContent` in v4.17.1
+    versions: ['>=4.17.1']
   },
   {
     file: 'resources/images.js',
     targetClass: 'Images',
-    object: 'images',
+    baseResource: 'images',
     methods: ['createVariation', 'edit', 'generate']
   },
   {
     file: 'resources/fine-tuning/jobs.js',
     targetClass: 'Jobs',
-    object: 'fineTuning.jobs',
-    methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve']
+    baseResource: 'fine_tuning.jobs',
+    methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
+    versions: ['>=4.1.0']
+  },
+  {
+    file: 'resources/fine-tunes.js', // deprecated after 4.1.0
+    targetClass: 'FineTunes',
+    baseResource: 'fine-tune',
+    methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
+    versions: ['>=4.0.0 <4.1.0']
   },
   {
     file: 'resources/models.js',
     targetClass: 'Models',
-    object: 'models',
+    baseResource: 'models',
     methods: ['del', 'list', 'retrieve']
   },
   {
-    file: 'resources/moderation.js',
+    file: 'resources/moderations.js',
     targetClass: 'Moderations',
-    object: 'moderation',
+    baseResource: 'moderations',
     methods: ['create']
   },
   {
     file: 'resources/audio/transcriptions.js',
     targetClass: 'Transcriptions',
-    object: 'audio.transcriptions',
+    baseResource: 'audio.transcriptions',
     methods: ['create']
   },
   {
     file: 'resources/audio/translations.js',
     targetClass: 'Translations',
-    object: 'audio.translations',
+    baseResource: 'audio.translations',
     methods: ['create']
   }
 ]
@@ -112,8 +134,9 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-for (const { file, targetClass, object, methods } of V4_PACKAGE_SHIMS) {
-  addHook({ name: 'openai', file, versions: ['>=4'] }, exports => {
+for (const shim of V4_PACKAGE_SHIMS) {
+  const { file, targetClass, baseResource, methods } = shim
+  addHook({ name: 'openai', file, versions: shim.versions || ['>=4'] }, exports => {
     const targetPrototype = exports[targetClass].prototype
 
     for (const methodName of methods) {
@@ -125,7 +148,7 @@ for (const { file, targetClass, object, methods } of V4_PACKAGE_SHIMS) {
         const client = this._client || this.client
 
         startCh.publish({
-          methodName: `${object}.${methodName}`,
+          methodName: `${baseResource}.${methodName}`,
           args: arguments,
           basePath: client.baseURL,
           apiKey: client.apiKey
@@ -133,29 +156,31 @@ for (const { file, targetClass, object, methods } of V4_PACKAGE_SHIMS) {
 
         const apiProm = methodFn.apply(this, arguments)
 
-        let headers, method, path
-
         // wrapping `parse` avoids problematic wrapping of `then` when trying to call
         // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
         shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-          return this.responsePromise
-            .then(({ response, options }) => {
-              headers = response.headers
-              method = options.method
-              path = response.url
-            })
-            .then(() => origApiPromParse.apply(this, arguments))
-            .then(body => {
+          return origApiPromParse.apply(this, arguments)
+            // the original response is wrapped in a promise, so we need to unwrap it
+            .then(body => Promise.all([this.responsePromise, body]))
+            .then(([{ response, options }, body]) => {
               finishCh.publish({
-                headers,
+                headers: response.headers,
                 body,
-                path,
-                method
+                path: response.url,
+                method: options.method
               })
 
-              shimmer.unwrap(apiProm, 'parse')
-
               return body
+            })
+            .catch(err => {
+              errorCh.publish({ err })
+
+              throw err
+            })
+            .finally(() => {
+              // maybe we don't want to unwrap here in case the promise is re-used?
+              // other hand: we want to avoid resource leakage
+              shimmer.unwrap(apiProm, 'parse')
             })
         })
 

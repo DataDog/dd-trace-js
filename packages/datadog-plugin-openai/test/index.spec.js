@@ -20,9 +20,10 @@ describe('Plugin', () => {
   let clock
   let metricStub
   let externalLoggerStub
+  let realVersion
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    withVersions('openai', 'openai', '>=4', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -39,13 +40,26 @@ describe('Plugin', () => {
 
       beforeEach(() => {
         clock = sinon.useFakeTimers()
-        const { Configuration, OpenAIApi } = require(moduleRequirePath).get()
 
-        const configuration = new Configuration({
-          apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
-        })
+        const requiredModule = require(moduleRequirePath)
+        const module = requiredModule.get()
+        realVersion = requiredModule.version()
 
-        openai = new OpenAIApi(configuration)
+        if (semver.satisfies(realVersion, '>=4.0.0')) {
+          const OpenAI = module
+
+          openai = new OpenAI({
+            apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
+          })
+        } else {
+          const { Configuration, OpenAIApi } = module
+
+          const configuration = new Configuration({
+            apiKey: 'sk-DATADOG-ACCEPTANCE-TESTS'
+          })
+
+          openai = new OpenAIApi(configuration)
+        }
 
         metricStub = sinon.stub(DogStatsDClient.prototype, '_add')
         externalLoggerStub = sinon.stub(NoopExternalLogger.prototype, 'log')
@@ -116,7 +130,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'createCompletion')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'completions.create')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'createCompletion')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/completions')
@@ -149,7 +167,7 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 19)
             })
 
-          const result = await openai.createCompletion({
+          const params = {
             model: 'text-davinci-002',
             prompt: 'Hello, \n\nFriend\t\tHi',
             suffix: 'foo',
@@ -166,9 +184,15 @@ describe('Plugin', () => {
             best_of: 2,
             logit_bias: { 50256: 30 },
             user: 'hunter2'
-          })
+          }
 
-          expect(result.data.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.completions.create(params)
+            expect(result.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
+          } else {
+            const result = await openai.createCompletion(params)
+            expect(result.data.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
+          }
 
           await checkTraces
 
@@ -193,7 +217,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: 'sampled createCompletion',
+            message: semver.satisfies(realVersion, '4.0.0') ? 'sampled completions.create' : 'sampled createCompletion',
             prompt: 'Hello, \n\nFriend\t\tHi',
             choices: [
               {
@@ -232,12 +256,18 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
-          await openai.createCompletion({
+          const params = {
             model: 'text-davinci-002',
             prompt: 'Hello, ',
             suffix: 'foo',
             stream: true
-          })
+          }
+
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            await openai.completions.create(params)
+          } else {
+            await openai.createCompletion(params)
+          }
 
           await checkTraces
 
@@ -284,7 +314,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/embeddings')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -300,21 +334,27 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 2)
             })
 
-          const result = await openai.createEmbedding({
+          const params = {
             model: 'text-embedding-ada-002',
             input: 'Cat?',
             user: 'hunter2'
-          })
+          }
 
-          expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.embeddings.create(params)
+            expect(result.model).to.eql('text-embedding-ada-002-v2')
+          } else {
+            const result = await openai.createEmbedding(params)
+            expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+          }
+
+          await checkTraces
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: 'sampled createEmbedding',
+            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
             input: 'Cat?'
           })
-
-          await checkTraces
         })
       })
 
@@ -392,7 +432,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'listModels')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'models.list')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'listModels')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models')
@@ -401,10 +445,15 @@ describe('Plugin', () => {
               // Note that node doesn't accept a user value
             })
 
-          const result = await openai.listModels()
-
-          expect(result.data.object).to.eql('list')
-          expect(result.data.data.length).to.eql(2)
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.models.list()
+            expect(result.object).to.eql('list')
+            expect(result.data.length).to.eql(2)
+          } else {
+            const result = await openai.listModels()
+            expect(result.data.object).to.eql('list')
+            expect(result.data.data.length).to.eql(2)
+          }
 
           await checkTraces
         })
@@ -457,7 +506,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'models.retrieve')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
@@ -480,9 +533,15 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.permission.is_blocking', 0)
             })
 
-          const result = await openai.retrieveModel('gpt-4')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.models.retrieve('gpt-4')
 
-          expect(result.data.id).to.eql('gpt-4')
+            expect(result.id).to.eql('gpt-4')
+          } else {
+            const result = await openai.retrieveModel('gpt-4')
+
+            expect(result.data.id).to.eql('gpt-4')
+          }
 
           await checkTraces
         })
@@ -528,70 +587,73 @@ describe('Plugin', () => {
           scope.done()
         })
 
-        it('makes a successful call', async () => {
-          const checkTraces = agent
-            .use(traces => {
-              expect(traces[0][0]).to.have.property('name', 'openai.request')
-              expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'createEdit')
-              expect(traces[0][0]).to.have.property('error', 0)
-              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
-              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/edits')
+        if (semver.satisfies(realVersion, '<4.0.0')) {
+        // `edits.create` was deprecated and removed after 4.0.0
+          it('makes a successful call', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('name', 'openai.request')
+                expect(traces[0][0]).to.have.property('type', 'openai')
+                expect(traces[0][0]).to.have.property('resource', 'createEdit')
+                expect(traces[0][0]).to.have.property('error', 0)
+                expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/edits')
 
-              expect(traces[0][0].meta).to.have.property('openai.request.input', 'What day of the wek is it?')
-              expect(traces[0][0].meta).to.have.property('openai.request.instruction', 'Fix the spelling mistakes')
-              expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-davinci-edit-001')
-              expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
-              expect(traces[0][0].meta).to.have.property('openai.response.choices.0.text',
-                'What day of the week is it, Bob?\\n')
-              expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 1.00001)
-              expect(traces[0][0].metrics).to.have.property('openai.request.top_p', 0.999)
-              expect(traces[0][0].metrics).to.have.property('openai.response.choices_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.created', 1684267309)
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens', 28)
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 25)
-              expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 53)
+                expect(traces[0][0].meta).to.have.property('openai.request.input', 'What day of the wek is it?')
+                expect(traces[0][0].meta).to.have.property('openai.request.instruction', 'Fix the spelling mistakes')
+                expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-davinci-edit-001')
+                expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
+                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.text',
+                  'What day of the week is it, Bob?\\n')
+                expect(traces[0][0].metrics).to.have.property('openai.request.n', 1)
+                expect(traces[0][0].metrics).to.have.property('openai.request.temperature', 1.00001)
+                expect(traces[0][0].metrics).to.have.property('openai.request.top_p', 0.999)
+                expect(traces[0][0].metrics).to.have.property('openai.response.choices_count', 1)
+                expect(traces[0][0].metrics).to.have.property('openai.response.created', 1684267309)
+                expect(traces[0][0].metrics).to.have.property('openai.response.usage.completion_tokens', 28)
+                expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 25)
+                expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 53)
+              })
+
+            const result = await openai.createEdit({
+              model: 'text-davinci-edit-001',
+              input: 'What day of the wek is it?',
+              instruction: 'Fix the spelling mistakes',
+              n: 1,
+              temperature: 1.00001,
+              top_p: 0.999,
+              user: 'hunter2'
             })
 
-          const result = await openai.createEdit({
-            model: 'text-davinci-edit-001',
-            input: 'What day of the wek is it?',
-            instruction: 'Fix the spelling mistakes',
-            n: 1,
-            temperature: 1.00001,
-            top_p: 0.999,
-            user: 'hunter2'
+            expect(result.data.choices[0].text).to.eql('What day of the week is it, Bob?\n')
+
+            clock.tick(10 * 1000)
+
+            await checkTraces
+
+            const expectedTags = [
+              'org:kill-9',
+              'endpoint:/v1/edits',
+              'model:text-davinci-edit:001',
+              'error:0'
+            ]
+
+            expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
+            expect(metricStub).to.be.calledWith('openai.ratelimit.remaining.requests', 19, 'g', expectedTags)
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled edits.create' : 'sampled createEdit',
+              input: 'What day of the wek is it?',
+              instruction: 'Fix the spelling mistakes',
+              choices: [{
+                text: 'What day of the week is it, Bob?\n',
+                index: 0
+              }]
+            })
           })
-
-          expect(result.data.choices[0].text).to.eql('What day of the week is it, Bob?\n')
-
-          clock.tick(10 * 1000)
-
-          await checkTraces
-
-          const expectedTags = [
-            'org:kill-9',
-            'endpoint:/v1/edits',
-            'model:text-davinci-edit:001',
-            'error:0'
-          ]
-
-          expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
-          expect(metricStub).to.be.calledWith('openai.ratelimit.remaining.requests', 19, 'g', expectedTags)
-
-          expect(externalLoggerStub).to.have.been.calledWith({
-            status: 'info',
-            message: 'sampled createEdit',
-            input: 'What day of the wek is it?',
-            instruction: 'Fix the spelling mistakes',
-            choices: [{
-              text: 'What day of the week is it, Bob?\n',
-              index: 0
-            }]
-          })
-        })
+        }
       })
 
       describe('listFiles()', () => {
@@ -642,7 +704,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'listFiles')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.list')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'listFiles')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -651,10 +717,17 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.count', 2)
             })
 
-          const result = await openai.listFiles()
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.files.list()
 
-          expect(result.data.data.length).to.eql(2)
-          expect(result.data.data[0].id).to.eql('file-foofoofoo')
+            expect(result.data.length).to.eql(2)
+            expect(result.data[0].id).to.eql('file-foofoofoo')
+          } else {
+            const result = await openai.listFiles()
+
+            expect(result.data.data.length).to.eql(2)
+            expect(result.data.data[0].id).to.eql('file-foofoofoo')
+          }
 
           await checkTraces
         })
@@ -696,7 +769,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'createFile')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.create')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'createFile')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files')
@@ -713,10 +790,19 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684362764)
             })
 
-          const result = await openai.createFile(fs.createReadStream(
-            Path.join(__dirname, 'dave-hal.jsonl')), 'fine-tune')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.files.create({
+              file: fs.createReadStream(Path.join(__dirname, 'dave-hal.jsonl')),
+              purpose: 'fine-tune'
+            })
 
-          expect(result.data.filename).to.eql('dave-hal.jsonl')
+            expect(result.filename).to.eql('dave-hal.jsonl')
+          } else {
+            const result = await openai.createFile(fs.createReadStream(
+              Path.join(__dirname, 'dave-hal.jsonl')), 'fine-tune')
+
+            expect(result.data.filename).to.eql('dave-hal.jsonl')
+          }
 
           await checkTraces
         })
@@ -752,7 +838,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'deleteFile')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.del')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'deleteFile')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
@@ -763,9 +853,15 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.deleted', 1)
             })
 
-          const result = await openai.deleteFile('file-268aYWYhvxWwHb4nIzP9FHM6')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.files.del('file-268aYWYhvxWwHb4nIzP9FHM6')
 
-          expect(result.data.deleted).to.eql(true)
+            expect(result.deleted).to.eql(true)
+          } else {
+            const result = await openai.deleteFile('file-268aYWYhvxWwHb4nIzP9FHM6')
+
+            expect(result.data.deleted).to.eql(true)
+          }
 
           await checkTraces
         })
@@ -807,7 +903,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.retrieve')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
@@ -823,9 +923,15 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684362764)
             })
 
-          const result = await openai.retrieveFile('file-fIkEUgQPWnVXNKPJsr4pEWiz')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.files.retrieve('file-fIkEUgQPWnVXNKPJsr4pEWiz')
 
-          expect(result.data.filename).to.eql('dave-hal.jsonl')
+            expect(result.filename).to.eql('dave-hal.jsonl')
+          } else {
+            const result = await openai.retrieveFile('file-fIkEUgQPWnVXNKPJsr4pEWiz')
+
+            expect(result.data.filename).to.eql('dave-hal.jsonl')
+          }
 
           await checkTraces
         })
@@ -854,30 +960,50 @@ describe('Plugin', () => {
           scope.done()
         })
 
+        // TODO: issues with content being async arraybuffer, how to compute byteLength before promise resolves?
         it('makes a successful call', async () => {
           const checkTraces = agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'downloadFile')
+              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.retrieveContent')
+              } else if (semver.satisfies(realVersion, '>=4.17.1')) {
+                expect(traces[0][0]).to.have.property('resource', 'files.content')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'downloadFile')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files/*/content')
 
               expect(traces[0][0].meta).to.have.property('openai.request.file_id', 'file-t3k1gVSQDHrfZnPckzftlZ4A')
-              expect(traces[0][0].metrics).to.have.property('openai.response.total_bytes', 88)
+              if (semver.satisfies(realVersion, '<4.17.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.total_bytes', 88)
+              }
             })
 
-          const result = await openai.downloadFile('file-t3k1gVSQDHrfZnPckzftlZ4A')
+          if (semver.satisfies(realVersion, '>=4.0.0 < 4.17.1')) {
+            const result = await openai.files.retrieveContent('file-t3k1gVSQDHrfZnPckzftlZ4A')
 
-          /**
+            expect(result)
+              .to.eql(`{"prompt": "foo?", "completion": "bar."}\n{"prompt": "foofoo?", "completion": "barbar."}\n`)
+          } else if (semver.satisfies(realVersion, '>=4.17.1')) {
+            const result = await openai.files.content('file-t3k1gVSQDHrfZnPckzftlZ4A')
+
+            expect(result.constructor.name).to.eql('Response')
+          } else {
+            const result = await openai.downloadFile('file-t3k1gVSQDHrfZnPckzftlZ4A')
+
+            /**
            * TODO: Seems like an OpenAI library bug?
            * downloading single line JSONL file results in the JSON being converted into an object.
            * downloading multi-line JSONL file then provides a basic string.
            * This suggests the library is doing `try { return JSON.parse(x) } catch { return x }`
            */
-          expect(result.data[0]).to.eql('{') // raw JSONL file
+            expect(result.data[0]).to.eql('{') // raw JSONL file
+          }
 
           await checkTraces
         })
@@ -888,9 +1014,9 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           scope = nock('https://api.openai.com:443')
-            .post('/v1/fine-tunes')
+            .post(semver.satisfies(realVersion, '>=4.1.0') ? '/v1/fine_tuning/jobs' : '/v1/fine-tunes')
             .reply(200, {
-              object: 'fine-tune',
+              object: 'fine_tuning.jobs',
               id: 'ft-10RCfqSvgyEcauomw7VpiYco',
               hyperparams: {
                 n_epochs: 5,
@@ -940,13 +1066,24 @@ describe('Plugin', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent
             .use(traces => {
+              // console.log(traces[0][0])
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'createFineTune')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
+              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine-tune.create')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'createFineTune')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs')
+              } else {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
+              }
 
               expect(traces[0][0].meta).to.have.property('openai.request.classification_positive_class', 'wat')
               expect(traces[0][0].meta).to.have.property('openai.request.model', 'curie')
@@ -978,7 +1115,7 @@ describe('Plugin', () => {
             })
 
           // only certain request parameter combinations are allowed, leaving unused ones commented for now
-          const result = await openai.createFineTune({
+          const params = {
             training_file: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
             validation_file: 'file-foobar',
             model: 'curie',
@@ -992,9 +1129,21 @@ describe('Plugin', () => {
             classification_positive_class: 'wat',
             classification_betas: [0.1, 0.2, 0.3]
             // validation_file: '',
-          })
+          }
 
-          expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            const result = await openai.fineTuning.jobs.create(params)
+
+            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.fineTunes.create(params)
+
+            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          } else {
+            const result = await openai.createFineTune(params)
+
+            expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          }
 
           await checkTraces
         })
@@ -1005,9 +1154,19 @@ describe('Plugin', () => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
             })
 
-          await openai.createFineTune({
-            classification_betas: null
-          })
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            await openai.fineTuning.jobs.create({
+              classification_betas: null
+            })
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            await openai.fineTunes.create({
+              classification_betas: null
+            })
+          } else {
+            await openai.createFineTune({
+              classification_betas: null
+            })
+          }
 
           await checkTraces
         })
@@ -1016,9 +1175,13 @@ describe('Plugin', () => {
       describe('retrieveFineTune()', () => {
         let scope
 
-        before(() => {
+        beforeEach(() => {
           scope = nock('https://api.openai.com:443')
-            .get('/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco')
+            .get(
+              semver.satisfies(realVersion, '>=4.1.0')
+                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco'
+                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco'
+            )
             .reply(200, {
               object: 'fine-tune',
               id: 'ft-10RCfqSvgyEcauomw7VpiYco',
@@ -1143,11 +1306,21 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
+              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine-tune.retrieve')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*')
+              } else {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*')
+              }
 
               expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-10RCfqSvgyEcauomw7VpiYco')
               expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
@@ -1165,9 +1338,19 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
             })
 
-          const result = await openai.retrieveFineTune('ft-10RCfqSvgyEcauomw7VpiYco')
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            const result = await openai.fineTuning.jobs.retrieve('ft-10RCfqSvgyEcauomw7VpiYco')
 
-          expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.fineTunes.retrieve('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          } else {
+            const result = await openai.retrieveFineTune('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.data.id).to.eql('ft-10RCfqSvgyEcauomw7VpiYco')
+          }
 
           await checkTraces
         })
@@ -1176,9 +1359,13 @@ describe('Plugin', () => {
       describe('listFineTunes()', () => {
         let scope
 
-        before(() => {
+        beforeEach(() => {
           scope = nock('https://api.openai.com:443')
-            .get('/v1/fine-tunes')
+            .get(
+              semver.satisfies(realVersion, '>=4.1.0')
+                ? '/v1/fine_tuning/jobs'
+                : '/v1/fine-tunes'
+            )
             .reply(200, {
               object: 'list',
               data: [{
@@ -1221,7 +1408,7 @@ describe('Plugin', () => {
             })
         })
 
-        after(() => {
+        afterEach(() => {
           nock.removeInterceptor(scope)
           scope.done()
         })
@@ -1231,17 +1418,37 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
+              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine-tune.list')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs')
+              } else {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes')
+              }
 
               expect(traces[0][0].metrics).to.have.property('openai.response.count', 1)
             })
 
-          const result = await openai.listFineTunes()
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            const result = await openai.fineTuning.jobs.list()
 
-          expect(result.data.object).to.eql('list')
+            expect(result.body.object).to.eql('list')
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.fineTunes.list()
+
+            expect(result.object).to.eql('list')
+          } else {
+            const result = await openai.listFineTunes()
+
+            expect(result.data.object).to.eql('list')
+          }
 
           await checkTraces
         })
@@ -1250,9 +1457,13 @@ describe('Plugin', () => {
       describe('listFineTuneEvents()', () => {
         let scope
 
-        before(() => {
+        beforeEach(() => { // beforeEach allows realVersion to be set first before nocking the call
           scope = nock('https://api.openai.com:443')
-            .get('/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco/events')
+            .get(
+              semver.satisfies(realVersion, '>=4.1.0')
+                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco/events'
+                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco/events'
+            )
             .reply(200, {
               object: 'list',
               data: [
@@ -1333,7 +1544,7 @@ describe('Plugin', () => {
             ])
         })
 
-        after(() => {
+        afterEach(() => {
           nock.removeInterceptor(scope)
           scope.done()
         })
@@ -1343,18 +1554,38 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
+              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine-tune.listEvents')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/events')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/events')
+              } else {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/events')
+              }
 
               expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-10RCfqSvgyEcauomw7VpiYco')
               expect(traces[0][0].metrics).to.have.property('openai.response.count', 11)
             })
 
-          const result = await openai.listFineTuneEvents('ft-10RCfqSvgyEcauomw7VpiYco')
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            const result = await openai.fineTuning.jobs.listEvents('ft-10RCfqSvgyEcauomw7VpiYco')
 
-          expect(result.data.object).to.eql('list')
+            expect(result.body.object).to.eql('list')
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.fineTunes.listEvents('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.object).to.eql('list')
+          } else {
+            const result = await openai.listFineTuneEvents('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.data.object).to.eql('list')
+          }
 
           await checkTraces
         })
@@ -1391,7 +1622,11 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'deleteModel')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'models.del')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'deleteModel')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
@@ -1401,20 +1636,31 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.id', 'ft-10RCfqSvgyEcauomw7VpiYco')
             })
 
-          const result = await openai.deleteModel('ft-10RCfqSvgyEcauomw7VpiYco')
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.models.del('ft-10RCfqSvgyEcauomw7VpiYco')
 
-          expect(result.data.deleted).to.eql(true)
+            expect(result.deleted).to.eql(true)
+          } else {
+            const result = await openai.deleteModel('ft-10RCfqSvgyEcauomw7VpiYco')
+
+            expect(result.data.deleted).to.eql(true)
+          }
 
           await checkTraces
         })
       })
 
+      // TODO check this
       describe('cancelFineTune()', () => {
         let scope
 
-        before(() => {
+        beforeEach(() => {
           scope = nock('https://api.openai.com:443')
-            .post('/v1/fine-tunes/ft-TVpNqwlvermMegfRVqSOyPyS/cancel')
+            .post(
+              semver.satisfies(realVersion, '>=4.1.0')
+                ? '/v1/fine_tuning/jobs/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
+                : '/v1/fine-tunes/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
+            )
             .reply(200, {
               object: 'fine-tune',
               id: 'ft-TVpNqwlvermMegfRVqSOyPyS',
@@ -1466,7 +1712,7 @@ describe('Plugin', () => {
             ])
         })
 
-        after(() => {
+        afterEach(() => {
           nock.removeInterceptor(scope)
           scope.done()
         })
@@ -1476,11 +1722,21 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
+              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'fine-tune.cancel')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
+              }
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
-              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/cancel')
+              if (semver.satisfies(realVersion, '>=4.1.0')) {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine_tuning/jobs/*/cancel')
+              } else {
+                expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/fine-tunes/*/cancel')
+              }
 
               expect(traces[0][0].meta).to.have.property('openai.request.fine_tune_id', 'ft-TVpNqwlvermMegfRVqSOyPyS')
               expect(traces[0][0].meta).to.have.property('openai.response.fine_tuned_model', 'idk')
@@ -1499,15 +1755,25 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
             })
 
-          const result = await openai.cancelFineTune('ft-TVpNqwlvermMegfRVqSOyPyS')
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            const result = await openai.fineTuning.jobs.cancel('ft-TVpNqwlvermMegfRVqSOyPyS')
 
-          expect(result.data.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
+            expect(result.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
+          } else if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.fineTunes.cancel('ft-TVpNqwlvermMegfRVqSOyPyS')
+
+            expect(result.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
+          } else {
+            const result = await openai.cancelFineTune('ft-TVpNqwlvermMegfRVqSOyPyS')
+
+            expect(result.data.id).to.eql('ft-TVpNqwlvermMegfRVqSOyPyS')
+          }
 
           await checkTraces
         })
       })
 
-      if (semver.intersects(version, '3.0.1')) {
+      if (semver.intersects(version, '>=3.0.1')) {
         describe('createModeration()', () => {
           let scope
 
@@ -1559,7 +1825,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createModeration')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'moderations.create')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createModeration')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -1591,25 +1861,36 @@ describe('Plugin', () => {
                 expect(traces[0][0].metrics).to.have.property('openai.response.flagged', 1)
               })
 
-            const result = await openai.createModeration({
-              input: 'I want to harm the robots',
-              model: 'text-moderation-stable'
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.moderations.create({
+                input: 'I want to harm the robots',
+                model: 'text-moderation-stable'
+              })
 
-            expect(result.data.results[0].flagged).to.eql(true)
+              expect(result.results[0].flagged).to.eql(true)
+            } else {
+              const result = await openai.createModeration({
+                input: 'I want to harm the robots',
+                model: 'text-moderation-stable'
+              })
+
+              expect(result.data.results[0].flagged).to.eql(true)
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createModeration',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled moderations.create'
+                : 'sampled createModeration',
               input: 'I want to harm the robots'
             })
-
-            await checkTraces
           })
         })
       }
 
-      if (semver.intersects(version, '3.1')) {
+      if (semver.intersects(version, '>=3.1')) {
         describe('createImage()', () => {
           let scope
 
@@ -1643,7 +1924,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createImage')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'images.generate')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createImage')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -1661,23 +1946,37 @@ describe('Plugin', () => {
                 expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
               })
 
-            const result = await openai.createImage({
-              prompt: 'A datadog wearing headphones',
-              n: 1,
-              size: '256x256',
-              response_format: 'url',
-              user: 'hunter2'
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.generate({
+                prompt: 'A datadog wearing headphones',
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://')).to.be.true
+            } else {
+              const result = await openai.createImage({
+                prompt: 'A datadog wearing headphones',
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImage',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.generate'
+                : 'sampled createImage',
               prompt: 'A datadog wearing headphones'
             })
-
-            await checkTraces
           })
 
           it('makes a successful call using an array of tokens prompt', async () => {
@@ -1686,23 +1985,37 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt', '[999, 888, 777, 666, 555]')
               })
 
-            const result = await openai.createImage({
-              prompt: [999, 888, 777, 666, 555],
-              n: 1,
-              size: '256x256',
-              response_format: 'url',
-              user: 'hunter2'
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.generate({
+                prompt: [999, 888, 777, 666, 555],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://')).to.be.true
+            } else {
+              const result = await openai.createImage({
+                prompt: [999, 888, 777, 666, 555],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImage',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.generate'
+                : 'sampled createImage',
               prompt: [999, 888, 777, 666, 555]
             })
-
-            await checkTraces
           })
 
           it('makes a successful call using an array of string prompts', async () => {
@@ -1712,23 +2025,37 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', 'bar')
               })
 
-            const result = await openai.createImage({
-              prompt: ['foo', 'bar'],
-              n: 1,
-              size: '256x256',
-              response_format: 'url',
-              user: 'hunter2'
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.generate({
+                prompt: ['foo', 'bar'],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://')).to.be.true
+            } else {
+              const result = await openai.createImage({
+                prompt: ['foo', 'bar'],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImage',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.generate'
+                : 'sampled createImage',
               prompt: ['foo', 'bar']
             })
-
-            await checkTraces
           })
 
           it('makes a successful call using an array of tokens prompts', async () => {
@@ -1738,26 +2065,40 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.prompt.1', '[444, 555, 666]')
               })
 
-            const result = await openai.createImage({
-              prompt: [
-                [111, 222, 333],
-                [444, 555, 666]
-              ],
-              n: 1,
-              size: '256x256',
-              response_format: 'url',
-              user: 'hunter2'
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.generate({
+                prompt: [[111, 222, 333], [444, 555, 666]],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://'))
+            } else {
+              const result = await openai.createImage({
+                prompt: [
+                  [111, 222, 333],
+                  [444, 555, 666]
+                ],
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImage',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.generate'
+                : 'sampled createImage',
               prompt: [[111, 222, 333], [444, 555, 666]]
             })
-
-            await checkTraces
           })
         })
 
@@ -1794,7 +2135,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'images.edit')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -1814,27 +2159,43 @@ describe('Plugin', () => {
                 expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
               })
 
-            const result = await openai.createImageEdit(
-              fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
-              'Change all red to blue',
-              fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
-              1,
-              '256x256',
-              'url',
-              'hunter2'
-            )
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.edit({
+                image: fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
+                prompt: 'Change all red to blue',
+                mask: fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://')).to.be.true
+            } else {
+              const result = await openai.createImageEdit(
+                fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
+                'Change all red to blue',
+                fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
+                1,
+                '256x256',
+                'url',
+                'hunter2'
+              )
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImageEdit',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.edit'
+                : 'sampled createImageEdit',
               prompt: 'Change all red to blue',
               file: 'ntsc.png',
               mask: 'ntsc.png'
             })
-
-            await checkTraces
           })
         })
 
@@ -1871,7 +2232,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'images.createVariation')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -1889,23 +2254,37 @@ describe('Plugin', () => {
                 expect(traces[0][0].metrics).to.have.property('openai.response.images_count', 1)
               })
 
-            const result = await openai.createImageVariation(
-              fs.createReadStream(Path.join(__dirname, 'ntsc.png')), 1, '256x256', 'url', 'hunter2')
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.images.createVariation({
+                image: fs.createReadStream(Path.join(__dirname, 'ntsc.png')),
+                n: 1,
+                size: '256x256',
+                response_format: 'url',
+                user: 'hunter2'
+              })
 
-            expect(result.data.data[0].url.startsWith('https://')).to.be.true
+              expect(result.data[0].url.startsWith('https://')).to.be.true
+            } else {
+              const result = await openai.createImageVariation(
+                fs.createReadStream(Path.join(__dirname, 'ntsc.png')), 1, '256x256', 'url', 'hunter2')
+
+              expect(result.data.data[0].url.startsWith('https://')).to.be.true
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createImageVariation',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled images.createVariation'
+                : 'sampled createImageVariation',
               file: 'ntsc.png'
             })
-
-            await checkTraces
           })
         })
       }
 
-      if (semver.intersects(version, '3.2')) {
+      if (semver.intersects('>=3.2.0', version)) {
         describe('createChatCompletion()', () => {
           let scope
 
@@ -1953,7 +2332,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'chat.completions.create')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -1987,7 +2370,7 @@ describe('Plugin', () => {
                 expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 47)
               })
 
-            const result = await openai.createChatCompletion({
+            const params = {
               model: 'gpt-3.5-turbo',
               messages: [
                 {
@@ -2018,17 +2401,34 @@ describe('Plugin', () => {
               n: 3,
               stop: 'time',
               user: 'hunter2'
-            })
+            }
 
-            expect(result.data.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
-            expect(result.data.model).to.eql('gpt-3.5-turbo-0301')
-            expect(result.data.choices[0].message.role).to.eql('assistant')
-            expect(result.data.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
-            expect(result.data.choices[0].finish_reason).to.eql('length')
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.chat.completions.create(params)
+
+              expect(result.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
+              expect(result.model).to.eql('gpt-3.5-turbo-0301')
+              expect(result.choices[0].message.role).to.eql('assistant')
+              expect(result.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
+              expect(result.choices[0].finish_reason).to.eql('length')
+            } else {
+              const result = await openai.createChatCompletion(params)
+
+              expect(result.data.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
+              expect(result.data.model).to.eql('gpt-3.5-turbo-0301')
+              expect(result.data.choices[0].message.role).to.eql('assistant')
+              expect(result.data.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
+              expect(result.data.choices[0].finish_reason).to.eql('length')
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createChatCompletion',
+              message:
+                semver.satisfies(realVersion, '>=4.0.0')
+                  ? 'sampled chat.completions.create'
+                  : 'sampled createChatCompletion',
               messages: [
                 {
                   role: 'user',
@@ -2052,8 +2452,6 @@ describe('Plugin', () => {
                 index: 0
               }]
             })
-
-            await checkTraces
           })
 
           it('does not error with invalid .messages or missing .logit_bias', async () => {
@@ -2062,10 +2460,17 @@ describe('Plugin', () => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
               })
 
-            await openai.createChatCompletion({
-              model: 'gpt-3.5-turbo',
-              messages: null
-            })
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              await openai.chat.completions.create({
+                model: 'gpt-3.5-turbo',
+                messages: null
+              })
+            } else {
+              await openai.createChatCompletion({
+                model: 'gpt-3.5-turbo',
+                messages: null
+              })
+            }
 
             await checkTraces
           })
@@ -2117,7 +2522,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createTranscription')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'audio.transcriptions.create')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createTranscription')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -2136,25 +2545,41 @@ describe('Plugin', () => {
               })
 
             // TODO: Should test each of 'json, text, srt, verbose_json, vtt' since response formats differ
-            const result = await openai.createTranscription(
-              fs.createReadStream(Path.join(__dirname, '/hello-friend.m4a')),
-              'whisper-1',
-              'what does this say',
-              'verbose_json',
-              0.5,
-              'en'
-            )
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.audio.transcriptions.create({
+                file: fs.createReadStream(Path.join(__dirname, '/hello-friend.m4a')),
+                model: 'whisper-1',
+                prompt: 'what does this say',
+                response_format: 'verbose_json',
+                temperature: 0.5,
+                language: 'en'
+              })
 
-            expect(result.data.text).to.eql('Hello, friend.')
+              // for OpenAI v4, the result is a stringified version of the JSON response
+              expect(typeof result).to.eql('string')
+            } else {
+              const result = await openai.createTranscription(
+                fs.createReadStream(Path.join(__dirname, '/hello-friend.m4a')),
+                'whisper-1',
+                'what does this say',
+                'verbose_json',
+                0.5,
+                'en'
+              )
+
+              expect(result.data.text).to.eql('Hello, friend.')
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createTranscription',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled audio.transcriptions.create'
+                : 'sampled createTranscription',
               prompt: 'what does this say',
               file: 'hello-friend.m4a'
             })
-
-            await checkTraces
           })
         })
 
@@ -2203,7 +2628,11 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                expect(traces[0][0]).to.have.property('resource', 'createTranslation')
+                if (semver.satisfies(realVersion, '>=4.0.0')) {
+                  expect(traces[0][0]).to.have.property('resource', 'audio.translations.create')
+                } else {
+                  expect(traces[0][0]).to.have.property('resource', 'createTranslation')
+                }
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -2221,24 +2650,38 @@ describe('Plugin', () => {
               })
 
             // TODO: Should test each of 'json, text, srt, verbose_json, vtt' since response formats differ
-            const result = await openai.createTranslation(
-              fs.createReadStream(Path.join(__dirname, 'guten-tag.m4a')),
-              'whisper-1',
-              'greeting',
-              'verbose_json',
-              0.5
-            )
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.audio.translations.create({
+                file: fs.createReadStream(Path.join(__dirname, 'guten-tag.m4a')),
+                model: 'whisper-1',
+                prompt: 'greeting',
+                response_format: 'verbose_json',
+                temperature: 0.5
+              })
 
-            expect(result.data.text).to.eql('Guten Tag!')
+              expect(result.text).to.eql('Guten Tag!')
+            } else {
+              const result = await openai.createTranslation(
+                fs.createReadStream(Path.join(__dirname, 'guten-tag.m4a')),
+                'whisper-1',
+                'greeting',
+                'verbose_json',
+                0.5
+              )
+
+              expect(result.data.text).to.eql('Guten Tag!')
+            }
+
+            await checkTraces
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: 'sampled createTranslation',
+              message: semver.satisfies(realVersion, '>=4.0.0')
+                ? 'sampled audio.translations.create'
+                : 'sampled createTranslation',
               prompt: 'greeting',
               file: 'guten-tag.m4a'
             })
-
-            await checkTraces
           })
         })
       }

@@ -113,42 +113,42 @@ class OpenApiPlugin extends TracingPlugin {
     }
 
     switch (methodName) {
-      case 'createFineTune':
+      case 'createFineTune': case 'fine_tuning.jobs.create': case 'fine-tune.create':
         createFineTuneRequestExtraction(tags, payload)
         break
 
-      case 'createImage':
-      case 'createImageEdit':
-      case 'createImageVariation':
+      case 'createImage': case 'images.generate':
+      case 'createImageEdit': case 'images.edit':
+      case 'createImageVariation': case 'images.createVariation':
         commonCreateImageRequestExtraction(tags, payload, store)
         break
 
-      case 'createChatCompletion':
+      case 'createChatCompletion': case 'chat.completions.create':
         createChatCompletionRequestExtraction(tags, payload, store)
         break
 
-      case 'createFile':
-      case 'retrieveFile':
+      case 'createFile': case 'files.create':
+      case 'retrieveFile': case 'files.retrieve':
         commonFileRequestExtraction(tags, payload)
         break
 
-      case 'createTranscription':
-      case 'createTranslation':
+      case 'createTranscription': case 'audio.transcriptions.create':
+      case 'createTranslation': case 'audio.translations.create':
         commonCreateAudioRequestExtraction(tags, payload, store)
         break
 
-      case 'retrieveModel':
+      case 'retrieveModel': case 'models.retrieve':
         retrieveModelRequestExtraction(tags, payload)
         break
 
-      case 'listFineTuneEvents':
-      case 'retrieveFineTune':
-      case 'deleteModel':
-      case 'cancelFineTune':
+      case 'listFineTuneEvents': case 'fine_tuning.jobs.listEvents': case 'fine-tune.listEvents':
+      case 'retrieveFineTune': case 'fine_tuning.jobs.retrieve': case 'fine-tune.retrieve':
+      case 'deleteModel': case 'models.del':
+      case 'cancelFineTune': case 'fine_tuning.jobs.cancel': case 'fine-tune.cancel':
         commonLookupFineTuneRequestExtraction(tags, payload)
         break
 
-      case 'createEdit':
+      case 'createEdit': case 'edits.create':
         createEditRequestExtraction(tags, payload, store)
         break
     }
@@ -157,6 +157,10 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   finish ({ headers, body, method, path }) {
+    try {
+      headers = Object.fromEntries(headers)
+    } catch { /* headers are already an object */ }
+
     const span = this.activeSpan
     const methodName = span._spanContext._tags['resource.name']
 
@@ -165,11 +169,14 @@ class OpenApiPlugin extends TracingPlugin {
     const fullStore = storage.getStore()
     const store = fullStore.openai
 
+    try {
+      path = new URL(path).pathname
+    } catch { /* path is already a URL pathname */ }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
     const tags = {
       'openai.request.endpoint': endpoint,
-      'openai.request.method': method,
+      'openai.request.method': method.toUpperCase(),
 
       'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
       'openai.organization.name': headers['openai-organization'],
@@ -284,8 +291,9 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
 
 function commonCreateImageRequestExtraction (tags, payload, store) {
   // createImageEdit, createImageVariation
-  if (payload.file && typeof payload.file === 'object' && payload.file.path) {
-    const file = path.basename(payload.file.path)
+  const img = payload.file || payload.image
+  if (img && typeof img === 'object' && img.path) {
+    const file = path.basename(img.path)
     tags['openai.request.image'] = file
     store.file = file
   }
@@ -304,61 +312,61 @@ function commonCreateImageRequestExtraction (tags, payload, store) {
 
 function responseDataExtractionByMethod (methodName, tags, body, store) {
   switch (methodName) {
-    case 'createModeration':
+    case 'createModeration': case 'moderations.create':
       createModerationResponseExtraction(tags, body)
       break
 
-    case 'createCompletion':
-    case 'createChatCompletion':
-    case 'createEdit':
+    case 'createCompletion': case 'completions.create':
+    case 'createChatCompletion': case 'chat.completions.create':
+    case 'createEdit': case 'edits.create':
       commonCreateResponseExtraction(tags, body, store)
       break
 
-    case 'listFiles':
-    case 'listFineTunes':
-    case 'listFineTuneEvents':
+    case 'listFiles': case 'files.list':
+    case 'listFineTunes': case 'fine_tuning.jobs.list': case 'fine-tune.list':
+    case 'listFineTuneEvents': case 'fine_tuning.jobs.listEvents': case 'fine-tune.listEvents':
       commonListCountResponseExtraction(tags, body)
       break
 
-    case 'createEmbedding':
+    case 'createEmbedding': case 'embeddings.create':
       createEmbeddingResponseExtraction(tags, body)
       break
 
-    case 'createFile':
-    case 'retrieveFile':
+    case 'createFile': case 'files.create':
+    case 'retrieveFile': case 'files.retrieve':
       createRetrieveFileResponseExtraction(tags, body)
       break
 
-    case 'deleteFile':
+    case 'deleteFile': case 'files.del':
       deleteFileResponseExtraction(tags, body)
       break
 
-    case 'downloadFile':
+    case 'downloadFile': case 'files.retrieveContent': case 'files.content':
       downloadFileResponseExtraction(tags, body)
       break
 
-    case 'createFineTune':
-    case 'retrieveFineTune':
-    case 'cancelFineTune':
+    case 'createFineTune': case 'fine_tuning.jobs.create': case 'fine-tune.create':
+    case 'retrieveFineTune': case 'fine_tuning.jobs.retrieve': case 'fine-tune.retrieve':
+    case 'cancelFineTune': case 'fine_tuning.jobs.cancel': case 'fine-tune.cancel':
       commonFineTuneResponseExtraction(tags, body)
       break
 
-    case 'createTranscription':
-    case 'createTranslation':
+    case 'createTranscription': case 'audio.transcriptions.create':
+    case 'createTranslation': case 'audio.translations.create':
       createAudioResponseExtraction(tags, body)
       break
 
-    case 'createImage':
-    case 'createImageEdit':
-    case 'createImageVariation':
+    case 'createImage': case 'images.generate':
+    case 'createImageEdit': case 'images.edit':
+    case 'createImageVariation': case 'images.createVariation':
       commonImageResponseExtraction(tags, body)
       break
 
-    case 'listModels':
+    case 'listModels': case 'models.list':
       listModelsResponseExtraction(tags, body)
       break
 
-    case 'retrieveModel':
+    case 'retrieveModel': case 'models.retrieve':
       retrieveModelResponseExtraction(tags, body)
       break
   }
@@ -576,35 +584,52 @@ function truncateText (text) {
 // The server almost always responds with JSON
 function coerceResponseBody (body, methodName) {
   switch (methodName) {
-    case 'downloadFile':
+    case 'downloadFile': case 'files.retrieveContent': case 'files.content':
       return { file: body }
   }
 
-  return typeof body === 'object' ? body : {}
+  const type = typeof body
+  if (type === 'string') {
+    try {
+      return JSON.parse(body)
+    } catch {
+      return body
+    }
+  } else if (type === 'object') {
+    return body
+  } else {
+    return {}
+  }
 }
 
 // This method is used to replace a dynamic URL segment with an asterisk
 function lookupOperationEndpoint (operationId, url) {
   switch (operationId) {
-    case 'deleteModel':
-    case 'retrieveModel':
+    case 'deleteModel': case 'models.del':
+    case 'retrieveModel': case 'models.retrieve':
       return '/v1/models/*'
 
-    case 'deleteFile':
-    case 'retrieveFile':
+    case 'deleteFile': case 'files.del':
+    case 'retrieveFile': case 'files.retrieve':
       return '/v1/files/*'
 
-    case 'downloadFile':
+    case 'downloadFile': case 'files.retrieveContent': case 'files.content':
       return '/v1/files/*/content'
 
-    case 'retrieveFineTune':
+    case 'retrieveFineTune': case 'fine-tune.retrieve':
       return '/v1/fine-tunes/*'
+    case 'fine_tuning.jobs.retrieve':
+      return '/v1/fine_tuning/jobs/*'
 
-    case 'listFineTuneEvents':
+    case 'listFineTuneEvents': case 'fine-tune.listEvents':
       return '/v1/fine-tunes/*/events'
+    case 'fine_tuning.jobs.listEvents':
+      return '/v1/fine_tuning/jobs/*/events'
 
-    case 'cancelFineTune':
+    case 'cancelFineTune': case 'fine-tune.cancel':
       return '/v1/fine-tunes/*/cancel'
+    case 'fine_tuning.jobs.cancel':
+      return '/v1/fine_tuning/jobs/*/cancel'
   }
 
   return url
@@ -617,13 +642,13 @@ function lookupOperationEndpoint (operationId, url) {
  */
 function normalizeRequestPayload (methodName, args) {
   switch (methodName) {
-    case 'listModels':
-    case 'listFiles':
-    case 'listFineTunes':
+    case 'listModels': case 'models.list':
+    case 'listFiles': case 'files.list':
+    case 'listFineTunes': case 'fine_tuning.jobs.list': case 'fine-tune.list':
       // no argument
       return {}
 
-    case 'retrieveModel':
+    case 'retrieveModel': case 'models.retrieve':
       return { id: args[0] }
 
     case 'createFile':
@@ -632,20 +657,20 @@ function normalizeRequestPayload (methodName, args) {
         purpose: args[1]
       }
 
-    case 'deleteFile':
-    case 'retrieveFile':
-    case 'downloadFile':
+    case 'deleteFile': case 'files.del':
+    case 'retrieveFile': case 'files.retrieve':
+    case 'downloadFile': case 'files.retrieveContent': case 'files.content':
       return { file_id: args[0] }
 
-    case 'listFineTuneEvents':
+    case 'listFineTuneEvents': case 'fine_tuning.jobs.listEvents': case 'fine-tune.listEvents':
       return {
         fine_tune_id: args[0],
         stream: args[1] // undocumented
       }
 
-    case 'retrieveFineTune':
-    case 'deleteModel':
-    case 'cancelFineTune':
+    case 'retrieveFineTune': case 'fine_tuning.jobs.retrieve': case 'fine-tune.retrieve':
+    case 'deleteModel': case 'models.del':
+    case 'cancelFineTune': case 'fine_tuning.jobs.cancel': case 'fine-tune.cancel':
       return { fine_tune_id: args[0] }
 
     case 'createImageEdit':
