@@ -75,9 +75,9 @@ class Kinesis extends BaseAwsSdkPlugin {
 
   storeStreamName (params, operation, store) {
     if (!operation || (operation !== 'getShardIterator' && operation !== 'listShards')) return
-    if (!params || !params.StreamName) return
+    if (!params || !params.StreamName || !params.StreamARN) return
 
-    const streamName = params.StreamName
+    const streamName = params.StreamARN ? params.StreamARN : params.StreamName
     storage.enterWith({ ...store, streamName })
   }
 
@@ -145,11 +145,11 @@ class Kinesis extends BaseAwsSdkPlugin {
     let stream
     switch (operation) {
       case 'putRecord':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamARN ? params.StreamARN : (params.StreamName ? params.StreamName : '')
         this.injectToMessage(span, params, stream, true)
         break
       case 'putRecords':
-        stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
+        stream = params.StreamARN ? params.StreamARN : (params.StreamName ? params.StreamName : '')
         for (let i = 0; i < params.Records.length; i++) {
           this.injectToMessage(span, params.Records[i], stream, i === 0)
         }
