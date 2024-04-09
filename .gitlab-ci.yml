@@ -23,8 +23,10 @@ variables:
 package_version:
   #image: docker:git
   #extends: .common
-  tags: ["arch:amd64"]
-  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
+  #tags: ["arch:amd64"]
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  tags: ["runner:apm-k8s-tweaked-metal"]
+  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
   #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
   #image: registry.ddbuild.io/images/bazel:6-gbi
   stage: package
