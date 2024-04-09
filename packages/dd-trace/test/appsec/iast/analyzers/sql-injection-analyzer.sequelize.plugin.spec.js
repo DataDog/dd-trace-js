@@ -12,7 +12,7 @@ const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability
 
 describe('sql-injection-analyzer with sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
-    const sequelizeSpecificVersion = require(`../../../../versions/sequelize@${sequelizeVersion}`).version()
+    const sequelizeSpecificVersion = require(`../../../../../../versions/sequelize@${sequelizeVersion}`).version()
     const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>4') ? '>=1' : '>=1 <3.9.4'
     withVersions('mysql2', 'mysql2', compatibleMysql2VersionRange, () => {
       let sequelize
