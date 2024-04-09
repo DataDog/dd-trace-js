@@ -37,3 +37,12 @@ export JS_PACKAGE_VERSION="6.0.0-pre"
 
 echo "JS_PACKAGE_VERSION has value: ${JS_PACKAGE_VERSION}" 
 echo "JS_PACKAGE_VERSION=$JS_PACKAGE_VERSION" >> package_version.env
+
+echo "Creating volume for verdaccio storage..."
+docker volume create verdaccio_storage;
+echo "Run verdaccio container..."
+docker run -d --restart unless-stopped \
+ --name verdaccio \
+ --publish 4873:4873 \
+ --mount type=volume,src=verdaccio_storage,dst=/verdaccio \
+ verdaccio/verdaccio:latest
