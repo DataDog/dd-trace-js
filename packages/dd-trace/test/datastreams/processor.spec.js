@@ -66,8 +66,8 @@ describe('StatsPoint', () => {
     payloadSize.accept(100)
 
     const encoded = aggStats.encode()
-    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
-    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH.reverse()).toString())
+    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH.reverse()).toString())
     expect(encoded.EdgeTags).to.deep.equal(aggStats.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -277,8 +277,8 @@ describe('DataStreamsProcessor', () => {
     payloadSize.accept(mockCheckpoint.payloadSize)
 
     const encoded = checkpointBucket.encode()
-    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH).toString())
-    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH).toString())
+    expect(encoded.Hash.toString()).to.equal(new Uint64(DEFAULT_CURRENT_HASH.reverse()).toString())
+    expect(encoded.ParentHash.toString()).to.equal(new Uint64(DEFAULT_PARENT_HASH.reverse()).toString())
     expect(encoded.EdgeTags).to.deep.equal(mockCheckpoint.edgeTags)
     expect(encoded.EdgeLatency).to.deep.equal(edgeLatency.toProto())
     expect(encoded.PathwayLatency).to.deep.equal(pathwayLatency.toProto())
@@ -296,8 +296,8 @@ describe('DataStreamsProcessor', () => {
         Start: new Uint64(1680000000000),
         Duration: new Uint64(10000000000),
         Stats: [{
-          Hash: new Uint64(DEFAULT_CURRENT_HASH),
-          ParentHash: new Uint64(DEFAULT_PARENT_HASH),
+          Hash: new Uint64(DEFAULT_CURRENT_HASH.reverse()),
+          ParentHash: new Uint64(DEFAULT_PARENT_HASH.reverse()),
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),

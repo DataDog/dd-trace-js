@@ -1,4 +1,3 @@
-const { toBufferLE } = require('bigint-buffer')
 const { encodeVarint, decodeVarint } = require('./encoding')
 
 const LRUCache = require('lru-cache')
@@ -40,17 +39,21 @@ function computeHash (service, env, edgeTags, parentHash) {
     b = Buffer.concat([b, getBytes(t)])
   }
   const nodeHash = fnv1Base64(b)
-  // console.log(node_hash)
-  const nodeHashBuffer = toBufferLE(nodeHash, 8)
+  const nodeHashBuffer = Buffer.alloc(8)
+  nodeHashBuffer.writeBigUInt64LE(nodeHash, 0)
 
+  let parentHashBuffer
   if (typeof parentHash === 'bigint') {
-    parentHash = toBufferLE(parentHash, 8)
+    parentHashBuffer = Buffer.alloc(8)
+    parentHashBuffer = Buffer.writeBigUInt64LE(parentHash, 0)
+  } else {
+    parentHashBuffer = parentHash
   }
 
-  const parentHashBuffer = parentHash
-
   const combinedBuffer = Buffer.concat([nodeHashBuffer, parentHashBuffer])
-  const val = toBufferLE(fnv1Base64(combinedBuffer), 8)
+
+  const val = Buffer.alloc(8)
+  val.writeBigUInt64LE(fnv1Base64(combinedBuffer), 0)
 
   cache.set(key, val)
 

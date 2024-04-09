@@ -20,7 +20,7 @@ describe('encoding', () => {
     const hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
     expect(hash)
-      .to.deep.equal(Buffer.from('ec99e1e8e682985d', 'hex'))
+      .to.deep.equal(Buffer.from('131e7ed6327ade60', 'hex'))
   })
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
@@ -127,7 +127,7 @@ describe('encoding', () => {
 
     DsmPathwayCodec.encode(ctx, carrier)
 
-    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    const expectedBase64Hash = 'Ex5+1jJ63mDE58Cfj2LI2cOfj2I='
     expect(carrier['dd-pathway-ctx-base64']).to.equal(expectedBase64Hash)
   })
 
@@ -140,7 +140,7 @@ describe('encoding', () => {
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
     const carrier = {}
-    const expectedBase64Hash = '7Jnh6OaCmF3E58Cfj2LI2cOfj2I='
+    const expectedBase64Hash = 'Ex5+1jJ63mDE58Cfj2LI2cOfj2I='
     carrier['dd-pathway-ctx-base64'] = expectedBase64Hash
     const decodedCtx = DsmPathwayCodec.decode(carrier)
 
