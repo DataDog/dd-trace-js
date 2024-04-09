@@ -3,16 +3,13 @@
 const path = require('path')
 const axios = require('axios')
 const getPort = require('get-port')
-const semver = require('semver')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 
 describe('sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
-    const sequelizeSpecificVersion = require(`../../../../versions/sequelize@${sequelizeVersion}`).version()
-    const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>4') ? '>=1' : '>=1 <3.9.4'
-    withVersions('mysql2', 'mysql2', compatibleMysql2VersionRange, (mysql2Version) => {
+    withVersions('mysql2', 'mysql2', () => {
       withVersions('sequelize', 'express', (expressVersion) => {
         let sequelize, User, server, port
 

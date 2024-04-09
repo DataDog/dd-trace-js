@@ -3,15 +3,19 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
+const semver = require("semver");
 
 describe('sql-injection-analyzer with sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
-    withVersions('mysql2', 'mysql2', (mysqlVersion) => {
+    const sequelizeSpecificVersion = require(`../../../../versions/sequelize@${sequelizeVersion}`).version()
+    const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>4') ? '>=1' : '>=1 <3.9.4'
+    withVersions('mysql2', 'mysql2', compatibleMysql2VersionRange, () => {
       let sequelize
 
       prepareTestServerForIast('sequelize + mysql2',
