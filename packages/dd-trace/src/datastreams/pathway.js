@@ -1,6 +1,11 @@
 const { toBufferLE } = require('bigint-buffer')
 const { encodeVarint, decodeVarint } = require('./encoding')
 
+const LRUCache = require('lru-cache')
+
+const options = { max: 500 }
+const cache = new LRUCache(options)
+
 const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 
@@ -24,9 +29,14 @@ function getBytes (s) {
   return Buffer.from(s, 'utf-8')
 }
 
-function computeHash (service, env, tags, parentHash) {
+function computeHash (service, env, edgeTags, parentHash) {
+  const key = `${service}${env}` + edgeTags.join('') + parentHash.toString()
+  if (cache.get(key)) {
+    return cache.get(key)
+  }
+
   let b = Buffer.concat([getBytes(service), getBytes(env)])
-  for (const t of tags) {
+  for (const t of edgeTags) {
     b = Buffer.concat([b, getBytes(t)])
   }
   const nodeHash = fnv1Base64(b)
@@ -40,15 +50,19 @@ function computeHash (service, env, tags, parentHash) {
   const parentHashBuffer = parentHash
 
   const combinedBuffer = Buffer.concat([nodeHashBuffer, parentHashBuffer])
-  return toBufferLE(fnv1Base64(combinedBuffer), 8)
+  const val = toBufferLE(fnv1Base64(combinedBuffer), 8)
+
+  cache.set(key, val)
+
+  return val
 }
 
 function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
-    encodeVarint(dataStreamsContext.pathwayStartNs * 1e3),
-    encodeVarint(dataStreamsContext.edgeStartNs * 1e3)
-  ])
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6)))
+  ], 20)
 }
 
 function encodePathwayContextBase64 (dataStreamsContext) {
