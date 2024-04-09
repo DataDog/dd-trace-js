@@ -9,7 +9,6 @@ const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
-const semver = require("semver");
 
 describe('sql-injection-analyzer with sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
