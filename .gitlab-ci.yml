@@ -23,15 +23,15 @@ variables:
 package_version:
   #image: docker:git
   #extends: .common
-  #tags: ["arch:amd64"]
-  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  tags: ["arch:amd64"]
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   #tags: ["runner:apm-k8s-tweaked-metal"]
   #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
   #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
   #image: registry.ddbuild.io/images/bazel:6-gbi
 
-  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.13
-  tags: ["arch:amd64"]
+  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.13
+  #tags: ["arch:amd64"]
 
   stage: package
   rules:
@@ -45,14 +45,19 @@ package_version:
       allow_failure: true
   script:
    - |
-      echo "Creating volume for verdaccio storage..."
-      docker volume create verdaccio_storage;
-      echo "Run verdaccio container..."
-      docker run -d --restart unless-stopped \
-      --name verdaccio \
-      --publish 4873:4873 \
-      --mount type=volume,src=verdaccio_storage,dst=/verdaccio \
-      verdaccio/verdaccio:latest
+      echo "step 1"
+      yarn install
+      echo "step 2"  
+      npm pack --tag dev --provenance
+      echo "done"
+      #echo "Creating volume for verdaccio storage..."
+      #docker volume create verdaccio_storage;
+      #echo "Run verdaccio container..."
+      #docker run -d --restart unless-stopped \
+      #--name verdaccio \
+      #--publish 4873:4873 \
+      #--mount type=volume,src=verdaccio_storage,dst=/verdaccio \
+      #verdaccio/verdaccio:latest
 
       #if [ -z "$JS_PACKAGE_VERSION$CI_COMMIT_TAG" ]; then
       #  echo CI_JOB_ID=$CI_JOB_ID
