@@ -16,19 +16,19 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = new Uint64(hash.reverse())
-    this.parentHash = new Uint64(parentHash.reverse())
-    console.log(this.hash)
-    console.log(this.parentHash)
-    console.log(edgeTags)
+    this.hash = new Uint64(hash)
+    this.parentHash = new Uint64(parentHash)
+    console.log(`hash: ${this.hash}`)
+    console.log(`parent hash: ${this.parentHash}`)
+    console.log(`edgeTags: ${edgeTags}`)
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.payloadSize = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
 
     // reverse buffers back to little endian
-    hash.reverse()
-    parentHash.reverse()
+    // hash.reverse()
+    // parentHash.reverse()
   }
 
   addLatencies (checkpoint) {
