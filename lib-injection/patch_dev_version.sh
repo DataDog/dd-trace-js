@@ -32,6 +32,8 @@ echo PRE="${PRE}"
 #   style by `g` for identification.
 BUILD="b${git_branch_hash}.${1}${2}.g${git_short_sha}"
 echo BUILD="${BUILD}"
-export JS_PACKAGE_VERSION=${LAST_TAG_VERSION}.$PRE.${BUILD}
+#export JS_PACKAGE_VERSION=${LAST_TAG_VERSION}.$PRE.${BUILD}
+export JS_PACKAGE_VERSION="2.21.0.9999"
+
 echo "JS_PACKAGE_VERSION has value: ${JS_PACKAGE_VERSION}" 
 echo "JS_PACKAGE_VERSION=$JS_PACKAGE_VERSION" >> package_version.env
