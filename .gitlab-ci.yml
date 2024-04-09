@@ -24,8 +24,8 @@ package_version:
   #image: docker:git
   #extends: .common
   tags: ["arch:amd64"]
-  #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
-  image: registry.ddbuild.io/images/bazel:6-gbi
+  image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
+  #image: registry.ddbuild.io/images/bazel:6-gbi
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
@@ -38,12 +38,21 @@ package_version:
       allow_failure: true
   script:
    - |
-      if [ -z "$JS_PACKAGE_VERSION$CI_COMMIT_TAG" ]; then
-        echo CI_JOB_ID=$CI_JOB_ID
-        echo CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME
-        echo CI_COMMIT_SHA=$CI_COMMIT_SHA
-        sh lib-injection/patch_dev_version.sh glci $CI_JOB_ID $CI_COMMIT_REF_NAME $CI_COMMIT_SHA
-      fi
+      echo "Creating volume for verdaccio storage..."
+      docker volume create verdaccio_storage;
+      echo "Run verdaccio container..."
+      docker run -d --restart unless-stopped \
+      --name verdaccio \
+      --publish 4873:4873 \
+      --mount type=volume,src=verdaccio_storage,dst=/verdaccio \
+      verdaccio/verdaccio:latest
+
+      #if [ -z "$JS_PACKAGE_VERSION$CI_COMMIT_TAG" ]; then
+      #  echo CI_JOB_ID=$CI_JOB_ID
+      #  echo CI_COMMIT_REF_NAME=$CI_COMMIT_REF_NAME
+      #  echo CI_COMMIT_SHA=$CI_COMMIT_SHA
+      #  sh lib-injection/patch_dev_version.sh glci $CI_JOB_ID $CI_COMMIT_REF_NAME $CI_COMMIT_SHA
+      #fi
   artifacts:
     reports:
       dotenv: package_version.env
