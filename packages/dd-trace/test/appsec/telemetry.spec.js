@@ -142,6 +142,23 @@ describe('Appsec Telemetry metrics', () => {
 
         expect(track).to.have.been.calledTwice
       })
+
+      it('should sum waf.duration metrics', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
     })
 
     describe('incWafInitMetric', () => {
@@ -252,6 +269,52 @@ describe('Appsec Telemetry metrics', () => {
 
       expect(count).to.not.have.been.called
       expect(inc).to.not.have.been.called
+    })
+
+    describe('updateWafRequestMetricTags', () => {
+      it('should sum waf.duration and waf.durationExt request metrics', () => {
+        appsecTelemetry.enable({
+          enabled: false,
+          metrics: true
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
+
+      it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
+        appsecTelemetry.enable({
+          enabled: true,
+          metrics: false
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
     })
   })
 })
