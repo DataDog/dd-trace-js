@@ -122,7 +122,10 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, knownSuites, faultyThres
     }
   }
   const newSuitesPercentage = (newSuites / projectSuites.length) * 100
-  return newSuitesPercentage >= faultyThreshold
+  // The faulty threshold represents a percentage, but we also want to consider
+  // smaller projects, where big variations in the % are more likely.
+  // This is the reason why we also compare the number of suites with `newSuites > faultyThreshold`
+  return newSuites >= faultyThreshold && newSuitesPercentage >= faultyThreshold
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -804,7 +807,7 @@ addHook({
     if (isEarlyFlakeDetectionEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
       const isFaulty =
-        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
         isEarlyFlakeDetectionEnabled = false
         // config is shared between all tests, so we can disable EFD for all of them
