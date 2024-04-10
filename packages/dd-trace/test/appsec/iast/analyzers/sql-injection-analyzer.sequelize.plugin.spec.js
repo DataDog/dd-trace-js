@@ -12,6 +12,10 @@ const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability
 
 describe('sql-injection-analyzer with sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
+    /**
+     * mysql2 3.9.4 causes an error when using it with sequelize 4.x, making sequelize plugin test to fail.
+     * Constraint the test combination of sequelize and mysql2 to force run mysql2 <3.9.4 with sequelize 4.x
+     */
     const sequelizeSpecificVersion = require(`../../../../../../versions/sequelize@${sequelizeVersion}`).version()
     const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>4') ? '>=1' : '>=1 <3.9.4'
     withVersions('mysql2', 'mysql2', compatibleMysql2VersionRange, () => {
