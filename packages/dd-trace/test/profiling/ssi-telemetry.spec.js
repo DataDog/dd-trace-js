@@ -134,21 +134,21 @@ function testEnabledTelemetry (enablementChoice) {
 }
 
 function testNoOp (enablementChoice) {
-  executeTelemetryEnabledScenario(_ => {}, 0, false, enablementChoice, 'no_span,short_lived')
+  executeTelemetryEnabledScenario(_ => {}, 0, false, enablementChoice, 'no_span_short_lived')
 }
 
 function testProfilesSent (enablementChoice) {
   executeTelemetryEnabledScenario(_ => {
     dc.channel('datadog:profiling:profile-submitted').publish()
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 2, true, enablementChoice, 'no_span,short_lived')
+  }, 2, true, enablementChoice, 'no_span_short_lived')
 }
 
 function testMockProfilesSent (enablementChoice) {
   executeTelemetryEnabledScenario(_ => {
     dc.channel('datadog:profiling:mock-profile-submitted').publish()
     dc.channel('datadog:profiling:mock-profile-submitted').publish()
-  }, 2, false, enablementChoice, 'no_span,short_lived')
+  }, 2, false, enablementChoice, 'no_span_short_lived')
 }
 
 function testSpan (enablementChoice) {
