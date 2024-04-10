@@ -19,6 +19,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -89,6 +90,7 @@ class JestPlugin extends CiPlugin {
       hasForcedToRunSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -116,6 +118,9 @@ class JestPlugin extends CiPlugin {
 
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
 
       this.testModuleSpan.finish()

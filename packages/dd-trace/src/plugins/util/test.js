@@ -54,6 +54,7 @@ const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
+const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -103,6 +104,7 @@ module.exports = {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,

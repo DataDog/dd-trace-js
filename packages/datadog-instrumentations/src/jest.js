@@ -61,6 +61,8 @@ let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionFaultyThreshold = 30
+let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -110,6 +112,17 @@ function getEfdStats (testStatuses) {
     acc[testStatus]++
     return acc
   }, { pass: 0, fail: 0 })
+}
+
+function getIsFaultyEarlyFlakeDetection (projectSuites, knownSuites, faultyThreshold) {
+  let newSuites = 0
+  for (const suite of projectSuites) {
+    if (!knownSuites[suite]) {
+      newSuites++
+    }
+  }
+  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
+  return newSuitesPercentage >= faultyThreshold
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -433,6 +446,7 @@ function cliWrapper (cli, jestVersion) {
         isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
       }
     } catch (err) {
       log.error(err)
@@ -547,6 +561,7 @@ function cliWrapper (cli, jestVersion) {
         hasForcedToRunSuites,
         error,
         isEarlyFlakeDetectionEnabled,
+        isEarlyFlakeDetectionFaulty,
         onDone
       })
     })
@@ -783,13 +798,22 @@ addHook({
   const SearchSource = searchSourcePackage.default ? searchSourcePackage.default : searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
-    if (!isSuitesSkippingEnabled || !skippableSuites.length) {
-      return getTestPaths.apply(this, arguments)
-    }
-
+    const testPaths = await getTestPaths.apply(this, arguments)
     const [{ rootDir, shard }] = arguments
 
-    if (shard?.shardCount > 1) {
+    if (isEarlyFlakeDetectionEnabled) {
+      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      const isFaulty =
+        getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+      if (isFaulty) {
+        isEarlyFlakeDetectionEnabled = false
+        // config is shared between all tests, so we can disable EFD for all of them
+        testPaths.tests[0].context.config.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+        isEarlyFlakeDetectionFaulty = true
+      }
+    }
+
+    if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
       // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
       // The reason for this is the following:
       // The tests for different shards are likely being run in different CI jobs so
@@ -797,10 +821,8 @@ addHook({
       // If the skippable endpoint is returning different suites and we filter the list of tests here,
       // the base list of tests that is used for sharding might be different,
       // causing the shards to potentially run the same suite.
-      return getTestPaths.apply(this, arguments)
+      return testPaths
     }
-
-    const testPaths = await getTestPaths.apply(this, arguments)
     const { tests } = testPaths
 
     const suitesToRun = applySuiteSkipping(tests, rootDir, frameworkVersion)
