@@ -132,7 +132,7 @@ class SSITelemetry {
       'installation:ssi',
       `enablement_choice:${enablementChoiceToTagValue(this.enablementChoice)}`,
       `has_sent_profiles:${this.hasSentProfiles}`,
-      `heuristic_hypothetical_decision:${decision.join()}`
+      `heuristic_hypothetical_decision:${decision.join('_')}`
     ]
 
     this._profileCount = profilersNamespace.count('ssi_heuristic.number_of_profiles', tags)
