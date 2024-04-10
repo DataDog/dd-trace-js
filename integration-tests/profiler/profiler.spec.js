@@ -382,7 +382,7 @@ describe('profiler', () => {
 
       function checkTags (tags) {
         assert.include(tags, 'enablement_choice:manually_enabled')
-        assert.include(tags, 'heuristic_hypothetical_decision:no_span,short_lived')
+        assert.include(tags, 'heuristic_hypothetical_decision:no_span_short_lived')
         assert.include(tags, 'installation:ssi')
         // There's a race between metrics and on-shutdown profile, so tag value
         // can be either false or true but it must be present
