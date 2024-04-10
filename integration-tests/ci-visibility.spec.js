@@ -28,7 +28,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
   JEST_DISPLAY_NAME
 } = require('../packages/dd-trace/src/plugins/util/test')
@@ -670,7 +670,7 @@ testFrameworks.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -757,7 +757,7 @@ testFrameworks.forEach(({
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const newTests = tests.filter(test =>
                 test.meta[TEST_SUITE] === `ci-visibility/test-early-flake-detection/${parameterizedTestFile}`
@@ -839,7 +839,7 @@ testFrameworks.forEach(({
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
@@ -903,7 +903,7 @@ testFrameworks.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -976,7 +976,7 @@ testFrameworks.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -1107,7 +1107,7 @@ testFrameworks.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -1170,7 +1170,7 @@ testFrameworks.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -1259,7 +1259,7 @@ testFrameworks.forEach(({
                 const events = payloads.flatMap(({ payload }) => payload.events)
 
                 const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
                 const tests = events.filter(event => event.type === 'test').map(event => event.content)
 

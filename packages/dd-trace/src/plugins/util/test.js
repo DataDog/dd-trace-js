@@ -53,7 +53,7 @@ const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 // Early flake detection
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
-const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
+const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -102,7 +102,7 @@ module.exports = {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
