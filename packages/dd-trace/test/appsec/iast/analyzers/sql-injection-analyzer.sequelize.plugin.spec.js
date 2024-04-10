@@ -17,7 +17,7 @@ describe('sql-injection-analyzer with sequelize', () => {
      * Constraint the test combination of sequelize and mysql2 to force run mysql2 <3.9.4 with sequelize 4.x
      */
     const sequelizeSpecificVersion = require(`../../../../../../versions/sequelize@${sequelizeVersion}`).version()
-    const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>4') ? '>=1' : '>=1 <3.9.4'
+    const compatibleMysql2VersionRange = semver.satisfies(sequelizeSpecificVersion, '>=5') ? '>=1' : '>=1 <3.9.4'
     withVersions('mysql2', 'mysql2', compatibleMysql2VersionRange, () => {
       let sequelize
 
