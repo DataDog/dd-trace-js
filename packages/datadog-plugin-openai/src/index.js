@@ -439,15 +439,19 @@ function createFineTuneRequestExtraction (tags, body) {
 function commonFineTuneResponseExtraction (tags, body) {
   tags['openai.response.events_count'] = defensiveArrayLength(body.events)
   tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
-  if (body.hyperparams) {
-    tags['openai.response.hyperparams.n_epochs'] = body.hyperparams.n_epochs
-    tags['openai.response.hyperparams.batch_size'] = body.hyperparams.batch_size
-    tags['openai.response.hyperparams.prompt_loss_weight'] = body.hyperparams.prompt_loss_weight
-    tags['openai.response.hyperparams.learning_rate_multiplier'] = body.hyperparams.learning_rate_multiplier
+
+  const hyperparams = body.hyperparams || body.hyperparameters
+  const hyperparamsKey = body.hyperparams ? 'hyperparams' : 'hyperparameters'
+
+  if (hyperparams) {
+    tags[`openai.response.${hyperparamsKey}.n_epochs`] = hyperparams.n_epochs
+    tags[`openai.response.${hyperparamsKey}.batch_size`] = hyperparams.batch_size
+    tags[`openai.response.${hyperparamsKey}.prompt_loss_weight`] = hyperparams.prompt_loss_weight
+    tags[`openai.response.${hyperparamsKey}.learning_rate_multiplier`] = hyperparams.learning_rate_multiplier
   }
-  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files)
+  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files || body.training_file)
   tags['openai.response.result_files_count'] = defensiveArrayLength(body.result_files)
-  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files)
+  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files || body.validation_file)
   tags['openai.response.updated_at'] = body.updated_at
   tags['openai.response.status'] = body.status
 }
@@ -727,7 +731,16 @@ function normalizeStringOrTokenArray (input, truncate) {
 }
 
 function defensiveArrayLength (maybeArray) {
-  return Array.isArray(maybeArray) ? maybeArray.length : undefined
+  if (maybeArray) {
+    if (Array.isArray(maybeArray)) {
+      return maybeArray.length
+    } else {
+      // case of a singular item (ie body.training_file vs body.training_files)
+      return 1
+    }
+  }
+
+  return undefined
 }
 
 module.exports = OpenApiPlugin

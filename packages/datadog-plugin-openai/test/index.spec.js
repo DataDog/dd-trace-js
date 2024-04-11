@@ -1015,42 +1015,58 @@ describe('Plugin', () => {
         let scope
 
         beforeEach(() => {
+          const response = {
+            id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+            created_at: 1684442489,
+            updated_at: 1684442489,
+            organization_id: 'org-COOLORG',
+            model: 'curie',
+            fine_tuned_model: 'huh',
+            status: 'pending',
+            result_files: []
+          }
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            response.object = 'fine_tuning.job'
+            response.hyperparameters = {
+              n_epochs: 5,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.validation_file = null
+            response.training_file = 'file-t3k1gVSQDHrfZnPckzftlZ4A'
+          } else {
+            response.object = 'fine-tunes'
+            response.hyperparams = {
+              n_epochs: 5,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.training_files = [{
+              object: 'file',
+              id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+              purpose: 'fine-tune',
+              filename: 'dave-hal.jsonl',
+              bytes: 356,
+              created_at: 1684365950,
+              status: 'processed',
+              status_details: null
+            }]
+            response.validation_files = []
+            response.events = [{
+              object: 'fine-tune-event',
+              level: 'info',
+              message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+              created_at: 1684442489
+            }]
+          }
+
           scope = nock('https://api.openai.com:443')
-            .post(semver.satisfies(realVersion, '>=4.1.0') ? '/v1/fine_tuning/jobs' : '/v1/fine-tunes')
-            .reply(200, {
-              object: 'fine_tuning.jobs',
-              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-              hyperparams: {
-                n_epochs: 5,
-                batch_size: 3,
-                prompt_loss_weight: 0.01,
-                learning_rate_multiplier: 0.1
-              },
-              organization_id: 'org-COOLORG',
-              model: 'curie',
-              training_files: [{
-                object: 'file',
-                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                purpose: 'fine-tune',
-                filename: 'dave-hal.jsonl',
-                bytes: 356,
-                created_at: 1684365950,
-                status: 'processed',
-                status_details: null
-              }],
-              validation_files: [],
-              result_files: [],
-              created_at: 1684442489,
-              updated_at: 1684442489,
-              status: 'pending',
-              fine_tuned_model: 'huh',
-              events: [{
-                object: 'fine-tune-event',
-                level: 'info',
-                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                created_at: 1684442489
-              }]
-            }, [
+            .post(
+              semver.satisfies(realVersion, '>=4.1.0') ? '/v1/fine_tuning/jobs' : '/v1/fine-tunes'
+            )
+            .reply(200, response, [
               'Date', 'Thu, 18 May 2023 20:41:30 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '898',
@@ -1068,7 +1084,6 @@ describe('Plugin', () => {
         it('makes a successful call', async () => {
           const checkTraces = agent
             .use(traces => {
-              // console.log(traces[0][0])
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
               if (semver.satisfies(realVersion, '>=4.1.0')) {
@@ -1105,15 +1120,23 @@ describe('Plugin', () => {
               expect(traces[0][0].metrics).to.have.property('openai.request.n_epochs', 4)
               expect(traces[0][0].metrics).to.have.property('openai.request.prompt_loss_weight', 0.01)
               expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684442489)
-              expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.batch_size', 3)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.learning_rate_multiplier', 0.1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.n_epochs', 5)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.prompt_loss_weight', 0.01)
+
+              const hyperparams = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
+
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 1)
+              }
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.batch_size`, 3)
+              expect(traces[0][0].metrics)
+                .to.have.property(`openai.response.${hyperparams}.learning_rate_multiplier`, 0.1)
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.n_epochs`, 5)
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparams}.prompt_loss_weight`, 0.01)
               expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 0)
               expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
               expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684442489)
-              expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              }
             })
 
           // only certain request parameter combinations are allowed, leaving unused ones commented for now
@@ -1178,35 +1201,39 @@ describe('Plugin', () => {
         let scope
 
         beforeEach(() => {
-          scope = nock('https://api.openai.com:443')
-            .get(
-              semver.satisfies(realVersion, '>=4.1.0')
-                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco'
-                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco'
-            )
-            .reply(200, {
-              object: 'fine-tune',
-              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-              hyperparams: {
-                n_epochs: 4,
-                batch_size: 3,
-                prompt_loss_weight: 0.01,
-                learning_rate_multiplier: 0.1
-              },
-              organization_id: 'org-COOLORG',
-              model: 'curie',
-              training_files: [{
-                object: 'file',
-                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                purpose: 'fine-tune',
-                filename: 'dave-hal.jsonl',
-                bytes: 356,
-                created_at: 1684365950,
-                status: 'processed',
-                status_details: null
-              }],
-              validation_files: [],
-              result_files: [{
+          const response = {
+            id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+            organization_id: 'org-COOLORG',
+            model: 'curie',
+            created_at: 1684442489,
+            updated_at: 1684442697,
+            status: 'succeeded',
+            fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
+          }
+
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            response.object = 'fine_tuning.job'
+            response.hyperparameters = {
+              n_epochs: 4,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.result_files = [
+              'file-bJyf8TM0jeSZueBo4jpodZVQ'
+            ]
+            response.validation_file = null
+            response.training_file = 'file-t3k1gVSQDHrfZnPckzftlZ4A'
+          } else {
+            response.object = 'fine-tune'
+            response.hyperparams = {
+              n_epochs: 4,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.result_files = [
+              {
                 object: 'file',
                 id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
                 purpose: 'fine-tune-results',
@@ -1215,80 +1242,96 @@ describe('Plugin', () => {
                 created_at: 1684442697,
                 status: 'processed',
                 status_details: null
-              }],
-              created_at: 1684442489,
-              updated_at: 1684442697,
-              status: 'succeeded',
-              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
-              events: [
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  created_at: 1684442489
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune costs $0.00',
-                  created_at: 1684442612
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune enqueued. Queue number: 0',
-                  created_at: 1684442612
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune started',
-                  created_at: 1684442614
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 1/4',
-                  created_at: 1684442677
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 2/4',
-                  created_at: 1684442677
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 3/4',
-                  created_at: 1684442678
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 4/4',
-                  created_at: 1684442679
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  created_at: 1684442696
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  created_at: 1684442697
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune succeeded',
-                  created_at: 1684442697
-                }
-              ]
-            }, [
+              }
+            ]
+            response.validation_files = []
+            response.training_files = [{
+              object: 'file',
+              id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+              purpose: 'fine-tune',
+              filename: 'dave-hal.jsonl',
+              bytes: 356,
+              created_at: 1684365950,
+              status: 'processed',
+              status_details: null
+            }]
+            response.events = [
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+                created_at: 1684442489
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Fine-tune costs $0.00',
+                created_at: 1684442612
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Fine-tune enqueued. Queue number: 0',
+                created_at: 1684442612
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Fine-tune started',
+                created_at: 1684442614
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Completed epoch 1/4',
+                created_at: 1684442677
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Completed epoch 2/4',
+                created_at: 1684442677
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Completed epoch 3/4',
+                created_at: 1684442678
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Completed epoch 4/4',
+                created_at: 1684442679
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
+                created_at: 1684442696
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
+                created_at: 1684442697
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Fine-tune succeeded',
+                created_at: 1684442697
+              }
+            ]
+          }
+
+          scope = nock('https://api.openai.com:443')
+            .get(
+              semver.satisfies(realVersion, '>=4.1.0')
+                ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco'
+                : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco'
+            )
+            .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:11:53 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '2727',
@@ -1329,15 +1372,24 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.model', 'curie')
               expect(traces[0][0].meta).to.have.property('openai.response.status', 'succeeded')
               expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684442489)
-              expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 11)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.batch_size', 3)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.learning_rate_multiplier', 0.1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.n_epochs', 4)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.prompt_loss_weight', 0.01)
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 11)
+              }
+
+              const hyperparamsKey = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
+
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.batch_size`, 3)
+              expect(traces[0][0].metrics)
+                .to.have.property(`openai.response.${hyperparamsKey}.learning_rate_multiplier`, 0.1)
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.n_epochs`, 4)
+              expect(traces[0][0].metrics)
+                .to.have.property(`openai.response.${hyperparamsKey}.prompt_loss_weight`, 0.01)
               expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 1)
               expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
               expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684442697)
-              expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              }
             })
 
           if (semver.satisfies(realVersion, '>=4.1.0')) {
@@ -1362,52 +1414,77 @@ describe('Plugin', () => {
         let scope
 
         beforeEach(() => {
+          const response = {
+            object: 'list'
+          }
+
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            response.data = [{
+              object: 'fine-tuning.jobs',
+              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+              hyperparameters: {
+                n_epochs: 4,
+                batch_size: 3,
+                prompt_loss_weight: 0.01,
+                learning_rate_multiplier: 0.1
+              },
+              created_at: 1684442489,
+              updated_at: 1684442697,
+              organization_id: 'org-COOLORG',
+              model: 'curie',
+              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56',
+              result_files: [],
+              status: 'succeeded',
+              validation_file: null,
+              training_file: 'file-t3k1gVSQDHrfZnPckzftlZ4A'
+            }]
+          } else {
+            response.data = [{
+              object: 'fine-tune',
+              id: 'ft-10RCfqSvgyEcauomw7VpiYco',
+              hyperparams: {
+                n_epochs: 4,
+                batch_size: 3,
+                prompt_loss_weight: 0.01,
+                learning_rate_multiplier: 0.1
+              },
+              organization_id: 'org-COOLORG',
+              model: 'curie',
+              training_files: [{
+                object: 'file',
+                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+                purpose: 'fine-tune',
+                filename: 'dave-hal.jsonl',
+                bytes: 356,
+                created_at: 1684365950,
+                status: 'processed',
+                status_details: null
+              }],
+              validation_files: [],
+              result_files: [{
+                object: 'file',
+                id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
+                purpose: 'fine-tune-results',
+                filename: 'compiled_results.csv',
+                bytes: 410,
+                created_at: 1684442697,
+                status: 'processed',
+                status_details: null
+              }],
+              created_at: 1684442489,
+              updated_at: 1684442697,
+              status: 'succeeded',
+              fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
+            }]
+          }
+
           scope = nock('https://api.openai.com:443')
             .get(
               semver.satisfies(realVersion, '>=4.1.0')
                 ? '/v1/fine_tuning/jobs'
                 : '/v1/fine-tunes'
             )
-            .reply(200, {
-              object: 'list',
-              data: [{
-                object: 'fine-tune',
-                id: 'ft-10RCfqSvgyEcauomw7VpiYco',
-                hyperparams: {
-                  n_epochs: 4,
-                  batch_size: 3,
-                  prompt_loss_weight: 0.01,
-                  learning_rate_multiplier: 0.1
-                },
-                organization_id: 'org-COOLORG',
-                model: 'curie',
-                training_files: [{
-                  object: 'file',
-                  id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                  purpose: 'fine-tune',
-                  filename: 'dave-hal.jsonl',
-                  bytes: 356,
-                  created_at: 1684365950,
-                  status: 'processed',
-                  status_details: null
-                }],
-                validation_files: [],
-                result_files: [{
-                  object: 'file',
-                  id: 'file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  purpose: 'fine-tune-results',
-                  filename: 'compiled_results.csv',
-                  bytes: 410,
-                  created_at: 1684442697,
-                  status: 'processed',
-                  status_details: null
-                }],
-                created_at: 1684442489,
-                updated_at: 1684442697,
-                status: 'succeeded',
-                fine_tuned_model: 'curie:ft-foo:deleteme-2023-05-18-20-44-56'
-              }]
-            })
+            .reply(200, response)
         })
 
         afterEach(() => {
@@ -1460,83 +1537,82 @@ describe('Plugin', () => {
         let scope
 
         beforeEach(() => { // beforeEach allows realVersion to be set first before nocking the call
+          const response = {
+            object: 'list',
+            data: [
+              {
+                level: 'info',
+                message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
+                created_at: 1684442489
+              },
+              {
+                level: 'info',
+                message: 'Fine-tune costs $0.00',
+                created_at: 1684442612
+              },
+              {
+                level: 'info',
+                message: 'Fine-tune enqueued. Queue number: 0',
+                created_at: 1684442612
+              },
+              {
+                level: 'info',
+                message: 'Fine-tune started',
+                created_at: 1684442614
+              },
+              {
+                level: 'info',
+                message: 'Completed epoch 1/4',
+                created_at: 1684442677
+              },
+              {
+                level: 'info',
+                message: 'Completed epoch 2/4',
+                created_at: 1684442677
+              },
+              {
+                level: 'info',
+                message: 'Completed epoch 3/4',
+                created_at: 1684442678
+              },
+              {
+                level: 'info',
+                message: 'Completed epoch 4/4',
+                created_at: 1684442679
+              },
+              {
+                level: 'info',
+                message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
+                created_at: 1684442696
+              },
+              {
+                level: 'info',
+                message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
+                created_at: 1684442697
+              },
+              {
+                level: 'info',
+                message: 'Fine-tune succeeded',
+                created_at: 1684442697
+              }
+            ]
+          }
+
+          for (const event of response.data) {
+            if (semver.satisfies(realVersion, '>=4.1.0')) {
+              event.object = 'fine_tuning.job.event'
+            } else {
+              event.object = 'fine-tune-event'
+            }
+          }
+
           scope = nock('https://api.openai.com:443')
             .get(
               semver.satisfies(realVersion, '>=4.1.0')
                 ? '/v1/fine_tuning/jobs/ft-10RCfqSvgyEcauomw7VpiYco/events'
                 : '/v1/fine-tunes/ft-10RCfqSvgyEcauomw7VpiYco/events'
             )
-            .reply(200, {
-              object: 'list',
-              data: [
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Created fine-tune: ft-10RCfqSvgyEcauomw7VpiYco',
-                  created_at: 1684442489
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune costs $0.00',
-                  created_at: 1684442612
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune enqueued. Queue number: 0',
-                  created_at: 1684442612
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune started',
-                  created_at: 1684442614
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 1/4',
-                  created_at: 1684442677
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 2/4',
-                  created_at: 1684442677
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 3/4',
-                  created_at: 1684442678
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Completed epoch 4/4',
-                  created_at: 1684442679
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Uploaded model: curie:ft-foo:deleteme-2023-05-18-20-44-56',
-                  created_at: 1684442696
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Uploaded result file: file-bJyf8TM0jeSZueBo4jpodZVQ',
-                  created_at: 1684442697
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune succeeded',
-                  created_at: 1684442697
-                }
-              ]
-            }, [
+            .reply(200, response, [
               'Date', 'Thu, 18 May 2023 22:47:17 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '1718',
@@ -1652,59 +1728,74 @@ describe('Plugin', () => {
         })
       })
 
-      // TODO check this
       describe('cancel finetune', () => {
         let scope
 
         beforeEach(() => {
+          const response = {
+            id: 'ft-TVpNqwlvermMegfRVqSOyPyS',
+            organization_id: 'org-COOLORG',
+            model: 'curie',
+            created_at: 1684452102,
+            updated_at: 1684452103,
+            status: 'cancelled',
+            fine_tuned_model: 'idk'
+          }
+
+          if (semver.satisfies(realVersion, '>=4.1.0')) {
+            response.object = 'fine-tuning.job'
+            response.hyperparameters = {
+              n_epochs: 4,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.training_files = 'file-t3k1gVSQDHrfZnPckzftlZ4A'
+            response.validation_file = null
+            response.result_files = []
+          } else {
+            response.object = 'fine-tune'
+            response.hyperparams = {
+              n_epochs: 4,
+              batch_size: 3,
+              prompt_loss_weight: 0.01,
+              learning_rate_multiplier: 0.1
+            }
+            response.training_files = [{
+              object: 'file',
+              id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
+              purpose: 'fine-tune',
+              filename: 'dave-hal.jsonl',
+              bytes: 356,
+              created_at: 1684365950,
+              status: 'processed',
+              status_details: null
+            }]
+            response.validation_files = []
+            response.result_files = []
+            response.events = [
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
+                created_at: 1684452102
+              },
+              {
+                object: 'fine-tune-event',
+                level: 'info',
+                message: 'Fine-tune cancelled',
+                created_at: 1684452103
+              }
+            ]
+          }
+
           scope = nock('https://api.openai.com:443')
             .post(
               semver.satisfies(realVersion, '>=4.1.0')
                 ? '/v1/fine_tuning/jobs/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
                 : '/v1/fine-tunes/ft-TVpNqwlvermMegfRVqSOyPyS/cancel'
             )
-            .reply(200, {
-              object: 'fine-tune',
-              id: 'ft-TVpNqwlvermMegfRVqSOyPyS',
-              hyperparams: {
-                n_epochs: 4,
-                batch_size: 3,
-                prompt_loss_weight: 0.01,
-                learning_rate_multiplier: 0.1
-              },
-              organization_id: 'org-COOLORG',
-              model: 'curie',
-              training_files: [{
-                object: 'file',
-                id: 'file-t3k1gVSQDHrfZnPckzftlZ4A',
-                purpose: 'fine-tune',
-                filename: 'dave-hal.jsonl',
-                bytes: 356,
-                created_at: 1684365950,
-                status: 'processed',
-                status_details: null
-              }],
-              validation_files: [],
-              result_files: [],
-              created_at: 1684452102,
-              updated_at: 1684452103,
-              status: 'cancelled',
-              fine_tuned_model: 'idk',
-              events: [
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Created fine-tune: ft-TVpNqwlvermMegfRVqSOyPyS',
-                  created_at: 1684452102
-                },
-                {
-                  object: 'fine-tune-event',
-                  level: 'info',
-                  message: 'Fine-tune cancelled',
-                  created_at: 1684452103
-                }
-              ]
-            }, [
+            .reply(200, response, [
               'Date', 'Thu, 18 May 2023 23:21:43 GMT',
               'Content-Type', 'application/json',
               'Content-Length', '1042',
@@ -1746,15 +1837,24 @@ describe('Plugin', () => {
               expect(traces[0][0].meta).to.have.property('openai.response.model', 'curie')
               expect(traces[0][0].meta).to.have.property('openai.response.status', 'cancelled')
               expect(traces[0][0].metrics).to.have.property('openai.response.created_at', 1684452102)
-              expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 2)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.batch_size', 3)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.learning_rate_multiplier', 0.1)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.n_epochs', 4)
-              expect(traces[0][0].metrics).to.have.property('openai.response.hyperparams.prompt_loss_weight', 0.01)
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.events_count', 2)
+              }
+
+              const hyperparamsKey = semver.satisfies(realVersion, '>=4.1.0') ? 'hyperparameters' : 'hyperparams'
+
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.batch_size`, 3)
+              expect(traces[0][0].metrics)
+                .to.have.property(`openai.response.${hyperparamsKey}.learning_rate_multiplier`, 0.1)
+              expect(traces[0][0].metrics).to.have.property(`openai.response.${hyperparamsKey}.n_epochs`, 4)
+              expect(traces[0][0].metrics)
+                .to.have.property(`openai.response.${hyperparamsKey}.prompt_loss_weight`, 0.01)
               expect(traces[0][0].metrics).to.have.property('openai.response.result_files_count', 0)
               expect(traces[0][0].metrics).to.have.property('openai.response.training_files_count', 1)
               expect(traces[0][0].metrics).to.have.property('openai.response.updated_at', 1684452103)
-              expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              if (semver.satisfies(realVersion, '<4.1.0')) {
+                expect(traces[0][0].metrics).to.have.property('openai.response.validation_files_count', 0)
+              }
             })
 
           if (semver.satisfies(realVersion, '>=4.1.0')) {
