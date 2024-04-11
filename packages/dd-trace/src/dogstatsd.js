@@ -186,9 +186,9 @@ class DogStatsDClient {
 }
 
 class NoopDogStatsDClient {
-  gauge () { }
-
   increment () { }
+
+  gauge () { }
 
   distribution () { }
 

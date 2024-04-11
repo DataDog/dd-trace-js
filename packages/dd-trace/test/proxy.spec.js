@@ -29,6 +29,7 @@ describe('TracerProxy', () => {
   let remoteConfig
   let rc
   let noopDogStatsD
+  let noopDogStatsDClient
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -71,6 +72,14 @@ describe('TracerProxy', () => {
       trackCustomEvent: sinon.stub()
     }
 
+    noopDogStatsDClient = {
+      increment: sinon.spy(),
+      gauge: sinon.spy(),
+      distribution: sinon.spy(),
+      histogram: sinon.spy(),
+      flush: sinon.spy()
+    }
+
     {
       const dogstatsdIncrements = []
       let dogstatsdConfig
@@ -94,7 +103,8 @@ describe('TracerProxy', () => {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
-        _flushes: () => dogstatsdFlushes
+        _flushes: () => dogstatsdFlushes,
+        NoopDogStatsDClient: sinon.stub().returns(noopDogStatsDClient)
       }
     }
 
@@ -156,7 +166,7 @@ describe('TracerProxy', () => {
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      './dogstatsd': noopDogStatsD
+      '../dogstatsd': noopDogStatsD
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -524,6 +534,19 @@ describe('TracerProxy', () => {
           proxy.appsec.trackCustomEvent(eventName, metadata)
           expect(noopAppsecSdk.trackCustomEvent).to.have.been.calledOnceWithExactly(eventName, metadata)
         })
+      })
+    })
+
+    describe('dogstatsd', () => {
+      it('should not throw when calling noop methods', () => {
+        proxy.dogstatsd.increment('inc')
+        expect(noopDogStatsDClient.increment).to.have.been.calledWith('inc')
+        proxy.dogstatsd.distribution('dist')
+        expect(noopDogStatsDClient.distribution).to.have.been.calledWith('dist')
+        proxy.dogstatsd.histogram('hist')
+        expect(noopDogStatsDClient.histogram).to.have.been.calledWith('hist')
+        proxy.dogstatsd.flush()
+        expect(noopDogStatsDClient.flush).to.have.been.called
       })
     })
   })
