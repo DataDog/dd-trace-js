@@ -792,7 +792,7 @@ describe('AVM OSS', () => {
       }
     ]
 
-    function expectScaValue(payload, scaValue) {
+    function expectScaValue (payload, scaValue) {
       if (scaValue === undefined) {
         expect(payload.configuration.filter(c => c.name === 'sca.enabled')).is.empty
       } else {
@@ -802,7 +802,7 @@ describe('AVM OSS', () => {
       }
     }
 
-    suite.forEach(({scaValue, testDescription}) => {
+    suite.forEach(({ scaValue, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
           clock = sinon.useFakeTimers()
