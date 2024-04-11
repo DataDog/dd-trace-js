@@ -28,8 +28,9 @@ describe('TracerProxy', () => {
   let pluginManager
   let remoteConfig
   let rc
-  let noopDogStatsD
+  let dogStatsD
   let noopDogStatsDClient
+  let NoopDogStatsDClient
 
   beforeEach(() => {
     process.env.DD_TRACE_MOCHA_ENABLED = false
@@ -99,12 +100,11 @@ describe('TracerProxy', () => {
         }
       }
 
-      noopDogStatsD = {
+      dogStatsD = {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
-        _flushes: () => dogstatsdFlushes,
-        NoopDogStatsDClient: sinon.stub().returns(noopDogStatsDClient)
+        _flushes: () => dogstatsdFlushes
       }
     }
 
@@ -117,6 +117,7 @@ describe('TracerProxy', () => {
     AppsecSdk = sinon.stub().returns(appsecSdk)
     NoopAppsecSdk = sinon.stub().returns(noopAppsecSdk)
     PluginManager = sinon.stub().returns(pluginManager)
+    NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
       tracing: true,
@@ -166,7 +167,7 @@ describe('TracerProxy', () => {
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      '../dogstatsd': noopDogStatsD
+      './dogstatsd': NoopDogStatsDClient
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -182,7 +183,8 @@ describe('TracerProxy', () => {
       './telemetry': telemetry,
       './appsec/remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
-      './dogstatsd': noopDogStatsD
+      './dogstatsd': dogStatsD,
+      './noop/dogstatsd': NoopDogStatsDClient
     })
 
     proxy = new Proxy()
@@ -307,11 +309,11 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(noopDogStatsD._flushes()).to.equal(0)
+        expect(dogStatsD._flushes()).to.equal(0)
 
         clock.tick(10000)
 
-        expect(noopDogStatsD._flushes()).to.equal(1)
+        expect(dogStatsD._flushes()).to.equal(1)
       })
 
       it('should expose real metrics methods after init when configured', () => {
@@ -327,10 +329,10 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        expect(noopDogStatsD._config().dogstatsd.hostname).to.equal('localhost')
+        expect(dogStatsD._config().dogstatsd.hostname).to.equal('localhost')
 
         proxy.dogstatsd.increment('foo', 10, { alpha: 'bravo' })
-        const incs = noopDogStatsD._increments()
+        const incs = dogStatsD._increments()
         expect(incs.length).to.equal(1)
         expect(incs[0][0]).to.equal('foo')
         expect(incs[0][1]).to.equal(10)

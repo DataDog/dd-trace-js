@@ -185,18 +185,6 @@ class DogStatsDClient {
   }
 }
 
-class NoopDogStatsDClient {
-  increment () { }
-
-  gauge () { }
-
-  distribution () { }
-
-  histogram () { }
-
-  flush () { }
-}
-
 // This is a simplified user-facing proxy to the underlying DogStatsDClient instance
 class CustomMetrics {
   constructor (config) {
@@ -267,6 +255,5 @@ class CustomMetrics {
 
 module.exports = {
   DogStatsDClient,
-  NoopDogStatsDClient,
   CustomMetrics
 }
