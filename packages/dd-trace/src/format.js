@@ -33,6 +33,7 @@ const map = {
 function format (span) {
   const formatted = formatSpan(span)
 
+  extractSpanLinks(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -53,7 +54,8 @@ function formatSpan (span) {
     meta: {},
     metrics: {},
     start: Math.round(span._startTime * 1e6),
-    duration: Math.round(span._duration * 1e6)
+    duration: Math.round(span._duration * 1e6),
+    links: []
   }
 }
 
@@ -62,6 +64,28 @@ function setSingleSpanIngestionTags (span, options) {
   addTag({}, span.metrics, SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN)
   addTag({}, span.metrics, SPAN_SAMPLING_RULE_RATE, options.sampleRate)
   addTag({}, span.metrics, SPAN_SAMPLING_MAX_PER_SECOND, options.maxPerSecond)
+}
+
+function extractSpanLinks (trace, span) {
+  const links = []
+  if (span._links) {
+    for (const link of span._links) {
+      const { context, attributes } = link
+      const formattedLink = {}
+
+      formattedLink.trace_id = context.toTraceId(true)
+      formattedLink.span_id = context.toSpanId(true)
+
+      if (attributes && Object.keys(attributes).length > 0) {
+        formattedLink.attributes = attributes
+      }
+      if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
+      if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
+
+      links.push(formattedLink)
+    }
+  }
+  if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
 }
 
 function extractTags (trace, span) {
@@ -84,7 +108,6 @@ function extractTags (trace, span) {
 
   for (const tag in tags) {
     switch (tag) {
-      case 'operation.name':
       case 'service.name':
       case 'span.type':
       case 'resource.name':

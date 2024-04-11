@@ -1,5 +1,6 @@
 'use strict'
 
+const path = require('path')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const Readable = require('stream').Readable
@@ -27,7 +28,7 @@ describe('Plugin', () => {
     }, service)
 
     const loader = require('../../../versions/@grpc/proto-loader').get()
-    const definition = loader.loadSync(`${__dirname}/test.proto`)
+    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
     const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
     server = new grpc.Server()

@@ -2,7 +2,9 @@
 
 const csiMethods = [
   { src: 'concat' },
+  { src: 'parse' },
   { src: 'plusOperator', operator: true },
+  { src: 'random' },
   { src: 'replace' },
   { src: 'slice' },
   { src: 'substr' },

@@ -17,10 +17,7 @@ require,istanbul-lib-coverage,BSD-3-Clause,Copyright 2012-2015 Yahoo! Inc.
 require,jest-docblock,MIT,Copyright Meta Platforms, Inc. and affiliates.
 require,koalas,MIT,Copyright 2013-2017 Brian Woodward
 require,limiter,MIT,Copyright 2011 John Hurliman
-require,lodash.kebabcase,MIT,Copyright JS Foundation and other contributors
-require,lodash.pick,MIT,Copyright JS Foundation and other contributors
 require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
-require,lodash.uniq,MIT,Copyright JS Foundation and other contributors
 require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
 require,methods,MIT,Copyright 2013-2014 TJ Holowaychuk
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
@@ -33,6 +30,7 @@ require,protobufjs,BSD-3-Clause,Copyright 2016 Daniel Wirtz
 require,tlhunter-sorted-set,MIT,Copyright (c) 2023 Datadog Inc.
 require,retry,MIT,Copyright 2011 Tim Koschützki Felix Geisendörfer
 require,semver,ISC,Copyright Isaac Z. Schlueter and Contributors
+require,shell-quote,mit,Copyright (c) 2013 James Halliday
 dev,@types/node,MIT,Copyright Authors
 dev,autocannon,MIT,Copyright 2016 Matteo Collina
 dev,aws-sdk,Apache 2.0,Copyright 2012-2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -50,7 +48,6 @@ dev,eslint-config-standard,MIT,Copyright Feross Aboukhadijeh
 dev,eslint-plugin-import,MIT,Copyright 2015 Ben Mosher
 dev,eslint-plugin-mocha,MIT,Copyright 2014 Mathias Schreck
 dev,eslint-plugin-n,MIT,Copyright 2015 Toru Nagashima
-dev,eslint-plugin-node,MIT,Copyright 2015 Toru Nagashima
 dev,eslint-plugin-promise,ISC,jden and other contributors
 dev,eslint-plugin-standard,MIT,Copyright 2015 Jamund Ferguson
 dev,express,MIT,Copyright 2009-2014 TJ Holowaychuk 2013-2014 Roman Shtylman 2014-2015 Douglas Christopher Wilson

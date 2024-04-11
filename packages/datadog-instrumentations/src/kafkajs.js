@@ -38,7 +38,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     constructor (options) {
       super(options)
       this._brokers = (options.brokers && typeof options.brokers !== 'function')
-        ? options.brokers.join(',') : undefined
+        ? options.brokers.join(',')
+        : undefined
     }
   }
 
@@ -67,7 +68,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           const result = send.apply(this, arguments)
 
           result.then(
-            innerAsyncResource.bind(() => producerFinishCh.publish(undefined)),
+            innerAsyncResource.bind(res => {
+              producerFinishCh.publish(undefined)
+              producerCommitCh.publish(res)
+            }),
             innerAsyncResource.bind(err => {
               if (err) {
                 producerErrorCh.publish(err)
@@ -75,12 +79,6 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
               producerFinishCh.publish(undefined)
             })
           )
-
-          result.then(res => {
-            if (producerCommitCh.hasSubscribers) {
-              producerCommitCh.publish(res)
-            }
-          })
 
           return result
         } catch (e) {

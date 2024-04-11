@@ -47,12 +47,12 @@ describe('pino test', () => {
       assert.containsAllKeys(stdoutData, ['dd'])
       assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
       assert.strictEqual(
-        stdoutData['dd']['trace_id'],
-        stdoutData['custom']['trace_id']
+        stdoutData.dd.trace_id,
+        stdoutData.custom.trace_id
       )
       assert.strictEqual(
-        stdoutData['dd']['span_id'],
-        stdoutData['custom']['span_id']
+        stdoutData.dd.span_id,
+        stdoutData.custom.span_id
       )
     })
 

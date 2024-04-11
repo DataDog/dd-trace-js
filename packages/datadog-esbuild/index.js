@@ -89,7 +89,7 @@ module.exports.setup = function (build) {
 
       let pathToPackageJson
       try {
-        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
+        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [args.resolveDir] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
@@ -173,7 +173,7 @@ function dotFriendlyResolve (path, directory) {
     path = '../'
   }
 
-  return require.resolve(path, { paths: [ directory ] })
+  return require.resolve(path, { paths: [directory] })
 }
 
 /**

@@ -12,7 +12,19 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const webAppServer = require('../ci-visibility/web-app-server')
-const { TEST_STATUS, TEST_SOURCE_START, TEST_TYPE } = require('../../packages/dd-trace/src/plugins/util/test')
+const {
+  TEST_STATUS,
+  TEST_SOURCE_START,
+  TEST_TYPE,
+  TEST_SOURCE_FILE,
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
+} = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
+
+const NUM_RETRIES_EFD = 3
 
 const versions = ['1.18.0', 'latest']
 
@@ -51,7 +63,8 @@ versions.forEach((version) => {
       context(`reporting via ${reportMethod}`, () => {
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
-            ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
           const reportUrl = reportMethod === 'agentless' ? '/api/v2/citestcycle' : '/evp_proxy/v2/api/v2/citestcycle'
 
           receiver.gatherPayloadsMaxTimeout(({ url }) => url === reportUrl, payloads => {
@@ -70,6 +83,10 @@ versions.forEach((version) => {
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
             assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'browser')
+
+            assert.exists(testSessionEvent.content.meta[ERROR_MESSAGE])
+            assert.exists(testModuleEvent.content.meta[ERROR_MESSAGE])
+
             assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
               'test_suite.todo-list-page-test.js',
               'test_suite.landing-page-test.js',
@@ -81,6 +98,12 @@ versions.forEach((version) => {
               'fail',
               'skip'
             ])
+
+            testSuiteEvents.forEach(testSuiteEvent => {
+              if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
+                assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
+              }
+            })
 
             assert.includeMembers(testEvents.map(test => test.content.resource), [
               'landing-page-test.js.should work with passing tests',
@@ -99,6 +122,14 @@ versions.forEach((version) => {
 
             testEvents.forEach(testEvent => {
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
+              assert.equal(
+                testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
+              )
+              // Can read DD_TAGS
+              assert.propertyVal(testEvent.content.meta, 'test.customtag', 'customvalue')
+              assert.propertyVal(testEvent.content.meta, 'test.customtag2', 'customvalue2')
+              // Adds the browser used
+              assert.propertyVal(testEvent.content.meta, TEST_CONFIGURATION_BROWSER_NAME, 'chromium')
             })
 
             stepEvents.forEach(stepEvent => {
@@ -120,7 +151,8 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...envVars,
-                PW_BASE_URL: `http://localhost:${webAppPort}`
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
               },
               stdio: 'pipe'
             }
@@ -163,5 +195,299 @@ versions.forEach((version) => {
         testOutput += chunk.toString()
       })
     })
+
+    it('works when before all fails and step durations are negative', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
+        const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+
+        assert.propertyVal(testSuiteEvent.meta, TEST_STATUS, 'fail')
+        assert.propertyVal(testSessionEvent.meta, TEST_STATUS, 'fail')
+        assert.exists(testSuiteEvent.meta[ERROR_MESSAGE])
+        assert.include(testSessionEvent.meta[ERROR_MESSAGE], 'Test suites failed: 1')
+      }).then(() => done()).catch(done)
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            TEST_DIR: './ci-visibility/playwright-tests-error',
+            TEST_TIMEOUT: 3000
+          },
+          stdio: 'pipe'
+        }
+      )
+    })
+
+    if (version === 'latest') {
+      context('early flake detection', () => {
+        it('retries new tests', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTests(
+            {
+              playwright: {
+                'landing-page-test.js': [
+                  // 'should work with passing tests', // it will be considered new
+                  'should work with skipped tests',
+                  'should work with fixme',
+                  'should work with annotated tests'
+                ],
+                'skipped-suite-test.js': [
+                  'should work with fixme root'
+                ],
+                'todo-list-page-test.js': [
+                  'should work with failing tests',
+                  'should work with fixme root'
+                ]
+              }
+            }
+          )
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const newTests = tests.filter(test =>
+                test.resource ===
+                  'landing-page-test.js.should work with passing tests'
+              )
+              newTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+
+              // all but one has been retried
+              assert.equal(retriedTests.length, newTests.length - 1)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+        it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTests(
+            {
+              playwright: {
+                'landing-page-test.js': [
+                  // 'should work with passing tests', // it will be considered new
+                  'should work with skipped tests',
+                  'should work with fixme',
+                  'should work with annotated tests'
+                ],
+                'skipped-suite-test.js': [
+                  'should work with fixme root'
+                ],
+                'todo-list-page-test.js': [
+                  'should work with failing tests',
+                  'should work with fixme root'
+                ]
+              }
+            }
+          )
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(test =>
+                test.resource ===
+                  'landing-page-test.js.should work with passing tests'
+              )
+              newTests.forEach(test => {
+                assert.notProperty(test.meta, TEST_IS_NEW)
+              })
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+        it('does not retry tests that are skipped', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTests(
+            {
+              playwright: {
+                'landing-page-test.js': [
+                  'should work with passing tests',
+                  // 'should work with skipped tests', // new but not retried because it's skipped
+                  // 'should work with fixme', // new but not retried because it's skipped
+                  'should work with annotated tests'
+                ],
+                'skipped-suite-test.js': [
+                  'should work with fixme root'
+                ],
+                'todo-list-page-test.js': [
+                  'should work with failing tests',
+                  'should work with fixme root'
+                ]
+              }
+            }
+          )
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const newTests = tests.filter(test =>
+                test.resource ===
+                  'landing-page-test.js.should work with skipped tests' ||
+                test.resource === 'landing-page-test.js.should work with fixme'
+              )
+              // no retries
+              assert.equal(newTests.length, 2)
+              newTests.forEach(test => {
+                assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+              })
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise.then(() => done()).catch(done)
+          })
+        })
+        it('does not run EFD if the known tests request fails', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTestsResponseCode(500)
+          receiver.setKnownTests({})
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.equal(tests.length, 7)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 0)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise
+              .then(() => done())
+              .catch(done)
+          })
+        })
+      })
+    }
   })
 })

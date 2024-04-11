@@ -18,32 +18,35 @@ const { isFalse, isTrue } = require('../util')
 class Config {
   constructor (options = {}) {
     const {
-      DD_PROFILING_ENABLED,
-      DD_PROFILING_PROFILERS,
-      DD_ENV,
-      DD_TAGS,
-      DD_SERVICE,
-      DD_VERSION,
-      DD_TRACE_AGENT_URL,
       DD_AGENT_HOST,
-      DD_TRACE_AGENT_PORT,
-      DD_PROFILING_DEBUG_SOURCE_MAPS,
-      DD_PROFILING_UPLOAD_TIMEOUT,
-      DD_PROFILING_SOURCE_MAP,
-      DD_PROFILING_UPLOAD_PERIOD,
-      DD_PROFILING_PPROF_PREFIX,
-      DD_PROFILING_HEAP_ENABLED,
-      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
-      DD_PROFILING_WALLTIME_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
-      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
+      DD_ENV,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_CPU_ENABLED,
+      DD_PROFILING_DEBUG_SOURCE_MAPS,
+      DD_PROFILING_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
+      DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+      DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED,
+      DD_PROFILING_HEAP_ENABLED,
+      DD_PROFILING_PPROF_PREFIX,
+      DD_PROFILING_PROFILERS,
+      DD_PROFILING_SOURCE_MAP,
+      DD_PROFILING_TIMELINE_ENABLED,
+      DD_PROFILING_UPLOAD_PERIOD,
+      DD_PROFILING_UPLOAD_TIMEOUT,
+      DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
+      DD_PROFILING_WALLTIME_ENABLED,
+      DD_SERVICE,
+      DD_TAGS,
+      DD_TRACE_AGENT_PORT,
+      DD_TRACE_AGENT_URL,
+      DD_VERSION
     } = process.env
 
     const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
@@ -91,14 +94,28 @@ class Config {
         logger.warn(`${deprecatedEnvVarName} is deprecated. Use DD_PROFILING_${shortVarName} instead.`)
       }
     }
+    // Profiler sampling contexts are not available on Windows, so features
+    // depending on those (code hotspots and endpoint collection) need to default
+    // to false on Windows.
+    const samplingContextsAvailable = process.platform !== 'win32'
+    function checkOptionAllowed (option, description, condition) {
+      if (option && !condition) {
+        throw new Error(`${description} not supported on ${process.platform}.`)
+      }
+    }
+    function checkOptionWithSamplingContextAllowed (option, description) {
+      checkOptionAllowed(option, description, samplingContextsAvailable)
+    }
+
     this.flushInterval = flushInterval
     this.uploadTimeout = uploadTimeout
     this.sourceMap = sourceMap
     this.debugSourceMaps = isTrue(coalesce(options.debugSourceMaps, DD_PROFILING_DEBUG_SOURCE_MAPS, false))
     this.endpointCollectionEnabled = isTrue(coalesce(options.endpointCollection,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('ENDPOINT_COLLECTION_ENABLED')
+    checkOptionWithSamplingContextAllowed(this.endpointCollectionEnabled, 'Endpoint collection')
 
     this.pprofPrefix = pprofPrefix
     this.v8ProfilerBugWorkaroundEnabled = isTrue(coalesce(options.v8ProfilerBugWorkaround,
@@ -115,8 +132,13 @@ class Config {
       new AgentExporter(this)
     ], this)
 
+    // OOM monitoring does not work well on Windows, so it is disabled by default.
+    const oomMonitoringSupported = process.platform !== 'win32'
+
     const oomMonitoringEnabled = isTrue(coalesce(options.oomMonitoring,
-      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, true))
+      DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED, oomMonitoringSupported))
+    checkOptionAllowed(oomMonitoringEnabled, 'OOM monitoring', oomMonitoringSupported)
+
     const heapLimitExtensionSize = coalesce(options.oomHeapLimitExtensionSize,
       Number(DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE), 0)
     const maxHeapExtensionCount = coalesce(options.oomMaxHeapExtensionCount,
@@ -143,12 +165,22 @@ class Config {
       })
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+      DD_PROFILING_TIMELINE_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, samplingContextsAvailable))
+    logExperimentalVarDeprecation('TIMELINE_ENABLED')
+    checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
 
     this.codeHotspotsEnabled = isTrue(coalesce(options.codeHotspotsEnabled,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('CODEHOTSPOTS_ENABLED')
+    checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
+
+    this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
+      DD_PROFILING_CPU_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, samplingContextsAvailable))
+    logExperimentalVarDeprecation('CPU_ENABLED')
+    checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
   }
@@ -208,7 +240,7 @@ function ensureOOMExportStrategies (strategies, options) {
     }
   }
 
-  return [ ...new Set(strategies) ]
+  return [...new Set(strategies)]
 }
 
 function getExporter (name, options) {
@@ -259,8 +291,9 @@ function ensureProfilers (profilers, options) {
     }
   }
 
-  // Events profiler is a profiler for timeline events
-  if (options.timelineEnabled) {
+  // Events profiler is a profiler that produces timeline events. It is only
+  // added if timeline is enabled and there's a wall profiler.
+  if (options.timelineEnabled && profilers.some(p => p instanceof WallProfiler)) {
     profilers.push(new EventsProfiler(options))
   }
 

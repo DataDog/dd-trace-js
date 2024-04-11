@@ -46,7 +46,7 @@ describe('Span', () => {
     }
 
     Span = proxyquire('../src/opentracing/span', {
-      'perf_hooks': {
+      perf_hooks: {
         performance: {
           now
         }
@@ -66,6 +66,7 @@ describe('Span', () => {
 
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._spanId).to.deep.equal('123')
+    expect(span.context()._isRemote).to.deep.equal(false)
   })
 
   it('should add itself to the context trace started spans', () => {
@@ -148,6 +149,7 @@ describe('Span', () => {
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace).to.equal(parent._trace)
+    expect(span.context()._isRemote).to.equal(false)
   })
 
   it('should generate a 128-bit trace ID when configured', () => {
@@ -202,7 +204,7 @@ describe('Span', () => {
         traceId: '123',
         spanId: '456',
         _baggageItems: {
-          'foo': 'bar'
+          foo: 'bar'
         },
         _trace: {
           started: ['span'],
@@ -213,6 +215,67 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
 
       expect(span.context()._baggageItems).to.have.property('foo', 'bar')
+    })
+  })
+
+  // TODO are these tests trivial?
+  describe('links', () => {
+    it('should allow links to be added', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addLink(span2.context())
+      expect(span).to.have.property('_links')
+      expect(span._links).to.have.lengthOf(1)
+    })
+
+    it('sanitizes attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const attributes = {
+        foo: 'bar',
+        baz: 'qux'
+      }
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal(attributes)
+    })
+
+    it('sanitizes nested attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      const attributes = {
+        foo: true,
+        bar: 'hi',
+        baz: 1,
+        qux: [1, 2, 3]
+      }
+
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal({
+        foo: 'true',
+        bar: 'hi',
+        baz: '1',
+        'qux.0': '1',
+        'qux.1': '2',
+        'qux.2': '3'
+      })
+    })
+
+    it('sanitizes invalid attributes', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const span2 = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      const attributes = {
+        foo: () => {},
+        bar: Symbol('bar'),
+        baz: 'valid'
+      }
+
+      span.addLink(span2.context(), attributes)
+      expect(span._links[0].attributes).to.deep.equal({
+        baz: 'valid'
+      })
     })
   })
 

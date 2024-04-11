@@ -8,8 +8,14 @@ const { writeFileSync } = require('fs')
 const { satisfies } = require('semver')
 const path = require('path')
 
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
+
+const BUILD_COMMAND = NODE_MAJOR < 18
+  ? 'yarn exec next build'
+  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
+let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
+VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
 
 describe('test suite', () => {
   let server
@@ -17,8 +23,8 @@ describe('test suite', () => {
 
   const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-  withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-    const realVersion = require(`${__dirname}/../../../../versions/next@${version}`).version()
+  withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+    const realVersion = require(`../../../../versions/next@${version}`).version()
 
     function initApp (appName) {
       const appDir = path.join(__dirname, 'next', appName)
@@ -28,7 +34,7 @@ describe('test suite', () => {
 
         const cwd = appDir
 
-        const pkg = require(`${__dirname}/../../../../versions/next@${version}/package.json`)
+        const pkg = require(`../../../../versions/next@${version}/package.json`)
 
         if (realVersion.startsWith('10')) {
           return this.skip() // TODO: Figure out why 10.x tests fail.
@@ -48,7 +54,7 @@ describe('test suite', () => {
         execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
-        execSync('yarn exec next build', {
+        execSync(BUILD_COMMAND, {
           cwd,
           env: {
             ...process.env,
@@ -150,6 +156,25 @@ describe('test suite', () => {
       })
     }
 
+    function getFindBodyThreatMethod (done) {
+      return function findBodyThreat (traces) {
+        let attackFound = false
+
+        traces.forEach(trace => {
+          trace.forEach(span => {
+            if (span.meta['_dd.appsec.json']) {
+              attackFound = true
+            }
+          })
+        })
+
+        if (attackFound) {
+          agent.unsubscribe(findBodyThreat)
+          done()
+        }
+      }
+    }
+
     tests.forEach(({ appName, serverPath }) => {
       describe(`should detect threats in ${appName}`, () => {
         initApp(appName)
@@ -159,22 +184,7 @@ describe('test suite', () => {
         it('in request body', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           agent.subscribe(findBodyThreat)
           axios
@@ -183,27 +193,26 @@ describe('test suite', () => {
             }).catch(e => { done(e) })
         })
 
+        it('in form data body', function (done) {
+          this.timeout(5000)
+
+          const findBodyThreat = getFindBodyThreatMethod(done)
+
+          agent.subscribe(findBodyThreat)
+
+          axios
+            .post(`http://127.0.0.1:${port}/api/test-formdata`, new URLSearchParams({
+              key: 'testattack'
+            })).catch(e => {
+              done(e)
+            })
+        })
+
         if (appName === 'app-dir') {
           it('in request body with .text() function', function (done) {
             this.timeout(5000)
 
-            function findBodyThreat (traces) {
-              let attackFound = false
-
-              traces.forEach(trace => {
-                trace.forEach(span => {
-                  if (span.meta['_dd.appsec.json']) {
-                    attackFound = true
-                  }
-                })
-              })
-
-              if (attackFound) {
-                agent.unsubscribe(findBodyThreat)
-                done()
-              }
-            }
-
+            const findBodyThreat = getFindBodyThreatMethod(done)
             agent.subscribe(findBodyThreat)
             axios
               .post(`http://127.0.0.1:${port}/api/test-text`, {
@@ -217,20 +226,7 @@ describe('test suite', () => {
         it('in request query', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param=testattack`)
@@ -242,20 +238,7 @@ describe('test suite', () => {
         it('in request query with array params, attack in the second  item', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param[]=safe&param[]=testattack`)
@@ -267,20 +250,7 @@ describe('test suite', () => {
         it('in request query with array params, threat in the first item', function (done) {
           this.timeout(5000)
 
-          function findBodyThreat (traces) {
-            let attackFound = false
-            traces.forEach(trace => {
-              trace.forEach(span => {
-                if (span.meta['_dd.appsec.json']) {
-                  attackFound = true
-                }
-              })
-            })
-            if (attackFound) {
-              agent.unsubscribe(findBodyThreat)
-              done()
-            }
-          }
+          const findBodyThreat = getFindBodyThreatMethod(done)
 
           axios
             .get(`http://127.0.0.1:${port}/api/test?param[]=testattack&param[]=safe`)

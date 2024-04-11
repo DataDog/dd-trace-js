@@ -323,12 +323,12 @@ describe('Plugin', () => {
           })
           expect(testSpan.meta[COMPONENT]).to.equal('mocha')
           expect(testSpan.meta[ERROR_TYPE]).to.equal('TypeError')
-          const beginning = `mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed": `
+          const beginning = 'mocha-fail-hook-sync "before each" hook for "will not run but be reported as failed": '
           expect(testSpan.meta[ERROR_MESSAGE].startsWith(beginning)).to.equal(true)
           const errorMsg = testSpan.meta[ERROR_MESSAGE].replace(beginning, '')
           expect(
-            errorMsg === `Cannot set property 'error' of undefined` ||
-            errorMsg === `Cannot set properties of undefined (setting 'error')`
+            errorMsg === 'Cannot set property \'error\' of undefined' ||
+            errorMsg === 'Cannot set properties of undefined (setting \'error\')'
           ).to.equal(true)
           expect(testSpan.meta[ERROR_STACK]).not.to.be.undefined
         }).then(done, done)

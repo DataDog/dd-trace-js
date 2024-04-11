@@ -2,14 +2,21 @@
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
+const path = require('path')
 const axios = require('axios')
 const getPort = require('get-port')
 const { execSync, spawn } = require('child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { writeFileSync, readdirSync } = require('fs')
 const { satisfies } = require('semver')
-const { DD_MAJOR } = require('../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
+
+const BUILD_COMMAND = NODE_MAJOR < 18
+  ? 'yarn exec next build'
+  : 'NODE_OPTIONS=--openssl-legacy-provider yarn exec next build'
+let VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
+VERSIONS_TO_TEST = DD_MAJOR >= 4 ? VERSIONS_TO_TEST : '>=9.5 <11.1'
 
 describe('Plugin', function () {
   let server
@@ -19,8 +26,8 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', DD_MAJOR >= 4 && '>=11', version => {
-      const pkg = require(`${__dirname}/../../../versions/next@${version}/node_modules/next/package.json`)
+    withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+      const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
@@ -32,7 +39,7 @@ describe('Plugin', function () {
         before(function (done) {
           this.timeout(40000)
           const cwd = standalone
-            ? `${__dirname}/.next/standalone`
+            ? path.join(__dirname, '.next/standalone')
             : __dirname
 
           server = spawn('node', ['server'], {
@@ -45,6 +52,7 @@ describe('Plugin', function () {
               WITH_CONFIG: withConfig,
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
+              // eslint-disable-next-line n/no-path-concat
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0
@@ -79,8 +87,8 @@ describe('Plugin', function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
-        const pkg = require(`${__dirname}/../../../versions/next@${version}/package.json`)
-        const realVersion = require(`${__dirname}/../../../versions/next@${version}`).version()
+        const pkg = require(`../../../versions/next@${version}/package.json`)
+        const realVersion = require(`../../../versions/next@${version}`).version()
 
         delete pkg.workspaces
 
@@ -90,14 +98,14 @@ describe('Plugin', function () {
         // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
-        writeFileSync(`${__dirname}/package.json`, JSON.stringify(pkg, null, 2))
+        writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
         execSync('yarn install', { cwd })
 
         // building in-process makes tests fail for an unknown reason
-        execSync('yarn exec next build', {
+        execSync(BUILD_COMMAND, {
           cwd,
           env: {
             ...process.env,
@@ -108,8 +116,8 @@ describe('Plugin', function () {
 
         if (satisfiesStandalone(realVersion)) {
           // copy public and static files to the `standalone` folder
-          const publicOrigin = `${__dirname}/public`
-          const publicDestination = `${__dirname}/.next/standalone/public`
+          const publicOrigin = path.join(__dirname, 'public')
+          const publicDestination = path.join(__dirname, '.next/standalone/public')
           execSync(`mkdir ${publicDestination}`)
           execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
         }
@@ -123,7 +131,7 @@ describe('Plugin', function () {
           '.next',
           'yarn.lock'
         ]
-        const paths = files.map(file => `${__dirname}/${file}`)
+        const paths = files.map(file => path.join(__dirname, file))
         execSync(`rm -rf ${paths.join(' ')}`)
       })
 
@@ -390,7 +398,7 @@ describe('Plugin', function () {
 
           it('should do automatic instrumentation for static chunks', done => {
             // get first static chunk file programatically
-            const file = readdirSync(`${__dirname}/.next/static/chunks`)[0]
+            const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
 
             agent
               .use(traces => {
@@ -452,7 +460,7 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[1]).to.have.property('resource', `GET /api/appDir/[name]`)
+                expect(spans[1]).to.have.property('resource', 'GET /api/appDir/[name]')
               })
               .then(done)
               .catch(done)
@@ -467,7 +475,7 @@ describe('Plugin', function () {
               .use(traces => {
                 const spans = traces[0]
 
-                expect(spans[1]).to.have.property('resource', `GET /appDir/[name]`)
+                expect(spans[1]).to.have.property('resource', 'GET /appDir/[name]')
                 expect(spans[1].meta).to.have.property('http.status_code', '200')
               })
               .then(done)
