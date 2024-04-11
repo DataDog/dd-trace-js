@@ -317,12 +317,18 @@ function updateConfig (changes, config) {
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+  const entriesNotSentOnUndefinedDefault = new Set(['appsec.sca.enabled'])
 
   const configuration = []
   const names = [] // list of config names whose values have been changed
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
+
+    if (entriesNotSentOnUndefinedDefault.has(name) && change.origin === 'default' && change.value === undefined) {
+      continue
+    }
+
     names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }

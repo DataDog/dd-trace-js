@@ -779,30 +779,33 @@ describe('AVM OSS', () => {
 
     const suite = [
       {
-        scaValue: undefined,
-        testDescription: 'should not send when no env var is informed'
-      },
-      {
         scaValue: true,
+        scaValueOrigin: 'env_var',
         testDescription: 'should send when env var is true'
       },
       {
         scaValue: false,
+        scaValueOrigin: 'env_var',
         testDescription: 'should send when env var is false'
+      },
+      {
+        scaValue: undefined,
+        scaValueOrigin: 'default',
+        testDescription: 'should not send when no env var is informed'
       }
     ]
 
     function expectScaValue (payload, scaValue) {
       if (scaValue === undefined) {
-        expect(payload.configuration.filter(c => c.name === 'sca.enabled')).is.empty
+        expect(payload.configuration.filter(c => c.name === 'appsec.sca.enabled')).is.empty
       } else {
         expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'sca.enabled', value: scaValue, origin: 'env_var' }
+          { name: 'appsec.sca.enabled', value: scaValue, origin: 'env_var' }
         ])
       }
     }
 
-    suite.forEach(({ scaValue, testDescription }) => {
+    suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
           clock = sinon.useFakeTimers()
@@ -842,12 +845,10 @@ describe('AVM OSS', () => {
         })
 
         before(() => {
-          if (scaValue !== undefined) {
-            telemetry.updateConfig(
-              [{ name: 'sca.enabled', value: scaValue, origin: 'env_var' }],
-              telemetryConfig
-            )
-          }
+          telemetry.updateConfig(
+            [{ name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }],
+            telemetryConfig
+          )
           telemetry.start(telemetryConfig, { _pluginsByName: {} })
         })
 
