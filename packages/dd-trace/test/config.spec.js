@@ -218,6 +218,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
+    expect(config).to.have.nested.property('appsec.sca.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -228,7 +229,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('installSignature.id', null)
     expect(config).to.have.nested.property('installSignature.time', null)
     expect(config).to.have.nested.property('installSignature.type', null)
-    expect(config).to.have.nested.property('sca.enabled', undefined)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -295,6 +295,7 @@ describe('Config', () => {
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
+      { name: 'appsec.sca.enabled', value: undefined, origin: 'default' },
       { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
@@ -324,8 +325,7 @@ describe('Config', () => {
       { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
-      { name: 'version', value: '', origin: 'default' },
-      { name: 'sca.enabled', value: undefined, origin: 'default' }
+      { name: 'version', value: '', origin: 'default' }
     ])
   })
 
@@ -506,6 +506,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+    expect(config).to.have.nested.property('appsec.sca.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -522,7 +523,6 @@ describe('Config', () => {
       type: 'k8s_single_step',
       time: '1703188212'
     })
-    expect(config).to.have.nested.property('sca.enabled', true)
 
     expect(updateConfig).to.be.calledOnce
 
@@ -561,6 +561,7 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
+      { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
@@ -573,8 +574,7 @@ describe('Config', () => {
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
-      { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' },
-      { name: 'sca.enabled', value: true, origin: 'env_var' }
+      { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' }
     ])
   })
 
@@ -1181,6 +1181,9 @@ describe('Config', () => {
       apiSecurity: {
         enabled: true,
         requestSampling: 1.0
+      },
+      sca: {
+        enabled: undefined
       }
     })
   })

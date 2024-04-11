@@ -447,6 +447,7 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
+    this._setValue(defaults, 'appsec.sca.enabled', undefined)
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
@@ -495,7 +496,6 @@ class Config {
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
-    this._setValue(defaults, 'sca.enabled', undefined)
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -618,6 +618,8 @@ class Config {
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
+    // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
+    this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
@@ -682,8 +684,6 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
-    // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
-    this._setBoolean(env, 'sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
