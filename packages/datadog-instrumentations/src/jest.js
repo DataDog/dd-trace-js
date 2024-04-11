@@ -11,7 +11,8 @@ const {
   getTestSuitePath,
   getTestParametersString,
   addEfdStringToTestName,
-  removeEfdStringFromTestName
+  removeEfdStringFromTestName,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -112,20 +113,6 @@ function getEfdStats (testStatuses) {
     acc[testStatus]++
     return acc
   }, { pass: 0, fail: 0 })
-}
-
-function getIsFaultyEarlyFlakeDetection (projectSuites, knownSuites, faultyThreshold) {
-  let newSuites = 0
-  for (const suite of projectSuites) {
-    if (!knownSuites[suite]) {
-      newSuites++
-    }
-  }
-  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
-  // The faulty threshold represents a percentage, but we also want to consider
-  // smaller projects, where big variations in the % are more likely.
-  // This is the reason why we also compare the number of suites with `newSuites > faultyThreshold`
-  return newSuites >= faultyThreshold && newSuitesPercentage >= faultyThreshold
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -809,9 +796,13 @@ addHook({
       const isFaulty =
         getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest || {}, earlyFlakeDetectionFaultyThreshold)
       if (isFaulty) {
+        log.error('Early flake detection is disabled because the number of new suites is too high.')
         isEarlyFlakeDetectionEnabled = false
-        // config is shared between all tests, so we can disable EFD for all of them
-        testPaths.tests[0].context.config.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+        const testEnvironmentOptions = testPaths.tests[0]?.context?.config?.testEnvironmentOptions
+        // Project config is shared among all tests, so we can modify it here
+        if (testEnvironmentOptions) {
+          testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled = false
+        }
         isEarlyFlakeDetectionFaulty = true
       }
     }

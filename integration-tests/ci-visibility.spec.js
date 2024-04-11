@@ -1319,12 +1319,8 @@ testFrameworks.forEach(({
             if (reportingOption === 'evp proxy') {
               receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
             }
-            // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
-            receiver.setKnownTests({
-              [name]: {
-                'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
-              }
-            })
+            // Tests from ci-visibility/test/ci-visibility-test* will be considered new
+            receiver.setKnownTests({})
 
             const NUM_RETRIES_EFD = 3
             receiver.setSettings({

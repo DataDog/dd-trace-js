@@ -143,7 +143,8 @@ module.exports = {
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
-  addEfdStringToTestName
+  addEfdStringToTestName,
+  getIsFaultyEarlyFlakeDetection
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -572,4 +573,22 @@ function addEfdStringToTestName (testName, numAttempt) {
 
 function removeEfdStringFromTestName (testName) {
   return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
+  let newSuites = 0
+  for (const suite of projectSuites) {
+    if (!testsBySuiteName[suite]) {
+      newSuites++
+    }
+  }
+  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
+
+  // The faulty threshold represents a percentage, but we also want to consider
+  // smaller projects, where big variations in the % are more likely.
+  // This is why we also check the absolute number of new suites.
+  return (
+    newSuites > faultyThresholdPercentage &&
+    newSuitesPercentage > faultyThresholdPercentage
+  )
 }
