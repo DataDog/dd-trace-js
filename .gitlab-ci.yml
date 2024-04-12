@@ -72,9 +72,8 @@ package_version:
    - |
       verdaccio &
       sleep 5
-      npm cache clean --force
-
-      npm adduser --registry http://localhost:4873 --auth-type=legacy
+      npm install -g npm-cli-adduser
+      npm-cli-adduser -u test -p test -e email@email.com -r http://localhost:4873
       echo "step 1"
       yarn install
       echo "step 2"  
