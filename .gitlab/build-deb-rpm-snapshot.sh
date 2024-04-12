@@ -12,4 +12,7 @@ current_version+="$CI_VERSION_SUFFIX"
 npm version --no-git-tag-version $current_version
 npm publish --tag dev --registry http://localhost:4873
 export JS_PACKAGE_VERSION=$current_version
-echo "Finish version: $JS_PACKAGE_VERSION"
+
+echo "Genrating Version: $JS_PACKAGE_VERSION"
+cd packaging
+../.gitlab/build-deb-rpm.sh
