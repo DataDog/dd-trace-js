@@ -1,10 +1,11 @@
 stages:
+  - manual_images
   - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - manual_images
+
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
@@ -65,6 +66,7 @@ package_version:
       when: on_success
     - if: $CI_COMMIT_BRANCH == 'robertomonteromiguel/add_onboarding_tests'
       when: on_success
+      allow_failure: true
     - when: manual
       allow_failure: true
   script:
