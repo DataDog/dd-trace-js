@@ -71,6 +71,9 @@ package_version:
       allow_failure: true
   script:
    - |
+      cd ..
+      echo "Where am I?"
+      pwd
       verdaccio &
       sleep 5
       npm install -g npm-cli-adduser
