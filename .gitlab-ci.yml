@@ -70,6 +70,8 @@ package_version:
       allow_failure: true
   script:
    - |
+      verdaccio &
+      sleep 5
       echo "step 1"
       yarn install
       echo "step 2"  
