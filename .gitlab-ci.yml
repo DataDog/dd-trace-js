@@ -83,8 +83,8 @@ package_version:
       #npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
       npm publish --tag dev --registry http://localhost:4873
       echo "Finish"
-
-
+      export JS_PACKAGE_VERSION="6.0.0-pre"
+      ../.gitlab/build-deb-rpm.sh
 
       echo "done"
       #echo "Creating volume for verdaccio storage..."
