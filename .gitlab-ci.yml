@@ -74,7 +74,7 @@ package_version:
       sleep 5
       npm cache clean --force
 
-      npm adduser --registry http://localhost:4873
+      npm adduser --registry http://localhost:4873 --auth-type=legacy
       echo "step 1"
       yarn install
       echo "step 2"  
