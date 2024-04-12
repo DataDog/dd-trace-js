@@ -201,54 +201,32 @@ function getTaintTrackingNoop () {
   return getTaintTrackingImpl(null, true)
 }
 
-function lodashTrim (target, result) {
-  try {
-    const context = getContextDefault()
-    const transactionId = getTransactionId(context)
-    if (transactionId) {
-      result = TaintedUtils.trim(transactionId, result, target)
-    }
-  } catch (e) {
-    iastLog.error('Error invoking CSI lodash trim')
-      .errorAndPublish(e)
-  }
+const lodashFns = {
+  trim: TaintedUtils.trim,
+  trimStart: TaintedUtils.trim,
+  trimEnd: TaintedUtils.trimEnd,
+  toLower: TaintedUtils.stringCase,
+  toUpper: TaintedUtils.stringCase,
+  join: TaintedUtils.arrayJoin
 }
 
-function lodashTrimEnd (target, result) {
-  try {
-    const context = getContextDefault()
-    const transactionId = getTransactionId(context)
-    if (transactionId) {
-      result = TaintedUtils.trimEnd(transactionId, result, target)
-    }
-  } catch (e) {
-    iastLog.error('Error invoking CSI lodash trimEnd')
-      .errorAndPublish(e)
+function getLodashTaintedUtilFn (lodashFn) {
+  if (!Object.keys(lodashFns).includes(lodashFn)) {
+    return (transactionId, result) => result
   }
+
+  return lodashFns[lodashFn]
 }
 
-function lodashStringCase (target, result) {
+function lodashTaintTrackingHandler ({ operation, arguments: lodashFnArguments, result }) {
   try {
     const context = getContextDefault()
     const transactionId = getTransactionId(context)
     if (transactionId) {
-      result = TaintedUtils.stringCase(transactionId, result, target)
+      result = getLodashTaintedUtilFn(operation)(transactionId, result, ...lodashFnArguments)
     }
   } catch (e) {
-    iastLog.error('Error invoking CSI lodash stringCase')
-      .errorAndPublish(e)
-  }
-}
-
-function lodashArrayJoin (target, result, separator) {
-  try {
-    const context = getContextDefault()
-    const transactionId = getTransactionId(context)
-    if (transactionId) {
-      result = TaintedUtils.arrayJoin(transactionId, result, target, separator)
-    }
-  } catch (e) {
-    iastLog.error('Error invoking CSI lodash arrayJoin')
+    iastLog.error(`Error invoking CSI lodash ${operation}`)
       .errorAndPublish(e)
   }
 }
@@ -256,8 +234,5 @@ function lodashArrayJoin (target, result, separator) {
 module.exports = {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
-  lodashTrim,
-  lodashTrimEnd,
-  lodashStringCase,
-  lodashArrayJoin
+  lodashTaintTrackingHandler
 }

@@ -8,17 +8,11 @@ const { isInfoAllowed } = require('../telemetry/verbosity')
 const {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
-  lodashTrim,
-  lodashTrimEnd,
-  lodashStringCase,
-  lodashArrayJoin
+  lodashTaintTrackingHandler
 } = require('./taint-tracking-impl')
 const { taintObject } = require('./operations-taint-object')
 
-const lodashTrimCh = dc.channel('datadog:lodash:trim')
-const lodashTrimEndCh = dc.channel('datadog:lodash:trimEnd')
-const lodashStringCaseCh = dc.channel('datadog:lodash:stringCase')
-const lodashArrayJoinCh = dc.channel('datadog:lodash:arrayJoin')
+const lodashOperationCh = dc.channel('datadog:lodash:operation')
 
 function createTransaction (id, iastContext) {
   if (id && iastContext) {
@@ -104,30 +98,12 @@ function enableTaintOperations (telemetryVerbosity) {
   }
 
   global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
-
-  lodashTrimCh.subscribe(({ arguments: trimArgs, result }) => {
-    const target = trimArgs[0]
-    lodashTrim(target, result)
-  })
-
-  lodashTrimEndCh.subscribe(({ arguments: trimArgs, result }) => {
-    const target = trimArgs[0]
-    lodashTrimEnd(target, result)
-  })
-
-  lodashStringCaseCh.subscribe(({ value, result }) => {
-    lodashStringCase(value, result)
-  })
-
-  lodashArrayJoinCh.subscribe(({ arguments: arrayJoinArgs, result }) => {
-    const target = arrayJoinArgs[0]
-    const separator = arrayJoinArgs[1]
-    lodashArrayJoin(target, result, separator)
-  })
+  lodashOperationCh.subscribe(lodashTaintTrackingHandler)
 }
 
 function disableTaintOperations () {
   global._ddiast = getTaintTrackingNoop()
+  lodashOperationCh.unsubscribe(lodashTaintTrackingHandler)
 }
 
 function setMaxTransactions (transactions) {
