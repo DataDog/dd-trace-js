@@ -7,6 +7,7 @@ const shimmer = require('../../datadog-shimmer')
 addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
   const trimCh = channel('datadog:lodash:trim')
   const trimEndCh = channel('datadog:lodash:trimEnd')
+  const stringCaseCh = channel('datadog:lodash:stringCase')
 
   shimmer.wrap(lodash, 'trim', trim => {
     return function (string, chars, guard) {
@@ -42,6 +43,32 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
 
       const result = trimEnd(...arguments)
       trimEndCh.publish({ arguments, result })
+
+      return result
+    }
+  })
+
+  shimmer.wrap(lodash, 'toLower', toLower => {
+    return function (value) {
+      if (!stringCaseCh.hasSubscribers) {
+        return toLower(value)
+      }
+
+      const result = toLower(value)
+      stringCaseCh.publish({ value, result })
+
+      return result
+    }
+  })
+
+  shimmer.wrap(lodash, 'toUpper', toUpper => {
+    return function (value) {
+      if (!stringCaseCh.hasSubscribers) {
+        return toUpper(value)
+      }
+
+      const result = toUpper(value)
+      stringCaseCh.publish({ value, result })
 
       return result
     }

@@ -227,9 +227,23 @@ function lodashTrimEnd (target, result) {
   }
 }
 
+function lodashStringCase (target, result) {
+  try {
+    const context = getContextDefault()
+    const transactionId = getTransactionId(context)
+    if (transactionId) {
+      result = TaintedUtils.stringCase(transactionId, result, target)
+    }
+  } catch (e) {
+    iastLog.error('Error invoking CSI lodash stringCase')
+      .errorAndPublish(e)
+  }
+}
+
 module.exports = {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
   lodashTrim,
-  lodashTrimEnd
+  lodashTrimEnd,
+  lodashStringCase
 }

@@ -250,7 +250,7 @@
   "lodash": [
     {
       "name": "lodash",
-      "versions": [">=3"]
+      "versions": [">=4"]
     }
   ],
   "mariadb": [

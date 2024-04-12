@@ -10,8 +10,18 @@ function trimEndLodash (_, str) {
   return _.trimEnd(str)
 }
 
+function toLowerLodash (_, str) {
+  return _.toLower(str)
+}
+
+function toUpperLodash (_, str) {
+  return _.toUpper(str)
+}
+
 module.exports = {
   trimLodash,
   trimStartLodash,
-  trimEndLodash
+  trimEndLodash,
+  toLowerLodash,
+  toUpperLodash
 }

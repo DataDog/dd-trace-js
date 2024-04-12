@@ -33,6 +33,8 @@ const propagationFns = [
 ]
 
 const propagationLodashFns = [
+  'toLowerLodash',
+  'toUpperLodash',
   'trimLodash',
   'trimStartLodash',
   'trimEndLodash'
@@ -83,7 +85,7 @@ describe('TaintTracking lodash', () => {
               const commandResult = propFnInstrumented(_, commandTainted)
               expect(isTainted(iastContext, commandResult)).to.be.true
 
-              const commandResultOrig = propFnOriginal(commandTainted)
+              const commandResultOrig = propFnOriginal(_, commandTainted)
               expect(commandResult).eq(commandResultOrig)
 
               try {
