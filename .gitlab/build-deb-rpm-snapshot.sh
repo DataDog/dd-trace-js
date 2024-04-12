@@ -11,5 +11,5 @@ current_version=$(echo "$current_version" | tr -d '"')
 current_version+="$CI_VERSION_SUFFIX"
 npm version --no-git-tag-version $current_version
 npm publish --tag dev --registry http://localhost:4873
-echo "Finish"
 export JS_PACKAGE_VERSION=$current_version
+echo "Finish version: $JS_PACKAGE_VERSION"
