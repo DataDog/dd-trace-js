@@ -5,7 +5,6 @@ const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
-
   const trimCh = channel('datadog:lodash:trim')
   const trimEndCh = channel('datadog:lodash:trimEnd')
 
@@ -16,7 +15,7 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
       }
 
       const result = trim(...arguments)
-      trimCh.publish({arguments, result})
+      trimCh.publish({ arguments, result })
 
       return result
     }
@@ -29,7 +28,7 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
       }
 
       const result = trimStart(...arguments)
-      trimCh.publish({arguments, result})
+      trimCh.publish({ arguments, result })
 
       return result
     }
@@ -42,7 +41,7 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
       }
 
       const result = trimEnd(...arguments)
-      trimEndCh.publish({arguments, result})
+      trimEndCh.publish({ arguments, result })
 
       return result
     }

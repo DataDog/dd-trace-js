@@ -52,11 +52,11 @@ function sliceStr (str) {
   return str.slice(1, 4)
 }
 
-function toLowerCaseStr(str) {
+function toLowerCaseStr (str) {
   return str.toLowerCase()
 }
 
-function toUpperCaseStr(str) {
+function toUpperCaseStr (str) {
   return str.toUpperCase()
 }
 

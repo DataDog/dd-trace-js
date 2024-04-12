@@ -192,7 +192,7 @@ function lodashTrim (target, result) {
       result = TaintedUtils.trim(transactionId, result, target)
     }
   } catch (e) {
-    iastLog.error(`Error invoking CSI lodash trim`)
+    iastLog.error('Error invoking CSI lodash trim')
       .errorAndPublish(e)
   }
 }
@@ -205,7 +205,7 @@ function lodashTrimEnd (target, result) {
       result = TaintedUtils.trimEnd(transactionId, result, target)
     }
   } catch (e) {
-    iastLog.error(`Error invoking CSI lodash trimEnd`)
+    iastLog.error('Error invoking CSI lodash trimEnd')
       .errorAndPublish(e)
   }
 }

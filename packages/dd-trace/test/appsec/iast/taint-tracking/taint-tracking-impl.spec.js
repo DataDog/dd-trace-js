@@ -96,7 +96,6 @@ describe('TaintTracking lodash', () => {
       })
     })
   })
-
 })
 
 describe('TaintTracking', () => {

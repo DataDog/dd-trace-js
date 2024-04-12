@@ -5,7 +5,12 @@ const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastTelemetry = require('../telemetry')
 const { REQUEST_TAINTED } = require('../telemetry/iast-metric')
 const { isInfoAllowed } = require('../telemetry/verbosity')
-const { getTaintTrackingImpl, getTaintTrackingNoop, lodashTrim, lodashTrimEnd} = require('./taint-tracking-impl')
+const {
+  getTaintTrackingImpl,
+  getTaintTrackingNoop,
+  lodashTrim,
+  lodashTrimEnd
+} = require('./taint-tracking-impl')
 const { taintObject } = require('./operations-taint-object')
 
 const lodashTrimCh = dc.channel('datadog:lodash:trim')
@@ -96,12 +101,12 @@ function enableTaintOperations (telemetryVerbosity) {
 
   global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
 
-  lodashTrimCh.subscribe(({arguments: trimArgs, result}) => {
+  lodashTrimCh.subscribe(({ arguments: trimArgs, result }) => {
     const target = trimArgs[0]
     lodashTrim(target, result)
   })
 
-  lodashTrimEndCh.subscribe(({arguments: trimArgs, result}) => {
+  lodashTrimEndCh.subscribe(({ arguments: trimArgs, result }) => {
     const target = trimArgs[0]
     lodashTrimEnd(target, result)
   })
