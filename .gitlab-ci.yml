@@ -1,10 +1,10 @@
 stages:
-  - manual_images
   - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
+  - manual_images
 
 
 include:
@@ -49,7 +49,7 @@ package_version:
   #extends: .common
   tags: ["arch:amd64"]
   #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
-  image: registry.ddbuild.io/ci/auto_inject/gitlab:current
+  image: registry.ddbuild.io/ci/dd-trace-js/gitlab:current
   #tags: ["runner:apm-k8s-tweaked-metal"]
   #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
   #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
