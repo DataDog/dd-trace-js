@@ -2696,25 +2696,17 @@ describe('Plugin', () => {
               choices: [{
                 message: {
                   role: 'assistant',
-                  choices: [{
-                    message: {
-                      role: 'assistant',
-                      content: null,
-                      name: 'hunter2',
-                      tool_calls: [
-                        {
-                          id: 'tool-1',
-                          type: 'function',
-                          'function': {
-                            name: 'extract_fictional_info',
-                            arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
-                          }
-                        }
-                      ]
-                    },
-                    finish_reason: 'tool_calls',
-                    index: 0
-                  }],
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: 'tool-1',
+                      type: 'function',
+                      'function': {
+                        name: 'extract_fictional_info',
+                        arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
+                      }
+                    }
+                  ],
                   name: 'hunter2'
                 },
                 finish_reason: 'tool_calls',
