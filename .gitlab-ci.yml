@@ -62,6 +62,7 @@ package_snapshot:
   script:
    - |
       export CI_VERSION_SUFFIX=".pipeline.${CI_PIPELINE_ID}.beta.${CI_COMMIT_SHORT_SHA}"
+      export JS_PACKAGE_VERSION=""
       cd ..
       ./.gitlab/build-deb-rpm-snapshot.sh
       echo "Version:::: $JS_PACKAGE_VERSION"
