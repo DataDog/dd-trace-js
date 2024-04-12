@@ -45,20 +45,9 @@ build-gitlab-image:
 
 
 package_snapshot:
-  #image: docker:git
-  #extends: .common
   extends: .package
   tags: ["arch:amd64"]
-  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   image: registry.ddbuild.io/ci/dd-trace-js/gitlab:current
-  #tags: ["runner:apm-k8s-tweaked-metal"]
-  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
-  #image: registry.ddbuild.io/images/docker:24.0.4-gbi-focal
-  #image: registry.ddbuild.io/images/bazel:6-gbi
-
-  #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/docker:20.10.13
-  #tags: ["arch:amd64"]
-
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
@@ -72,31 +61,12 @@ package_snapshot:
       allow_failure: true
   script:
    - |
-      CI_VERSION_SUFFIX=".pipeline.${CI_PIPELINE_ID}.beta.${CI_COMMIT_SHORT_SHA}"
+      export CI_VERSION_SUFFIX=".pipeline.${CI_PIPELINE_ID}.beta.${CI_COMMIT_SHORT_SHA}"
       cd ..
-      echo "Where am I?"
-      pwd
-      verdaccio &
-      sleep 5
-      npm install -g npm-cli-adduser
-      npm-cli-adduser -u test -p test -e email@email.com -r http://localhost:4873
-      yarn install
-      content=`cat ./package.json | tr '\n' ' '`
-      current_version=$(jq '.version' <<< "$content" )
-      current_version=$(echo "$current_version" | tr -d '"')
-      current_version+="$CI_VERSION_SUFFIX"
-      npm version --no-git-tag-version $current_version
-      npm publish --tag dev --registry http://localhost:4873
-      echo "Finish"
-      export JS_PACKAGE_VERSION=$current_version
+      ./.gitlab/build-deb-rpm-snapshot.sh
       cd packaging
       ../.gitlab/build-deb-rpm.sh
-  
       echo "done"
- 
-  artifacts:
-    reports:
-      dotenv: package_version.env
 
 package:
   extends: .package
