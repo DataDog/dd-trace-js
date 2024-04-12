@@ -46,6 +46,7 @@ build-gitlab-image:
 package_version:
   #image: docker:git
   #extends: .common
+  extends: .package
   tags: ["arch:amd64"]
   #image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   image: registry.ddbuild.io/ci/dd-trace-js/gitlab:current
