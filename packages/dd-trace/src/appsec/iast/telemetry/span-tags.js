@@ -40,7 +40,7 @@ function taggedMetricName (data) {
 }
 
 function filterTags (tags) {
-  return tags?.filter(tag => !tag.startsWith('lib_language') && !tag.startsWith('version'))
+  return tags?.filter(tag => !tag.startsWith('version'))
 }
 
 function processTagValue (tags) {

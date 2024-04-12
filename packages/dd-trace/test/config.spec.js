@@ -1284,6 +1284,29 @@ describe('Config', () => {
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([])
   })
 
+  it('should send remote config changes to telemetry', () => {
+    const config = new Config()
+
+    config.configure({
+      tracing_sampling_rate: 0
+    }, true)
+
+    expect(updateConfig.getCall(1).args[0]).to.deep.equal([
+      { name: 'sampleRate', value: 0, origin: 'remote_config' }
+    ])
+  })
+
+  it('should have consistent runtime-id after remote configuration updates tags', () => {
+    const config = new Config()
+    const runtimeId = config.tags['runtime-id']
+    config.configure({
+      tracing_tags: { foo: 'bar' }
+    }, true)
+
+    expect(config.tags).to.have.property('foo', 'bar')
+    expect(config.tags).to.have.property('runtime-id', runtimeId)
+  })
+
   it('should ignore invalid iast.requestSampling', () => {
     const config = new Config({
       experimental: {

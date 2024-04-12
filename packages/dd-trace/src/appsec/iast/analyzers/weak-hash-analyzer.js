@@ -20,11 +20,15 @@ const EXCLUDED_LOCATIONS = getNodeModulesPaths(
   'pusher/lib/utils.js',
   'redlock/dist/cjs',
   'sqreen/lib/package-reader/index.js',
-  'ws/lib/websocket-server.js'
+  'ws/lib/websocket-server.js',
+  'google-gax/build/src/grpc.js',
+  'cookie-signature/index.js'
 )
 
 const EXCLUDED_PATHS_FROM_STACK = [
-  path.join('node_modules', 'object-hash', path.sep)
+  path.join('node_modules', 'object-hash', path.sep),
+  path.join('node_modules', 'aws-sdk', 'lib', 'util.js'),
+  path.join('node_modules', 'keygrip', path.sep)
 ]
 class WeakHashAnalyzer extends Analyzer {
   constructor () {

@@ -19,7 +19,8 @@ const {
   TEST_SOURCE_FILE,
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
-  TEST_IS_RETRY
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_IS_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -261,8 +262,11 @@ versions.forEach((version) => {
           const receiverPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
                 test.resource ===
                   'landing-page-test.js.should work with passing tests'
@@ -431,6 +435,56 @@ versions.forEach((version) => {
 
           childProcess.on('exit', () => {
             receiverPromise.then(() => done()).catch(done)
+          })
+        })
+        it('does not run EFD if the known tests request fails', (done) => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD
+              }
+            }
+          })
+
+          receiver.setKnownTestsResponseCode(500)
+          receiver.setKnownTests({})
+
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.equal(tests.length, 7)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 0)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`
+              },
+              stdio: 'pipe'
+            }
+          )
+
+          childProcess.on('exit', () => {
+            receiverPromise
+              .then(() => done())
+              .catch(done)
           })
         })
       })

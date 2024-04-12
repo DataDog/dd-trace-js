@@ -4,5 +4,5 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@v4
-    - run: docker-compose up -d testagent
+    - run: docker compose up -d testagent
       shell: bash

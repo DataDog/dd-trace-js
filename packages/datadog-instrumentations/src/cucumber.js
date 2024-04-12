@@ -292,6 +292,8 @@ function getWrappedStart (start, frameworkVersion) {
       const knownTestsResponse = await knownTestsPromise
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
+      } else {
+        isEarlyFlakeDetectionEnabled = false
       }
     }
 

@@ -114,6 +114,10 @@ function getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, ev
 
     const commitsToUpload = getCommitsRevList(alreadySeenCommits, commitsToInclude)
 
+    if (commitsToUpload === null) {
+      return callback(new Error('git rev-list failed'))
+    }
+
     callback(null, commitsToUpload)
   })
 }
@@ -252,9 +256,8 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     return callback(new Error('Repository URL is empty'))
   }
 
-  const latestCommits = getLatestCommits()
+  let latestCommits = getLatestCommits()
   log.debug(`There were ${latestCommits.length} commits since last month.`)
-  const [headCommit] = latestCommits
 
   const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
     if (err) {
@@ -268,6 +271,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
 
     // If it has already unshallowed or the clone is not shallow, we move on
     if (hasCheckedShallow || !isShallowRepository()) {
+      const [headCommit] = latestCommits
       return generateAndUploadPackFiles({
         url,
         isEvpProxy,
@@ -280,6 +284,9 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
     unshallowRepository()
+
+    // The latest commits change after unshallowing
+    latestCommits = getLatestCommits()
     getCommitsToUpload({
       url,
       repositoryUrl,
