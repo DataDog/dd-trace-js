@@ -1,10 +1,10 @@
 stages:
-  - manual_images
   - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
+  - manual_images
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
@@ -72,6 +72,7 @@ package_version:
    - |
       verdaccio &
       sleep 5
+      npm adduser --registry http://localhost:4873
       echo "step 1"
       yarn install
       echo "step 2"  
