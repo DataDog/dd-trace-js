@@ -23,7 +23,7 @@ describe('Plugin', () => {
   let realVersion
 
   describe('openai', () => {
-    withVersions('openai', 'openai', '>=4', version => {
+    withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -2575,6 +2575,134 @@ describe('Plugin', () => {
             }
 
             await checkTraces
+          })
+        })
+
+        describe('create chat completion with tools', () => {
+          let scope
+
+          beforeEach(() => {
+            scope = nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, {
+                id: 'chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN',
+                object: 'chat.completion',
+                created: 1684188020,
+                model: 'gpt-3.5-turbo-0301',
+                usage: {
+                  prompt_tokens: 37,
+                  completion_tokens: 10,
+                  total_tokens: 47
+                },
+                choices: [{
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    name: 'hunter2',
+                    tool_calls: [
+                      {
+                        id: 'tool-1',
+                        type: 'function',
+                        'function': {
+                          name: 'extract_fictional_info',
+                          arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
+                        }
+                      }
+                    ]
+                  },
+                  finish_reason: 'tool_calls',
+                  index: 0
+                }]
+              }, [
+                'Date', 'Mon, 15 May 2023 22:00:21 GMT',
+                'Content-Type', 'application/json',
+                'Content-Length', '327',
+                'access-control-allow-origin', '*',
+                'openai-model', 'gpt-3.5-turbo-0301',
+                'openai-organization', 'kill-9',
+                'openai-processing-ms', '713',
+                'openai-version', '2020-10-01'
+              ])
+          })
+
+          afterEach(() => {
+            nock.removeInterceptor(scope)
+            scope.done()
+          })
+
+          it('tags the tool calls successfully', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                expect(traces[0][0].meta)
+                  .to.have.property('openai.response.choices.0.message.tool_calls.0.name', 'extract_fictional_info')
+                expect(traces[0][0].meta)
+                  .to.have.property('openai.response.choices.0.message.tool_calls.0.arguments',
+                    '{"name":"SpongeBob","origin":"Bikini Bottom"}')
+                expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+              })
+
+            const input = 'My name is SpongeBob and I live in Bikini Bottom.'
+            const tools = [
+              {
+                name: 'extract_fictional_info',
+                description: 'Get the fictional information from the body of the input text',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', description: 'Name of the character' },
+                    origin: { type: 'string', description: 'Where they live' }
+                  }
+                }
+              }
+            ]
+
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.chat.completions.create({
+                model: 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: input }],
+                tools: [{ type: 'function', function: tools[0] }],
+                tool_choice: 'auto',
+                user: 'hunter2'
+              })
+
+              expect(result.choices[0].finish_reason).to.eql('tool_calls')
+            } else {
+              const result = await openai.createChatCompletion({
+                model: 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: input }],
+                tools: [{ type: 'function', function: tools[0] }],
+                tool_choice: 'auto',
+                user: 'hunter2'
+              })
+
+              expect(result.data.choices[0].finish_reason).to.eql('tool_calls')
+            }
+
+            await checkTraces
+
+            expect(externalLoggerStub).to.have.been.calledWith({
+              status: 'info',
+              message:
+                semver.satisfies(realVersion, '>=4.0.0')
+                  ? 'sampled chat.completions.create'
+                  : 'sampled createChatCompletion',
+              messages: [
+                {
+                  role: 'user',
+                  content: input,
+                  name: 'hunter2'
+                }
+              ],
+              choices: [{
+                message: {
+                  role: 'assistant',
+
+                  name: 'hunter2'
+                },
+                finish_reason: 'tool_calls',
+                index: 0
+              }]
+            })
           })
         })
 

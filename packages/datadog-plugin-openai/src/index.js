@@ -540,18 +540,27 @@ function commonCreateResponseExtraction (tags, body, store) {
 
   store.choices = body.choices
 
-  for (let i = 0; i < body.choices.length; i++) {
-    const choice = body.choices[i]
-    tags[`openai.response.choices.${i}.finish_reason`] = choice.finish_reason
-    tags[`openai.response.choices.${i}.logprobs`] = ('logprobs' in choice) ? 'returned' : undefined
-    tags[`openai.response.choices.${i}.text`] = truncateText(choice.text)
+  for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
+    const choice = body.choices[choiceIdx]
+    tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
+    tags[`openai.response.choices.${choiceIdx}.logprobs`] = ('logprobs' in choice) ? 'returned' : undefined
+    tags[`openai.response.choices.${choiceIdx}.text`] = truncateText(choice.text)
 
     // createChatCompletion only
     if ('message' in choice) {
       const message = choice.message
-      tags[`openai.response.choices.${i}.message.role`] = message.role
-      tags[`openai.response.choices.${i}.message.content`] = truncateText(message.content)
-      tags[`openai.response.choices.${i}.message.name`] = truncateText(message.name)
+      tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
+      tags[`openai.response.choices.${choiceIdx}.message.content`] = truncateText(message.content)
+      tags[`openai.response.choices.${choiceIdx}.message.name`] = truncateText(message.name)
+      if ('tool_calls' in message) {
+        const toolCalls = message.tool_calls
+        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.name`] =
+            toolCalls[toolIdx].function.name
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.arguments`] =
+            toolCalls[toolIdx].function.arguments
+        }
+      }
     }
   }
 }
