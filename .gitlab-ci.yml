@@ -81,7 +81,7 @@ package_version:
       #content=`cat ./package.json | tr '\n' ' '`
       #echo "json=$content" >> $GITHUB_OUTPUT
       #npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
-      npm publish --tag dev --provenance --registry http://localhost:4873
+      npm publish --tag dev --registry http://localhost:4873
       echo "Finish"
 
 
