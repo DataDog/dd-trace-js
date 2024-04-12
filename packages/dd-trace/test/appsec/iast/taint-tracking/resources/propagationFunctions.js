@@ -72,6 +72,15 @@ function jsonParseStr (str) {
   return JSON.parse(str)
 }
 
+function arrayJoin (str) {
+  const testArr = [str, str]
+  return testArr.join(',')
+}
+
+function arrayProtoJoin (str) {
+  return Array.prototype.join.call([str, str], ',')
+}
+
 module.exports = {
   concatSuffix,
   insertStr,
@@ -90,5 +99,7 @@ module.exports = {
   toUpperCaseStr,
   replaceStr,
   replaceRegexStr,
-  jsonParseStr
+  jsonParseStr,
+  arrayJoin,
+  arrayProtoJoin
 }

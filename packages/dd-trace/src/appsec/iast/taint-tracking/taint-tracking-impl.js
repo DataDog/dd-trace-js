@@ -17,6 +17,7 @@ function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
+  join: noop,
   concat: noop,
   parse: noop,
   plusOperator: noop,
@@ -149,6 +150,22 @@ function csiMethodsOverrides (getContext) {
               const range = ranges.find(range => range.iinfo?.type)
               res = taintObject(iastContext, res, range?.iinfo.type || JSON_VALUE)
             }
+          }
+        } catch (e) {
+          iastLog.error(e)
+        }
+      }
+
+      return res
+    },
+
+    join: function (res, fn, target, separator) {
+      if (fn === Array.prototype.join) {
+        try {
+          const iastContext = getContext()
+          const transactionId = getTransactionId(iastContext)
+          if (transactionId) {
+            res = TaintedUtils.arrayJoin(transactionId, res, target, separator)
           }
         } catch (e) {
           iastLog.error(e)

@@ -2,6 +2,7 @@
 
 const csiMethods = [
   { src: 'concat' },
+  { src: 'join' },
   { src: 'parse' },
   { src: 'plusOperator', operator: true },
   { src: 'random' },

@@ -11,6 +11,8 @@ const { clearCache } = require('../../../../src/appsec/iast/vulnerability-report
 const { expect } = require('chai')
 
 const propagationFns = [
+  'arrayProtoJoin',
+  'arrayJoin',
   'concatSuffix',
   'insertStr',
   'appendStr',
@@ -179,7 +181,14 @@ describe('TaintTracking', () => {
   })
 
   describe('should not catch original Error', () => {
-    const filtered = ['concatSuffix', 'insertStr', 'appendStr', 'concatTaintedStr']
+    const filtered = [
+      'appendStr',
+      'arrayJoin',
+      'arrayProtoJoin',
+      'concatSuffix',
+      'concatTaintedStr',
+      'insertStr'
+    ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return
       it(`invoking ${propFn} with null argument`, () => {
