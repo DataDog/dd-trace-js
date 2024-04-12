@@ -4,6 +4,7 @@ stages:
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
+  - manual_images
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
@@ -11,6 +12,9 @@ include:
   - local: ".gitlab/single-step-instrumentation-tests.yml"
 
 variables:
+  DOCKER_REGISTRY: registry.ddbuild.io
+  CI_DOCKER_IMAGE_BASE: $DOCKER_REGISTRY/ci/dd-trace-js
+  PROMOTION_TAG: current
   JS_PACKAGE_VERSION:
     description: "Version to build for .deb and .rpm. Must be already published in NPM"
   DOWNSTREAM_BRANCH:
@@ -19,6 +23,25 @@ variables:
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
+
+build-gitlab-image:
+  stage: manual_images
+  rules:
+    #- if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_PIPELINE_SOURCE == "push"
+    #  changes:
+    #    - gitlab/Dockerfile.*
+    - when: manual
+      allow_failure: true
+  tags: [ "arch:amd64" ]
+  image: $DOCKER_REGISTRY/docker:20.10.13
+  script:
+    - >
+      docker buildx build 
+      --tag $CI_DOCKER_IMAGE_BASE/gitlab:current
+      --platform linux/amd64
+      --push
+      --file ci/gitlab/Dockerfile.gitlab
+      .
 
 package_version:
   #image: docker:git

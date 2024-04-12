@@ -1,0 +1,8 @@
+FROM registry.ddbuild.io/ci/auto_inject/gitlab:current
+
+USER root
+
+RUN clean-apt install \
+    yarnpkg
+RUN ln -s /usr/bin/yarnpkg /usr/bin/yarn
+ENV NODE_PATH=/usr/lib/nodejs:/usr/share/nodejs
