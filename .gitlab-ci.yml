@@ -72,6 +72,8 @@ package_version:
    - |
       verdaccio &
       sleep 5
+      npm cache clean --force
+
       npm adduser --registry http://localhost:4873
       echo "step 1"
       yarn install
