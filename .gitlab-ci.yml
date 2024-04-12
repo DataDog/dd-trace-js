@@ -88,7 +88,7 @@ package_version:
       npm publish --tag dev --registry http://localhost:4873
       echo "Finish"
       export JS_PACKAGE_VERSION="6.0.0-pre"
-      ../.gitlab/build-deb-rpm.sh
+      ./.gitlab/build-deb-rpm.sh
 
       echo "done"
       #echo "Creating volume for verdaccio storage..."
