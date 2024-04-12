@@ -1,11 +1,10 @@
 stages:
+  - manual_images
   - package
   - deploy
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - manual_images
-
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
@@ -74,7 +73,15 @@ package_version:
       echo "step 1"
       yarn install
       echo "step 2"  
-      npm pack --tag dev --provenance
+      #npm pack --tag dev --provenance
+      #content=`cat ./package.json | tr '\n' ' '`
+      #echo "json=$content" >> $GITHUB_OUTPUT
+      #npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+      npm publish --tag dev --provenance --registry http://localhost:4873
+      echo "Finish"
+
+
+
       echo "done"
       #echo "Creating volume for verdaccio storage..."
       #docker volume create verdaccio_storage;
