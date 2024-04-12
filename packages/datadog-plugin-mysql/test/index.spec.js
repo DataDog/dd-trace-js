@@ -579,7 +579,7 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `SELECT 1 + 1 AS solution`)
+                'SELECT 1 + 1 AS solution')
             } catch (e) {
               done(e)
             }
@@ -606,7 +606,7 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `SELECT 1 + 1 AS solution`)
+                'SELECT 1 + 1 AS solution')
             } catch (e) {
               done(e)
             }
@@ -633,7 +633,7 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `SELECT 1 + 1 AS solution`)
+                'SELECT 1 + 1 AS solution')
             } catch (e) {
               done(e)
             }
