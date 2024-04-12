@@ -52,6 +52,14 @@ function sliceStr (str) {
   return str.slice(1, 4)
 }
 
+function toLowerCaseStr(str) {
+  return str.toLowerCase()
+}
+
+function toUpperCaseStr(str) {
+  return str.toUpperCase()
+}
+
 function replaceStr (str) {
   return str.replace('ls', 'sl')
 }
@@ -78,6 +86,8 @@ module.exports = {
   substringStr,
   substrStr,
   sliceStr,
+  toLowerCaseStr,
+  toUpperCaseStr,
   replaceStr,
   replaceRegexStr,
   jsonParseStr

@@ -25,6 +25,7 @@ const TaintTrackingNoop = {
   slice: noop,
   substr: noop,
   substring: noop,
+  stringCase: noop,
   trim: noop,
   trimEnd: noop
 }
@@ -112,6 +113,13 @@ function csiMethodsOverrides (getContext) {
       }
       return res
     },
+
+    stringCase: getCsiFn(
+      (transactionId, res, target) => TaintedUtils.stringCase(transactionId, res, target),
+      getContext,
+      String.prototype.toLowerCase,
+      String.prototype.toUpperCase
+    ),
 
     trim: getCsiFn(
       (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),

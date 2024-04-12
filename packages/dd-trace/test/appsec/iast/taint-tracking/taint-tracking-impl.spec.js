@@ -24,6 +24,8 @@ const propagationFns = [
   'substringStr',
   'substrStr',
   'sliceStr',
+  'toLowerCaseStr',
+  'toUpperCaseStr',
   'replaceStr',
   'replaceRegexStr'
 ]
