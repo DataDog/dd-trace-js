@@ -85,6 +85,7 @@ package_snapshot:
       current_version=$(jq '.version' <<< "$content" )
       current_version=$(echo "$current_version" | tr -d '"')
       current_version+="$CI_VERSION_SUFFIX"
+      current_version="4.0.0.beta.1"
       npm version --no-git-tag-version $current_version
       npm publish --tag dev --registry http://localhost:4873
       echo "Finish"
