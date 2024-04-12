@@ -11,7 +11,6 @@ source common_build_functions.sh
 # Extract package to a dir to make changes
 fpm --input-type npm \
   --npm-package-name-prefix "" \
-  --npm-registry http://localhost:4873 \
   --output-type dir --prefix "" \
   --version "$JS_PACKAGE_VERSION" \
   --verbose \
