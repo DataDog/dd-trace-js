@@ -40,7 +40,6 @@ build-gitlab-image:
       --file .gitlab/Dockerfile.gitlab
       .
 
-
 package-snapshot:
   extends: .package
   tags: ["arch:amd64"]
