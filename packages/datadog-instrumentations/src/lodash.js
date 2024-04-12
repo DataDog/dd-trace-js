@@ -8,6 +8,7 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
   const trimCh = channel('datadog:lodash:trim')
   const trimEndCh = channel('datadog:lodash:trimEnd')
   const stringCaseCh = channel('datadog:lodash:stringCase')
+  const arrayJoinCh = channel('datadog:lodash:arrayJoin')
 
   shimmer.wrap(lodash, 'trim', trim => {
     return function (string, chars, guard) {
@@ -69,6 +70,19 @@ addHook({ name: 'lodash', versions: ['>=4'] }, lodash => {
 
       const result = toUpper(value)
       stringCaseCh.publish({ value, result })
+
+      return result
+    }
+  })
+
+  shimmer.wrap(lodash, 'join', join => {
+    return function (array, separator) {
+      if (!arrayJoinCh.hasSubscribers) {
+        return join(...arguments)
+      }
+
+      const result = join(...arguments)
+      arrayJoinCh.publish({ arguments, result })
 
       return result
     }

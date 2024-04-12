@@ -10,13 +10,15 @@ const {
   getTaintTrackingNoop,
   lodashTrim,
   lodashTrimEnd,
-  lodashStringCase
+  lodashStringCase,
+  lodashArrayJoin
 } = require('./taint-tracking-impl')
 const { taintObject } = require('./operations-taint-object')
 
 const lodashTrimCh = dc.channel('datadog:lodash:trim')
 const lodashTrimEndCh = dc.channel('datadog:lodash:trimEnd')
 const lodashStringCaseCh = dc.channel('datadog:lodash:stringCase')
+const lodashArrayJoinCh = dc.channel('datadog:lodash:arrayJoin')
 
 function createTransaction (id, iastContext) {
   if (id && iastContext) {
@@ -115,6 +117,12 @@ function enableTaintOperations (telemetryVerbosity) {
 
   lodashStringCaseCh.subscribe(({ value, result }) => {
     lodashStringCase(value, result)
+  })
+
+  lodashArrayJoinCh.subscribe(({ arguments: arrayJoinArgs, result }) => {
+    const target = arrayJoinArgs[0]
+    const separator = arrayJoinArgs[1]
+    lodashArrayJoin(target, result, separator)
   })
 }
 

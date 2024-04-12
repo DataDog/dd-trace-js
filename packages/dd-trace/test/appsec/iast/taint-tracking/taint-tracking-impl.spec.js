@@ -37,7 +37,9 @@ const propagationLodashFns = [
   'toUpperLodash',
   'trimLodash',
   'trimStartLodash',
-  'trimEndLodash'
+  'trimEndLodash',
+  'arrayJoinLodashWithoutSeparator',
+  'arrayJoinLodashWithSeparator'
 ]
 
 const commands = [

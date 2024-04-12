@@ -240,10 +240,24 @@ function lodashStringCase (target, result) {
   }
 }
 
+function lodashArrayJoin (target, result, separator) {
+  try {
+    const context = getContextDefault()
+    const transactionId = getTransactionId(context)
+    if (transactionId) {
+      result = TaintedUtils.arrayJoin(transactionId, result, target, separator)
+    }
+  } catch (e) {
+    iastLog.error('Error invoking CSI lodash arrayJoin')
+      .errorAndPublish(e)
+  }
+}
+
 module.exports = {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
   lodashTrim,
   lodashTrimEnd,
-  lodashStringCase
+  lodashStringCase,
+  lodashArrayJoin
 }

@@ -18,10 +18,20 @@ function toUpperLodash (_, str) {
   return _.toUpper(str)
 }
 
+function arrayJoinLodashWithoutSeparator (_, str) {
+  return _.join([str, str])
+}
+
+function arrayJoinLodashWithSeparator (_, str) {
+  return _.join([str, str], str)
+}
+
 module.exports = {
   trimLodash,
   trimStartLodash,
   trimEndLodash,
   toLowerLodash,
-  toUpperLodash
+  toUpperLodash,
+  arrayJoinLodashWithoutSeparator,
+  arrayJoinLodashWithSeparator
 }
