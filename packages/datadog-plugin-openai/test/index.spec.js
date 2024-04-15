@@ -2671,10 +2671,9 @@ describe('Plugin', () => {
             } else {
               const result = await openai.createChatCompletion({
                 model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: input }],
+                messages: [{ role: 'user', content: input, name: 'hunter2' }],
                 tools: [{ type: 'function', function: tools[0] }],
-                tool_choice: 'auto',
-                name: 'hunter2'
+                tool_choice: 'auto'
               })
 
               expect(result.data.choices[0].finish_reason).to.eql('tool_calls')
