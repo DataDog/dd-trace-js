@@ -12,9 +12,7 @@ include:
   - local: ".gitlab/single-step-instrumentation-tests.yml"
 
 variables:
- # DOCKER_REGISTRY: registry.ddbuild.io
- # CI_DOCKER_IMAGE_BASE: $DOCKER_REGISTRY/ci/dd-trace-js
- # PROMOTION_TAG: current
+
   JS_PACKAGE_VERSION:
     description: "Version to build for .deb and .rpm. Must be already published in NPM"
   DOWNSTREAM_BRANCH:
@@ -24,26 +22,9 @@ variables:
 .common: &common
   tags: [ "runner:main", "size:large" ]
 
-build-gitlab-image:
-  stage: manual_images
-  rules:
-    - when: manual
-      allow_failure: true
-  tags: [ "arch:amd64" ]
-  image: $DOCKER_REGISTRY/docker:20.10.13
-  script:
-    - >
-      docker buildx build 
-      --tag $CI_DOCKER_IMAGE_BASE/gitlab:current
-      --platform linux/amd64
-      --push
-      --file .gitlab/Dockerfile.gitlab
-      .
 
 package-snapshot:
   extends: .package
-  #tags: ["arch:amd64"]
-  #image: registry.ddbuild.io/ci/dd-trace-js/gitlab:current
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
@@ -64,8 +45,6 @@ package-snapshot:
 
 package-snapshot-arm:
   extends: .package-arm
-  #tags: ["arch:amd64"]
-  #image: registry.ddbuild.io/ci/dd-trace-js/gitlab:current
   stage: package
   rules:
     - if: $JS_PACKAGE_VERSION
