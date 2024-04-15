@@ -1,11 +1,7 @@
 #!/bin/bash
 
-#This script uses verdaccio to publish the package to a local registry
-#We build the npm package setting the snapshot version and then we publish it to the local registry
-#Use local registry  to build the deb and rpm packages
+#We build the npm package setting the snapshot version and then we use it to build the deb and rpm packages
 
-#npm install -g npm-cli-adduser
-#npm-cli-adduser -u test -p test -e email@email.com -r http://localhost:4873
 yarn install
 content=`cat ./package.json | tr '\n' ' '`
 current_version=$(jq '.version' <<< "$content" )
