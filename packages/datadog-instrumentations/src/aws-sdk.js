@@ -161,11 +161,11 @@ function getChannelSuffix (name) {
     'lambda',
     'redshift',
     's3',
+    'sfn',
     'sns',
     'sqs',
-    'stepfunctions',
-    'sfn',
-    'states'
+    'states',
+    'stepfunctions'
   ].includes(name) ? name : 'default'
 }
 

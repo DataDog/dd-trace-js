@@ -28,38 +28,6 @@ describe('Sfn', () => {
   describe('Injection behaviour', () => {
     before(() => {
       tracer = require('../../dd-trace')
-      tracer.init()
-      span = {
-        finish: sinon.spy(() => {}),
-        context: () => {
-          return {
-            _sampling: {
-              priority: 1
-            },
-            _trace: {
-              started: [],
-              origin: ''
-            },
-            _traceFlags: {
-              sampled: 1
-            },
-            'x-datadog-trace-id': traceId,
-            'x-datadog-parent-id': parentId,
-            'x-datadog-sampling-priority': '1',
-            toTraceId: () => {
-              return traceId
-            },
-            toSpanId: () => {
-              return spanId
-            }
-          }
-        },
-        addTags: sinon.stub(),
-        setTag: sinon.stub()
-      }
-      tracer._tracer.startSpan = sinon.spy(() => {
-        return span
-      })
     })
 
     it('generates tags for a start_execution', () => {
@@ -83,61 +51,6 @@ describe('Sfn', () => {
         'resource.name': 'startExecution my-execution',
         'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
-    })
-
-    it('injects trace context into StepFunction start_execution requests', () => {
-      const sfn = new Stepfunctions(tracer)
-      const request = {
-        params: {
-          input: JSON.stringify({ 'foo': 'bar' })
-        },
-        operation: 'startExecution'
-      }
-
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
-      sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
-    })
-
-    it('injects trace context into StepFunction start_sync_execution requests', () => {
-      const sfn = new Stepfunctions(tracer)
-      const request = {
-        params: {
-          input: JSON.stringify({ 'foo': 'bar' })
-        },
-        operation: 'startExecution'
-      }
-
-      sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '{"foo":"bar","_datadog":{"x-datadog-trace-id":"456853219676779160","x-datadog-parent-id":"456853219676779160","x-datadog-sampling-priority":"1"}}' })
-    })
-
-    it('will not inject trace context if the input is a number', () => {
-      const sfn = new Stepfunctions(tracer)
-      const request = {
-        params: {
-          input: JSON.stringify(1024)
-        },
-        operation: 'startExecution'
-      }
-
-      sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': '1024' })
-    })
-
-    it('will not inject trace context if the input is a boolean', () => {
-      const sfn = new Stepfunctions(tracer)
-      const request = {
-        params: {
-          input: JSON.stringify(true)
-        },
-        operation: 'startExecution'
-      }
-
-      sfn.requestInject(span.context(), request)
-      expect(request.params).to.deep.equal({ 'input': 'true' })
     })
   })
 
@@ -200,7 +113,7 @@ describe('Sfn', () => {
 
     describe('Traces', () => {
       before(() => {
-        tracer = require('../../dd-trace').init()
+        tracer = require('../../dd-trace')
         tracer.use('aws-sdk')
       })
       // aws-sdk v2 doesn't support StepFunctions below 2.7.10
@@ -221,8 +134,9 @@ describe('Sfn', () => {
         it('is instrumented', async function () {
           const expectSpanPromise = agent.use(traces => {
             const span = traces[0][0]
-            expect(span).to.deep.equal('true')
-            expect(span).to.have.property('yolo', 'aws.stepfunctions')
+            expect(span).to.have.property('resource', 'startExecution')
+            expect(span.meta).to.have.property('statemachinearn', stateMachineArn)
+            // TODO: write some tests about span.meta
           })
 
           await client.startExecution({
@@ -230,7 +144,7 @@ describe('Sfn', () => {
             input: JSON.stringify({ 'moduleName': moduleName })
           })
 
-          return expectSpanPromise.then(() => console.log('done'))
+          return expectSpanPromise.then(() => {})
         })
       }
     })

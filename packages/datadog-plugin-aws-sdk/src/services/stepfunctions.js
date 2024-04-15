@@ -29,10 +29,11 @@ class Stepfunctions extends BaseAwsSdkPlugin {
 
   generateTags (params, operation, response) {
     if (!params) return {}
-    return {
-      'resource.name': params.name ? `${operation} ${params.name}` : `${operation}`,
-      'statemachinearn': `${params.stateMachineArn}`
+    const tags = { 'resource.name': params.name ? `${operation} ${params.name}` : `${operation}` }
+    if (operation === 'startExecution' || operation === 'startSyncExecution') {
+      tags['statemachinearn'] = `${params.stateMachineArn}`
     }
+    return tags
   }
 
   requestInject (span, request) {
