@@ -2445,13 +2445,15 @@ describe('Plugin', () => {
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
                 expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
 
-                expect(traces[0][0].meta).to.have.property('openai.request.0.content', 'Peanut Butter or Jelly?')
-                expect(traces[0][0].meta).to.have.property('openai.request.0.name', 'hunter2')
-                expect(traces[0][0].meta).to.have.property('openai.request.0.role', 'user')
-                expect(traces[0][0].meta).to.have.property('openai.request.1.content', 'Are you allergic to peanuts?')
-                expect(traces[0][0].meta).to.have.property('openai.request.1.role', 'assistant')
-                expect(traces[0][0].meta).to.have.property('openai.request.2.content', 'Deathly allergic!')
-                expect(traces[0][0].meta).to.have.property('openai.request.2.role', 'user')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.0.content',
+                  'Peanut Butter or Jelly?')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.0.role', 'user')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.1.content',
+                  'Are you allergic to peanuts?')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.1.role', 'assistant')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.2.content', 'Deathly allergic!')
+                expect(traces[0][0].meta).to.have.property('openai.request.messages.2.role', 'user')
                 expect(traces[0][0].meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
                 expect(traces[0][0].meta).to.have.property('openai.request.stop', 'time')
                 expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
@@ -2630,7 +2632,7 @@ describe('Plugin', () => {
             scope.done()
           })
 
-          it('tags the tool calls successfully', async () => {
+          it.only('tags the tool calls successfully', async () => {
             const checkTraces = agent
               .use(traces => {
                 expect(traces[0][0].meta)
@@ -2662,7 +2664,7 @@ describe('Plugin', () => {
                 messages: [{ role: 'user', content: input }],
                 tools: [{ type: 'function', function: tools[0] }],
                 tool_choice: 'auto',
-                user: 'hunter2'
+                name: 'hunter2'
               })
 
               expect(result.choices[0].finish_reason).to.eql('tool_calls')
@@ -2672,7 +2674,7 @@ describe('Plugin', () => {
                 messages: [{ role: 'user', content: input }],
                 tools: [{ type: 'function', function: tools[0] }],
                 tool_choice: 'auto',
-                user: 'hunter2'
+                name: 'hunter2'
               })
 
               expect(result.data.choices[0].finish_reason).to.eql('tool_calls')

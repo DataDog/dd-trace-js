@@ -282,10 +282,10 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
-    tags[`openai.request.${i}.content`] = truncateText(message.content)
-    tags[`openai.request.${i}.role`] = message.role
-    tags[`openai.request.${i}.name`] = message.name
-    tags[`openai.request.${i}.finish_reason`] = message.finish_reason
+    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tags[`openai.request.messages.${i}.role`] = message.role
+    tags[`openai.request.messages.${i}.name`] = message.name
+    tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
   }
 }
 
