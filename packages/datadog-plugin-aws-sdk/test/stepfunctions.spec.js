@@ -19,11 +19,7 @@ const helloWorldSMD = {
 }
 
 describe('Sfn', () => {
-  let span
   let tracer
-  let traceId
-  let parentId
-  let spanId
 
   describe('Injection behaviour', () => {
     before(() => {
