@@ -54,7 +54,8 @@ function _resetGlobalContext () {
 function acquireRequest (rootSpan) {
   if (availableRequest > 0 && rootSpan) {
     const sampling = config && typeof config.requestSampling === 'number'
-      ? config.requestSampling : 30
+      ? config.requestSampling
+      : 30
     if (rootSpan.context().toSpanId().slice(-2) <= sampling) {
       availableRequest--
       return true

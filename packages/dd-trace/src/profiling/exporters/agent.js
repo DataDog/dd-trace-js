@@ -9,6 +9,8 @@ const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
+const os = require('os')
+const perf = require('perf_hooks').performance
 
 const containerId = docker.id()
 
@@ -50,7 +52,7 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout } = {}) {
+  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
     this._url = url
     this._logger = logger
 
@@ -58,48 +60,87 @@ class AgentExporter {
 
     this._backoffTime = backoffTime
     this._backoffTries = backoffTries
+    this._env = env
+    this._host = host
+    this._service = service
+    this._appVersion = version
   }
 
   export ({ profiles, start, end, tags }) {
-    const types = Object.keys(profiles)
+    const fields = []
 
-    const fields = [
-      ['recording-start', start.toISOString()],
-      ['recording-end', end.toISOString()],
-      ['language', 'javascript'],
-      ['runtime', 'nodejs'],
-      ['runtime_version', process.version],
-      ['profiler_version', version],
-      ['format', 'pprof'],
+    function typeToFile (type) {
+      return `${type}.pprof`
+    }
 
-      ['tags[]', 'language:javascript'],
-      ['tags[]', 'runtime:nodejs'],
-      ['tags[]', `runtime_version:${process.version}`],
-      ['tags[]', `process_id:${process.pid}`],
-      ['tags[]', `profiler_version:${version}`],
-      ['tags[]', 'format:pprof'],
-      ...Object.entries(tags).map(([key, value]) => ['tags[]', `${key}:${value}`])
-    ]
-
-    this._logger.debug(() => {
-      const body = fields.map(([key, value]) => `  ${key}: ${value}`).join('\n')
-      return `Building agent export report: ${'\n' + body}`
+    const event = JSON.stringify({
+      attachments: Object.keys(profiles).map(typeToFile),
+      start: start.toISOString(),
+      end: end.toISOString(),
+      family: 'node',
+      version: '4',
+      tags_profiler: [
+        'language:javascript',
+        'runtime:nodejs',
+        `runtime_arch:${process.arch}`,
+        `runtime_os:${process.platform}`,
+        `runtime_version:${process.version}`,
+        `process_id:${process.pid}`,
+        `profiler_version:${version}`,
+        'format:pprof',
+        ...Object.entries(tags).map(([key, value]) => `${key}:${value}`)
+      ].join(','),
+      info: {
+        application: {
+          env: this._env,
+          service: this._service,
+          start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
+          version: this._appVersion
+        },
+        platform: {
+          hostname: this._host,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version()
+        },
+        profiler: {
+          version
+        },
+        runtime: {
+          // Using `nodejs` for consistency with the existing `runtime` tag.
+          // Note that the event `family` property uses `node`, as that's what's
+          // proscribed by the Intake API, but that's an internal enum and is
+          // not customer visible.
+          engine: 'nodejs',
+          // strip off leading 'v'. This makes the format consistent with other
+          // runtimes (e.g. Ruby) but not with the existing `runtime_version` tag.
+          // We'll keep it like this as we want cross-engine consistency. We
+          // also aren't changing the format of the existing tag as we don't want
+          // to break it.
+          version: process.version.substring(1)
+        }
+      }
     })
 
-    for (let index = 0; index < types.length; index++) {
-      const type = types[index]
-      const buffer = profiles[type]
+    fields.push(['event', event, {
+      filename: 'event.json',
+      contentType: 'application/json'
+    }])
 
+    this._logger.debug(() => {
+      return `Building agent export report:\n${event}`
+    })
+
+    for (const [type, buffer] of Object.entries(profiles)) {
       this._logger.debug(() => {
         const bytes = buffer.toString('hex').match(/../g).join(' ')
         return `Adding ${type} profile to agent export: ` + bytes
       })
 
-      fields.push([`types[${index}]`, type])
-      fields.push([`data[${index}]`, buffer, {
-        filename: `${type}.pb.gz`,
-        contentType: 'application/octet-stream',
-        knownLength: buffer.length
+      const filename = typeToFile(type)
+      fields.push([filename, buffer, {
+        filename,
+        contentType: 'application/octet-stream'
       }])
     }
 
@@ -121,7 +162,11 @@ class AgentExporter {
         const options = {
           method: 'POST',
           path: '/profiling/v1/input',
-          headers: form.getHeaders(),
+          headers: {
+            'DD-EVP-ORIGIN': 'dd-trace-js',
+            'DD-EVP-ORIGIN-VERSION': version,
+            ...form.getHeaders()
+          },
           timeout: this._backoffTime * Math.pow(2, attempt)
         }
 

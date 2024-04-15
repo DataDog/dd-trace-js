@@ -11,11 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  SLACK_REPORT_ENABLE: ${{ github.event.schedule }} # value is empty for non-nightly jobs
-  SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-  SLACK_MOREINFO: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
 # TODO: upstream jobs
 
 
@@ -192,6 +187,25 @@ jobs:
     env:
       PLUGINS: amqplib
       SERVICES: rabbitmq
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  apollo:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: apollo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start

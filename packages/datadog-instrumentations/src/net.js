@@ -15,7 +15,7 @@ const startTCPCh = channel('apm:net:tcp:start')
 const finishTCPCh = channel('apm:net:tcp:finish')
 const errorTCPCh = channel('apm:net:tcp:error')
 
-const connectionCh = channel(`apm:net:tcp:connection`)
+const connectionCh = channel('apm:net:tcp:connection')
 
 const names = ['net', 'node:net']
 

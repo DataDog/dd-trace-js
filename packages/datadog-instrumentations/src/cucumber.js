@@ -17,6 +17,7 @@ const testSuiteFinishCh = channel('ci:cucumber:test-suite:finish')
 const testSuiteCodeCoverageCh = channel('ci:cucumber:test-suite:code-coverage')
 
 const libraryConfigurationCh = channel('ci:cucumber:library-configuration')
+const knownTestsCh = channel('ci:cucumber:known-tests')
 const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
@@ -41,12 +42,18 @@ const originalCoverageMap = createCoverageMap()
 // TODO: remove in a later major version
 const patched = new WeakSet()
 
+const lastStatusByPickleId = new Map()
+const numRetriesByPickleId = new Map()
+
 let pickleByFile = {}
 const pickleResultByFile = {}
 let skippableSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
+let isEarlyFlakeDetectionEnabled = false
+let earlyFlakeDetectionNumRetries = 0
+let knownTests = []
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -84,6 +91,21 @@ function getStatusFromResultLatest (result) {
   return { status: 'fail', errorMessage: result.message }
 }
 
+function isNewTest (testSuite, testName) {
+  const testsForSuite = knownTests.cucumber?.[testSuite] || []
+  return !testsForSuite.includes(testName)
+}
+
+function getTestStatusFromRetries (testStatuses) {
+  if (testStatuses.every(status => status === 'fail')) {
+    return 'fail'
+  }
+  if (testStatuses.some(status => status === 'pass')) {
+    return 'pass'
+  }
+  return 'pass'
+}
+
 function wrapRun (pl, isLatestVersion) {
   if (patched.has(pl)) return
 
@@ -98,18 +120,7 @@ function wrapRun (pl, isLatestVersion) {
     return asyncResource.runInAsyncScope(() => {
       const testFileAbsolutePath = this.pickle.uri
 
-      if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
-        isUnskippable = isMarkedAsUnskippable(this.pickle)
-        const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-        isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
-
-        testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
-      }
-
-      const testSourceLine = this.gherkinDocument &&
-        this.gherkinDocument.feature &&
-        this.gherkinDocument.feature.location &&
-        this.gherkinDocument.feature.location.line
+      const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
       testStartCh.publish({
         testName: this.pickle.name,
@@ -121,32 +132,23 @@ function wrapRun (pl, isLatestVersion) {
         promise.finally(() => {
           const result = this.getWorstStepResult()
           const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+            ? getStatusFromResultLatest(result)
+            : getStatusFromResult(result)
 
-          if (!pickleResultByFile[testFileAbsolutePath]) {
-            pickleResultByFile[testFileAbsolutePath] = [status]
+          if (lastStatusByPickleId.has(this.pickle.id)) {
+            lastStatusByPickleId.get(this.pickle.id).push(status)
           } else {
-            pickleResultByFile[testFileAbsolutePath].push(status)
+            lastStatusByPickleId.set(this.pickle.id, [status])
           }
-          testFinishCh.publish({ status, skipReason, errorMessage })
-          // last test in suite
-          if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
-            const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
-            if (global.__coverage__) {
-              const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+          let isNew = false
+          let isEfdRetry = false
+          if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+            const numRetries = numRetriesByPickleId.get(this.pickle.id)
 
-              testSuiteCodeCoverageCh.publish({
-                coverageFiles,
-                suiteFile: testFileAbsolutePath
-              })
-              // We need to reset coverage to get a code coverage per suite
-              // Before that, we preserve the original coverage
-              mergeCoverage(global.__coverage__, originalCoverageMap)
-              resetCoverage(global.__coverage__)
-            }
-
-            testSuiteFinishCh.publish(testSuiteStatus)
+            isNew = numRetries !== undefined
+            isEfdRetry = numRetries > 0
           }
+          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry })
         })
         return promise
       } catch (err) {
@@ -176,7 +178,8 @@ function wrapRun (pl, isLatestVersion) {
 
         promise.then((result) => {
           const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result) : getStatusFromResult(result)
+            ? getStatusFromResultLatest(result)
+            : getStatusFromResult(result)
 
           testFinishCh.publish({ isStep: true, status, skipReason, errorMessage })
         })
@@ -258,12 +261,11 @@ function getPickleByFile (runtime) {
   }, {})
 }
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.0.0'],
-  file: 'lib/runtime/index.js'
-}, (runtimePackage, frameworkVersion) => {
-  shimmer.wrap(runtimePackage.default.prototype, 'start', start => async function () {
+function getWrappedStart (start, frameworkVersion) {
+  return async function () {
+    if (!libraryConfigurationCh.hasSubscribers) {
+      return start.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     let onDone
 
@@ -275,7 +277,25 @@ addHook({
       libraryConfigurationCh.publish({ onDone })
     })
 
-    await configPromise
+    const configurationResponse = await configPromise
+
+    isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
+    earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
+
+    if (isEarlyFlakeDetectionEnabled) {
+      const knownTestsPromise = new Promise(resolve => {
+        onDone = resolve
+      })
+      asyncResource.runInAsyncScope(() => {
+        knownTestsCh.publish({ onDone })
+      })
+      const knownTestsResponse = await knownTestsPromise
+      if (!knownTestsResponse.err) {
+        knownTests = knownTestsResponse.knownTests
+      } else {
+        isEarlyFlakeDetectionEnabled = false
+      }
+    }
 
     const skippableSuitesPromise = new Promise(resolve => {
       onDone = resolve
@@ -342,11 +362,110 @@ addHook({
         testCodeCoverageLinesTotal,
         numSkippedSuites: skippedSuites.length,
         hasUnskippableSuites: isUnskippable,
-        hasForcedToRunSuites: isForcedToRun
+        hasForcedToRunSuites: isForcedToRun,
+        isEarlyFlakeDetectionEnabled
       })
     })
     return success
-  })
+  }
+}
+
+function getWrappedRunTest (runTestFunction) {
+  return async function (pickleId) {
+    const test = this.eventDataCollector.getPickle(pickleId)
+
+    const testFileAbsolutePath = test.uri
+    const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+
+    if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
+      isUnskippable = isMarkedAsUnskippable(test)
+      isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
+
+      testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
+    }
+
+    let isNew = false
+
+    if (isEarlyFlakeDetectionEnabled) {
+      isNew = isNewTest(testSuitePath, test.name)
+      if (isNew) {
+        numRetriesByPickleId.set(pickleId, 0)
+      }
+    }
+    const runTestCaseResult = await runTestFunction.apply(this, arguments)
+
+    const testStatuses = lastStatusByPickleId.get(pickleId)
+    const lastTestStatus = testStatuses[testStatuses.length - 1]
+    // If it's a new test and it hasn't been skipped, we run it again
+    if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
+      for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
+        numRetriesByPickleId.set(pickleId, retryIndex + 1)
+        await runTestFunction.apply(this, arguments)
+      }
+    }
+    let testStatus = lastTestStatus
+    if (isEarlyFlakeDetectionEnabled) {
+      /**
+       * If Early Flake Detection (EFD) is enabled the logic is as follows:
+       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+       * - If just a single attempt passes, we will prevent the test process from failing.
+       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+       */
+      testStatus = getTestStatusFromRetries(testStatuses)
+      if (testStatus === 'pass') {
+        this.success = true
+      }
+    }
+
+    if (!pickleResultByFile[testFileAbsolutePath]) {
+      pickleResultByFile[testFileAbsolutePath] = [testStatus]
+    } else {
+      pickleResultByFile[testFileAbsolutePath].push(testStatus)
+    }
+
+    // last test in suite
+    if (pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
+      const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
+      if (global.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          suiteFile: testFileAbsolutePath
+        })
+        // We need to reset coverage to get a code coverage per suite
+        // Before that, we preserve the original coverage
+        mergeCoverage(global.__coverage__, originalCoverageMap)
+        resetCoverage(global.__coverage__)
+      }
+
+      testSuiteFinishCh.publish(testSuiteStatus)
+    }
+
+    return runTestCaseResult
+  }
+}
+
+// From 7.3.0 onwards, runPickle becomes runTestCase
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/index.js'
+}, (runtimePackage, frameworkVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
+  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
+
+  return runtimePackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.0.0 <7.3.0'],
+  file: 'lib/runtime/index.js'
+}, (runtimePackage, frameworkVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTest(runPickle))
+  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
 
   return runtimePackage
 })

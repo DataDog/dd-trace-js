@@ -118,7 +118,7 @@ withVersions('express', 'express', version => {
         }
 
         it('should get the request body schema', async () => {
-          const expectedRequestBodySchema = formatSchema([{ 'key': [8] }])
+          const expectedRequestBodySchema = formatSchema([{ key: [8] }])
           const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -133,7 +133,7 @@ withVersions('express', 'express', version => {
         })
 
         it('should get the response body schema with res.send method with object', async () => {
-          const expectedResponseBodySchema = formatSchema([{ 'sendResKey': [8] }])
+          const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
           const res = await axios.post(`http://localhost:${port}/sendjson`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -146,7 +146,7 @@ withVersions('express', 'express', version => {
         })
 
         it('should get the response body schema with res.json method', async () => {
-          const expectedResponseBodySchema = formatSchema([{ 'jsonResKey': [8] }])
+          const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
           const res = await axios.post(`http://localhost:${port}/json`, { key: 'value' })
 
           await agent.use((traces) => {
@@ -159,7 +159,7 @@ withVersions('express', 'express', version => {
         })
 
         it('should get the response body schema with res.jsonp method', async () => {
-          const expectedResponseBodySchema = formatSchema([{ 'jsonpResKey': [8] }])
+          const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
           const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
 
           await agent.use((traces) => {

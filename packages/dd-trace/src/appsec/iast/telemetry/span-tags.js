@@ -1,11 +1,11 @@
 'use strict'
 
 function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
-  if (!rootSpan || !rootSpan.addTags || !metrics) return
+  if (!rootSpan?.addTags || !metrics) return
 
   const flattenMap = new Map()
   metrics
-    .filter(data => data && data.metric)
+    .filter(data => data?.metric)
     .forEach(data => {
       const name = taggedMetricName(data)
       let total = flattenMap.get(name)
@@ -27,19 +27,20 @@ function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
 }
 
 function flatten (metricData) {
-  return metricData.points && metricData.points.map(point => point[1]).reduce((total, value) => total + value, 0)
+  const { points } = metricData
+  return points ? points.map(point => point[1]).reduce((total, value) => total + value, 0) : 0
 }
 
 function taggedMetricName (data) {
   const metric = data.metric
-  const tags = data.tags && filterTags(data.tags)
-  return !tags || !tags.length
+  const tags = filterTags(data.tags)
+  return !tags?.length
     ? metric
     : `${metric}.${processTagValue(tags)}`
 }
 
 function filterTags (tags) {
-  return tags.filter(tag => !tag.startsWith('lib_language') && !tag.startsWith('version'))
+  return tags?.filter(tag => !tag.startsWith('version'))
 }
 
 function processTagValue (tags) {

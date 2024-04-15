@@ -67,6 +67,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
 
+            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               try {
                 expect(results).to.not.be.null

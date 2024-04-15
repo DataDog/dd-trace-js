@@ -4,7 +4,7 @@ const HttpClientPlugin = require('../../datadog-plugin-http/src/client')
 
 class FetchPlugin extends HttpClientPlugin {
   static get id () { return 'fetch' }
-  static get prefix () { return `apm:fetch:request` }
+  static get prefix () { return 'apm:fetch:request' }
 
   addTraceSub (eventName, handler) {
     this.addSub(`apm:${this.constructor.id}:${this.operation}:${eventName}`, handler)

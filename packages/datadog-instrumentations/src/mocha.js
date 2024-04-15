@@ -106,7 +106,10 @@ function getTestFullName (test) {
 }
 
 function isNewTest (test) {
-  return !knownTests.includes(getTestFullName(test))
+  const testSuite = getTestSuitePath(test.file, process.cwd())
+  const testName = removeEfdStringFromTestName(test.fullTitle())
+  const testsForSuite = knownTests.mocha?.[testSuite] || []
+  return !testsForSuite.includes(testName)
 }
 
 function retryTest (test) {
@@ -480,7 +483,7 @@ addHook({
    */
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options.parallel) {
-      log.warn(`Unable to initialize CI Visibility because Mocha is running in parallel mode.`)
+      log.warn('Unable to initialize CI Visibility because Mocha is running in parallel mode.')
       return run.apply(this, arguments)
     }
 

@@ -3,8 +3,8 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { storage } = require('../../../datadog-core')
-const { CONTEXT_PROPAGATION_KEY, getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
-const { encodePathwayContext } = require('../../../dd-trace/src/datastreams/pathway')
+const { getHeadersSize } = require('../../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../../dd-trace/src/datastreams/pathway')
 
 class Sqs extends BaseAwsSdkPlugin {
   static get id () { return 'sqs' }
@@ -40,7 +40,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span ?? null, parsedMessageAttributes ?? null
+        request.operation, request.params, response, span || null, parsedMessageAttributes || null
       )
     })
 
@@ -101,7 +101,7 @@ class Sqs extends BaseAwsSdkPlugin {
     Object.assign(tags, {
       'resource.name': `${operation} ${params.QueueName || params.QueueUrl}`,
       'aws.sqs.queue_name': params.QueueName || params.QueueUrl,
-      'queuename': queueName
+      queuename: queueName
     })
 
     switch (operation) {
@@ -146,7 +146,7 @@ class Sqs extends BaseAwsSdkPlugin {
     if (parsedAttributes) {
       return {
         datadogContext: this.tracer.extract('text_map', parsedAttributes),
-        parsedAttributes: parsedAttributes
+        parsedAttributes
       }
     }
   }
@@ -192,13 +192,13 @@ class Sqs extends BaseAwsSdkPlugin {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
-      if (parsedAttributes && parsedAttributes[CONTEXT_PROPAGATION_KEY]) {
+      if (parsedAttributes && DsmPathwayCodec.contextExists(parsedAttributes)) {
         const payloadSize = getHeadersSize({
           Body: message.Body,
           MessageAttributes: message.MessageAttributes
         })
         const queue = params.QueueUrl.split('/').pop()
-        this.tracer.decodeDataStreamsContext(Buffer.from(parsedAttributes[CONTEXT_PROPAGATION_KEY]))
+        this.tracer.decodeDataStreamsContext(parsedAttributes)
         this.tracer
           .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
       }
@@ -206,38 +206,72 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   requestInject (span, request) {
-    const operation = request.operation
-    if (operation === 'sendMessage') {
-      if (!request.params) {
-        request.params = {}
-      }
-      if (!request.params.MessageAttributes) {
-        request.params.MessageAttributes = {}
-      } else if (Object.keys(request.params.MessageAttributes).length >= 10) { // SQS quota
-        // TODO: add test when the test suite is fixed
-        return
-      }
-      const ddInfo = {}
+    const { operation, params } = request
+
+    if (!params) return
+
+    switch (operation) {
+      case 'sendMessage':
+        this.injectToMessage(span, params, params.QueueUrl, true)
+        break
+      case 'sendMessageBatch':
+        for (let i = 0; i < params.Entries.length; i++) {
+          this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
+        }
+        break
+    }
+  }
+
+  injectToMessage (span, params, queueUrl, injectTraceContext) {
+    if (!params) {
+      params = {}
+    }
+    if (!params.MessageAttributes) {
+      params.MessageAttributes = {}
+    } else if (Object.keys(params.MessageAttributes).length >= 10) { // SQS quota
+      // TODO: add test when the test suite is fixed
+      return
+    }
+    const ddInfo = {}
+    // for now, we only want to inject to the first message, this may change for batches in the future
+    if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
-      request.params.MessageAttributes._datadog = {
+      params.MessageAttributes._datadog = {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo)
       }
-      if (this.config.dsmEnabled) {
-        const payloadSize = getHeadersSize({
-          Body: request.params.MessageBody,
-          MessageAttributes: request.params.MessageAttributes
-        })
-        const queue = request.params.QueueUrl.split('/').pop()
-        const dataStreamsContext = this.tracer
-          .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-        if (dataStreamsContext) {
-          const pathwayCtx = encodePathwayContext(dataStreamsContext)
-          ddInfo[CONTEXT_PROPAGATION_KEY] = pathwayCtx.toJSON()
+    }
+
+    if (this.config.dsmEnabled) {
+      if (!params.MessageAttributes._datadog) {
+        params.MessageAttributes._datadog = {
+          DataType: 'String',
+          StringValue: JSON.stringify(ddInfo)
         }
       }
-      request.params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
+
+      const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
+      if (dataStreamsContext) {
+        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+        params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
+      }
     }
+
+    if (params.MessageAttributes._datadog && Object.keys(ddInfo).length === 0) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
+    }
+  }
+
+  setDSMCheckpoint (span, params, queueUrl) {
+    const payloadSize = getHeadersSize({
+      Body: params.MessageBody,
+      MessageAttributes: params.MessageAttributes
+    })
+    const queue = queueUrl.split('/').pop()
+    const dataStreamsContext = this.tracer
+      .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
+    return dataStreamsContext
   }
 }
 

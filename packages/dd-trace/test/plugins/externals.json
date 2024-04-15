@@ -1,4 +1,22 @@
 {
+  "apollo": [
+    {
+      "name": "@apollo/subgraph",
+      "versions": [">=2.3.0"]
+    },
+    {
+      "name": "graphql",
+      "versions": ["^16.6.0"]
+    },
+    {
+      "name": "graphql-tag",
+      "versions": ["^2.12.6"]
+    },
+    {
+      "name": "@apollo/server",
+      "versions": ["^4.0.0"]
+    }
+  ],
   "aws-sdk": [
     {
       "name": "@aws-sdk/client-lambda",
@@ -255,6 +273,10 @@
     {
       "name": "bson",
       "versions": ["4.0.0"]
+    },
+    {
+      "name": "mongodb",
+      "versions": ["6.3.0"]
     }
   ],
   "mongoose": [
@@ -328,6 +350,12 @@
     {
       "name": "redis",
       "versions": ["^4"]
+    }
+  ],
+  "sequelize": [
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ]
 }

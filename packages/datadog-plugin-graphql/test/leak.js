@@ -5,7 +5,7 @@ require('../../dd-trace')
   .use('graphql')
 
 const test = require('tape')
-const graphql = require(`../../../versions/graphql`).get()
+const graphql = require('../../../versions/graphql').get()
 const profile = require('../../dd-trace/test/profile')
 
 test('graphql plugin should not leak', t => {
@@ -15,7 +15,7 @@ test('graphql plugin should not leak', t => {
     }
   `)
 
-  const source = `{ hello }`
+  const source = '{ hello }'
 
   profile(t, operation, 2000)
 

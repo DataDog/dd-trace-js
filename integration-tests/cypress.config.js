@@ -1,12 +1,32 @@
+const ddAfterRun = require('dd-trace/ci/cypress/after-run')
+const ddAfterSpec = require('dd-trace/ci/cypress/after-spec')
+const cypressFailFast = require('cypress-fail-fast/plugin')
+const ddTracePlugin = require('dd-trace/ci/cypress/plugin')
+
 module.exports = {
   defaultCommandTimeout: 100,
   e2e: {
     setupNodeEvents (on, config) {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
-        require('cypress-fail-fast/plugin')(on, config)
+        cypressFailFast(on, config)
       }
-      require('dd-trace/ci/cypress/plugin')(on, config)
-    }
+      ddTracePlugin(on, config)
+      if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
+        on('after:run', (...args) => {
+          // do custom stuff
+          // and call after-run at the end
+          return ddAfterRun(...args)
+        })
+      }
+      if (process.env.CYPRESS_ENABLE_AFTER_SPEC_CUSTOM) {
+        on('after:spec', (...args) => {
+          // do custom stuff
+          // and call after-spec at the end
+          return ddAfterSpec(...args)
+        })
+      }
+    },
+    specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
   },
   video: false,
   screenshotOnRunFailure: false

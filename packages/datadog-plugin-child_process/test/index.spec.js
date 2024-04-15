@@ -56,7 +56,7 @@ describe('Child process plugin', () => {
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.exec': JSON.stringify([ 'ls', '-l' ])
+              'cmd.exec': JSON.stringify(['ls', '-l'])
             },
             integrationName: 'system'
           }
@@ -102,7 +102,7 @@ describe('Child process plugin', () => {
               'resource.name': 'echo',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.exec': JSON.stringify([ 'echo', arg, '' ]),
+              'cmd.exec': JSON.stringify(['echo', arg, '']),
               'cmd.truncated': 'true'
             },
             integrationName: 'system'
@@ -153,7 +153,7 @@ describe('Child process plugin', () => {
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
-              'cmd.exec': JSON.stringify([ 'ls', '-l', '', '' ]),
+              'cmd.exec': JSON.stringify(['ls', '-l', '', '']),
               'cmd.truncated': 'true'
             },
             integrationName: 'system'
@@ -359,7 +359,7 @@ describe('Child process plugin', () => {
               })
 
               it('should be instrumented with error code', (done) => {
-                const command = [ 'node', '-badOption' ]
+                const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe'
                 }
@@ -473,7 +473,7 @@ describe('Child process plugin', () => {
               })
 
               it('should be instrumented with error code', (done) => {
-                const command = [ 'node', '-badOption' ]
+                const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe'
                 }
@@ -524,7 +524,7 @@ describe('Child process plugin', () => {
                 // when a process return an invalid code, in node <=16, in execFileSync with shell:true
                 // an exception is not thrown
                 it('should be instrumented with error code (override shell default behavior)', (done) => {
-                  const command = [ 'node', '-badOption' ]
+                  const command = ['node', '-badOption']
                   const options = {
                     stdio: 'pipe',
                     shell: true

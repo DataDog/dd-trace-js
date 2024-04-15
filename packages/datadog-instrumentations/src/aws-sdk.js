@@ -111,6 +111,7 @@ function wrapSmithySend (send) {
 }
 
 function wrapCb (cb, serviceName, request, ar) {
+  // eslint-disable-next-line n/handle-callback-err
   return function wrappedCb (err, response) {
     const obj = { request, response }
     return ar.runInAsyncScope(() => {

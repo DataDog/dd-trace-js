@@ -15,19 +15,21 @@ const zlib = require('zlib')
 const { Profile } = require('pprof-format')
 const semver = require('semver')
 
-async function checkProfiles (agent, proc, timeout,
+function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
+  const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   const resultPromise = agent.assertMessageReceived(({ headers, payload, files }) => {
     assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-    assert.propertyVal(payload, 'format', 'pprof')
-    assert.deepPropertyVal(payload, 'types', expectedProfileTypes)
-    for (const [index, profileType] of expectedProfileTypes.entries()) {
-      assert.propertyVal(files[index], 'originalname', `${profileType}.pb.gz`)
+    assert.propertyVal(files[0], 'originalname', 'event.json')
+    const event = JSON.parse(files[0].buffer.toString())
+    assert.propertyVal(event, 'family', 'node')
+    assert.deepPropertyVal(event, 'attachments', fileNames)
+    for (const [index, fileName] of fileNames.entries()) {
+      assert.propertyVal(files[index + 1], 'originalname', fileName)
     }
   }, timeout, multiplicity)
 
-  await processExitPromise(proc, timeout, expectBadExit)
-  return resultPromise
+  return Promise.all([processExitPromise(proc, timeout, expectBadExit), resultPromise])
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -303,7 +305,7 @@ describe('profiler', () => {
                 })
               })
             })
-            const [ port1, port2 ] = await p
+            const [port1, port2] = await p
             const args = [String(port1), String(port2), msg]
             // Invoke the profiled program, passing it the ports of the servers and
             // the expected message.
@@ -340,7 +342,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('records profile on process exit', async () => {
+    it('records profile on process exit', () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -352,7 +354,7 @@ describe('profiler', () => {
     })
 
     if (process.platform !== 'win32') { // PROF-8905
-      it('sends a heap profile on OOM with external process', async () => {
+      it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -361,7 +363,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
-      it('sends a heap profile on OOM with external process and exits successfully', async () => {
+      it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -374,7 +376,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], false, 2)
       })
 
-      it('sends a heap profile on OOM with async callback', async () => {
+      it('sends a heap profile on OOM with async callback', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -388,7 +390,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
-      it('sends heap profiles on OOM with multiple strategies', async () => {
+      it('sends heap profiles on OOM with multiple strategies', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -402,7 +404,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true, 2)
       })
 
-      it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
+      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, 50], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }

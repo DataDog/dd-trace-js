@@ -142,14 +142,12 @@ describe('format', () => {
     })
 
     it('should extract Datadog specific tags', () => {
-      spanContext._tags['operation.name'] = 'name'
       spanContext._tags['service.name'] = 'service'
       spanContext._tags['span.type'] = 'type'
       spanContext._tags['resource.name'] = 'resource'
 
       trace = format(span)
 
-      expect(trace.name).to.equal('name')
       expect(trace.service).to.equal('service')
       expect(trace.type).to.equal('type')
       expect(trace.resource).to.equal('resource')
@@ -344,7 +342,7 @@ describe('format', () => {
     it('should extract errors', () => {
       const error = new Error('boom')
 
-      spanContext._tags['error'] = error
+      spanContext._tags.error = error
       trace = format(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
@@ -357,7 +355,7 @@ describe('format', () => {
 
       error.name = null
       error.stack = null
-      spanContext._tags['error'] = error
+      spanContext._tags.error = error
       trace = format(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
@@ -376,12 +374,12 @@ describe('format', () => {
     it('should add the language tag for a basic span', () => {
       trace = format(span)
 
-      expect(trace.meta['language']).to.equal('javascript')
+      expect(trace.meta.language).to.equal('javascript')
     })
 
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
-        spanContext._tags['error'] = true
+        spanContext._tags.error = true
 
         trace = format(span)
 
@@ -389,7 +387,7 @@ describe('format', () => {
       })
 
       it('should not set the error flag when error is false', () => {
-        spanContext._tags['error'] = false
+        spanContext._tags.error = false
 
         trace = format(span)
 
@@ -397,11 +395,11 @@ describe('format', () => {
       })
 
       it('should not extract error to meta', () => {
-        spanContext._tags['error'] = true
+        spanContext._tags.error = true
 
         trace = format(span)
 
-        expect(trace.meta['error']).to.be.undefined
+        expect(trace.meta.error).to.be.undefined
       })
     })
 
@@ -427,7 +425,7 @@ describe('format', () => {
     })
 
     it('should not set the error flag for internal spans with error tag', () => {
-      spanContext._tags['error'] = new Error('boom')
+      spanContext._tags.error = new Error('boom')
       spanContext._name = 'fs.operation'
 
       trace = format(span)
@@ -469,7 +467,7 @@ describe('format', () => {
         num: '1'
       }
 
-      spanContext._tags['nested'] = tag
+      spanContext._tags.nested = tag
       trace = format(span)
 
       expect(trace.meta['nested.num']).to.equal('1')
@@ -527,8 +525,8 @@ describe('format', () => {
 
     it('should not crash on prototype-free tags objects when nesting', () => {
       const tags = Object.create(null)
-      tags['nested'] = { foo: 'bar' }
-      spanContext._tags['nested'] = tags
+      tags.nested = { foo: 'bar' }
+      spanContext._tags.nested = tags
 
       format(span)
     })

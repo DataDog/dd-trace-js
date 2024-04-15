@@ -125,7 +125,7 @@ describe('Tracer', () => {
       }, true)
 
       expect(span.addTags).to.have.been.calledWith({
-        'foo': 'bar'
+        foo: 'bar'
       })
 
       expect(testSpan).to.equal(span)
@@ -221,13 +221,13 @@ describe('Tracer', () => {
 
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
-        'foo': 'tracer',
-        'bar': 'tracer'
+        foo: 'tracer',
+        bar: 'tracer'
       }
 
       fields.tags = {
-        'bar': 'span',
-        'baz': 'span'
+        bar: 'span',
+        baz: 'span'
       }
 
       tracer = new Tracer(config)

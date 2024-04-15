@@ -9,6 +9,7 @@ class MockAbortController {
   constructor () {
     this.signal = new EventEmitter()
   }
+
   abort () {
     this.signal.emit('abort')
   }
@@ -167,7 +168,7 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
-        it(`should run the request's close event in the correct context`, done => {
+        it('should run the request\'s close event in the correct context', done => {
           app = (req, res) => {
             req.on('close', () => {
               expect(tracer.scope().active()).to.equal(null)
@@ -178,7 +179,7 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
-        it(`should run the response's close event in the correct context`, done => {
+        it('should run the response\'s close event in the correct context', done => {
           app = (req, res) => {
             const span = tracer.scope().active()
 
@@ -191,7 +192,7 @@ describe('Plugin', () => {
           request(http2, `http://localhost:${port}/user`).catch(done)
         })
 
-        it(`should run the finish event in the correct context`, done => {
+        it('should run the finish event in the correct context', done => {
           app = (req, res) => {
             const span = tracer.scope().active()
 
