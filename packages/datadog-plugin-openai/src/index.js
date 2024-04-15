@@ -112,6 +112,10 @@ class OpenApiPlugin extends TracingPlugin {
       }
     }
 
+    if ('stream' in payload) {
+      tags['openai.request.stream'] = payload.stream
+    }
+
     switch (methodName) {
       case 'createFineTune': case 'fine_tuning.jobs.create': case 'fine-tune.create':
         createFineTuneRequestExtraction(tags, payload)
@@ -277,15 +281,16 @@ function retrieveModelRequestExtraction (tags, payload) {
 }
 
 function createChatCompletionRequestExtraction (tags, payload, store) {
-  if (!defensiveArrayLength(payload.messages)) return
+  const messages = payload.messages
+  if (!defensiveArrayLength(messages)) return
 
-  store.messages = payload.messages
-  for (let i = 0; i < payload.messages.length; i++) {
-    const message = payload.messages[i]
-    tags[`openai.request.${i}.content`] = truncateText(message.content)
-    tags[`openai.request.${i}.role`] = message.role
-    tags[`openai.request.${i}.name`] = message.name
-    tags[`openai.request.${i}.finish_reason`] = message.finish_reason
+  store.messages = messages
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]
+    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tags[`openai.request.messages.${i}.role`] = message.role
+    tags[`openai.request.messages.${i}.name`] = message.name
+    tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
   }
 }
 
@@ -547,8 +552,8 @@ function commonCreateResponseExtraction (tags, body, store) {
     tags[`openai.response.choices.${choiceIdx}.text`] = truncateText(choice.text)
 
     // createChatCompletion only
-    if ('message' in choice) {
-      const message = choice.message
+    const message = choice.message || choice.delta
+    if (message) {
       tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
       tags[`openai.response.choices.${choiceIdx}.message.content`] = truncateText(message.content)
       tags[`openai.response.choices.${choiceIdx}.message.name`] = truncateText(message.name)
