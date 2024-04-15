@@ -31,7 +31,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
     if (!params) return {}
     const tags = { 'resource.name': params.name ? `${operation} ${params.name}` : `${operation}` }
     if (operation === 'startExecution' || operation === 'startSyncExecution') {
-      tags['statemachinearn'] = `${params.stateMachineArn}`
+      tags.statemachinearn = `${params.stateMachineArn}`
     }
     return tags
   }
