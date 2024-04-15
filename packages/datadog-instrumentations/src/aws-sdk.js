@@ -167,7 +167,9 @@ function getChannelSuffix (name) {
     'sqs',
     'states',
     'stepfunctions'
-  ].includes(name) ? name : 'default'
+  ].includes(name)
+    ? name
+    : 'default'
 }
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {

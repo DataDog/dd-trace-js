@@ -7,13 +7,13 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 
 const helloWorldSMD = {
-  'Comment': 'A Hello World example of the Amazon States Language using a Pass state',
-  'StartAt': 'HelloWorld',
-  'States': {
-    'HelloWorld': {
-      'Type': 'Pass',
-      'Result': 'Hello World!',
-      'End': true
+  Comment: 'A Hello World example of the Amazon States Language using a Pass state',
+  StartAt: 'HelloWorld',
+  States: {
+    HelloWorld: {
+      Type: 'Pass',
+      Result: 'Hello World!',
+      End: true
     }
   }
 }
@@ -33,7 +33,7 @@ describe('Sfn', () => {
       }
       expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
         'resource.name': 'startExecution',
-        'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
+        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
 
@@ -45,7 +45,7 @@ describe('Sfn', () => {
       }
       expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
         'resource.name': 'startExecution my-execution',
-        'statemachinearn': 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
+        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
       })
     })
   })
@@ -104,7 +104,7 @@ describe('Sfn', () => {
     }
 
     async function deleteStateMachine (arn) {
-      return client.deleteStateMachine({ 'stateMachineArn': arn })
+      return client.deleteStateMachine({ stateMachineArn: arn })
     }
 
     describe('Traces', () => {
@@ -137,7 +137,7 @@ describe('Sfn', () => {
 
           await client.startExecution({
             stateMachineArn,
-            input: JSON.stringify({ 'moduleName': moduleName })
+            input: JSON.stringify({ moduleName: moduleName })
           })
 
           return expectSpanPromise.then(() => {})
