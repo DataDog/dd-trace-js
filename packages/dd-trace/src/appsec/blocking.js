@@ -117,6 +117,10 @@ function block (req, res, rootSpan, abortController, type) {
 
   const { body, headers, statusCode } = getBlockingData(req, type, rootSpan)
 
+  for (const headerName of res.getHeaderNames()) {
+    res.removeHeader(headerName)
+  }
+
   res.writeHead(statusCode, headers).end(body)
 
   abortController?.abort()
