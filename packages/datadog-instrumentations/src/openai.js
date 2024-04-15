@@ -134,35 +134,6 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-function addStreamedChunk (content, chunk) {
-  return content.choices.map((oldChoice, choiceIdx) => {
-    const newChoice = oldChoice
-    const chunkChoice = chunk.choices[choiceIdx]
-    if (!oldChoice.finish_reason) {
-      newChoice.finish_reason = chunkChoice.finish_reason
-    }
-
-    const deltaContent = chunkChoice.delta.content
-    if (deltaContent) newChoice.delta.content += deltaContent
-
-    const tools = chunkChoice.delta.tool_calls
-
-    if (tools) {
-      newChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-        const oldTool = oldChoice.delta.tool_calls[toolIdx]
-
-        if (oldTool) {
-          oldTool.function.arguments += newTool.function.arguments
-        }
-
-        return oldTool
-      })
-    }
-
-    return newChoice
-  })
-}
-
 for (const shim of V4_PACKAGE_SHIMS) {
   const { file, targetClass, baseResource, methods } = shim
   addHook({ name: 'openai', file, versions: shim.versions || ['>=4'] }, exports => {
@@ -173,8 +144,6 @@ for (const shim of V4_PACKAGE_SHIMS) {
         if (!startCh.hasSubscribers) {
           return methodFn.apply(this, arguments)
         }
-
-        const stream = arguments[0].stream
 
         const client = this._client || this.client
 
@@ -194,52 +163,12 @@ for (const shim of V4_PACKAGE_SHIMS) {
             // the original response is wrapped in a promise, so we need to unwrap it
             .then(body => Promise.all([this.responsePromise, body]))
             .then(([{ response, options }, body]) => {
-              if (stream) {
-                let content
-                shimmer.wrap(body, 'iterator', itr => function () {
-                  const iterator = itr.apply(this, arguments)
-                  shimmer.wrap(iterator, 'next', next => function () {
-                    return next.apply(this, arguments)
-                      .then(res => {
-                        const { done, value: chunk } = res
-
-                        if (!content) {
-                          content = chunk
-                        } else if (chunk) {
-                          content.choices = addStreamedChunk(content, chunk)
-                        }
-
-                        if (done) {
-                          finishCh.publish({
-                            headers: response.headers,
-                            body: content,
-                            path: response.url,
-                            method: options.method
-                          })
-                        }
-
-                        return res
-                      })
-                      .catch(err => {
-                        errorCh.publish({ err })
-
-                        throw err
-                      })
-                      .finally(() => {
-                        shimmer.unwrap(body, 'iterator')
-                        shimmer.unwrap(iterator, 'next')
-                      })
-                  })
-                  return iterator
-                })
-              } else {
-                finishCh.publish({
-                  headers: response.headers,
-                  body,
-                  path: response.url,
-                  method: options.method
-                })
-              }
+              finishCh.publish({
+                headers: response.headers,
+                body,
+                path: response.url,
+                method: options.method
+              })
 
               return body
             })
