@@ -12,9 +12,9 @@ include:
   - local: ".gitlab/single-step-instrumentation-tests.yml"
 
 variables:
-  DOCKER_REGISTRY: registry.ddbuild.io
-  CI_DOCKER_IMAGE_BASE: $DOCKER_REGISTRY/ci/dd-trace-js
-  PROMOTION_TAG: current
+ # DOCKER_REGISTRY: registry.ddbuild.io
+ # CI_DOCKER_IMAGE_BASE: $DOCKER_REGISTRY/ci/dd-trace-js
+ # PROMOTION_TAG: current
   JS_PACKAGE_VERSION:
     description: "Version to build for .deb and .rpm. Must be already published in NPM"
   DOWNSTREAM_BRANCH:
