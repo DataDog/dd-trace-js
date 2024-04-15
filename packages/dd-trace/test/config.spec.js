@@ -198,7 +198,8 @@ describe('Config', () => {
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' },
-      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' }
+      { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
+      { name: 'sampler.rules', value: [], origin: 'default' }
     )
   })
 

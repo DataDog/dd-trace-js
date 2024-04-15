@@ -308,7 +308,8 @@ function updateConfig (changes, config) {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
-    tags: 'DD_TAGS'
+    tags: 'DD_TAGS',
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
