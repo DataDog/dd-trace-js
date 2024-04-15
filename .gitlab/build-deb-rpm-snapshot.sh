@@ -14,7 +14,7 @@ current_version+="$CI_VERSION_SUFFIX"
 npm version --no-git-tag-version $current_version
 npm pack
 export JS_PACKAGE_VERSION=$current_version
-
+cp dd-trace-$JS_PACKAGE_VERSION.tgz packaging/dd-trace-$JS_PACKAGE_VERSION.tgz
 echo "Generating Version: $JS_PACKAGE_VERSION"
 cd packaging
 echo -n $JS_PACKAGE_VERSION > auto_inject-node.version
