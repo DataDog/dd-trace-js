@@ -2632,7 +2632,7 @@ describe('Plugin', () => {
             scope.done()
           })
 
-          it.only('tags the tool calls successfully', async () => {
+          it('tags the tool calls successfully', async () => {
             const checkTraces = agent
               .use(traces => {
                 expect(traces[0][0].meta)
