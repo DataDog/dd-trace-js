@@ -345,6 +345,23 @@ describe('metrics', () => {
       ])
     })
 
+    it('should decrement with explicit arg', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.count('name')
+
+      metric.inc(3)
+
+      metric.track = sinon.spy(metric.track)
+
+      metric.dec(2)
+
+      expect(metric.track).to.be.calledWith(-2)
+
+      expect(metric.points).to.deep.equal([
+        [now / 1e3, 1]
+      ])
+    })
+
     it('should retain timestamp of first change', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name')
