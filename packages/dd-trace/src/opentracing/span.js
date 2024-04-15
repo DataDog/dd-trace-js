@@ -33,6 +33,7 @@ const integrationCounters = {
   spans_finished: {}
 }
 
+const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 
 function getIntegrationCounter (event, integration) {
@@ -96,6 +97,7 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
     spanleak.addSpan(this, operationName)
+    startCh.publish(this)
   }
 
   toString () {

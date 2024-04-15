@@ -12,6 +12,7 @@ const MAX_BUFFER_SIZE = 1024 // limit from the agent
 const TYPE_COUNTER = 'c'
 const TYPE_GAUGE = 'g'
 const TYPE_DISTRIBUTION = 'd'
+const TYPE_HISTOGRAM = 'h'
 
 class DogStatsDClient {
   constructor (options = {}) {
@@ -44,6 +45,10 @@ class DogStatsDClient {
 
   distribution (stat, value, tags) {
     this._add(stat, value, TYPE_DISTRIBUTION, tags)
+  }
+
+  histogram (stat, value, tags) {
+    this._add(stat, value, TYPE_HISTOGRAM, tags)
   }
 
   flush () {
@@ -180,16 +185,6 @@ class DogStatsDClient {
   }
 }
 
-class NoopDogStatsDClient {
-  gauge () { }
-
-  increment () { }
-
-  distribution () { }
-
-  flush () { }
-}
-
 // This is a simplified user-facing proxy to the underlying DogStatsDClient instance
 class CustomMetrics {
   constructor (config) {
@@ -229,6 +224,14 @@ class CustomMetrics {
     )
   }
 
+  histogram (stat, value, tags) {
+    return this.dogstatsd.histogram(
+      stat,
+      value,
+      CustomMetrics.tagTranslator(tags)
+    )
+  }
+
   flush () {
     return this.dogstatsd.flush()
   }
@@ -252,6 +255,5 @@ class CustomMetrics {
 
 module.exports = {
   DogStatsDClient,
-  NoopDogStatsDClient,
   CustomMetrics
 }
