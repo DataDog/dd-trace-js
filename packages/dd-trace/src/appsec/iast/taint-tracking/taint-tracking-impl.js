@@ -17,8 +17,8 @@ function noop (res) { return res }
 // NOTE: methods of this object must be synchronized with csi-methods.js file definitions!
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
-  join: noop,
   concat: noop,
+  join: noop,
   parse: noop,
   plusOperator: noop,
   random: noop,
@@ -202,12 +202,13 @@ function getTaintTrackingNoop () {
 }
 
 const lodashFns = {
-  trim: TaintedUtils.trim,
-  trimStart: TaintedUtils.trim,
-  trimEnd: TaintedUtils.trimEnd,
+  join: TaintedUtils.arrayJoin,
   toLower: TaintedUtils.stringCase,
   toUpper: TaintedUtils.stringCase,
-  join: TaintedUtils.arrayJoin
+  trim: TaintedUtils.trim,
+  trimEnd: TaintedUtils.trimEnd,
+  trimStart: TaintedUtils.trim
+
 }
 
 function getLodashTaintedUtilFn (lodashFn) {
