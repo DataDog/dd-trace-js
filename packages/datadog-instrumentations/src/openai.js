@@ -56,11 +56,18 @@ const V4_PACKAGE_SHIMS = [
     methods: ['createVariation', 'edit', 'generate']
   },
   {
+    file: 'resources/fine-tuning/jobs/jobs.js',
+    targetClass: 'Jobs',
+    baseResource: 'fine_tuning.jobs',
+    methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
+    versions: ['>=4.34.0'] // file location changed in 4.34.0
+  },
+  {
     file: 'resources/fine-tuning/jobs.js',
     targetClass: 'Jobs',
     baseResource: 'fine_tuning.jobs',
     methods: ['cancel', 'create', 'list', 'listEvents', 'retrieve'],
-    versions: ['>=4.1.0']
+    versions: ['>=4.1.0 <4.34.0']
   },
   {
     file: 'resources/fine-tunes.js', // deprecated after 4.1.0

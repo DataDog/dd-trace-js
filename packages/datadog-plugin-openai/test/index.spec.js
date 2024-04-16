@@ -2661,10 +2661,9 @@ describe('Plugin', () => {
             if (semver.satisfies(realVersion, '>=4.0.0')) {
               const result = await openai.chat.completions.create({
                 model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: input }],
+                messages: [{ role: 'user', content: input, name: 'hunter2' }],
                 tools: [{ type: 'function', function: tools[0] }],
-                tool_choice: 'auto',
-                name: 'hunter2'
+                tool_choice: 'auto'
               })
 
               expect(result.choices[0].finish_reason).to.eql('tool_calls')
