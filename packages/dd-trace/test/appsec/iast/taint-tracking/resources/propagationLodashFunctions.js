@@ -26,12 +26,17 @@ function arrayJoinLodashWithSeparator (_, str) {
   return _.join([str, str], str)
 }
 
+function startCaseLodash (_, str) {
+  return _.startCase(str)
+}
+
 module.exports = {
-  trimLodash,
-  trimStartLodash,
-  trimEndLodash,
+  arrayJoinLodashWithoutSeparator,
+  arrayJoinLodashWithSeparator,
   toLowerLodash,
   toUpperLodash,
-  arrayJoinLodashWithoutSeparator,
-  arrayJoinLodashWithSeparator
+  startCaseLodash,
+  trimEndLodash,
+  trimLodash,
+  trimStartLodash
 }

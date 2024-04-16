@@ -76,4 +76,21 @@ describe('TaintTracking lodash', () => {
       })
     })
   })
+
+  describe('lodash method with no taint tracking', () => {
+    it('should return the original result', () => {
+      const _ = require('../../../../../../versions/lodash').get()
+      const store = storage.getStore()
+      const iastContext = iastContextFunctions.getIastContext(store)
+      const taintedValue = newTaintedString(iastContext, 'tainted', 'param', 'Request')
+
+      const propFnInstrumented = require(instrumentedFunctionsFile).startCaseLodash
+      const propFnOriginal = propagationLodashFunctions.startCaseLodash
+
+      const originalResult = propFnOriginal(_, taintedValue)
+      const instrumentedResult = propFnInstrumented(_, taintedValue)
+      expect(instrumentedResult).to.be.equal(originalResult)
+      expect(isTainted(iastContext, instrumentedResult)).to.be.false
+    })
+  })
 })

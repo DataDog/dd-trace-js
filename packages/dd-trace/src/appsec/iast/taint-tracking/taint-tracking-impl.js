@@ -212,11 +212,7 @@ const lodashFns = {
 }
 
 function getLodashTaintedUtilFn (lodashFn) {
-  if (!Object.keys(lodashFns).includes(lodashFn)) {
-    return (transactionId, result) => result
-  }
-
-  return lodashFns[lodashFn]
+  return lodashFns[lodashFn] || ((transactionId, result) => result)
 }
 
 function lodashTaintTrackingHandler ({ operation, arguments: lodashFnArguments, result }) {
