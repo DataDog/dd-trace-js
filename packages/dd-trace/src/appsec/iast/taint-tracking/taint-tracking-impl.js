@@ -217,6 +217,7 @@ function getLodashTaintedUtilFn (lodashFn) {
 
 function lodashTaintTrackingHandler ({ operation, arguments: lodashFnArguments, result }) {
   try {
+    if (!result) return
     const context = getContextDefault()
     const transactionId = getTransactionId(context)
     if (transactionId) {
