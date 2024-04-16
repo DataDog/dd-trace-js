@@ -990,7 +990,7 @@ describe('Plugin', () => {
             const result = await openai.files.retrieveContent('file-t3k1gVSQDHrfZnPckzftlZ4A')
 
             expect(result)
-              .to.eql(`{"prompt": "foo?", "completion": "bar."}\n{"prompt": "foofoo?", "completion": "barbar."}\n`)
+              .to.eql('{"prompt": "foo?", "completion": "bar."}\n{"prompt": "foofoo?", "completion": "barbar."}\n')
           } else if (semver.satisfies(realVersion, '>=4.17.1')) {
             const result = await openai.files.content('file-t3k1gVSQDHrfZnPckzftlZ4A')
 
@@ -2605,7 +2605,7 @@ describe('Plugin', () => {
                       {
                         id: 'tool-1',
                         type: 'function',
-                        'function': {
+                        function: {
                           name: 'extract_fictional_info',
                           arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
                         }
@@ -2701,7 +2701,7 @@ describe('Plugin', () => {
                     {
                       id: 'tool-1',
                       type: 'function',
-                      'function': {
+                      function: {
                         name: 'extract_fictional_info',
                         arguments: '{"name":"SpongeBob","origin":"Bikini Bottom"}'
                       }
