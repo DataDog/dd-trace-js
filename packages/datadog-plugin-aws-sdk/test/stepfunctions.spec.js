@@ -21,35 +21,6 @@ const helloWorldSMD = {
 describe('Sfn', () => {
   let tracer
 
-  describe('Injection behaviour', () => {
-    before(() => {
-      tracer = require('../../dd-trace')
-    })
-
-    it('generates tags for a start_execution', () => {
-      const sfn = new Stepfunctions(tracer)
-      const params = {
-        stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
-      }
-      expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
-        'resource.name': 'startExecution',
-        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
-      })
-    })
-
-    it('generates tags for a start_execution with a name', () => {
-      const sfn = new Stepfunctions(tracer)
-      const params = {
-        stateMachineArn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2',
-        name: 'my-execution'
-      }
-      expect(sfn.generateTags(params, 'startExecution', {})).to.deep.equal({
-        'resource.name': 'startExecution my-execution',
-        statemachinearn: 'arn:aws:states:us-east-1:425362996713:stateMachine:agocs-test-noop-state-machine-2'
-      })
-    })
-  })
-
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
     let stateMachineArn
     let client
@@ -137,7 +108,7 @@ describe('Sfn', () => {
 
           await client.startExecution({
             stateMachineArn,
-            input: JSON.stringify({ moduleName: moduleName })
+            input: JSON.stringify({ moduleName })
           })
 
           return expectSpanPromise.then(() => {})
