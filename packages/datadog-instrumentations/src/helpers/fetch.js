@@ -11,11 +11,7 @@ exports.createWrapFetch = function createWrapFetch (Request, ch) {
       const headers = req.headers
       const ctx = { req, headers }
 
-      return ch.tracePromise(() => {
-        const res = fetch.call(this, req, { headers: ctx.headers })
-        ctx.res = res
-        return res
-      }, ctx)
+      return ch.tracePromise(() => fetch.call(this, req, { headers: ctx.headers }), ctx)
     }
   }
 }
