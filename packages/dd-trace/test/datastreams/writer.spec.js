@@ -2,7 +2,7 @@
 require('../setup/tap')
 const pkg = require('../../../../package.json')
 const stubRequest = sinon.stub()
-const msgpack = require('msgpack-lite')
+const msgpack = require('msgpack-long-lite')
 const codec = msgpack.createCodec({ int64: true })
 
 const stubZlib = {

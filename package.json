@@ -92,7 +92,7 @@
     "lru-cache": "^7.14.0",
     "methods": "^1.1.2",
     "module-details-from-path": "^1.0.3",
-    "msgpack-lite": "^0.1.26",
+    "msgpack-long-lite": "^0.1.1",
     "node-abort-controller": "^3.1.1",
     "opentracing": ">=0.12.1",
     "path-to-regexp": "^0.1.2",

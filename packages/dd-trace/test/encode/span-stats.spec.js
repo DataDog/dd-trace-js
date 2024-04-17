@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const msgpack = require('msgpack-lite')
+const msgpack = require('msgpack-long-lite')
 const codec = msgpack.createCodec()
 
 const {

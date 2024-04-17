@@ -2,7 +2,7 @@ const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { URL, format } = require('url')
-const msgpack = require('msgpack-lite')
+const msgpack = require('msgpack-long-lite')
 const zlib = require('zlib')
 const codec = msgpack.createCodec({ int64: true })
 

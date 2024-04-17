@@ -3,7 +3,7 @@
 const { promisify } = require('util')
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
+const msgpack = require('msgpack-long-lite')
 const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const childProcess = require('child_process')
