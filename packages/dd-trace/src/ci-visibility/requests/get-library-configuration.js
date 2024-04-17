@@ -12,6 +12,7 @@ const {
 } = require('../telemetry')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
+const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 
 function getLibraryConfiguration ({
   url,
@@ -104,7 +105,9 @@ function getLibraryConfiguration ({
           requireGit,
           isEarlyFlakeDetectionEnabled: earlyFlakeDetectionConfig?.enabled ?? false,
           earlyFlakeDetectionNumRetries:
-            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES
+            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+          earlyFlakeDetectionFaultyThreshold:
+            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
