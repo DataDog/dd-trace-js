@@ -14,7 +14,8 @@ const {
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -269,5 +270,56 @@ describe('parseAnnotations', () => {
       { type: 'test.requirement', description: 'sure' }
     ])
     expect(tags).to.eql({})
+  })
+})
+
+describe('getIsFaultyEarlyFlakeDetection', () => {
+  it('returns false if the absolute number of new suites is smaller or equal than the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 50 tests and 25 are marked as new (50%): not faulty.
+    const projectSuites = Array.from({ length: 50 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 25 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.false
+
+    // Session has 60 tests and 30 are marked as new (50%): not faulty.
+    const projectSuites2 = Array.from({ length: 60 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites2 = Array.from({ length: 30 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+    const isFaulty2 = getIsFaultyEarlyFlakeDetection(
+      projectSuites2,
+      knownSuites2,
+      faultyThreshold
+    )
+    expect(isFaulty2).to.be.false
+  })
+
+  it('returns true if the percentage is above the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 100 tests and 31 are marked as new (31%): faulty.
+    const projectSuites = Array.from({ length: 100 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 69 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.true
   })
 })

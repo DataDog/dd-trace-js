@@ -30,7 +30,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
@@ -951,7 +951,7 @@ moduleType.forEach(({
             assert.equal(knownTest[0].resource, 'cypress/e2e/spec.cy.js.other context fails')
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
           })
 
         const {
@@ -1017,7 +1017,7 @@ moduleType.forEach(({
             assert.equal(newTests.length, 0)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
           })
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -1073,7 +1073,7 @@ moduleType.forEach(({
             assert.propertyVal(tests[0].meta, TEST_STATUS, 'skip')
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
           })
 
         const specToRun = 'cypress/e2e/skipped-test.js'
@@ -1122,7 +1122,7 @@ moduleType.forEach(({
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.equal(tests.length, 2)

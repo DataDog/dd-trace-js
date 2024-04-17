@@ -20,7 +20,7 @@ const {
   removeEfdStringFromTestName,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -223,7 +223,7 @@ class MochaPlugin extends CiPlugin {
         )
 
         if (isEarlyFlakeDetectionEnabled) {
-          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
 
         this.testModuleSpan.finish()
