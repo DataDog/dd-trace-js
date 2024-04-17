@@ -876,6 +876,34 @@ if (DD_MAJOR < 4) {
   }, jasmineAsyncInstallWraper)
 }
 
+const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
+  'selenium-webdriver'
+]
+
+function shouldBypassJestRequireEngine (moduleName) {
+  return (
+    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.some(library => moduleName.includes(library))
+  )
+}
+
+addHook({
+  name: 'jest-runtime',
+  versions: ['>=24.8.0']
+}, (runtimePackage) => {
+  const Runtime = runtimePackage.default ? runtimePackage.default : runtimePackage
+
+  shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
+    // TODO: do this for every library that we instrument
+    if (shouldBypassJestRequireEngine(moduleName)) {
+      // To bypass jest's own require engine
+      return this._requireCoreModule(moduleName)
+    }
+    return requireModuleOrMock.apply(this, arguments)
+  })
+
+  return runtimePackage
+})
+
 addHook({
   name: 'jest-worker',
   versions: ['>=24.9.0'],
