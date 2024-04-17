@@ -20,7 +20,7 @@ const {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -264,7 +264,7 @@ versions.forEach((version) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+              assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
 
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const newTests = tests.filter(test =>
@@ -460,7 +460,7 @@ versions.forEach((version) => {
 
               assert.equal(tests.length, 7)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+              assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
               const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
               assert.equal(newTests.length, 0)
