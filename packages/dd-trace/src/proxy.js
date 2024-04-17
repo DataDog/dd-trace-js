@@ -15,6 +15,21 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSITelemetry } = require('./profiling/ssi-telemetry')
 
+class TracerModule {
+  constructor (provider) {
+    this.provider = provider
+  }
+
+  enable (...args) {
+    this.module = this.provider()
+    this.module.enable(...args)
+  }
+
+  disable () {
+    this.module?.disable()
+  }
+}
+
 class Tracer extends NoopProxy {
   constructor () {
     super()
@@ -24,6 +39,11 @@ class Tracer extends NoopProxy {
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
+
+    this._modules = {
+      appsec: new TracerModule(() => require('./appsec')),
+      iast: new TracerModule(() => require('./appsec/iast'))
+    }
   }
 
   init (options) {
@@ -112,10 +132,11 @@ class Tracer extends NoopProxy {
   }
 
   _enableOrDisableTracing (config) {
+    const { appsec, iast } = this._modules
+
     if (config.tracing !== false) {
-      // dirty require for now so zero appsec code is executed unless explicitly enabled
       if (config.appsec.enabled) {
-        require('./appsec').enable(config)
+        appsec.enable(config)
       }
       if (!this._tracingInitialized) {
         this._tracer = new DatadogTracer(config)
@@ -123,11 +144,11 @@ class Tracer extends NoopProxy {
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
-        require('./appsec/iast').enable(config, this._tracer)
+        iast.enable(config, this._tracer)
       }
     } else if (this._tracingInitialized) {
-      require('./appsec').disable()
-      require('./appsec/iast').disable()
+      appsec.disable()
+      iast.disable()
     }
 
     if (this._tracingInitialized) {
