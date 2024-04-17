@@ -277,24 +277,37 @@ describe('TracerProxy', () => {
       it('should support applying remote config (only call disable if enabled before)', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
+          './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
           './appsec/remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
-        const remoteConfigProxy = new RemoteConfigProxy()
-        remoteConfigProxy.init({
-          appsec: { enabled: true },
-          experimental: { iast: { enabled: true } }
-        })
-        expect(DatadogTracer).to.have.been.calledOnce
-        expect(AppsecSdk).to.have.been.calledOnce
+        config.telemetry = {}
+        config.appsec.enabled = true
+        config.iast.enabled = true
+        config.configure = conf => {
+          config.tracing = conf.tracing_enabled
+        }
 
-        const conf = { tracing_enabled: false }
+        const remoteConfigProxy = new RemoteConfigProxy()
+        remoteConfigProxy.init()
+
+        expect(appsec.enable).to.have.been.calledOnceWithExactly(config)
+        expect(iast.enable).to.have.been.calledOnceWithExactly(config, tracer)
+
+        let conf = { tracing_enabled: false }
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
         expect(appsec.disable).to.have.been.called
         expect(iast.disable).to.have.been.called
+
+        conf = { tracing_enabled: true }
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        expect(appsec.enable).to.have.been.calledTwice
+        expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
+        expect(iast.enable).to.have.been.calledTwice
+        expect(iast.enable.secondCall).to.have.been.calledWithExactly(config, tracer)
       })
 
       it('should start capturing runtimeMetrics when configured', () => {
