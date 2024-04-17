@@ -14,7 +14,7 @@ const {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -41,7 +41,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.testSessionSpan.setTag(TEST_STATUS, status)
 
       if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
 
       if (this.numFailedSuites > 0) {

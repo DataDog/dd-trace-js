@@ -16,7 +16,7 @@ const {
   TEST_CODE_OWNERS,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
@@ -68,7 +68,7 @@ class CucumberPlugin extends CiPlugin {
         }
       )
       if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
