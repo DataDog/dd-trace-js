@@ -274,6 +274,8 @@ describe('TracerProxy', () => {
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
         expect(DatadogTracer).to.have.been.calledOnce
         expect(AppsecSdk).to.have.been.calledOnce
+        expect(appsec.enable).to.not.have.been.called
+        expect(iast.enable).to.not.have.been.called
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
