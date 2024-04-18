@@ -40,7 +40,7 @@ class Tracer extends NoopProxy {
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
 
-    // this requires must work with esm bundler
+    // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast'))
