@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { calculateDDBasePath } = require('../../util')
 
 const logs = new Map()
 
@@ -29,6 +30,37 @@ function isValid (logEntry) {
   return logEntry?.level && logEntry.message
 }
 
+const ddBasePath = calculateDDBasePath(__dirname)
+const EOL = '\n'
+const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
+
+function sanitize (logEntry) {
+  const stack = logEntry.stack_trace
+  if (!stack) return logEntry
+
+  let stackLines = stack.split(EOL)
+
+  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
+
+  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
+  stackLines = stackLines
+    .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
+    .map(line => line.replace(ddBasePath, ''))
+
+  logEntry.stack_trace = stackLines.join(EOL)
+  if (logEntry.stack_trace === '') {
+    // If entire stack was removed, we'd just have a message saying "omitted"
+    // in which case we'd rather not log it at all.
+    return null
+  }
+
+  if (!isDDCode) {
+    logEntry.message = 'omitted'
+  }
+
+  return logEntry
+}
+
 const logCollector = {
   add (logEntry) {
     try {
@@ -37,9 +69,13 @@ const logCollector = {
       // NOTE: should errors have higher priority? and discard log entries with lower priority?
       if (logs.size >= maxEntries) {
         overflowedCount++
-        return
+        return false
       }
 
+      logEntry = sanitize(logEntry)
+      if (!logEntry) {
+        return false
+      }
       const hash = createHash(logEntry)
       if (!logs.has(hash)) {
         logs.set(hash, logEntry)
