@@ -635,6 +635,54 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
+      it('works with multi project setup and test skipping with intelligent test runner', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: true
+        })
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js'
+          }
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            // suites for both projects in the multi-project config are reported as skipped
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+            const skippedSuites = testSuites.filter(
+              suite => suite.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+            )
+            assert.equal(skippedSuites.length, 2)
+
+            skippedSuites.forEach(skippedSuite => {
+              assert.equal(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.equal(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+            })
+          })
+
+        childProcess = exec(
+          'node ./node_modules/jest/bin/jest --config config-jest-multiproject.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
     }
     const reportingOptions = ['agentless', 'evp proxy']
 
