@@ -6,6 +6,7 @@ const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
+const BaseAwsSdkPlugin = require('../../../../datadog-plugin-aws-sdk/src/base')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
@@ -521,6 +522,20 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._tracestate).to.be.undefined
+    })
+
+    it(`should extract AWSTraceHeader`, () => {
+      const traceId = '4ef684dbd03d632e'
+      const spanId = '7e8d56262375628a'
+      const sampled = 1
+      const unparsedHeader = `Root=1-6583199d-00000000${traceId};Parent=${spanId};Sampled=${sampled}`
+      const carrier = BaseAwsSdkPlugin.prototype.parseAWSTraceHeader(unparsedHeader)
+
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal(id(traceId, 16).toString(10))
+      expect(spanContext.toSpanId()).to.equal(id(spanId, 16).toString(10))
+      expect(spanContext._sampling.samplingPriority).to.equal(sampled)
     })
 
     describe('with B3 propagation as multiple headers', () => {
