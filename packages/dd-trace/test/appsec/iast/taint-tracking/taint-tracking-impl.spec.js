@@ -13,6 +13,7 @@ const { expect } = require('chai')
 const propagationFns = [
   'arrayProtoJoin',
   'arrayJoin',
+  'arrayInVariableJoin',
   'concatSuffix',
   'insertStr',
   'appendStr',
@@ -128,6 +129,7 @@ describe('TaintTracking', () => {
   describe('should not catch original Error', () => {
     const filtered = [
       'appendStr',
+      'arrayInVariableJoin',
       'arrayJoin',
       'arrayProtoJoin',
       'concatSuffix',

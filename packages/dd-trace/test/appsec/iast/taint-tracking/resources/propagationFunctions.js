@@ -72,7 +72,11 @@ function jsonParseStr (str) {
   return JSON.parse(str)
 }
 
-function arrayJoin (str) {
+function arrayJoin(str) {
+  return [str, str].join(str)
+}
+
+function arrayInVariableJoin (str) {
   const testArr = [str, str]
   return testArr.join(',')
 }
@@ -101,5 +105,6 @@ module.exports = {
   replaceRegexStr,
   jsonParseStr,
   arrayJoin,
-  arrayProtoJoin
+  arrayProtoJoin,
+  arrayInVariableJoin
 }
