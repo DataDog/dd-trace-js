@@ -338,7 +338,7 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
-  skippableSuites = []
+
   return jestSuitesToRun.suitesToRun
 }
 
