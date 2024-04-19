@@ -11,7 +11,7 @@ const tagger = require('./tagger')
 const get = require('../../datadog-core/src/utils/src/get')
 const has = require('../../datadog-core/src/utils/src/has')
 const set = require('../../datadog-core/src/utils/src/set')
-const { isTrue, isFalse, otelEnvVarIsNone } = require('./util')
+const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
@@ -665,7 +665,7 @@ class Config {
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
     // only used to explicitly set runtimeMetrics to false
-    const otelSetRuntimeMetrics = String(process.env.OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
+    const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
       ? false
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
