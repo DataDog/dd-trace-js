@@ -72,7 +72,7 @@ function jsonParseStr (str) {
   return JSON.parse(str)
 }
 
-function arrayJoin(str) {
+function arrayJoin (str) {
   return [str, str].join(str)
 }
 
@@ -86,25 +86,25 @@ function arrayProtoJoin (str) {
 }
 
 module.exports = {
-  concatSuffix,
-  insertStr,
   appendStr,
-  trimStr,
-  trimStartStr,
-  trimEndStr,
-  trimProtoStr,
-  concatStr,
-  concatTaintedStr,
-  concatProtoStr,
-  substringStr,
-  substrStr,
-  sliceStr,
-  toLowerCaseStr,
-  toUpperCaseStr,
-  replaceStr,
-  replaceRegexStr,
-  jsonParseStr,
+  arrayInVariableJoin,
   arrayJoin,
   arrayProtoJoin,
-  arrayInVariableJoin
+  concatProtoStr,
+  concatStr,
+  concatSuffix,
+  concatTaintedStr,
+  insertStr,
+  jsonParseStr,
+  replaceRegexStr,
+  replaceStr,
+  sliceStr,
+  substrStr,
+  substringStr,
+  toLowerCaseStr,
+  toUpperCaseStr,
+  trimEndStr,
+  trimProtoStr,
+  trimStartStr,
+  trimStr
 }

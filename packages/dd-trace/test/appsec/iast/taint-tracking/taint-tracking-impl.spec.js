@@ -11,26 +11,26 @@ const { clearCache } = require('../../../../src/appsec/iast/vulnerability-report
 const { expect } = require('chai')
 
 const propagationFns = [
-  'arrayProtoJoin',
-  'arrayJoin',
-  'arrayInVariableJoin',
-  'concatSuffix',
-  'insertStr',
   'appendStr',
-  'trimStr',
-  'trimStartStr',
-  'trimEndStr',
-  'trimProtoStr',
-  'concatStr',
-  'concatTaintedStr',
+  'arrayInVariableJoin',
+  'arrayJoin',
+  'arrayProtoJoin',
   'concatProtoStr',
-  'substringStr',
-  'substrStr',
+  'concatStr',
+  'concatSuffix',
+  'concatTaintedStr',
+  'insertStr',
+  'replaceRegexStr',
+  'replaceStr',
   'sliceStr',
+  'substrStr',
+  'substringStr',
   'toLowerCaseStr',
   'toUpperCaseStr',
-  'replaceStr',
-  'replaceRegexStr'
+  'trimEndStr',
+  'trimProtoStr',
+  'trimStartStr',
+  'trimStr'
 ]
 
 const commands = [
