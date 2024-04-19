@@ -11,6 +11,7 @@ const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
+const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSITelemetry } = require('./profiling/ssi-telemetry')
 
@@ -21,7 +22,7 @@ class Tracer extends NoopProxy {
     this._initialized = false
     this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
-    this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
+    this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
   }
 
