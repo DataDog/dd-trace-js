@@ -72,6 +72,12 @@ const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
 
+// selenium tags
+const TEST_BROWSER_DRIVER = 'test.browser.driver'
+const TEST_BROWSER_DRIVER_VERSION = 'test.browser.driver_version'
+const TEST_BROWSER_NAME = 'test.browser.name'
+const TEST_BROWSER_VERSION = 'test.browser.version'
+
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
@@ -144,7 +150,11 @@ module.exports = {
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
   addEfdStringToTestName,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_DRIVER_VERSION,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
