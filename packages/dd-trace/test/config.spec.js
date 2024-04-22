@@ -73,6 +73,105 @@ describe('Config', () => {
     existsSyncParam = undefined
   })
 
+  it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
+    process.env.DD_SERVICE = 'service'
+    process.env.OTEL_SERVICE_NAME = 'otel_service'
+    process.env.DD_TRACE_LOG_LEVEL = 'error'
+    process.env.OTEL_LOG_LEVEL = 'debug'
+    process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+    process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
+    process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
+    process.env.DD_TRACE_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
+    process.env.DD_TAGS = 'foo:bar,baz:qux'
+    process.env.OTEL_RESOURCE_ATTRIBUTES = 'foo=bar1,baz=qux1'
+    process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
+    process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
+    process.env.OTEL_PROPAGATORS = 'datadog,tracecontext'
+
+    const config = new Config()
+
+    expect(config).to.have.property('service', 'service')
+    expect(config).to.have.property('logLevel', 'error')
+    expect(config).to.have.property('sampleRate', 0.5)
+    expect(config).to.have.property('runtimeMetrics', true)
+    expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'tracecontext'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'tracecontext'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.otelPropagators', false)
+
+    const indexFile = require('../src/index')
+    const proxy = require('../src/proxy')
+    expect(indexFile).to.equal(proxy)
+  })
+
+  it('should initialize with OTEL environment variables when DD env vars are not set', () => {
+    process.env.OTEL_SERVICE_NAME = 'otel_service'
+    process.env.OTEL_LOG_LEVEL = 'warn'
+    process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
+    process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
+    process.env.OTEL_RESOURCE_ATTRIBUTES = 'foo=bar1,baz=qux1'
+    process.env.OTEL_PROPAGATORS = 'b3,datadog'
+
+    const config = new Config()
+
+    expect(config).to.have.property('service', 'otel_service')
+    expect(config).to.have.property('logLevel', 'warn')
+    expect(config).to.have.property('sampleRate', 0.1)
+    expect(config).to.have.property('runtimeMetrics', false)
+    expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['b3', 'datadog'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['b3', 'datadog'])
+    expect(config).to.have.nested.deep.property('tracePropagationStyle.otelPropagators', true)
+
+    delete require.cache[require.resolve('../src/index')]
+    const indexFile = require('../src/index')
+    const noop = require('../src/noop/proxy')
+    expect(indexFile).to.equal(noop)
+  })
+
+  it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
+    process.env.OTEL_RESOURCE_ATTRIBUTES =
+    'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
+    const config = new Config()
+
+    expect(config).to.have.property('env', 'test1')
+    expect(config).to.have.property('service', 'test2')
+    expect(config).to.have.property('version', '5')
+    expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
+  })
+
+  it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
+    process.env.OTEL_TRACES_SAMPLER = 'always_on'
+    process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
+    let config = new Config()
+    expect(config).to.have.property('sampleRate', 1.0)
+
+    process.env.OTEL_TRACES_SAMPLER = 'always_off'
+    config = new Config()
+    expect(config).to.have.property('sampleRate', 0.0)
+
+    process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
+    config = new Config()
+    expect(config).to.have.property('sampleRate', 0.1)
+
+    process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_on'
+    config = new Config()
+    expect(config).to.have.property('sampleRate', 1.0)
+
+    process.env.OTEL_TRACES_SAMPLER = 'parentbased_always_off'
+    config = new Config()
+    expect(config).to.have.property('sampleRate', 0.0)
+
+    process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
+    config = new Config()
+    expect(config).to.have.property('sampleRate', 0.1)
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = new Config()
 
