@@ -16,6 +16,9 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { NODE_MAJOR } = require('../../version')
+
+const cucumberVersion = NODE_MAJOR <= 16 ? '9' : 'latest'
 
 const webAppServer = require('../ci-visibility/web-app-server')
 
@@ -30,7 +33,13 @@ versionRange.forEach(version => {
     let webAppPort
 
     before(async function () {
-      sandbox = await createSandbox(['mocha', 'jest', '@cucumber/cucumber', 'chai@v4', `selenium-webdriver@${version}`])
+      sandbox = await createSandbox([
+        'mocha',
+        'jest',
+        `@cucumber/cucumber@${cucumberVersion}`,
+        'chai@v4',
+        `selenium-webdriver@${version}`
+      ])
       cwd = sandbox.folder
 
       webAppPort = await getPort()
