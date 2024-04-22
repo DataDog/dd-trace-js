@@ -144,10 +144,9 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:test:finish', (status) => {
       const store = storage.getStore()
+      const span = store?.span
 
-      if (store && store.span) {
-        const span = store.span
-
+      if (span) {
         span.setTag(TEST_STATUS, status)
 
         span.finish()
