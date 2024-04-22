@@ -45,6 +45,7 @@ module.exports = {
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-jsdom' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-jasmine2' () { return require('../../../datadog-plugin-jest/src') },
+  get 'jest-runtime' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-worker' () { return require('../../../datadog-plugin-jest/src') },
   get koa () { return require('../../../datadog-plugin-koa/src') },
   get 'koa-router' () { return require('../../../datadog-plugin-koa/src') },
@@ -77,6 +78,7 @@ module.exports = {
   get restify () { return require('../../../datadog-plugin-restify/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
   get router () { return require('../../../datadog-plugin-router/src') },
+  get 'selenium-webdriver' () { return require('../../../datadog-plugin-selenium/src') },
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get winston () { return require('../../../datadog-plugin-winston/src') }
