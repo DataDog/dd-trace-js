@@ -74,6 +74,131 @@ describe('opentelemetry', () => {
     await sandbox.remove()
   })
 
+  it('should not capture telemetry DD and OTEL vars dont conflict', () => {
+    proc = fork(join(cwd, 'opentelemetry/basic.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+        TIMEOUT: 1500,
+        DD_SERVICE: 'service',
+        DD_TRACE_LOG_LEVEL: 'error',
+        DD_TRACE_SAMPLE_RATE: '0.5',
+        DD_TRACE_ENABLED: 'true',
+        DD_RUNTIME_METRICS_ENABLED: 'true',
+        DD_TAGS: 'foo:bar,baz:qux',
+        DD_TRACE_PROPAGATION_STYLE: 'datadog'
+      }
+    })
+
+    return check(agent, proc, timeout, ({ payload }) => {
+      assert.strictEqual(payload.request_type, 'generate-metrics')
+
+      const metrics = payload.payload
+
+      assert.strictEqual(metrics.namespace, 'tracers')
+
+      const otelHiding = metrics.series.filter(({ metric }) => metric === 'otel.env.hiding')
+      const otelInvalid = metrics.series.filter(({ metric }) => metric === 'otel.env.invalid')
+
+      assert.strictEqual(otelHiding.length, 0)
+      assert.strictEqual(otelInvalid.length, 0)
+    }, true)
+  })
+
+  it('should capture telemetry if both DD and OTEL env vars are set ', () => {
+    proc = fork(join(cwd, 'opentelemetry/basic.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_OTEL_ENABLED: 1,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+        TIMEOUT: 1500,
+        DD_SERVICE: 'service',
+        OTEL_SERVICE_NAME: 'otel_service',
+        DD_TRACE_LOG_LEVEL: 'error',
+        OTEL_LOG_LEVEL: 'debug',
+        DD_TRACE_SAMPLE_RATE: '0.5',
+        OTEL_TRACES_SAMPLER: 'traceidratio',
+        OTEL_TRACES_SAMPLER_ARG: '0.1',
+        DD_TRACE_ENABLED: 'true',
+        OTEL_TRACES_EXPORTER: 'none',
+        DD_RUNTIME_METRICS_ENABLED: 'true',
+        OTEL_METRICS_EXPORTER: 'none',
+        DD_TAGS: 'foo:bar,baz:qux',
+        OTEL_RESOURCE_ATTRIBUTES: 'foo=bar1,baz=qux1',
+        DD_TRACE_PROPAGATION_STYLE: 'datadog',
+        OTEL_PROPAGATORS: 'datadog,tracecontext',
+        OTEL_LOGS_EXPORTER: 'none',
+        OTEL_SDK_DISABLED: 'false'
+      }
+    })
+
+    return check(agent, proc, timeout, ({ payload }) => {
+      assert.strictEqual(payload.request_type, 'generate-metrics')
+
+      const metrics = payload.payload
+
+      assert.strictEqual(metrics.namespace, 'tracers')
+
+      const otelHiding = metrics.series.filter(({ metric }) => metric === 'otel.env.hiding')
+      const otelInvalid = metrics.series.filter(({ metric }) => metric === 'otel.env.invalid')
+
+      assert.strictEqual(otelHiding.length, 8)
+      assert.strictEqual(otelInvalid.length, 1)
+
+      assert.deepStrictEqual(otelHiding[0].tags, [
+        'DD_TRACE_LOG_LEVEL', 'OTEL_LOG_LEVEL',
+        `version:${process.version}`
+      ])
+      assert.deepStrictEqual(otelHiding[1].tags, [
+        'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS',
+        `version:${process.version}`
+      ])
+      assert.deepStrictEqual(otelHiding[2].tags, [
+        'DD_SERVICE', 'OTEL_SERVICE_NAME',
+        `version:${process.version}`
+      ])
+
+      assert.deepStrictEqual(otelHiding[3].tags, [
+        'DD_TRACE_SAMPLE_RATE', 'OTEL_TRACES_SAMPLER',
+        'OTEL_TRACES_SAMPLER_ARG', `version:${process.version}`
+      ])
+
+      assert.deepStrictEqual(otelHiding[4].tags, [
+        'DD_TRACE_ENABLED', 'OTEL_TRACES_EXPORTER',
+        `version:${process.version}`
+      ])
+
+      assert.deepStrictEqual(otelHiding[5].tags, [
+        'DD_RUNTIME_METRICS_ENABLED', 'OTEL_METRICS_EXPORTER',
+        `version:${process.version}`
+      ])
+
+      assert.deepStrictEqual(otelHiding[6].tags, [
+        'DD_TAGS', 'OTEL_RESOURCE_ATTRIBUTES',
+        `version:${process.version}`
+      ])
+
+      assert.deepStrictEqual(otelHiding[7].tags, [
+        'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED',
+        `version:${process.version}`
+      ])
+
+      for (const metric of otelHiding) {
+        assert.strictEqual(metric.points[0][1], 1)
+      }
+
+      assert.deepStrictEqual(otelInvalid[0].points[0][1], 1)
+
+      assert.deepStrictEqual(otelInvalid[0].tags, [
+        'OTEL_LOGS_EXPORTER',
+        `version:${process.version}`
+      ])
+    }, true)
+  })
+
   it('should start a trace in isolation', async () => {
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
