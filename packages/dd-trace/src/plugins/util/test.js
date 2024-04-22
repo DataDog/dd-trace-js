@@ -53,7 +53,8 @@ const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
 // Early flake detection
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
-const TEST_EARLY_FLAKE_IS_ENABLED = 'test.early_flake.is_enabled'
+const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
+const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
@@ -70,6 +71,12 @@ const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
 const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
+
+// selenium tags
+const TEST_BROWSER_DRIVER = 'test.browser.driver'
+const TEST_BROWSER_DRIVER_VERSION = 'test.browser.driver_version'
+const TEST_BROWSER_NAME = 'test.browser.name'
+const TEST_BROWSER_VERSION = 'test.browser.version'
 
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
@@ -102,7 +109,8 @@ module.exports = {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -141,7 +149,12 @@ module.exports = {
   EFD_STRING,
   EFD_TEST_NAME_REGEX,
   removeEfdStringFromTestName,
-  addEfdStringToTestName
+  addEfdStringToTestName,
+  getIsFaultyEarlyFlakeDetection,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_DRIVER_VERSION,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -570,4 +583,22 @@ function addEfdStringToTestName (testName, numAttempt) {
 
 function removeEfdStringFromTestName (testName) {
   return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
+  let newSuites = 0
+  for (const suite of projectSuites) {
+    if (!testsBySuiteName[suite]) {
+      newSuites++
+    }
+  }
+  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
+
+  // The faulty threshold represents a percentage, but we also want to consider
+  // smaller projects, where big variations in the % are more likely.
+  // This is why we also check the absolute number of new suites.
+  return (
+    newSuites > faultyThresholdPercentage &&
+    newSuitesPercentage > faultyThresholdPercentage
+  )
 }

@@ -356,6 +356,58 @@ describe('exporters/agent', function () {
     })
   })
 
+  describe('using ipv6', () => {
+    beforeEach(done => {
+      getPort().then(port => {
+        url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
+
+        listener = app.listen(port, '0:0:0:0:0:0:0:1', done)
+        listener.on('connection', socket => sockets.push(socket))
+        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+      })
+    })
+
+    afterEach(done => {
+      listener.close(done)
+      sockets.forEach(socket => socket.end())
+      tracer._tracer.startSpan.restore()
+    })
+
+    it('should support ipv6 urls', async () => {
+      const exporter = newAgentExporter({ url, logger })
+      const start = new Date()
+      const end = new Date()
+      const tags = {
+        'runtime-id': RUNTIME_ID
+      }
+
+      const [wall, space] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        wall,
+        space
+      }
+
+      await new Promise((resolve, reject) => {
+        app.post('/profiling/v1/input', upload.any(), (req, res) => {
+          try {
+            verifyRequest(req, profiles, start, end)
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+
+          res.send()
+        })
+
+        exporter.export({ profiles, start, end, tags }).catch(reject)
+      })
+    })
+  })
+
   describeOnUnix('using UDS', () => {
     let listener
 
