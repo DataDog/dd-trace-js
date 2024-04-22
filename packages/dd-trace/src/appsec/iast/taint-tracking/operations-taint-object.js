@@ -4,6 +4,7 @@ const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastLog = require('../iast-log')
 
+// @see packages/dd-trace/test/appsec/iast/taint-tracking/taint-tracking-operations.spec.js
 function taintObject (iastContext, object, type, keyTainting, keyType) {
   let result = object
   const transactionId = iastContext?.[IAST_TRANSACTION_ID]

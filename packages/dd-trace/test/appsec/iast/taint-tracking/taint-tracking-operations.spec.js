@@ -232,6 +232,30 @@ describe('IAST TaintTracking Operations', () => {
       checkValueAndKeyAreTainted(obj, null)
     })
 
+    // Tainting objects keys that are >10 char in length leads to taint
+    // matching string literals with the same content.
+    // The following test checks a matching literal is not tainted when tainting object key with same value
+    it.skip('Should not taint literals when tainting matching object keys', () => {
+      const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
+      const iastContext = {}
+      const transactionId = 'id'
+      taintTrackingOperations.createTransaction(transactionId, iastContext)
+
+      const VALUE_TYPE = 'value.type'
+      const KEY_TYPE = 'key.type'
+
+      const literalKey = 'literalKeyLargerThan10Chars'
+
+      const obj = {
+        literalKeyLargerThan10Chars: 'k9'
+      }
+
+      taintTrackingOperations.taintObject(iastContext, obj, VALUE_TYPE, true, KEY_TYPE)
+
+      const isLiteralKeyTainted = taintTrackingOperations.isTainted(iastContext, literalKey)
+      expect(isLiteralKeyTainted).to.be.false
+    })
+
     it('Should handle the exception', () => {
       const iastContext = {}
       const transactionId = 'id'
