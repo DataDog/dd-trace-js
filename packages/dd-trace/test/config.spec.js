@@ -218,7 +218,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
-    expect(config).to.have.nested.property('appsec.sca.enabled', undefined)
+    expect(config).to.have.nested.property('appsec.sca.enabled', null)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -1183,7 +1183,7 @@ describe('Config', () => {
         requestSampling: 1.0
       },
       sca: {
-        enabled: undefined
+        enabled: null
       }
     })
   })

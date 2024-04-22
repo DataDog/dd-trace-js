@@ -789,21 +789,11 @@ describe('AVM OSS', () => {
         testDescription: 'should send when env var is false'
       },
       {
-        scaValue: undefined,
+        scaValue: null,
         scaValueOrigin: 'default',
-        testDescription: 'should not send when no env var is informed'
+        testDescription: 'should send null (default) when no env var is set'
       }
     ]
-
-    function expectScaValue (payload, scaValue) {
-      if (scaValue === undefined) {
-        expect(payload.configuration.filter(c => c.name === 'appsec.sca.enabled')).is.empty
-      } else {
-        expect(payload).to.have.property('configuration').that.deep.equal([
-          { name: 'appsec.sca.enabled', value: scaValue, origin: 'env_var' }
-        ])
-      }
-    }
 
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
@@ -860,7 +850,9 @@ describe('AVM OSS', () => {
 
         it('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
-            expectScaValue(payload, scaValue)
+            expect(payload).to.have.property('configuration').that.deep.equal([
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+            ])
           }, true)
         })
 
@@ -868,7 +860,9 @@ describe('AVM OSS', () => {
           // Skip a full day
           clock.tick(86400000)
           return testSeq(2, 'app-extended-heartbeat', payload => {
-            expectScaValue(payload, scaValue)
+            expect(payload).to.have.property('configuration').that.deep.equal([
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }
+            ])
           }, true)
         })
       })

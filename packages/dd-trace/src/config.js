@@ -447,7 +447,7 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
-    this._setValue(defaults, 'appsec.sca.enabled', undefined)
+    this._setValue(defaults, 'appsec.sca.enabled', null)
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
