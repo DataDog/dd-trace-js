@@ -98,17 +98,19 @@ describe('Sfn', () => {
         })
 
         it('is instrumented', async function () {
+          const startExecInput = {
+            stateMachineArn,
+            input: JSON.stringify({ moduleName })
+          }
           const expectSpanPromise = agent.use(traces => {
             const span = traces[0][0]
             expect(span).to.have.property('resource', 'startExecution')
             expect(span.meta).to.have.property('statemachinearn', stateMachineArn)
+            expect(startExecInput.input).to.have.property('moduleName', moduleName)
             // TODO: write some tests about span.meta
           })
 
-          await client.startExecution({
-            stateMachineArn,
-            input: JSON.stringify({ moduleName })
-          })
+          await client.startExecution(startExecInput)
 
           return expectSpanPromise.then(() => {})
         })
