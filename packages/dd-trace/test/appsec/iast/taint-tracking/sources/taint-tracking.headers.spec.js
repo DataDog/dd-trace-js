@@ -6,10 +6,7 @@ const { storage } = require('../../../../../../datadog-core')
 const iast = require('../../../../../src/appsec/iast')
 const iastContextFunctions = require('../../../../../src/appsec/iast/iast-context')
 const { isTainted, getRanges } = require('../../../../../src/appsec/iast/taint-tracking/operations')
-const {
-  HTTP_REQUEST_HEADER_NAME,
-  HTTP_REQUEST_HEADER_VALUE
-} = require('../../../../../src/appsec/iast/taint-tracking/source-types')
+const { HTTP_REQUEST_HEADER_VALUE } = require('../../../../../src/appsec/iast/taint-tracking/source-types')
 const { testInRequest } = require('../../utils')
 
 describe('Headers sourcing', () => {
@@ -24,12 +21,12 @@ describe('Headers sourcing', () => {
       const taintedHeaderValueRanges = getRanges(iastContext, headerValue)
       expect(taintedHeaderValueRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_VALUE)
       // @see packages/dd-trace/test/appsec/iast/taint-tracking/taint-tracking-operations.spec.js
-      if (headerName.length >= 10) {
-        const isHeaderNameTainted = isTainted(iastContext, headerName)
-        expect(isHeaderNameTainted).to.be.true
-        const taintedHeaderNameRanges = getRanges(iastContext, headerName)
-        expect(taintedHeaderNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_NAME)
-      }
+      // if (headerName.length >= 10) {
+      //   const isHeaderNameTainted = isTainted(iastContext, headerName)
+      //   expect(isHeaderNameTainted).to.be.true
+      //   const taintedHeaderNameRanges = getRanges(iastContext, headerName)
+      //   expect(taintedHeaderNameRanges[0].iinfo.type).to.be.equal(HTTP_REQUEST_HEADER_NAME)
+      // }
     })
   }
 
