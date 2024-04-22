@@ -34,7 +34,7 @@ jobs:
     strategy:
       matrix:
         version: [16, latest]
-        framework: [cucumber, playwright]
+        framework: [cucumber, playwright, selenium]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -45,6 +45,25 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
+      - name: Install Google Chrome
+        run: |
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          if [ $? -ne 0 ]; then echo "Failed to add Google key"; exit 1; fi
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
+        if: ${{ matrix.framework == 'selenium' }}
+      - name: Install ChromeDriver
+        run: |
+          export CHROME_VERSION=$(google-chrome --version)
+          CHROME_DRIVER_DOWNLOAD_URL=$(node scripts/get-chrome-driver-download-url.js)
+          wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
+          if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
+          unzip chromedriver-linux64.zip
+          sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
+          sudo chmod +x /usr/bin/chromedriver
+        if: ${{ matrix.framework == 'selenium' }}
       - run: yarn install
       - run: yarn test:integration:${{ matrix.framework }}
         env:

@@ -187,6 +187,7 @@ interface Plugins {
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
+  "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
   "winston": tracer.plugins.winston;
@@ -1735,6 +1736,12 @@ declare namespace tracer {
      * [router](https://github.com/pillarjs/router) module.
      */
     interface router extends Integration {}
+
+    /**
+    * This plugin automatically instruments the
+    * [selenium-webdriver](https://www.npmjs.com/package/selenium-webdriver) module.
+    */
+    interface selenium extends Integration {}
 
     /**
      * This plugin automatically instruments the
