@@ -57,7 +57,7 @@ jobs:
       - name: Install ChromeDriver
         run: |
           export CHROME_VERSION=$(google-chrome --version)
-          CHROME_DRIVER_DOWNLOAD_URL=$(node scripts/get-chrome-driver-download-url.js)
+          CHROME_DRIVER_DOWNLOAD_URL=$(node --experimental-fetch scripts/get-chrome-driver-download-url.js)
           wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
           if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
           unzip chromedriver-linux64.zip
