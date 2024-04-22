@@ -104,10 +104,12 @@ describe('Sfn', () => {
           }
           const expectSpanPromise = agent.use(traces => {
             const span = traces[0][0]
+            const expectedTraceId = '"x-datadog-trace-id":"' + span.trace_id.toString() + '"'
+            expect(startExecInput.input).to.contain(expectedTraceId)
+            const expectedParentId = '"x-datadog-parent-id":"' + span.span_id.toString() + '"'
+            expect(startExecInput.input).to.contain(expectedParentId)
             expect(span).to.have.property('resource', 'startExecution')
             expect(span.meta).to.have.property('statemachinearn', stateMachineArn)
-            expect(startExecInput.input).to.have.property('moduleName', moduleName)
-            // TODO: write some tests about span.meta
           })
 
           await client.startExecution(startExecInput)
