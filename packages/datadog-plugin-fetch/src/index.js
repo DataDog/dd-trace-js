@@ -17,8 +17,11 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(ctx)
 
-    ctx.headers = headers
-    ctx.req = new globalThis.Request(req, { headers })
+    for (const name in headers) {
+      if (!req.headers.has(name)) {
+        req.headers.set(name, headers[name])
+      }
+    }
 
     return store
   }
