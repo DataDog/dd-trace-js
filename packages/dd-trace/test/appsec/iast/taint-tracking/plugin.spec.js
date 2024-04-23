@@ -6,8 +6,6 @@ const taintTrackingOperations = require('../../../../src/appsec/iast/taint-track
 const dc = require('dc-polyfill')
 const {
   HTTP_REQUEST_COOKIE_VALUE,
-  HTTP_REQUEST_COOKIE_NAME,
-  HTTP_REQUEST_HEADER_NAME,
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
@@ -204,9 +202,7 @@ describe('IAST Taint tracking plugin', () => {
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         cookies,
-        HTTP_REQUEST_COOKIE_VALUE,
-        true,
-        HTTP_REQUEST_COOKIE_NAME
+        HTTP_REQUEST_COOKIE_VALUE
       )
     })
 
@@ -244,9 +240,7 @@ describe('IAST Taint tracking plugin', () => {
       expect(taintTrackingOperations.taintObject).to.be.calledOnceWith(
         iastContext,
         req.headers,
-        HTTP_REQUEST_HEADER_VALUE,
-        true,
-        HTTP_REQUEST_HEADER_NAME
+        HTTP_REQUEST_HEADER_VALUE
       )
 
       expect(taintTrackingOperations.newTaintedString).to.be.calledOnceWith(
