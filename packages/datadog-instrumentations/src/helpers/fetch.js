@@ -7,11 +7,16 @@ exports.createWrapFetch = function createWrapFetch (Request, ch) {
     return function (input, init) {
       if (!ch.start.hasSubscribers) return fetch.apply(this, arguments)
 
-      const req = new Request(input, init)
-      const headers = req.headers
-      const ctx = { req, headers }
+      if (input instanceof Request) {
+        const ctx = { req: input }
 
-      return ch.tracePromise(() => fetch.call(this, req, { headers: ctx.headers }), ctx)
+        return ch.tracePromise(() => fetch.call(this, input, init), ctx)
+      } else {
+        const req = new Request(input, init)
+        const ctx = { req }
+
+        return ch.tracePromise(() => fetch.call(this, req), ctx)
+      }
     }
   }
 }
