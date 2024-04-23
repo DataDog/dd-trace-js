@@ -110,7 +110,7 @@ describe('Remote Config index', () => {
       beforeEach(() => {
         config.appsec = { enabled: undefined }
 
-        remoteConfig.enable(config)
+        remoteConfig.enable(config, appsec)
 
         listener = rc.on.firstCall.args[1]
       })
