@@ -95,12 +95,14 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
   _cookiesTaintTrackingHandler (target) {
     const iastContext = getIastContext(storage.getStore())
-    taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE, true, HTTP_REQUEST_COOKIE_NAME)
+    // Prevent tainting cookie names since it leads to taint literal string with same value.
+    taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE)
   }
 
   taintHeaders (headers, iastContext) {
+    // Prevent tainting header names since it leads to taint literal string with same value.
     this.execSource({
-      handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME),
+      handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE),
       tags: REQ_HEADER_TAGS,
       iastContext
     })
