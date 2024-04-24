@@ -48,6 +48,10 @@ describe('Sfn', () => {
           startExecution: function () {
             const req = new lib.StartExecutionCommand(...arguments)
             return client.send(req)
+          },
+          describeExecution: function () {
+            const req = new lib.DescribeExecutionCommand(...arguments)
+            return client.send(req)
           }
         }
       } else {
@@ -59,7 +63,8 @@ describe('Sfn', () => {
           deleteStateMachine: function () {
             return client.deleteStateMachine(...arguments).promise()
           },
-          startExecution: function () { return client.startExecution(...arguments).promise() }
+          startExecution: function () { return client.startExecution(...arguments).promise() },
+          describeExecution: function () { return client.describeExecution(...arguments).promise() }
         }
       }
     }
@@ -104,16 +109,17 @@ describe('Sfn', () => {
           }
           const expectSpanPromise = agent.use(traces => {
             const span = traces[0][0]
-            const expectedTraceId = '"x-datadog-trace-id":"' + span.trace_id.toString() + '"'
-            expect(startExecInput.input).to.contain(expectedTraceId)
-            const expectedParentId = '"x-datadog-parent-id":"' + span.span_id.toString() + '"'
-            expect(startExecInput.input).to.contain(expectedParentId)
             expect(span).to.have.property('resource', 'startExecution')
             expect(span.meta).to.have.property('statemachinearn', stateMachineArn)
           })
 
-          await client.startExecution(startExecInput)
+          const resp = await client.startExecution(startExecInput)
 
+          const result = await client.describeExecution({ executionArn: resp.executionArn })
+          const sfInput = JSON.parse(result.input)
+          expect(sfInput).to.have.property('_datadog')
+          expect(sfInput._datadog).to.have.property('x-datadog-trace-id')
+          expect(sfInput._datadog).to.have.property('x-datadog-parent-id')
           return expectSpanPromise.then(() => {})
         })
       }
