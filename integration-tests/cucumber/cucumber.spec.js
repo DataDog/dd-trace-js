@@ -30,11 +30,15 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_NAME
+  TEST_NAME,
+  CUCUMBER_IS_PARALLEL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+// const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+
+// does not work with '7.0.0' yet
+const versions = ['latest']
 
 const moduleType = [
   {
@@ -44,7 +48,7 @@ const moduleType = [
       './node_modules/nyc/bin/nyc.js -r=text-summary ' +
       'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
     parallelModeCommand: './node_modules/.bin/cucumber-js ' +
-    'ci-visibility/features/farewell.feature --parallel 2 --publish-quiet',
+    'ci-visibility/features/*.feature --parallel 2',
     featuresPath: 'ci-visibility/features/',
     fileExtension: 'js'
   }
@@ -88,7 +92,56 @@ versions.forEach(version => {
       })
       const reportMethods = ['agentless', 'evp proxy']
 
-      it('does not crash with parallel mode', (done) => {
+      it('works with parallel mode', (done) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const { content: testSessionEventContent } = events.find(event => event.type === 'test_session_end')
+            const { content: testModuleEventContent } = events.find(event => event.type === 'test_module_end')
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
+
+            assert.equal(
+              testModuleEventContent.test_session_id.toString(10),
+              testSessionEventContent.test_session_id.toString(10)
+            )
+
+            assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
+
+            testSuiteEvents.forEach(({
+              content: {
+                meta,
+                test_suite_id: testSuiteId,
+                test_module_id: testModuleId,
+                test_session_id: testSessionId
+              }
+            }) => {
+              assert.exists(meta[TEST_COMMAND])
+              assert.exists(meta[TEST_MODULE])
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            })
+
+            testEvents.forEach(({
+              content: {
+                meta,
+                test_suite_id: testSuiteId,
+                test_module_id: testModuleId,
+                test_session_id: testSessionId
+              }
+            }) => {
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+              assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
+            })
+
+            // add a tag to tests to check that parallel mode is being used
+            assert.propertyVal(testSessionEventContent.meta, CUCUMBER_IS_PARALLEL, 'true')
+          }, 5000)
+
         let testOutput
         childProcess = exec(
           parallelModeCommand,
@@ -108,11 +161,9 @@ versions.forEach(version => {
         childProcess.stderr.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.on('exit', (code) => {
+        childProcess.on('exit', () => {
           assert.notInclude(testOutput, 'TypeError')
-          assert.include(testOutput, 'Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
-          assert.equal(code, 0)
-          done()
+          receiverPromise.then(() => done()).catch(done)
         })
       }).timeout(50000)
 

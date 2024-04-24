@@ -24,7 +24,8 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   TEST_MODULE_ID,
-  TEST_SUITE
+  TEST_SUITE,
+  CUCUMBER_IS_PARALLEL
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -74,7 +75,8 @@ class CucumberPlugin extends CiPlugin {
       testCodeCoverageLinesTotal,
       hasUnskippableSuites,
       hasForcedToRunSuites,
-      isEarlyFlakeDetectionEnabled
+      isEarlyFlakeDetectionEnabled,
+      isParallel
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -93,6 +95,9 @@ class CucumberPlugin extends CiPlugin {
       )
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isParallel) {
+        this.testSessionSpan.setTag(CUCUMBER_IS_PARALLEL, 'true')
       }
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -142,7 +147,6 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:test-suite:finish', ({ status, testSuitePath }) => {
-      debugger
       const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
       testSuiteSpan.setTag(TEST_STATUS, status)
       testSuiteSpan.finish()
@@ -173,7 +177,7 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
     })
 
-    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine }) => {
+    this.addSub('ci:cucumber:test:start', ({ testName, testFileAbsolutePath, testSourceLine, isParallel }) => {
       const store = storage.getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
@@ -182,6 +186,10 @@ class CucumberPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testSourceLine,
         [TEST_SOURCE_FILE]: testSourceFile
       }
+      if (isParallel) {
+        extraTags[CUCUMBER_IS_PARALLEL] = 'true'
+      }
+
       const testSpan = this.startTestSpan(testName, testSuite, extraTags)
 
       this.enter(testSpan, store)
@@ -216,7 +224,6 @@ class CucumberPlugin extends CiPlugin {
       formattedTraces.forEach(trace => {
         trace.forEach(span => {
           if (span.name === 'cucumber.test') {
-            debugger
             const testSuite = span.meta[TEST_SUITE]
             const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
 

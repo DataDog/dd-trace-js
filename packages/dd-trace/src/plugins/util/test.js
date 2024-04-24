@@ -61,6 +61,8 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
+const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
+
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
 const TEST_ITR_SKIPPING_TYPE = 'test.itr.tests_skipping.type'
@@ -92,6 +94,7 @@ module.exports = {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
+  CUCUMBER_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,

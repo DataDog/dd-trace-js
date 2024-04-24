@@ -131,7 +131,8 @@ function wrapRun (pl, isLatestVersion) {
       testStartCh.publish({
         testName: this.pickle.name,
         testFileAbsolutePath,
-        testSourceLine
+        testSourceLine,
+        isParallel: !!process.env.CUCUMBER_WORKER_ID
       })
       try {
         const promise = run.apply(this, arguments)
@@ -256,7 +257,7 @@ function getPickleByFile (runtime) {
   }, {})
 }
 
-function getWrappedStart (start, frameworkVersion) {
+function getWrappedStart (start, frameworkVersion, isParallel = false) {
   return async function () {
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
@@ -357,7 +358,8 @@ function getWrappedStart (start, frameworkVersion) {
         numSkippedSuites: skippedSuites.length,
         hasUnskippableSuites: isUnskippable,
         hasForcedToRunSuites: isForcedToRun,
-        isEarlyFlakeDetectionEnabled
+        isEarlyFlakeDetectionEnabled,
+        isParallel
       })
     })
     return success
@@ -507,7 +509,7 @@ addHook({
     return giveWork.apply(this, arguments)
   })
 
-  shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
+  shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
   shimmer.wrap(coordinatorPackage.default.prototype, 'parseWorkerMessage', parseWorkerMessage =>
     function (worker, message) {
       // IPC for test case finished! We need to stop cucumber processing
