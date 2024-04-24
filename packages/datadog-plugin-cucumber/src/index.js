@@ -18,7 +18,13 @@ const {
   TEST_SOURCE_FILE,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
-  TEST_IS_RETRY
+  TEST_IS_RETRY,
+  TEST_SUITE_ID,
+  TEST_SESSION_ID,
+  TEST_COMMAND,
+  TEST_MODULE,
+  TEST_MODULE_ID,
+  TEST_SUITE
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -32,6 +38,22 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+const id = require('../../dd-trace/src/id')
+
+const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
+
+function getTestSuiteTags (testSuiteSpan) {
+  const suiteTags = {
+    [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
+    [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
+    [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
+    [TEST_MODULE]: 'cucumber'
+  }
+  if (testSuiteSpan.context()._parentId) {
+    suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
+  }
+  return suiteTags
+}
 
 class CucumberPlugin extends CiPlugin {
   static get id () {
@@ -42,6 +64,8 @@ class CucumberPlugin extends CiPlugin {
     super(...args)
 
     this.sourceRoot = process.cwd()
+
+    this.testSuiteSpanByPath = {}
 
     this.addSub('ci:cucumber:session:finish', ({
       status,
@@ -101,7 +125,7 @@ class CucumberPlugin extends CiPlugin {
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
       }
-      this.testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
+      const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
         tags: {
           [COMPONENT]: this.constructor.id,
@@ -109,25 +133,30 @@ class CucumberPlugin extends CiPlugin {
           ...testSuiteMetadata
         }
       })
+      this.testSuiteSpanByPath[testSuitePath] = testSuiteSpan
+
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
     })
 
-    this.addSub('ci:cucumber:test-suite:finish', status => {
-      this.testSuiteSpan.setTag(TEST_STATUS, status)
-      this.testSuiteSpan.finish()
+    this.addSub('ci:cucumber:test-suite:finish', ({ status, testSuitePath }) => {
+      debugger
+      const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
+      testSuiteSpan.setTag(TEST_STATUS, status)
+      testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
 
-    this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
+    this.addSub('ci:cucumber:test-suite:code-coverage', ({ coverageFiles, suiteFile, testSuitePath }) => {
       if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
       if (!coverageFiles.length) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
+      const testSuiteSpan = this.testSuiteSpanByPath[testSuitePath]
 
       const relativeCoverageFiles = [...coverageFiles, suiteFile]
         .map(filename => getTestSuitePath(filename, this.repositoryRoot))
@@ -135,8 +164,8 @@ class CucumberPlugin extends CiPlugin {
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
       const formattedCoverage = {
-        sessionId: this.testSuiteSpan.context()._traceId,
-        suiteId: this.testSuiteSpan.context()._spanId,
+        sessionId: testSuiteSpan.context()._traceId,
+        suiteId: testSuiteSpan.context()._spanId,
         files: relativeCoverageFiles
       }
 
@@ -172,6 +201,37 @@ class CucumberPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
+    this.addSub('ci:cucumber:worker-report:trace', (traces) => {
+      const formattedTraces = JSON.parse(traces).map(trace =>
+        trace.map(span => ({
+          ...span,
+          span_id: id(span.span_id),
+          trace_id: id(span.trace_id),
+          parent_id: id(span.parent_id)
+        }))
+      )
+
+      // we have to update the test session, test module and test suite ids
+      // BEFORE we export them in the main process
+      formattedTraces.forEach(trace => {
+        trace.forEach(span => {
+          if (span.name === 'cucumber.test') {
+            debugger
+            const testSuite = span.meta[TEST_SUITE]
+            const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
+
+            const testSuiteTags = getTestSuiteTags(testSuiteSpan)
+            span.meta = {
+              ...span.meta,
+              ...testSuiteTags
+            }
+          }
+        })
+
+        this.tracer._exporter.export(trace)
+      })
+    })
+
     this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage, isNew, isEfdRetry }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
@@ -202,6 +262,9 @@ class CucumberPlugin extends CiPlugin {
         )
         finishAllTraceSpans(span)
       }
+      if (isCucumberWorker) {
+        this.tracer._exporter.flush()
+      }
     })
 
     this.addSub('ci:cucumber:error', (err) => {
@@ -213,10 +276,11 @@ class CucumberPlugin extends CiPlugin {
   }
 
   startTestSpan (testName, testSuite, extraTags) {
+    const testSuiteSpan = this.testSuiteSpanByPath[testSuite]
     return super.startTestSpan(
       testName,
       testSuite,
-      this.testSuiteSpan,
+      testSuiteSpan,
       extraTags
     )
   }

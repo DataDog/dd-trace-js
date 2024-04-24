@@ -22,6 +22,8 @@ const skippableSuitesCh = channel('ci:cucumber:test-suite:skippable')
 const sessionStartCh = channel('ci:cucumber:session:start')
 const sessionFinishCh = channel('ci:cucumber:session:finish')
 
+const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
+
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const {
@@ -29,7 +31,8 @@ const {
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
-  getTestSuitePath
+  getTestSuitePath,
+  JEST_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
@@ -47,6 +50,9 @@ const numRetriesByPickleId = new Map()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
+
+const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
+
 let skippableSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
@@ -193,12 +199,6 @@ function wrapRun (pl, isLatestVersion) {
 }
 
 function pickleHook (PickleRunner) {
-  if (process.env.CUCUMBER_WORKER_ID) {
-    // Parallel mode is not supported
-    log.warn('Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
-    return PickleRunner
-  }
-
   const pl = PickleRunner.default
 
   wrapRun(pl, false)
@@ -207,12 +207,6 @@ function pickleHook (PickleRunner) {
 }
 
 function testCaseHook (TestCaseRunner) {
-  if (process.env.CUCUMBER_WORKER_ID) {
-    // Parallel mode is not supported
-    log.warn('Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
-    return TestCaseRunner
-  }
-
   const pl = TestCaseRunner.default
 
   wrapRun(pl, true)
@@ -226,6 +220,7 @@ addHook({
   file: 'lib/runtime/pickle_runner.js'
 }, pickleHook)
 
+// this is the only hook being executed in workers
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
@@ -266,14 +261,13 @@ function getWrappedStart (start, frameworkVersion) {
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
     }
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
     let onDone
 
     const configPromise = new Promise(resolve => {
       onDone = resolve
     })
 
-    asyncResource.runInAsyncScope(() => {
+    sessionAsyncResource.runInAsyncScope(() => {
       libraryConfigurationCh.publish({ onDone })
     })
 
@@ -286,7 +280,7 @@ function getWrappedStart (start, frameworkVersion) {
       const knownTestsPromise = new Promise(resolve => {
         onDone = resolve
       })
-      asyncResource.runInAsyncScope(() => {
+      sessionAsyncResource.runInAsyncScope(() => {
         knownTestsCh.publish({ onDone })
       })
       const knownTestsResponse = await knownTestsPromise
@@ -301,7 +295,7 @@ function getWrappedStart (start, frameworkVersion) {
       onDone = resolve
     })
 
-    asyncResource.runInAsyncScope(() => {
+    sessionAsyncResource.runInAsyncScope(() => {
       skippableSuitesCh.publish({ onDone })
     })
 
@@ -333,7 +327,7 @@ function getWrappedStart (start, frameworkVersion) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    asyncResource.runInAsyncScope(() => {
+    sessionAsyncResource.runInAsyncScope(() => {
       sessionStartCh.publish({ command, frameworkVersion })
     })
 
@@ -355,7 +349,7 @@ function getWrappedStart (start, frameworkVersion) {
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    asyncResource.runInAsyncScope(() => {
+    sessionAsyncResource.runInAsyncScope(() => {
       sessionFinishCh.publish({
         status: success ? 'pass' : 'fail',
         isSuitesSkipped,
@@ -432,7 +426,8 @@ function getWrappedRunTest (runTestFunction) {
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
-          suiteFile: testFileAbsolutePath
+          suiteFile: testFileAbsolutePath,
+          testSuitePath
         })
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
@@ -440,7 +435,7 @@ function getWrappedRunTest (runTestFunction) {
         resetCoverage(global.__coverage__)
       }
 
-      testSuiteFinishCh.publish(testSuiteStatus)
+      testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
     }
 
     return runTestCaseResult
@@ -448,6 +443,7 @@ function getWrappedRunTest (runTestFunction) {
 }
 
 // From 7.3.0 onwards, runPickle becomes runTestCase
+// these are probably not being executed
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
@@ -468,4 +464,99 @@ addHook({
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
 
   return runtimePackage
+})
+
+// this has no runTestCase equivalent to the above. We'll have to change it
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/parallel/coordinator.js'
+}, (coordinatorPackage, frameworkVersion) => {
+  shimmer.wrap(coordinatorPackage.default.prototype, 'giveWork', giveWork => function (worker, force) {
+    const coordinator = this
+    const oldWorkerProcessSend = worker.process.send
+
+    // when sending a message to the worker, we probably can send them timing info (_trace.startTime and _trace.ticks)
+    // so that the tests are better aligned
+    worker.process.send = function (runCommand) {
+      if (!runCommand.run) {
+        return oldWorkerProcessSend.apply(this, arguments)
+      }
+
+      const pickleId = runCommand.run.pickle.id
+
+      const test = coordinator.eventDataCollector.getPickle(pickleId)
+
+      const testFileAbsolutePath = test.uri
+      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+
+      // need to set status in pickleResultByFile when it finished
+      if (!pickleResultByFile[testFileAbsolutePath]?.started) { // first test in suite
+        pickleResultByFile[testFileAbsolutePath] = {
+          started: 1,
+          finished: []
+        }
+        testSuiteStartCh.publish({ testSuitePath })
+      } else {
+        pickleResultByFile[testFileAbsolutePath].started++
+      }
+
+      return oldWorkerProcessSend.apply(this, arguments)
+    }
+
+    return giveWork.apply(this, arguments)
+  })
+
+  shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
+  shimmer.wrap(coordinatorPackage.default.prototype, 'parseWorkerMessage', parseWorkerMessage =>
+    function (worker, message) {
+      // IPC for test case finished! We need to stop cucumber processing
+      if (Array.isArray(message)) {
+        const [messageCode, payload] = message
+        if (messageCode === JEST_WORKER_TRACE_PAYLOAD_CODE) {
+          sessionAsyncResource.runInAsyncScope(() => {
+            workerReportTraceCh.publish(payload)
+          })
+        }
+        return
+      }
+
+      const { jsonEnvelope } = message
+      if (!jsonEnvelope) {
+        return parseWorkerMessage.apply(this, arguments)
+      }
+      const parsed = JSON.parse(jsonEnvelope)
+
+      if (parsed.testCaseFinished) {
+        const { pickle, worstTestStepResult } =
+          this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
+
+        const testFileAbsolutePath = pickle.uri
+
+        // TODO: GET ACTUAL STATUS from worstTestStepResult
+        pickleResultByFile[testFileAbsolutePath].finished.push('pass')
+
+        if (pickleResultByFile[testFileAbsolutePath].finished.length === pickleByFile[testFileAbsolutePath].length) {
+          const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath].finished)
+          testSuiteFinishCh.publish({
+            status: testSuiteStatus,
+            testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
+          })
+        }
+      }
+
+      return parseWorkerMessage.apply(this, arguments)
+    }
+  )
+  return coordinatorPackage
+})
+
+// I could use #sendMessage (process.send) to flush data to the main process, just like in jest
+// or just use process.send directly, like we do in jest
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/parallel/worker.js'
+}, (parallelWorkerPackage) => {
+  return parallelWorkerPackage
 })

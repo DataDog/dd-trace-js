@@ -19,6 +19,9 @@ module.exports = name => {
       return require('./ci-visibility/exporters/agent-proxy')
     case exporters.JEST_WORKER:
       return require('./ci-visibility/exporters/jest-worker')
+    case exporters.CUCUMBER_WORKER:
+      // for the moment we'll use the same, but we have to change this!
+      return require('./ci-visibility/exporters/jest-worker')
     default:
       return inAWSLambda && !usingLambdaExtension ? require('./exporters/log') : require('./exporters/agent')
   }
