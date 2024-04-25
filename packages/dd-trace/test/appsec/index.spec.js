@@ -53,8 +53,7 @@ describe('AppSec Index', () => {
           mode: 'safe'
         },
         apiSecurity: {
-          enabled: false,
-          requestSampling: 0
+          enabled: false
         }
       }
     }
@@ -423,6 +422,57 @@ describe('AppSec Index', () => {
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
+
+    it('should not trigger schema extraction if sampling not enabled', () => {
+      const req = {
+        url: '/path',
+        method: 'GET'
+      }
+      const res = {
+        getHeaders: () => {},
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': {}
+        }
+      }, req)
+    })
+
+    it('should trigger schema extraction if sampling enabled', () => {
+      const req = {
+        url: '/path',
+        method: 'GET'
+      }
+      const res = {
+        getHeaders: () => {},
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': {},
+          'waf.context.processor': { 'extract-schema': true }
+        }
+      }, req)
+    })
   })
 
   describe('Api Security', () => {
@@ -430,16 +480,16 @@ describe('AppSec Index', () => {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        setTag: sinon.stub()
       }
 
       web.root.returns(rootSpan)
     })
 
-    it('should not trigger schema extraction with sampling disabled', () => {
+    it('should not trigger schema extraction with appsec enabled', () => {
       config.appsec.apiSecurity = {
-        enabled: true,
-        requestSampling: 0
+        enabled: true
       }
 
       AppSec.enable(config)
@@ -471,45 +521,9 @@ describe('AppSec Index', () => {
       }, req)
     })
 
-    it('should not trigger schema extraction with feature disabled', () => {
+    it('should not trigger schema extraction with appsec disabled', () => {
       config.appsec.apiSecurity = {
-        enabled: false,
-        requestSampling: 1
-      }
-
-      AppSec.enable(config)
-
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
-      }
-      const res = {}
-
-      AppSec.incomingHttpStartTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1'
-        }
-      }, req)
-    })
-
-    it('should trigger schema extraction with sampling enabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        requestSampling: 1
+        enabled: false
       }
 
       AppSec.enable(config)
@@ -544,8 +558,7 @@ describe('AppSec Index', () => {
     describe('onResponseBody', () => {
       beforeEach(() => {
         config.appsec.apiSecurity = {
-          enabled: true,
-          requestSampling: 1
+          enabled: true
         }
         AppSec.enable(config)
       })
