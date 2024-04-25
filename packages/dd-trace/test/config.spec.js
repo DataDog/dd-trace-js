@@ -565,7 +565,7 @@ describe('Config', () => {
       { name: 'iast.maxContextOperations', value: 4, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.redactionEnabled', value: false, origin: 'env_var' },
-      { name: 'iast.redactionNamePattern',  value: 'REDACTION_NAME_PATTERN', origin: 'env_var' },
+      { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'env_var' },
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
