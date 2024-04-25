@@ -29,6 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: conti/dbm_comment_tests
 
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
