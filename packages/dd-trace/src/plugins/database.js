@@ -28,15 +28,21 @@ class DatabasePlugin extends StoragePlugin {
     }
   }
 
-  createDBMPropagationCommentService (serviceName) {
+  createDBMPropagationCommentService (serviceName, span) {
     this.encodingServiceTags('dddbs', 'encodedDddbs', serviceName)
     this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
     this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
     this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
+    if (span._spanContext._tags['db.name']) {
+      this.encodingServiceTags('ddh', 'encodedDdh', this.tracer._version)
+    }
+    if (span._spanContext._tags['out.host']) {
+      this.encodingServiceTags('dddb', 'encodedDddb', this.tracer._version)
+    }
 
-    const { encodedDddbs, encodedDde, encodedDdps, encodedDdpv } = this.serviceTags
+    const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
 
-    return `dddbs='${encodedDddbs}',dde='${encodedDde}',` +
+    return `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}'` +
       `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
@@ -56,7 +62,7 @@ class DatabasePlugin extends StoragePlugin {
       return query
     }
 
-    const servicePropagation = this.createDBMPropagationCommentService(dbmService)
+    const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
 
     if (isPreparedStatement || mode === 'service') {
       return `/*${servicePropagation}*/ ${query}`
