@@ -3,7 +3,7 @@
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
-const semver = require('semver')
+// const semver = require('semver')
 const { assert } = require('chai')
 
 const {
@@ -34,10 +34,10 @@ const {
   CUCUMBER_IS_PARALLEL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-const isOldNode = semver.satisfies(process.version, '<=16')
+// const isOldNode = semver.satisfies(process.version, '<=16')
 // const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
-// does not work with '7.0.0' yet
+// TODO: fix 7.0.0 or set another limit
 const versions = ['latest']
 
 const moduleType = [

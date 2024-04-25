@@ -456,6 +456,58 @@ function getWrappedGiveWork (giveWorkFunction) {
   }
 }
 
+function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
+  return function (worker, message) {
+    // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
+    // TODO: identify the message better
+    if (Array.isArray(message)) {
+      const [messageCode, payload] = message
+      if (messageCode === JEST_WORKER_TRACE_PAYLOAD_CODE) {
+        sessionAsyncResource.runInAsyncScope(() => {
+          workerReportTraceCh.publish(payload)
+        })
+      }
+      return
+    }
+
+    const { jsonEnvelope } = message
+    if (!jsonEnvelope) {
+      return parseWorkerMessageFunction.apply(this, arguments)
+    }
+    let parsed = jsonEnvelope
+
+    if (typeof parsed === 'string') {
+      try {
+        parsed = JSON.parse(jsonEnvelope)
+      } catch (e) {
+        // ignore errors and continue
+        return parseWorkerMessageFunction.apply(this, arguments)
+      }
+    }
+
+    if (parsed.testCaseFinished) {
+      // we can grab worstTestStepResult in addition to pickle to get the actual status
+      const { pickle } =
+        this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
+
+      const testFileAbsolutePath = pickle.uri
+
+      // TODO: GET ACTUAL STATUS from worstTestStepResult
+      pickleResultByFile[testFileAbsolutePath].finished.push('pass')
+
+      if (pickleResultByFile[testFileAbsolutePath].finished.length === pickleByFile[testFileAbsolutePath].length) {
+        const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath].finished)
+        testSuiteFinishCh.publish({
+          status: testSuiteStatus,
+          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
+        })
+      }
+    }
+
+    return parseWorkerMessageFunction.apply(this, arguments)
+  }
+}
+
 // Test start / finish for older versions. The only hook executed in workers when in parallel mode
 addHook({
   name: '@cucumber/cucumber',
@@ -501,6 +553,7 @@ addHook({
 // Only executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
 // `getWrappedGiveWork` generates suite start events and sets pickleResultByFile (used by suite finish events)
+// `getWrappedParseWorkerMessage` generates suite finish events
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
@@ -508,61 +561,15 @@ addHook({
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
   shimmer.wrap(coordinatorPackage.default.prototype, 'giveWork', giveWork => getWrappedGiveWork(giveWork))
-
-  shimmer.wrap(coordinatorPackage.default.prototype, 'parseWorkerMessage', parseWorkerMessage =>
-    function (worker, message) {
-      // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
-      // TODO: identify the message better
-      if (Array.isArray(message)) {
-        const [messageCode, payload] = message
-        if (messageCode === JEST_WORKER_TRACE_PAYLOAD_CODE) {
-          sessionAsyncResource.runInAsyncScope(() => {
-            workerReportTraceCh.publish(payload)
-          })
-        }
-        return
-      }
-
-      const { jsonEnvelope } = message
-      if (!jsonEnvelope) {
-        return parseWorkerMessage.apply(this, arguments)
-      }
-      let parsed = jsonEnvelope
-
-      if (typeof parsed === 'string') {
-        try {
-          parsed = JSON.parse(jsonEnvelope)
-        } catch (e) {
-          // ignore errors and continue
-          return parseWorkerMessage.apply(this, arguments)
-        }
-      }
-
-      if (parsed.testCaseFinished) {
-        // we can grab worstTestStepResult in addition to pickle to get the actual status
-        const { pickle } =
-          this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
-
-        const testFileAbsolutePath = pickle.uri
-
-        // TODO: GET ACTUAL STATUS from worstTestStepResult
-        pickleResultByFile[testFileAbsolutePath].finished.push('pass')
-
-        if (pickleResultByFile[testFileAbsolutePath].finished.length === pickleByFile[testFileAbsolutePath].length) {
-          const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath].finished)
-          testSuiteFinishCh.publish({
-            status: testSuiteStatus,
-            testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
-          })
-        }
-      }
-
-      return parseWorkerMessage.apply(this, arguments)
-    }
+  shimmer.wrap(
+    coordinatorPackage.default.prototype,
+    'parseWorkerMessage',
+    parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage)
   )
   return coordinatorPackage
 })
 
+// TODO: remove unnecesary hooks
 // In `giveWork` I can modify the data that is sent to the workers it shows up in `runTestCase`.
 // This might be useful for "interprocess tracing".
 addHook({
