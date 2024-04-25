@@ -524,7 +524,7 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'tracing', value: false, origin: 'env_var' },
-      // { name: 'debug', value: true, origin: 'env_var' },
+      { name: 'port', value: '6218', origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
@@ -537,14 +537,15 @@ describe('Config', () => {
       { name: 'reportHostname', value: true, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
       { name: 'sampleRate', value: 0.5, origin: 'env_var' },
-      // { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
+      { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
-      // { name: 'spanComputePeerService', value: true, origin: 'env_var' },
       { name: 'sampler.rateLimit', value: '-1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
-      // { name: 'peerServiceMapping', value: 'c:cc,d:dd', origin: 'env_var' },
-      // { name: 'tracePropagationStyle.extract', value: ['b3', 'tracecontext'], origin: 'env_var' },
+      { name: 'peerServiceMapping', value: { c: 'cc', d: 'dd' }, origin: 'env_var' },
+      { name: 'profiling.enabled', value: true, origin: 'env_var' },
+      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
+      { name: 'telemetry.logCollection', value: true, origin: 'env_var' },
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
@@ -554,9 +555,9 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 42, origin: 'env_var' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
-      // { name: 'appsec.eventTracking.enabled', value: true, origin: 'env_var' },
-      // { name: 'appsec.eventTracking.mode', value: 'extended', origin: 'env_var' },
-      // { name: 'remoteConfig.enabled', value: false, origin: 'calculated' },
+      { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
+      { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
+      { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
       { name: 'iast.requestSampling', value: 40, origin: 'env_var' },
@@ -564,7 +565,11 @@ describe('Config', () => {
       { name: 'iast.maxContextOperations', value: 4, origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.redactionEnabled', value: false, origin: 'env_var' },
-      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' }
+      { name: 'iast.redactionNamePattern',  value: 'REDACTION_NAME_PATTERN', origin: 'env_var' },
+      { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'env_var' },
+      { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
+      { name: 'isGCPFunction', value: false, origin: 'env_var' },
+      { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' }
     ])
   })
 
