@@ -789,7 +789,7 @@ describe('Config', () => {
       { name: 'site', value: 'datadoghq.eu', origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
       { name: 'port', value: '6218', origin: 'code' },
-      // { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'calculated' }, its origin is code
+      { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'service', value: 'service', origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' },
@@ -802,13 +802,12 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: true, origin: 'code' },
       { name: 'reportHostname', value: true, origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
-      // { name: 'logLevel', value: logLevel, origin: 'code' }, it does not come
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
-      // { name: 'spanComputePeerService', value: true, origin: 'code' }, its origin is computed
-      // { name: 'peerServiceMapping', value: 'd:dd', origin: 'code' }, its value is {d: 'dd'}
-      // { name: 'tracePropagationStyle.extract', value: ['datadog'], origin: 'calculated' }, it does not come
+      { name: 'spanComputePeerService', value: true, origin: 'calculated' },
+      { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
+      { name: 'telemetry.logCollection', value: true, origin: 'code' },
       { name: 'experimental.runtimeId', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
@@ -821,7 +820,11 @@ describe('Config', () => {
       { name: 'iast.deduplicationEnabled', value: false, origin: 'code' },
       { name: 'iast.redactionEnabled', value: false, origin: 'code' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
-      // { name: 'sampler.sampleRate', value: 0.5, origin: 'code' } it does not come
+      { name: 'iast.redactionNamePattern', value: 'REDACTION_NAME_PATTERN', origin: 'code' },
+      { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'code' },
+      { name: 'sampler.rateLimit', value: 1000, origin: 'code' },
+      { name: 'spanAttributeSchema', value: 'v1', origin: 'code' },
+      { name: 'stats.enabled', value: false, origin: 'calculated' }
     ])
   })
 
