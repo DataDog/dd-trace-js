@@ -1,61 +1,52 @@
 'use strict'
 
-const log = require('../log')
+const LRU = require('lru-cache')
 
 let enabled
-let requestSampling
-
-const sampledRequests = new WeakSet()
+let sampledCache
 
 function configure ({ apiSecurity }) {
   enabled = apiSecurity.enabled
-  setRequestSampling(apiSecurity.requestSampling)
+
+  if (enabled) {
+    const {
+      sampleCacheSize: max = 4096,
+      sampleRate: ttl = 1000 * 30
+    } = apiSecurity
+
+    sampledCache = new LRU({ max, ttl })
+  }
 }
 
 function disable () {
   enabled = false
 }
 
-function setRequestSampling (sampling) {
-  requestSampling = parseRequestSampling(sampling)
-}
-
-function parseRequestSampling (requestSampling) {
-  let parsed = parseFloat(requestSampling)
-
-  if (isNaN(parsed)) {
-    log.warn(`Incorrect API Security request sampling value: ${requestSampling}`)
-
-    parsed = 0
-  } else {
-    parsed = Math.min(1, Math.max(0, parsed))
-  }
-
-  return parsed
-}
-
-function sampleRequest (req) {
-  if (!enabled || !requestSampling) {
+function sampleRequest (req, res) {
+  if (!enabled) {
     return false
   }
 
-  const shouldSample = Math.random() <= requestSampling
-
+  const key = getKey(req, res)
+  const shouldSample = !sampledCache.has(key)
   if (shouldSample) {
-    sampledRequests.add(req)
+    sampledCache.set(key)
   }
 
   return shouldSample
 }
 
-function isSampled (req) {
-  return sampledRequests.has(req)
+function getKey (req = {}, res = {}) {
+  return `${req.method}-${req.url}-${res.statusCode}`
+}
+
+function has (req, res) {
+  return sampledCache.has(getKey(req, res))
 }
 
 module.exports = {
   configure,
   disable,
-  setRequestSampling,
   sampleRequest,
-  isSampled
+  has
 }

@@ -89,7 +89,6 @@ describe('AppSec Index', () => {
 
     apiSecuritySampler = require('../../src/appsec/api_security_sampler')
     sinon.spy(apiSecuritySampler, 'sampleRequest')
-    sinon.spy(apiSecuritySampler, 'isSampled')
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
@@ -537,8 +536,7 @@ describe('AppSec Index', () => {
           'server.request.uri.raw': '/path',
           'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
           'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1',
-          'waf.context.processor': { 'extract-schema': true }
+          'http.client_ip': '127.0.0.1'
         }
       }, req)
     })
@@ -557,33 +555,36 @@ describe('AppSec Index', () => {
       })
 
       it('should not do anything if body is not an object', () => {
-        responseBody.publish({ req: {}, body: 'string' })
-        responseBody.publish({ req: {}, body: null })
+        responseBody.publish({ req: {}, res: {}, body: 'string' })
+        responseBody.publish({ req: {}, res: {}, body: null })
 
-        expect(apiSecuritySampler.isSampled).to.not.been.called
+        expect(apiSecuritySampler.sampleRequest).to.not.been.called
         expect(waf.run).to.not.been.called
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
         const req = {}
+        const res = {}
 
-        responseBody.publish({ req, body: {} })
+        responseBody.publish({ req, res, body: {} })
 
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.not.been.called
       })
 
       it('should call to the waf if it is a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
         const req = {}
+        const res = {}
         const body = {}
 
-        responseBody.publish({ req, body })
+        responseBody.publish({ req, res, body })
 
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
+            [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true },
             [addresses.HTTP_OUTGOING_BODY]: body
           }
         }, req)

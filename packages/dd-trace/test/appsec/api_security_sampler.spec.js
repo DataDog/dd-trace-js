@@ -4,68 +4,78 @@ const apiSecuritySampler = require('../../src/appsec/api_security_sampler')
 
 describe('Api Security Sampler', () => {
   let config
+  const req = {
+    url: '/test',
+    method: 'GET'
+  }
+  const res = {
+    statusCode: 200
+  }
 
   beforeEach(() => {
     config = {
       apiSecurity: {
         enabled: true,
-        requestSampling: 1
+        sampleCacheSize: 2
       }
     }
-
-    sinon.stub(Math, 'random').returns(0.3)
   })
 
   afterEach(sinon.restore)
 
   describe('sampleRequest', () => {
-    it('should sample request if enabled and sampling 1', () => {
+    it('should sample unknown request', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
     })
 
-    it('should not sample request if enabled and sampling 0', () => {
-      config.apiSecurity.requestSampling = 0
+    it('should sample multiple requests based on url, method and statusCode', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest({})).to.false
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+      expect(apiSecuritySampler.sampleRequest(req, { statusCode: 500 })).to.true
     })
 
-    it('should sample request if enabled and sampling greater than random', () => {
-      config.apiSecurity.requestSampling = 0.5
-
+    it('should sample multiple requests based on url, method and statusCode II', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+      expect(apiSecuritySampler.sampleRequest({ url: '/otherTest', method: 'POST' }, res)).to.true
     })
 
-    it('should not sample request if enabled and sampling less than random', () => {
-      config.apiSecurity.requestSampling = 0.1
-
+    it('should not sample repeated requests in the configured interval', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.false
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.false
     })
 
-    it('should not sample request if incorrect config value', () => {
-      config.apiSecurity.requestSampling = NaN
+    it('should sample repeated request after interval', () => {
+      const clock = sinon.useFakeTimers()
 
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest()).to.false
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+
+      clock.tick(40000)
+
+      expect(apiSecuritySampler.has(req, res)).to.false
+
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+
+      clock.restore()
     })
 
-    it('should sample request according to the config', () => {
-      config.apiSecurity.requestSampling = 1
-
+    it('should mantain a max size cache', () => {
       apiSecuritySampler.configure(config)
 
-      expect(apiSecuritySampler.sampleRequest({})).to.true
+      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
+      expect(apiSecuritySampler.sampleRequest(req, { statusCode: 500 })).to.true
+      expect(apiSecuritySampler.sampleRequest(req, { statusCode: 404 })).to.true
 
-      apiSecuritySampler.setRequestSampling(0)
-
-      expect(apiSecuritySampler.sampleRequest()).to.false
+      expect(apiSecuritySampler.has(req, res)).to.false
+      expect(apiSecuritySampler.has(req, { statusCode: 500 })).to.true
     })
   })
 })

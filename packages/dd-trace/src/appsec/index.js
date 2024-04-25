@@ -95,10 +95,6 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     persistent[addresses.HTTP_CLIENT_IP] = clientIp
   }
 
-  if (apiSecuritySampler.sampleRequest(req)) {
-    persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
-  }
-
   const actions = waf.run({ persistent }, req)
 
   handleResults(actions, req, res, rootSpan, abortController)
@@ -196,16 +192,21 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-function onResponseBody ({ req, body }) {
+// can we assume res.statusCode is fixed here?
+function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.isSampled(req)) return
 
-  // we don't support blocking at this point, so no results needed
-  waf.run({
-    persistent: {
-      [addresses.HTTP_OUTGOING_BODY]: body
-    }
-  }, req)
+  if (apiSecuritySampler.sampleRequest(req, res)) {
+    // we don't support blocking at this point, so no results needed
+    waf.run({
+      persistent: {
+        [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true },
+        [addresses.HTTP_OUTGOING_BODY]: body
+      }
+    }, req)
+
+    // TODO: set manual.keep to force agent to keep the trace
+  }
 }
 
 function onPassportVerify ({ credentials, user }) {
