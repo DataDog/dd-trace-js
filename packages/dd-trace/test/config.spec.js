@@ -232,6 +232,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'env', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
       { name: 'logInjection', value: false, origin: 'default' },
       { name: 'headerTags', value: [], origin: 'default' },
@@ -243,8 +244,8 @@ describe('Config', () => {
       { name: 'site', value: 'datadoghq.com', origin: 'default' },
       { name: 'hostname', value: '127.0.0.1', origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },
-      // { name: 'debug', value: false, origin: 'default' }, it is not present in argument
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
+      { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
@@ -255,13 +256,11 @@ describe('Config', () => {
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'reportHostname', value: false, origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
-      // { name: 'logLevel', value: 'debug', origin: 'default' }, it is not present in argument
-      // { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' }, its default is true
+      { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      // { name: 'peerServiceMapping', value: '', origin: 'default' }, its default is {}
-      // { name: 'tracePropagationStyle.extract', value: ['datadog', 'tracecontext'], origin: 'default' }, it is not present in argument
+      { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'experimental.runtimeId', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
@@ -270,11 +269,12 @@ describe('Config', () => {
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
       { name: 'startupLogs', value: false, origin: 'default' },
-      // { name: 'telemetry.enabled', value: true, origin: 'default' }, it comes as env_var origin, not as default
+      { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
-      // { name: 'telemetry.metrics', value: false, origin: 'default' }, its default is true
+      { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
+      { name: 'telemetry.logCollection', value: false, origin: 'default' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
@@ -282,9 +282,19 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
-      // { name: 'appsec.eventTracking.enabled', value: true, origin: 'default' }, it is not a config, it is inferred from DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
-      // { name: 'appsec.eventTracking.mode', value: 'safe', origin: 'default' }, it does not come as default origin
-      // { name: 'remoteConfig.enabled', value: true, origin: 'default' }, it comes as env_var origin, not as default
+      {
+        name: 'appsec.obfuscatorKeyRegex',
+        // eslint-disable-next-line max-len
+        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization',
+        origin: 'default'
+      },
+      {
+        name: 'appsec.obfuscatorValueRegex',
+        // eslint-disable-next-line max-len
+        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
+        origin: 'default'
+      },
+      { name: 'remoteConfig.enabled', value: true, origin: 'env_var' }, // it comes as env_var origin, not as default
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
@@ -293,11 +303,27 @@ describe('Config', () => {
       { name: 'iast.deduplicationEnabled', value: true, origin: 'default' },
       { name: 'iast.redactionEnabled', value: true, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
+      { name: 'iast.redactionNamePattern', value: null, origin: 'default' },
+      { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
       { name: 'openaiSpanCharLimit', value: 128, origin: 'default' },
-      // { name: 'traceId128BitGenerationEnabled', value: false, origin: 'default' }, duplicated
-      // { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' } duplicated
+      { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
+      { name: 'isGCPFunction', value: false, origin: 'env_var' },
+      { name: 'isGitUploadEnabled', value: false, origin: 'default' },
+      { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
+      { name: 'isManualApiEnabled', value: false, origin: 'default' },
+      { name: 'lookup', value: undefined, origin: 'default' },
+      {
+        name: 'queryStringObfuscation',
+        // eslint-disable-next-line max-len
+        value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
+        origin: 'default'
+      },
+      { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'spanComputePeerService', value: false, origin: 'calculated' },
+      { name: 'stats.enabled', value: false, origin: 'calculated' },
+      { name: 'version', value: '', origin: 'default' }
     ])
   })
 
