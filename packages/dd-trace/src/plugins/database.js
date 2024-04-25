@@ -42,7 +42,7 @@ class DatabasePlugin extends StoragePlugin {
 
     const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
 
-    return `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}'` +
+    return `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}',` +
       `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
   }
 
