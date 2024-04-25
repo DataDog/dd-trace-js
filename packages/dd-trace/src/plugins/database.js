@@ -33,11 +33,11 @@ class DatabasePlugin extends StoragePlugin {
     this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
     this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
     this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
-    if (span._spanContext._tags['db.name']) {
-      this.encodingServiceTags('ddh', 'encodedDdh', this.tracer._version)
-    }
     if (span._spanContext._tags['out.host']) {
-      this.encodingServiceTags('dddb', 'encodedDddb', this.tracer._version)
+      this.encodingServiceTags('ddh', 'encodedDdh', span._spanContext._tags['out.host'])
+    }
+    if (span._spanContext._tags['db.name']) {
+      this.encodingServiceTags('dddb', 'encodedDddb', span._spanContext._tags['db.name'])
     }
 
     const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
