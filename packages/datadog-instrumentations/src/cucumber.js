@@ -57,9 +57,12 @@ let skippableSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 let isUnskippable = false
+let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
+let skippedSuites = []
+let isSuitesSkipped = false
 
 function getSuiteStatusFromTestStatuses (testStatuses) {
   if (testStatuses.some(status => status === 'fail')) {
@@ -110,6 +113,43 @@ function getTestStatusFromRetries (testStatuses) {
     return 'pass'
   }
   return 'pass'
+}
+
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    sessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
+}
+
+function getFilteredPickles (runtime, suitesToSkip) {
+  return runtime.pickleIds.reduce((acc, pickleId) => {
+    const test = runtime.eventDataCollector.getPickle(pickleId)
+    const testSuitePath = getTestSuitePath(test.uri, process.cwd())
+
+    const isUnskippable = isMarkedAsUnskippable(test)
+    const isSkipped = suitesToSkip.includes(testSuitePath)
+
+    if (isSkipped && !isUnskippable) {
+      acc.skippedSuites.add(testSuitePath)
+    } else {
+      acc.picklesToRun.push(pickleId)
+    }
+    return acc
+  }, { skippedSuites: new Set(), picklesToRun: [] })
+}
+
+function getPickleByFile (runtime) {
+  return runtime.pickleIds.reduce((acc, pickleId) => {
+    const test = runtime.eventDataCollector.getPickle(pickleId)
+    if (acc[test.uri]) {
+      acc[test.uri].push(test)
+    } else {
+      acc[test.uri] = [test]
+    }
+    return acc
+  }, {})
 }
 
 function wrapRun (pl, isLatestVersion) {
@@ -215,76 +255,21 @@ function testCaseHook (TestCaseRunner) {
   return TestCaseRunner
 }
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['7.0.0 - 7.2.1'],
-  file: 'lib/runtime/pickle_runner.js'
-}, pickleHook)
-
-// this is the only hook being executed in workers
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/test_case_runner.js'
-}, testCaseHook)
-
-function getFilteredPickles (runtime, suitesToSkip) {
-  return runtime.pickleIds.reduce((acc, pickleId) => {
-    const test = runtime.eventDataCollector.getPickle(pickleId)
-    const testSuitePath = getTestSuitePath(test.uri, process.cwd())
-
-    const isUnskippable = isMarkedAsUnskippable(test)
-    const isSkipped = suitesToSkip.includes(testSuitePath)
-
-    if (isSkipped && !isUnskippable) {
-      acc.skippedSuites.add(testSuitePath)
-    } else {
-      acc.picklesToRun.push(pickleId)
-    }
-    return acc
-  }, { skippedSuites: new Set(), picklesToRun: [] })
-}
-
-function getPickleByFile (runtime) {
-  return runtime.pickleIds.reduce((acc, pickleId) => {
-    const test = runtime.eventDataCollector.getPickle(pickleId)
-    if (acc[test.uri]) {
-      acc[test.uri].push(test)
-    } else {
-      acc[test.uri] = [test]
-    }
-    return acc
-  }, {})
-}
-
 function getWrappedStart (start, frameworkVersion, isParallel = false) {
   return async function () {
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
     }
-    let onDone
+    let errorSkippableRequest
 
-    const configPromise = new Promise(resolve => {
-      onDone = resolve
-    })
-
-    sessionAsyncResource.runInAsyncScope(() => {
-      libraryConfigurationCh.publish({ onDone })
-    })
-
-    const configurationResponse = await configPromise
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
+    isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
 
     if (isEarlyFlakeDetectionEnabled) {
-      const knownTestsPromise = new Promise(resolve => {
-        onDone = resolve
-      })
-      sessionAsyncResource.runInAsyncScope(() => {
-        knownTestsCh.publish({ onDone })
-      })
-      const knownTestsResponse = await knownTestsPromise
+      const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (!knownTestsResponse.err) {
         knownTests = knownTestsResponse.knownTests
       } else {
@@ -292,35 +277,26 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
       }
     }
 
-    const skippableSuitesPromise = new Promise(resolve => {
-      onDone = resolve
-    })
+    if (isSuitesSkippingEnabled) {
+      const skippableResponse = await getChannelPromise(skippableSuitesCh)
 
-    sessionAsyncResource.runInAsyncScope(() => {
-      skippableSuitesCh.publish({ onDone })
-    })
+      errorSkippableRequest = skippableResponse.err
+      skippableSuites = skippableResponse.skippableSuites
 
-    const skippableResponse = await skippableSuitesPromise
+      if (!errorSkippableRequest) {
+        const filteredPickles = getFilteredPickles(this, skippableSuites)
+        const { picklesToRun } = filteredPickles
+        isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
 
-    const err = skippableResponse.err
-    skippableSuites = skippableResponse.skippableSuites
+        log.debug(
+          () => `${picklesToRun.length} out of ${this.pickleIds.length} suites are going to run.`
+        )
 
-    let skippedSuites = []
-    let isSuitesSkipped = false
+        this.pickleIds = picklesToRun
 
-    if (!err) {
-      const filteredPickles = getFilteredPickles(this, skippableSuites)
-      const { picklesToRun } = filteredPickles
-      isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
-
-      log.debug(
-        () => `${picklesToRun.length} out of ${this.pickleIds.length} suites are going to run.`
-      )
-
-      this.pickleIds = picklesToRun
-
-      skippedSuites = Array.from(filteredPickles.skippedSuites)
-      itrCorrelationId = skippableResponse.itrCorrelationId
+        skippedSuites = Array.from(filteredPickles.skippedSuites)
+        itrCorrelationId = skippableResponse.itrCorrelationId
+      }
     }
 
     pickleByFile = getPickleByFile(this)
@@ -332,7 +308,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
       sessionStartCh.publish({ command, frameworkVersion })
     })
 
-    if (!err && skippedSuites.length) {
+    if (!errorSkippableRequest && skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
@@ -444,56 +420,26 @@ function getWrappedRunTest (runTestFunction) {
   }
 }
 
-// From 7.3.0 onwards, runPickle becomes runTestCase
-// these are probably not being executed
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/index.js'
-}, (runtimePackage, frameworkVersion) => {
-  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
-  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
-
-  return runtimePackage
-})
-
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.0.0 <7.3.0'],
-  file: 'lib/runtime/index.js'
-}, (runtimePackage, frameworkVersion) => {
-  shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTest(runPickle))
-  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
-
-  return runtimePackage
-})
-
-// this has no runTestCase equivalent to the above. We'll have to change it
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/parallel/coordinator.js'
-}, (coordinatorPackage, frameworkVersion) => {
-  shimmer.wrap(coordinatorPackage.default.prototype, 'giveWork', giveWork => function (worker, force) {
+function getWrappedGiveWork (giveWorkFunction) {
+  return function (worker) {
+    if (!libraryConfigurationCh.hasSubscribers) {
+      return giveWorkFunction.apply(this, arguments)
+    }
     const coordinator = this
     const oldWorkerProcessSend = worker.process.send
 
-    // when sending a message to the worker, we probably can send them timing info (_trace.startTime and _trace.ticks)
-    // so that the tests are better aligned
     worker.process.send = function (runCommand) {
       if (!runCommand.run) {
         return oldWorkerProcessSend.apply(this, arguments)
       }
 
       const pickleId = runCommand.run.pickle.id
-
       const test = coordinator.eventDataCollector.getPickle(pickleId)
-
       const testFileAbsolutePath = test.uri
       const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
-      // need to set status in pickleResultByFile when it finished
-      if (!pickleResultByFile[testFileAbsolutePath]?.started) { // first test in suite
+      // First test in suite
+      if (!pickleResultByFile[testFileAbsolutePath]?.started) {
         pickleResultByFile[testFileAbsolutePath] = {
           started: 1,
           finished: []
@@ -506,13 +452,67 @@ addHook({
       return oldWorkerProcessSend.apply(this, arguments)
     }
 
-    return giveWork.apply(this, arguments)
-  })
+    return giveWorkFunction.apply(this, arguments)
+  }
+}
 
+// Test start / finish for older versions. The only hook executed in workers when in parallel mode
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['7.0.0 - 7.2.1'],
+  file: 'lib/runtime/pickle_runner.js'
+}, pickleHook)
+
+// Test start / finish for newer versions. The only hook executed in workers when in parallel mode
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/test_case_runner.js'
+}, testCaseHook)
+
+// From 7.3.0 onwards, runPickle becomes runTestCase. Not executed in parallel mode.
+// `getWrappedStart` generates session start and finish events
+// `getWrappedRunTest` generates suite start and finish events
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/index.js'
+}, (runtimePackage, frameworkVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
+  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
+
+  return runtimePackage
+})
+
+// Not executed in parallel mode.
+// `getWrappedStart` generates session start and finish events
+// `getWrappedRunTest` generates suite start and finish events
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.0.0 <7.3.0'],
+  file: 'lib/runtime/index.js'
+}, (runtimePackage, frameworkVersion) => {
+  shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTest(runPickle))
+  shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
+
+  return runtimePackage
+})
+
+// Only executed in parallel mode.
+// `getWrappedStart` generates session start and finish events
+// `getWrappedGiveWork` generates suite start events and sets pickleResultByFile (used by suite finish events)
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=7.3.0'],
+  file: 'lib/runtime/parallel/coordinator.js'
+}, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
+  shimmer.wrap(coordinatorPackage.default.prototype, 'giveWork', giveWork => getWrappedGiveWork(giveWork))
+
   shimmer.wrap(coordinatorPackage.default.prototype, 'parseWorkerMessage', parseWorkerMessage =>
     function (worker, message) {
-      // IPC for test case finished! We need to stop cucumber processing
+      // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
+      // TODO: identify the message better
       if (Array.isArray(message)) {
         const [messageCode, payload] = message
         if (messageCode === JEST_WORKER_TRACE_PAYLOAD_CODE) {
@@ -527,10 +527,20 @@ addHook({
       if (!jsonEnvelope) {
         return parseWorkerMessage.apply(this, arguments)
       }
-      const parsed = JSON.parse(jsonEnvelope)
+      let parsed = jsonEnvelope
+
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(jsonEnvelope)
+        } catch (e) {
+          // ignore errors and continue
+          return parseWorkerMessage.apply(this, arguments)
+        }
+      }
 
       if (parsed.testCaseFinished) {
-        const { pickle, worstTestStepResult } =
+        // we can grab worstTestStepResult in addition to pickle to get the actual status
+        const { pickle } =
           this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
 
         const testFileAbsolutePath = pickle.uri
@@ -553,12 +563,15 @@ addHook({
   return coordinatorPackage
 })
 
-// I could use #sendMessage (process.send) to flush data to the main process, just like in jest
-// or just use process.send directly, like we do in jest
+// In `giveWork` I can modify the data that is sent to the workers it shows up in `runTestCase`.
+// This might be useful for "interprocess tracing".
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
   file: 'lib/runtime/parallel/worker.js'
 }, (parallelWorkerPackage) => {
+  shimmer.wrap(parallelWorkerPackage.default.prototype, 'runTestCase', runTestCase => async function () {
+    return runTestCase.apply(this, arguments)
+  })
   return parallelWorkerPackage
 })

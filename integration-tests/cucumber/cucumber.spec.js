@@ -90,7 +90,6 @@ versions.forEach(version => {
         childProcess.kill()
         await receiver.stop()
       })
-      const reportMethods = ['agentless', 'evp proxy']
 
       it('works with parallel mode', (done) => {
         const receiverPromise = receiver
@@ -165,7 +164,9 @@ versions.forEach(version => {
           assert.notInclude(testOutput, 'TypeError')
           receiverPromise.then(() => done()).catch(done)
         })
-      }).timeout(50000)
+      })
+
+      const reportMethods = ['agentless', 'evp proxy']
 
       reportMethods.forEach((reportMethod) => {
         context(`reporting via ${reportMethod}`, () => {
