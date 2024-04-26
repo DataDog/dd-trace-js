@@ -32,7 +32,7 @@ const {
   mergeCoverage,
   fromCoverageMapToCoverage,
   getTestSuitePath,
-  JEST_WORKER_TRACE_PAYLOAD_CODE
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE
 } = require('../../dd-trace/src/plugins/util/test')
 
 const isMarkedAsUnskippable = (pickle) => {
@@ -459,15 +459,16 @@ function getWrappedGiveWork (giveWorkFunction) {
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
   return function (worker, message) {
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
+    // Otherwise cucumber code will throw an error
     // TODO: identify the message better
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
-      if (messageCode === JEST_WORKER_TRACE_PAYLOAD_CODE) {
+      if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
         sessionAsyncResource.runInAsyncScope(() => {
           workerReportTraceCh.publish(payload)
         })
+        return
       }
-      return
     }
 
     const { jsonEnvelope } = message
