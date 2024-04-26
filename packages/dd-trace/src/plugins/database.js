@@ -1,7 +1,7 @@
 'use strict'
 
 const StoragePlugin = require('./storage')
-const { PEER_SERVICE_KEY } = require('../constants')
+const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 
 class DatabasePlugin extends StoragePlugin {
   static get operation () { return 'query' }
@@ -42,8 +42,20 @@ class DatabasePlugin extends StoragePlugin {
 
     const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
 
-    return `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}',` +
+    let dbmComment = `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}',` +
       `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
+
+    if (this._tracerConfig.spanComputePeerService) {
+      // we only want to add 'peer.service' value if enabled, and explicitly set by user (source is 'peer.service' key)
+      const peerData = this.getPeerService(span.context()._tags)
+      if (peerData !== undefined && peerData[PEER_SERVICE_SOURCE_KEY] === PEER_SERVICE_KEY) {
+        this.encodingServiceTags('ddprs', 'encodedDdprs', peerData[PEER_SERVICE_SOURCE_KEY])
+
+        const { encodedDdprs } = this.serviceTags
+        dbmComment += `,ddprs='${encodedDdprs}'`
+      }
+    }
+    return dbmComment
   }
 
   getDbmServiceName (span, tracerService) {
