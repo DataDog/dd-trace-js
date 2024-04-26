@@ -6,6 +6,7 @@ const vulnerabilities = require('../../vulnerabilities')
 const { contains, intersects, remove } = require('./range-utils')
 
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
 const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
@@ -30,6 +31,9 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
       return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
+    })
+    this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
+      return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
     })
   }
 
