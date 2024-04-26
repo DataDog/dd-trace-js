@@ -420,42 +420,6 @@ function getWrappedRunTest (runTestFunction) {
   }
 }
 
-function getWrappedGiveWork (giveWorkFunction) {
-  return function (worker) {
-    if (!libraryConfigurationCh.hasSubscribers) {
-      return giveWorkFunction.apply(this, arguments)
-    }
-    const coordinator = this
-    const oldWorkerProcessSend = worker.process.send
-
-    worker.process.send = function (runCommand) {
-      if (!runCommand.run) {
-        return oldWorkerProcessSend.apply(this, arguments)
-      }
-
-      const pickleId = runCommand.run.pickle.id
-      const test = coordinator.eventDataCollector.getPickle(pickleId)
-      const testFileAbsolutePath = test.uri
-      const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-
-      // First test in suite
-      if (!pickleResultByFile[testFileAbsolutePath]?.started) {
-        pickleResultByFile[testFileAbsolutePath] = {
-          started: 1,
-          finished: []
-        }
-        testSuiteStartCh.publish({ testSuitePath })
-      } else {
-        pickleResultByFile[testFileAbsolutePath].started++
-      }
-
-      return oldWorkerProcessSend.apply(this, arguments)
-    }
-
-    return giveWorkFunction.apply(this, arguments)
-  }
-}
-
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
   return function (worker, message) {
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
@@ -483,6 +447,21 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       } catch (e) {
         // ignore errors and continue
         return parseWorkerMessageFunction.apply(this, arguments)
+      }
+    }
+    if (parsed.testCaseStarted) {
+      const { pickleId } = this.eventDataCollector.testCaseMap[parsed.testCaseStarted.testCaseId]
+      const pickle = this.eventDataCollector.getPickle(pickleId)
+      const testFileAbsolutePath = pickle.uri
+      if (!pickleResultByFile[testFileAbsolutePath]?.started) {
+        pickleResultByFile[testFileAbsolutePath] = {
+          started: 1,
+          finished: []
+        }
+        const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+        testSuiteStartCh.publish({ testSuitePath })
+      } else {
+        pickleResultByFile[testFileAbsolutePath].started++
       }
     }
 
@@ -560,29 +539,14 @@ addHook({
 // `getWrappedParseWorkerMessage` generates suite finish events
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
+  versions: ['>=8.0.0'],
   file: 'lib/runtime/parallel/coordinator.js'
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
-  shimmer.wrap(coordinatorPackage.default.prototype, 'giveWork', giveWork => getWrappedGiveWork(giveWork))
   shimmer.wrap(
     coordinatorPackage.default.prototype,
     'parseWorkerMessage',
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage)
   )
   return coordinatorPackage
-})
-
-// TODO: remove unnecesary hooks
-// In `giveWork` I can modify the data that is sent to the workers it shows up in `runTestCase`.
-// This might be useful for "interprocess tracing".
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
-  file: 'lib/runtime/parallel/worker.js'
-}, (parallelWorkerPackage) => {
-  shimmer.wrap(parallelWorkerPackage.default.prototype, 'runTestCase', runTestCase => async function () {
-    return runTestCase.apply(this, arguments)
-  })
-  return parallelWorkerPackage
 })

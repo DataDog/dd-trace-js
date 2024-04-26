@@ -3,7 +3,7 @@
 const { exec } = require('child_process')
 
 const getPort = require('get-port')
-// const semver = require('semver')
+const semver = require('semver')
 const { assert } = require('chai')
 
 const {
@@ -34,11 +34,8 @@ const {
   CUCUMBER_IS_PARALLEL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-// const isOldNode = semver.satisfies(process.version, '<=16')
-// const versions = ['7.0.0', isOldNode ? '9' : 'latest']
-
-// TODO: fix 7.0.0 or set another limit
-const versions = ['latest']
+const isOldNode = semver.satisfies(process.version, '<=16')
+const versions = ['7.0.0', isOldNode ? '9' : 'latest']
 
 const moduleType = [
   {
@@ -100,7 +97,12 @@ versions.forEach(version => {
             isAgentless = reportMethod === 'agentless'
             envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           })
-          const runModes = ['serial', 'parallel']
+          const runModes = ['serial']
+
+          if (version !== '7.0.0') { // only on latest or 9 if node is old
+            runModes.push('parallel')
+          }
+
           runModes.forEach((runMode) => {
             it(`(${runMode}) can run and report tests`, (done) => {
               const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
