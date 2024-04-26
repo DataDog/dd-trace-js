@@ -485,18 +485,21 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       }
     }
 
+    const parseWorkerResponse = parseWorkerMessageFunction.apply(this, arguments)
+
+    // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
-      // we can grab worstTestStepResult in addition to pickle to get the actual status
-      const { pickle } =
+      const { pickle, worstTestStepResult } =
         this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
 
+      const { status } = getStatusFromResultLatest(worstTestStepResult)
+
       const testFileAbsolutePath = pickle.uri
+      const { finished } = pickleResultByFile[testFileAbsolutePath]
+      finished.push(status)
 
-      // TODO: GET ACTUAL STATUS from worstTestStepResult
-      pickleResultByFile[testFileAbsolutePath].finished.push('pass')
-
-      if (pickleResultByFile[testFileAbsolutePath].finished.length === pickleByFile[testFileAbsolutePath].length) {
-        const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath].finished)
+      if (finished.length === pickleByFile[testFileAbsolutePath].length) {
+        const testSuiteStatus = getSuiteStatusFromTestStatuses(finished)
         testSuiteFinishCh.publish({
           status: testSuiteStatus,
           testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -504,7 +507,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       }
     }
 
-    return parseWorkerMessageFunction.apply(this, arguments)
+    return parseWorkerResponse
   }
 }
 
