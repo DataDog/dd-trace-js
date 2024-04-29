@@ -16,7 +16,9 @@ const commands = [
   'ls -la',
   ' ls -la  人 ',
   ' ls -la  𠆢𠆢𠆢 ',
-  ' ls -ls �'
+  ' ls -ls �',
+  ' w ',
+  'w'
 ]
 
 const propagationLodashFns = [

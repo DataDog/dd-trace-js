@@ -215,16 +215,16 @@ function getLodashTaintedUtilFn (lodashFn) {
   return lodashFns[lodashFn] || ((transactionId, result) => result)
 }
 
-function lodashTaintTrackingHandler ({ operation, arguments: lodashFnArguments, result }) {
+function lodashTaintTrackingHandler (message) {
   try {
-    if (!result) return
+    if (!message.result) return
     const context = getContextDefault()
     const transactionId = getTransactionId(context)
     if (transactionId) {
-      result = getLodashTaintedUtilFn(operation)(transactionId, result, ...lodashFnArguments)
+      message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
     }
   } catch (e) {
-    iastLog.error(`Error invoking CSI lodash ${operation}`)
+    iastLog.error(`Error invoking CSI lodash ${message.operation}`)
       .errorAndPublish(e)
   }
 }
