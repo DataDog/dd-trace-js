@@ -280,7 +280,8 @@ describe('AppSec Index', () => {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        setTag: sinon.stub()
       }
 
       web.root.returns(rootSpan)

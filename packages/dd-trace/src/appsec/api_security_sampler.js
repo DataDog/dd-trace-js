@@ -36,6 +36,7 @@ function sampleRequest (req, res) {
   return shouldSample
 }
 
+// rfc mentions using a hash
 function getKey (req = {}, res = {}) {
   return `${req.method}-${req.url}-${res.statusCode}`
 }

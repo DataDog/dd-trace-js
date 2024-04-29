@@ -134,6 +134,9 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   if (apiSecuritySampler.sampleRequest(req, res)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = EXTRACT_SCHEMA
+
+    const rootSpan = web.root(req)
+    rootSpan?.setTag(MANUAL_KEEP, 'true')
   }
 
   waf.run({ persistent }, req)
@@ -198,7 +201,6 @@ function onRequestCookieParser ({ req, res, abortController, cookies }) {
   handleResults(results, req, res, rootSpan, abortController)
 }
 
-// can we assume res.statusCode is fixed here?
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
 
