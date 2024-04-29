@@ -219,8 +219,8 @@ class CucumberPlugin extends CiPlugin {
         }))
       )
 
-      // we have to update the test session, test module and test suite ids
-      // BEFORE we export them in the main process
+      // We have to update the test session, test module and test suite ids
+      // before we export them in the main process
       formattedTraces.forEach(trace => {
         trace.forEach(span => {
           if (span.name === 'cucumber.test') {
@@ -268,9 +268,10 @@ class CucumberPlugin extends CiPlugin {
           { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
         )
         finishAllTraceSpans(span)
-      }
-      if (isCucumberWorker) {
-        this.tracer._exporter.flush()
+        // If it's a worker, flushing is cheap, as it's just sending data to the main process
+        if (isCucumberWorker) {
+          this.tracer._exporter.flush()
+        }
       }
     })
 

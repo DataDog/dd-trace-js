@@ -422,8 +422,8 @@ function getWrappedRunTest (runTestFunction) {
 
 function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
   return function (worker, message) {
-    // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing
-    // Otherwise cucumber code will throw an error
+    // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
+    // or cucumber will throw an error
     // TODO: identify the message better
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
@@ -453,15 +453,12 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       const { pickleId } = this.eventDataCollector.testCaseMap[parsed.testCaseStarted.testCaseId]
       const pickle = this.eventDataCollector.getPickle(pickleId)
       const testFileAbsolutePath = pickle.uri
-      if (!pickleResultByFile[testFileAbsolutePath]?.started) {
-        pickleResultByFile[testFileAbsolutePath] = {
-          started: 1,
-          finished: []
-        }
-        const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
-        testSuiteStartCh.publish({ testSuitePath })
-      } else {
-        pickleResultByFile[testFileAbsolutePath].started++
+      // First test in suite
+      if (!pickleResultByFile[testFileAbsolutePath]) {
+        pickleResultByFile[testFileAbsolutePath] = []
+        testSuiteStartCh.publish({
+          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
+        })
       }
     }
 
@@ -475,13 +472,12 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       const { status } = getStatusFromResultLatest(worstTestStepResult)
 
       const testFileAbsolutePath = pickle.uri
-      const { finished } = pickleResultByFile[testFileAbsolutePath]
+      const finished = pickleResultByFile[testFileAbsolutePath]
       finished.push(status)
 
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
-        const testSuiteStatus = getSuiteStatusFromTestStatuses(finished)
         testSuiteFinishCh.publish({
-          status: testSuiteStatus,
+          status: getSuiteStatusFromTestStatuses(finished),
           testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
         })
       }
