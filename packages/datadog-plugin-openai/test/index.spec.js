@@ -16,6 +16,8 @@ const { DD_MAJOR } = require('../../../version')
 
 const tracerRequirePath = '../../dd-trace'
 
+const VERSIONS_TO_TEST = DD_MAJOR >= 4 ? '>=3' : '>=3 <4'
+
 describe('Plugin', () => {
   let openai
   let clock
@@ -24,9 +26,7 @@ describe('Plugin', () => {
   let realVersion
 
   describe('openai', () => {
-    // don't run tests when DD_MAJOR < 4
-    // passing 'true' to withVersions will skip the test suite
-    withVersions('openai', 'openai', DD_MAJOR < 4, version => {
+    withVersions('openai', 'openai', VERSIONS_TO_TEST, version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
