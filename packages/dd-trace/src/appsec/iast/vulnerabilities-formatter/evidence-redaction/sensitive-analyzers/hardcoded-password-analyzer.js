@@ -1,12 +1,11 @@
 'use strict'
 
 module.exports = function extractSensitiveRanges (evidence, valuePattern) {
-  const evidenceValue = evidence.value
-  valuePattern.lastIndex = 0
-  if (valuePattern.test(evidenceValue)) {
+  const { value } = evidence
+  if (valuePattern.test(value)) {
     return [{
       start: 0,
-      end: evidenceValue.length
+      end: value.length
     }]
   }
 

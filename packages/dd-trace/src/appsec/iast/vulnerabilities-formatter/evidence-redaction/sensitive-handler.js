@@ -55,7 +55,9 @@ class SensitiveHandler {
     const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
     if (sensitiveAnalyzer) {
       const sensitiveRanges = sensitiveAnalyzer(evidence)
-      return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
+      if (evidence.ranges || sensitiveRanges?.length) {
+        return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
+      }
     }
     return null
   }
@@ -71,7 +73,7 @@ class SensitiveHandler {
     let nextTaintedIndex = 0
     let sourceIndex
 
-    let nextTainted = ranges.shift()
+    let nextTainted = ranges?.shift()
     let nextSensitive = sensitive.shift()
 
     for (let i = 0; i < value.length; i++) {
