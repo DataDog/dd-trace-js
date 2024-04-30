@@ -10,8 +10,8 @@ function configure ({ apiSecurity }) {
 
   if (enabled) {
     const {
-      sampleCacheSize: max = 4096,
-      sampleRate: ttl = 1000 * 30
+      sampleCacheSize: max = 4096, // for testing purposes only
+      sampleRate: ttl = 1000 * apiSecurity.sampleDelay
     } = apiSecurity
 
     sampledCache = new LRU({ max, ttl })

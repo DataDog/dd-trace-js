@@ -16,6 +16,7 @@ describe('Api Security Sampler', () => {
     config = {
       apiSecurity: {
         enabled: true,
+        sampleDelay: 30,
         sampleCacheSize: 2
       }
     }
