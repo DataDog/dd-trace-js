@@ -262,6 +262,11 @@ class Config {
       process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       true
     )
+    const DD_API_SECURITY_SAMPLE_DELAY = coalesce(
+      maybeFloat(options.appsec?.apiSecurity?.sampleDelay),
+      maybeFloat(process.env.DD_API_SECURITY_SAMPLE_DELAY),
+      30.0
+    )
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
     const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
@@ -326,7 +331,8 @@ class Config {
         mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
       },
       apiSecurity: {
-        enabled: DD_API_SECURITY_ENABLED
+        enabled: DD_API_SECURITY_ENABLED,
+        sampleDelay: DD_API_SECURITY_SAMPLE_DELAY
       }
     }
 

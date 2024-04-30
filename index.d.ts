@@ -676,7 +676,12 @@ declare namespace tracer {
         /** Whether to enable Api Security.
          * @default false
          */
-        enabled?: boolean
+        enabled?: boolean,
+
+        /** Specifies the Api Security samples collection interval in seconds.
+         * @default 30.0
+         */
+        sampleDelay?: number
       }
     };
 

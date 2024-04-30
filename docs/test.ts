@@ -114,7 +114,8 @@ tracer.init({
       mode: 'safe'
     },
     apiSecurity: {
-      enabled: true
+      enabled: true,
+      sampleDelay: 30
     }
   }
 });
