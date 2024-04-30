@@ -86,7 +86,11 @@ jobs:
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engines
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - name: Install dependencies and run tests
+        if: env.MAJOR_VERSION == '4'
+        run: |
+          yarn install --ignore-engines
+          yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -214,7 +218,7 @@ jobs:
       localstack:
         image: localstack/localstack:3.0.2
         env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda,stepfunctions,events
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1
