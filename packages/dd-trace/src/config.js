@@ -60,7 +60,7 @@ function checkIfBothOtelAndDdEnvVarSet () {
       log.warn(`both ${ddVar} and ${otelVar} environment variables are set`)
       getCounter('otel.env.hiding', ddVar, otelVar,
         otelVar === 'OTEL_TRACES_SAMPLER' &&
-        process.env.OTEL_TRACES_SAMPLER_ARG
+          process.env.OTEL_TRACES_SAMPLER_ARG
           ? 'OTEL_TRACES_SAMPLER_ARG'
           : undefined).inc()
     }
@@ -517,6 +517,7 @@ class Config {
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
+    this._setValue(defaults, 'instrumentation_config_id', undefined)
   }
 
   _applyEnvironment () {
@@ -549,6 +550,7 @@ class Config {
       DD_IAST_REQUEST_SAMPLING,
       DD_IAST_TELEMETRY_VERBOSITY,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
+      DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
@@ -673,7 +675,7 @@ class Config {
       ? false
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
-    otelSetRuntimeMetrics)
+      otelSetRuntimeMetrics)
     const OTEL_TRACES_SAMPLER_MAPPING = {
       always_on: '1.0',
       always_off: '0.0',
@@ -699,6 +701,7 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
     ))
+    this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
@@ -784,7 +787,7 @@ class Config {
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
-    (options.iastOptions === true || options.iastOptions.enabled === true))
+      (options.iastOptions === true || options.iastOptions.enabled === true))
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
