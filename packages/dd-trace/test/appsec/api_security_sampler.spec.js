@@ -59,7 +59,7 @@ describe('Api Security Sampler', () => {
 
       expect(apiSecuritySampler.sampleRequest(req, res)).to.true
 
-      clock.tick(40000)
+      clock.tick(60000)
 
       expect(apiSecuritySampler.has(req, res)).to.false
 
