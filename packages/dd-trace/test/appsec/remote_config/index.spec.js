@@ -32,8 +32,7 @@ describe('Remote Config index', () => {
     }
 
     apiSecuritySampler = {
-      configure: sinon.stub(),
-      setRequestSampling: sinon.stub()
+      configure: sinon.stub()
     }
 
     appsec = {

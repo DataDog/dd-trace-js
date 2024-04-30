@@ -217,7 +217,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -476,7 +475,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -1019,8 +1017,7 @@ describe('Config', () => {
           mode: 'safe'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         }
       },
       remoteConfig: {
@@ -1071,7 +1068,6 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.enabled', true)
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
-    expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -1099,8 +1095,7 @@ describe('Config', () => {
           mode: 'disabled'
         },
         apiSecurity: {
-          enabled: true,
-          requestSampling: 1.0
+          enabled: true
         }
       },
       experimental: {
@@ -1118,8 +1113,7 @@ describe('Config', () => {
             mode: 'safe'
           },
           apiSecurity: {
-            enabled: false,
-            requestSampling: 0.5
+            enabled: false
           }
         }
       }
@@ -1140,8 +1134,7 @@ describe('Config', () => {
         mode: 'disabled'
       },
       apiSecurity: {
-        enabled: true,
-        requestSampling: 1.0
+        enabled: true
       }
     })
   })
@@ -1729,33 +1722,5 @@ describe('Config', () => {
       expect(config).not.to.have.property('commitSHA')
       expect(config).not.to.have.property('repositoryUrl')
     })
-  })
-  it('should sanitize values for API Security sampling between 0 and 1', () => {
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: -5
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0)
-
-    expect(new Config({
-      appsec: {
-        apiSecurity: {
-          enabled: true,
-          requestSampling: 0.1
-        }
-      }
-    })).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
   })
 })
