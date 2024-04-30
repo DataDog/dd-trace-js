@@ -27,6 +27,7 @@ package:
     when: on_success
   script:
     - ../.gitlab/build-deb-rpm.sh
+    - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
 package-arm:
   extends: .package-arm
@@ -37,6 +38,7 @@ package-arm:
     when: on_success
   script:
     - ../.gitlab/build-deb-rpm.sh
+    - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
 .release-package:
   stage: deploy
