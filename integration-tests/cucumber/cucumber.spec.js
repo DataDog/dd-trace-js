@@ -27,7 +27,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_SOURCE_FILE,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME
@@ -809,7 +809,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   const newTests = tests.filter(test =>
@@ -862,7 +862,7 @@ versions.forEach(version => {
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
                   const newTests = tests.filter(test =>
@@ -914,7 +914,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   tests.forEach(test => {
@@ -971,7 +971,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   const skippedNewTest = tests.filter(test =>
@@ -1015,7 +1015,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   assert.equal(tests.length, 6)

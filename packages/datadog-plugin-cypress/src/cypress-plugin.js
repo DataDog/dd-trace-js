@@ -28,7 +28,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -364,7 +364,7 @@ class CypressPlugin {
       getTestModuleCommonTags(this.command, this.frameworkVersion, TEST_FRAMEWORK_NAME)
 
     if (this.isEarlyFlakeDetectionEnabled) {
-      testSessionSpanMetadata[TEST_EARLY_FLAKE_IS_ENABLED] = 'true'
+      testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {

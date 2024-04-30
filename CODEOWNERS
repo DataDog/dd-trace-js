@@ -5,10 +5,10 @@
 /packages/dd-trace/src/lambda/ @DataDog/serverless
 /packages/dd-trace/test/lambda/ @DataDog/serverless
 
-/packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js
-/packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js
-/packages/ddtrace/src/plugins/ @DataDog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js
-/packages/ddtrace/test/plugins/ @DataDog/dd-trace-js @Datadog/apm-framework-integrations-reviewers-js
+/packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
+/packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
+/packages/ddtrace/src/plugins/ @DataDog/dd-trace-js @Datadog/apm-idm-js
+/packages/ddtrace/test/plugins/ @DataDog/dd-trace-js @Datadog/apm-idm-js
 
 /packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-jest/ @DataDog/ci-app-libraries
@@ -34,8 +34,8 @@
 /integration-tests/ci-visibility.spec.js @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
 
-/packages/dd-trace/src/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
-/packages/dd-trace/test/service-naming/ @Datadog/apm-framework-integrations-reviewers-js
+/packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
+/packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
 
 # CI
 /.github/workflows/appsec.yml @DataDog/asm-js
