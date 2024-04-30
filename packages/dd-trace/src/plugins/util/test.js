@@ -61,6 +61,8 @@ const CI_APP_ORIGIN = 'ciapp-test'
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
 
+const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
+
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
 const TEST_ITR_SKIPPING_TYPE = 'test.itr.tests_skipping.type'
@@ -82,6 +84,9 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 
+// cucumber worker variables
+const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
+
 // Early flake detection util strings
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
@@ -92,6 +97,7 @@ module.exports = {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
+  CUCUMBER_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -104,6 +110,7 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_CONFIGURATION_BROWSER_NAME,
