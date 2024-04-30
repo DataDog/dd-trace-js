@@ -52,20 +52,20 @@ describe('Api Security Sampler', () => {
       expect(apiSecuritySampler.sampleRequest(req, res)).to.false
     })
 
-    it('should sample repeated request after interval', () => {
-      const clock = sinon.useFakeTimers()
+    it('should sample repeated request after interval', done => {
+      config.apiSecurity.sampleDelay = 0.1
 
       apiSecuritySampler.configure(config)
 
       expect(apiSecuritySampler.sampleRequest(req, res)).to.true
 
-      clock.tick(60000)
+      setTimeout(() => {
+        expect(apiSecuritySampler.has(req, res)).to.false
 
-      expect(apiSecuritySampler.has(req, res)).to.false
+        expect(apiSecuritySampler.sampleRequest(req, res)).to.true
 
-      expect(apiSecuritySampler.sampleRequest(req, res)).to.true
-
-      clock.restore()
+        done()
+      }, 200)
     })
 
     it('should mantain a max size cache', () => {
