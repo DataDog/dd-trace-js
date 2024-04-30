@@ -21,8 +21,7 @@ describe('sequelize', () => {
               enabled: true,
               rules: path.join(__dirname, 'express-rules.json'),
               apiSecurity: {
-                enabled: true,
-                requestSampling: 1
+                enabled: true
               }
             }
           }))
