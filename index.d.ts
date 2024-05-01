@@ -940,11 +940,15 @@ declare namespace tracer {
     /** @hidden */
     interface Http extends Instrumentation {
       /**
-       * List of URLs that should be instrumented.
+       * List of URLs/paths that should be instrumented.
+       *
+       * Note that when used for an http client the entry represents a full
+       * outbound URL (`https://example.org/api/foo`) but when used as a
+       * server the entry represents an inbound path (`/api/foo`).
        *
        * @default /^.*$/
        */
-      allowlist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+      allowlist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Deprecated in favor of `allowlist`.
@@ -952,15 +956,19 @@ declare namespace tracer {
        * @deprecated
        * @hidden
        */
-      whitelist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+      whitelist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
-       * List of URLs that should not be instrumented. Takes precedence over
+       * List of URLs/paths that should not be instrumented. Takes precedence over
        * allowlist if a URL matches an entry in both.
+       *
+       * Note that when used for an http client the entry represents a full
+       * outbound URL (`https://example.org/api/foo`) but when used as a
+       * server the entry represents an inbound path (`/api/foo`).
        *
        * @default []
        */
-      blocklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+      blocklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * Deprecated in favor of `blocklist`.
@@ -968,7 +976,7 @@ declare namespace tracer {
        * @deprecated
        * @hidden
        */
-      blacklist?: string | RegExp | ((url: string) => boolean) | (string | RegExp | ((url: string) => boolean))[];
+      blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
        * An array of headers to include in the span metadata.
