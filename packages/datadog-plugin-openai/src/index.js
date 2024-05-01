@@ -176,7 +176,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   finish ({ headers, body, method, path }) {
-    if (headers.constructor.name === 'Headers') {
+    if (headers?.constructor.name === 'Headers') {
       headers = Object.fromEntries(headers)
     }
 
@@ -188,14 +188,14 @@ class OpenApiPlugin extends TracingPlugin {
     const fullStore = storage.getStore()
     const store = fullStore.openai
 
-    if (path.startsWith('https://') || path.startsWith('http://')) {
+    if (path?.startsWith('https://') || path?.startsWith('http://')) {
       // basic checking for if the path was set as a full URL
       // not using a full regex as it will likely be "https://api.openai.com/..."
       path = new URL(path).pathname
     }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
-    const tags = {
+    const tags = method ? {
       'openai.request.endpoint': endpoint,
       'openai.request.method': method.toUpperCase(),
 
@@ -210,7 +210,7 @@ class OpenApiPlugin extends TracingPlugin {
       // Here we're conciously choosing to surface this inconsistency instead of normalizing
       'openai.response.created': body.created,
       'openai.response.created_at': body.created_at
-    }
+    } : {}
 
     responseDataExtractionByMethod(methodName, tags, body, store)
     span.addTags(tags)
