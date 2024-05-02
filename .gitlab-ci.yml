@@ -7,6 +7,7 @@ stages:
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
   - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/software_composition_analysis.yaml"
 
 variables:
   JS_PACKAGE_VERSION:
