@@ -102,9 +102,6 @@ const V4_PACKAGE_SHIMS = [
   }
 ]
 
-const DEFAULT_HEADERS = {}
-const DEFAULT_BODY = {}
-
 addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, exports => {
   const methodNames = Object.getOwnPropertyNames(exports.OpenAIApi.prototype)
   methodNames.shift() // remove leading 'constructor' method
@@ -134,10 +131,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
           return response
         })
         .catch(error => {
-          finish({
-            headers: DEFAULT_HEADERS,
-            body: DEFAULT_BODY
-          }, error)
+          finish(undefined, error)
 
           throw error
         })
@@ -186,10 +180,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
               return body
             })
             .catch(error => {
-              finish({
-                headers: DEFAULT_HEADERS,
-                body: DEFAULT_BODY
-              }, error)
+              finish(undefined, error)
 
               throw error
             })

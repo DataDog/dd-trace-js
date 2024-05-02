@@ -175,12 +175,21 @@ class OpenApiPlugin extends TracingPlugin {
     span.addTags(tags)
   }
 
-  finish ({ headers, body, method, path }) {
-    if (headers?.constructor.name === 'Headers') {
-      headers = Object.fromEntries(headers)
+  finish (response) {
+    const span = this.activeSpan
+    const error = !!span.context()._tags.error
+
+    let headers, body, method, path
+    if (!error) {
+      headers = response.headers
+      body = response.body
+      method = response.method
+      path = response.path
     }
 
-    const span = this.activeSpan
+    if (!error && headers?.constructor.name === 'Headers') {
+      headers = Object.fromEntries(headers)
+    }
     const methodName = span._spanContext._tags['resource.name']
 
     body = coerceResponseBody(body, methodName)
@@ -188,14 +197,14 @@ class OpenApiPlugin extends TracingPlugin {
     const fullStore = storage.getStore()
     const store = fullStore.openai
 
-    if (path?.startsWith('https://') || path?.startsWith('http://')) {
+    if (!error && (path.startsWith('https://') || path.startsWith('http://'))) {
       // basic checking for if the path was set as a full URL
       // not using a full regex as it will likely be "https://api.openai.com/..."
       path = new URL(path).pathname
     }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
-    const tags = method ? {
+    const tags = !error ? {
       'openai.request.endpoint': endpoint,
       'openai.request.method': method.toUpperCase(),
 
@@ -216,35 +225,19 @@ class OpenApiPlugin extends TracingPlugin {
     span.addTags(tags)
 
     super.finish()
-    this.sendLog(methodName, span, tags, store, false)
-    this.sendMetrics(headers, body, endpoint, span._duration)
+    this.sendLog(methodName, span, tags, store, error)
+    this.sendMetrics(headers, body, endpoint, span._duration, error)
   }
 
-  error (...args) {
-    super.error(...args)
-
-    const span = this.activeSpan
-    const methodName = span._spanContext._tags['resource.name']
-
-    const fullStore = storage.getStore()
-    const store = fullStore.openai
-
-    // We don't know most information about the request when it fails
-
-    const tags = ['error:1']
-    this.metrics.distribution('openai.request.duration', span._duration * 1000, tags)
-    this.metrics.increment('openai.request.error', 1, tags)
-
-    this.sendLog(methodName, span, {}, store, true)
-  }
-
-  sendMetrics (headers, body, endpoint, duration) {
-    const tags = [
-      `org:${headers['openai-organization']}`,
-      `endpoint:${endpoint}`, // just "/v1/models", no method
-      `model:${headers['openai-model']}`,
-      'error:0'
-    ]
+  sendMetrics (headers, body, endpoint, duration, error) {
+    const tags = [`error:${error ? 1 : 0}`]
+    if (error) {
+      this.metrics.increment('openai.request.error', 1, tags)
+    } else {
+      tags.push(`org:${headers['openai-organization']}`)
+      tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
+      tags.push(`model:${headers['openai-model']}`)
+    }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
@@ -256,20 +249,24 @@ class OpenApiPlugin extends TracingPlugin {
       this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
     }
 
-    if (headers['x-ratelimit-limit-requests']) {
-      this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
-    }
+    if (headers) {
+      if (headers['x-ratelimit-limit-requests']) {
+        this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
+      }
 
-    if (headers['x-ratelimit-remaining-requests']) {
-      this.metrics.gauge('openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags)
-    }
+      if (headers['x-ratelimit-remaining-requests']) {
+        this.metrics.gauge(
+          'openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags
+        )
+      }
 
-    if (headers['x-ratelimit-limit-tokens']) {
-      this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
-    }
+      if (headers['x-ratelimit-limit-tokens']) {
+        this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
+      }
 
-    if (headers['x-ratelimit-remaining-tokens']) {
-      this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
+      if (headers['x-ratelimit-remaining-tokens']) {
+        this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
+      }
     }
   }
 

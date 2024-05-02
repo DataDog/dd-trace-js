@@ -88,6 +88,66 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with error', () => {
+        let scope
+
+        beforeEach(() => {
+          scope = nock('https://api.openai.com:443')
+            .get('/v1/models')
+            .reply(400, {
+              error: {
+                message: 'fake message',
+                type: 'fake type',
+                param: 'fake param',
+                code: null
+              }
+            })
+        })
+
+        afterEach(() => {
+          nock.removeInterceptor(scope)
+          scope.done()
+        })
+
+        it('should attach the error to the span', async () => {
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              // the message content differs on OpenAI version, even between patches
+              expect(traces[0][0].meta['error.message']).to.exist
+              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta['error.stack']).to.exist
+            })
+
+          try {
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              await openai.models.list()
+            } else {
+              await openai.listModels()
+            }
+          } catch {
+            // ignore, we expect an error
+          }
+
+          await checkTraces
+
+          clock.tick(10 * 1000)
+
+          const expectedTags = ['error:1']
+
+          expect(metricStub).to.have.been.calledWith('openai.request.error', 1, 'c', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.prompt')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.tokens')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
+        })
+      })
+
       describe('create completion', () => {
         let scope
 
@@ -202,10 +262,10 @@ describe('Plugin', () => {
           clock.tick(10 * 1000)
 
           const expectedTags = [
+            'error:0',
             'org:kill-9',
             'endpoint:/v1/completions',
-            'model:text-davinci-002',
-            'error:0'
+            'model:text-davinci-002'
           ]
 
           expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
@@ -638,10 +698,10 @@ describe('Plugin', () => {
             await checkTraces
 
             const expectedTags = [
+              'error:0',
               'org:kill-9',
               'endpoint:/v1/edits',
-              'model:text-davinci-edit:001',
-              'error:0'
+              'model:text-davinci-edit:001'
             ]
 
             expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
