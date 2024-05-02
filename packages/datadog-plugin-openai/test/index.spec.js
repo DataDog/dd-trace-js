@@ -12,8 +12,11 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
+const { DD_MAJOR } = require('../../../version')
 
 const tracerRequirePath = '../../dd-trace'
+
+const VERSIONS_TO_TEST = DD_MAJOR >= 4 ? '>=3' : '>=3 <4'
 
 describe('Plugin', () => {
   let openai
@@ -23,7 +26,7 @@ describe('Plugin', () => {
   let realVersion
 
   describe('openai', () => {
-    withVersions('openai', 'openai', version => {
+    withVersions('openai', 'openai', VERSIONS_TO_TEST, version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
