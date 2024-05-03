@@ -18,7 +18,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [18, 20, latest]
+        version: [14, 16, 18, 20, latest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [18, latest]
+        version: [14, 16, 18, latest]
         framework: [cucumber, playwright, selenium]
     runs-on: ubuntu-latest
     env:
