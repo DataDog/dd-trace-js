@@ -295,7 +295,7 @@ describe('Config', () => {
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
-      { name: 'appsec.sca.enabled', value: undefined, origin: 'default' },
+      { name: 'appsec.sca.enabled', value: null, origin: 'default' },
       { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
