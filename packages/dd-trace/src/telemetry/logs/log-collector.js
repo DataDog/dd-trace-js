@@ -87,6 +87,11 @@ const logCollector = {
     return false
   },
 
+  // Used for testing
+  hasEntry (logEntry) {
+    return logs.has(createHash(logEntry))
+  },
+
   drain () {
     if (logs.size === 0) return
 
