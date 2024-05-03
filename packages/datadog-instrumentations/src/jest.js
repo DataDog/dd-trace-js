@@ -441,6 +441,7 @@ function cliWrapper (cli, jestVersion) {
     } catch (err) {
       log.error(err)
     }
+    console.log('isEarlyFlakeDetectionEnabled jest', isEarlyFlakeDetectionEnabled)
 
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsPromise = new Promise((resolve) => {

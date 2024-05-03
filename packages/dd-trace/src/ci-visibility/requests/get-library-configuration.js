@@ -98,6 +98,8 @@ function getLibraryConfiguration ({
           }
         } = JSON.parse(res)
 
+        console.log('library settings', JSON.parse(res))
+
         const settings = {
           isCodeCoverageEnabled,
           isSuitesSkippingEnabled,
@@ -109,6 +111,7 @@ function getLibraryConfiguration ({
           earlyFlakeDetectionFaultyThreshold:
             earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD
         }
+        console.log('settings', settings)
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)
 
