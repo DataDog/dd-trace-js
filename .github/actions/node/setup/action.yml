@@ -2,7 +2,7 @@ name: Node Setup
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v3
+    - uses: actions/setup-node@v4
       with:
         cache: yarn
         node-version: '14'

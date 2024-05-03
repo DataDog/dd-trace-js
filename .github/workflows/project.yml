@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
@@ -42,7 +42,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.version }}
       - name: Install Google Chrome
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install --ignore-engines
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.version }}
       - run: yarn config set ignore-engines true

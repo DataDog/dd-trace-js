@@ -42,7 +42,7 @@ jobs:
     steps:
       # Needs to remain on v3 for now due to GLIBC version
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: '14'
       - id: pkg
@@ -136,7 +136,7 @@ jobs:
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies and run tests
@@ -1038,7 +1038,7 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           cache: yarn
           node-version: '16'
