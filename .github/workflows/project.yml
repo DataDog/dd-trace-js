@@ -33,7 +33,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [14, 16, 18, latest]
+        version: [16, 18, 20, latest] # node 14 does not have experimental-fetch
         framework: [cucumber, playwright, selenium]
     runs-on: ubuntu-latest
     env:
@@ -75,7 +75,7 @@ jobs:
         # Important: This is outside the minimum supported version of dd-trace-js
         # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
         # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
-        version: [16, latest]
+        version: [16, 18, 20, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
     runs-on: ubuntu-latest
