@@ -218,6 +218,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
+    expect(config).to.have.nested.property('appsec.sca.enabled', null)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -294,6 +295,7 @@ describe('Config', () => {
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
+      { name: 'appsec.sca.enabled', value: null, origin: 'default' },
       { name: 'remoteConfig.enabled', value: true, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 5, origin: 'default' },
       { name: 'iast.enabled', value: false, origin: 'default' },
@@ -417,6 +419,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
+    process.env.DD_APPSEC_SCA_ENABLED = true
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -503,6 +506,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'extended')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
+    expect(config).to.have.nested.property('appsec.sca.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -557,6 +561,7 @@ describe('Config', () => {
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
+      { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
       { name: 'remoteConfig.pollInterval', value: 42, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
@@ -1176,6 +1181,9 @@ describe('Config', () => {
       apiSecurity: {
         enabled: true,
         requestSampling: 1.0
+      },
+      sca: {
+        enabled: null
       }
     })
   })
