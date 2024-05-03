@@ -368,7 +368,7 @@ describe('Plugin', () => {
         it('should contain comment in query text', done => {
           const connect = connection.query('SELECT 1 + 1 AS solution', (...args) => {
             try {
-              expect(connect.sql).to.equal('/*dddbs=\'serviced\',dde=\'tester\',' +
+              expect(connect.sql).to.equal('/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',' +
               `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
@@ -414,8 +414,8 @@ describe('Plugin', () => {
           const connect = connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connect.sql).to.equal(
-                '/*dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
-              `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
+                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
               done()
             } catch (e) {
               done(e)
@@ -452,7 +452,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())
@@ -495,7 +495,8 @@ describe('Plugin', () => {
           const queryPool = pool.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(queryPool.sql).to.equal(
-                `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'post\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -532,7 +533,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
             `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())

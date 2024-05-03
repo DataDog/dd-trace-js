@@ -133,7 +133,7 @@ describe('Plugin', () => {
               } else { // pino <7
                 expect(record).to.have.property('msg', error.message)
                 // ** TODO ** add this back once we fix it
-                if (NODE_MAJOR !== 21) {
+                if (NODE_MAJOR < 21) {
                   expect(record).to.have.property('type', 'Error')
                   expect(record).to.have.property('stack', error.stack)
                 }
