@@ -9,6 +9,10 @@ class HardcodedPasswordAnalyzer extends HardcodedBaseAnalyzer {
   constructor () {
     super(HARDCODED_PASSWORD, allRules)
   }
+
+  _getEvidence (value) {
+    return { value: `${value.ident}` }
+  }
 }
 
 module.exports = new HardcodedPasswordAnalyzer()
