@@ -31,7 +31,7 @@ jobs:
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/20
       - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/21
       - run: yarn test:trace:core:ci
       - uses: codecov/codecov-action@v3
 
