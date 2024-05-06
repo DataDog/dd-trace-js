@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-latest-large
+    runs-on: macos-11
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
