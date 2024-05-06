@@ -49,6 +49,10 @@ class VulnerabilityFormatter {
       evidence.ranges = ranges
     }
 
+    if (!evidence.ranges) {
+      return { value: evidence.value }
+    }
+
     evidence.ranges.forEach((range, rangeIndex) => {
       if (fromIndex < range.start) {
         valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
@@ -65,12 +69,8 @@ class VulnerabilityFormatter {
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (!evidence.ranges && !evidence.rangesToApply) {
-      if (typeof evidence.value === 'undefined') {
-        return undefined
-      } else {
-        return { value: evidence.value }
-      }
+    if (typeof evidence.value === 'undefined') {
+      return undefined
     }
 
     return this._redactVulnearbilities
