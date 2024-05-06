@@ -42,7 +42,7 @@ jobs:
     steps:
       # Needs to remain on v3 for now due to GLIBC version
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v3
         with:
           node-version: '14'
       - id: pkg
