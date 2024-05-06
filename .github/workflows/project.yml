@@ -86,6 +86,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/node/latest
       - run: yarn install --ignore-engines
       - uses: actions/setup-node@v4
         with:
@@ -109,6 +110,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
+        with:
+          node-version: ${{ matrix.version }}
       - run: yarn install
       - run: yarn type:test
       - run: yarn type:doc
