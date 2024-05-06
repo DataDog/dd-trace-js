@@ -1038,7 +1038,7 @@ jobs:
       DD_TEST_AGENT_URL: http://testagent:9126
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v3
         with:
           cache: yarn
           node-version: '16'
