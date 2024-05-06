@@ -72,7 +72,7 @@ describe('Sfn', () => {
     async function createStateMachine (name, definition, xargs) {
       return client.createStateMachine({
         definition: JSON.stringify(definition),
-        name: name,
+        name,
         roleArn: 'arn:aws:iam::123456:role/test',
         ...xargs
       })
