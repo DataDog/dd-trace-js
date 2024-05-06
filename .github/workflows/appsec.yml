@@ -210,7 +210,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
+      - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/21
       - run: yarn test:appsec:plugins:ci
