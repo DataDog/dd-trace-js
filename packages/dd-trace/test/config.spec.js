@@ -440,7 +440,7 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
-    process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcedf123'
+    process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
 
     const config = new Config()
 
