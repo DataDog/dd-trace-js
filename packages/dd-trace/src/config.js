@@ -445,6 +445,7 @@ class Config {
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.sca.enabled', null)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -527,6 +528,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
+      DD_APPSEC_SCA_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -614,6 +616,8 @@ class Config {
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
+    // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
+    this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)

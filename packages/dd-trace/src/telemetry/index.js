@@ -6,7 +6,8 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
-const logs = require('./logs')
+const telemetryLogger = require('./logs')
+const logger = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
@@ -211,7 +212,7 @@ function createPayload (currReqType, currPayload = {}) {
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     metricsManager.send(config, application, host)
-    logs.send(config, application, host)
+    telemetryLogger.send(config, application, host)
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
@@ -235,6 +236,10 @@ function extendedHeartbeat (config) {
 
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
+    if (aConfig.sca?.enabled) {
+      logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+    }
+
     return
   }
   config = aConfig
@@ -245,7 +250,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
-  logs.start(config)
+  telemetryLogger.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -318,6 +323,7 @@ function updateConfig (changes, config) {
 
   for (const change of changes) {
     const name = nameMapping[change.name] || change.name
+
     names.push(name)
     const { origin, value } = change
     const entry = { name, value, origin }
