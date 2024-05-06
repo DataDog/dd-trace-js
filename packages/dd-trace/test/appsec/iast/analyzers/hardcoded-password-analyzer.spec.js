@@ -42,19 +42,20 @@ describe('Hardcoded Password Analyzer', () => {
     samples.forEach((sample, sampleIndex) => {
       // sample values are arrays containing the parts of the original token
       it(`should match rule ${ruleId} with #${sampleIndex + 1} value ${sample.ident}...`, () => {
+        const ident = sample.ident
         hardcodedPasswordAnalyzer.analyze({
           file,
           literals: [{
             value: sample.value,
             locations: [{
-              ident: sample.ident,
+              ident,
               line,
               column
             }]
           }]
         })
 
-        expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, data: ruleId })
+        expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId })
       })
     })
 
@@ -73,6 +74,28 @@ describe('Hardcoded Password Analyzer', () => {
       })
 
       expect(report).not.to.have.been.called
+    })
+
+    it('should use ident as evidence', () => {
+      report.restore()
+
+      const reportEvidence = sinon.stub(hardcodedPasswordAnalyzer, '_reportEvidence')
+
+      const ident = 'passkey'
+      hardcodedPasswordAnalyzer.analyze({
+        file,
+        literals: [{
+          value: 'this_is_a_password',
+          locations: [{
+            ident,
+            line,
+            column
+          }]
+        }]
+      })
+
+      const evidence = { value: ident }
+      expect(reportEvidence).to.be.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId }, undefined, evidence)
     })
   })
 
@@ -117,6 +140,7 @@ describe('Hardcoded Password Analyzer', () => {
         agent
           .use(traces => {
             expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_PASSWORD"')
+            expect(traces[0][0].meta['_dd.iast.json']).to.include('"evidence":{"value":"pswd"}')
           })
           .then(done)
           .catch(done)
