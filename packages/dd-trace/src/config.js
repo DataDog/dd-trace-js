@@ -60,7 +60,7 @@ function checkIfBothOtelAndDdEnvVarSet () {
       log.warn(`both ${ddVar} and ${otelVar} environment variables are set`)
       getCounter('otel.env.hiding', ddVar, otelVar,
         otelVar === 'OTEL_TRACES_SAMPLER' &&
-          process.env.OTEL_TRACES_SAMPLER_ARG
+        process.env.OTEL_TRACES_SAMPLER_ARG
           ? 'OTEL_TRACES_SAMPLER_ARG'
           : undefined).inc()
     }
@@ -675,7 +675,7 @@ class Config {
       ? false
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
-      otelSetRuntimeMetrics)
+    otelSetRuntimeMetrics)
     const OTEL_TRACES_SAMPLER_MAPPING = {
       always_on: '1.0',
       always_off: '0.0',
@@ -787,7 +787,7 @@ class Config {
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
-      (options.iastOptions === true || options.iastOptions.enabled === true))
+    (options.iastOptions === true || options.iastOptions.enabled === true))
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)

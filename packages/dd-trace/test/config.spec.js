@@ -136,7 +136,7 @@ describe('Config', () => {
 
   it('should correctly map OTEL_RESOURCE_ATTRIBUTES', () => {
     process.env.OTEL_RESOURCE_ATTRIBUTES =
-      'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
+    'deployment.environment=test1,service.name=test2,service.version=5,foo=bar1,baz=qux1'
     const config = new Config()
 
     expect(config).to.have.property('env', 'test1')
