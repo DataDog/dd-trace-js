@@ -1,6 +1,5 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
-const log = require('../../log')
 
 function getKnownTests ({
   url,
@@ -70,8 +69,7 @@ function getKnownTests ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { test_full_names: knownTests } } } = JSON.parse(res)
-        log.debug(() => `Number of received known tests: ${Object.keys(knownTests).length}`)
+        const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
         done(null, knownTests)
       } catch (err) {
         done(err)

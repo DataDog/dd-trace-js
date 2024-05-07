@@ -84,12 +84,12 @@ class OpenApiPlugin extends TracingPlugin {
     const tags = {} // The remaining tags are added one at a time
 
     // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
-    if ('prompt' in payload) {
+    if (payload.prompt) {
       const prompt = payload.prompt
       store.prompt = prompt
       if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
         // This is a single prompt, either String or [Number]
-        tags[`openai.request.prompt`] = normalizeStringOrTokenArray(prompt, true)
+        tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
       } else if (Array.isArray(prompt)) {
         // This is multiple prompts, either [String] or [[Number]]
         for (let i = 0; i < prompt.length; i++) {
@@ -99,9 +99,9 @@ class OpenApiPlugin extends TracingPlugin {
     }
 
     // createEdit, createEmbedding, createModeration
-    if ('input' in payload) {
+    if (payload.input) {
       const normalized = normalizeStringOrTokenArray(payload.input, false)
-      tags[`openai.request.input`] = truncateText(normalized)
+      tags['openai.request.input'] = truncateText(normalized)
       store.input = normalized
     }
 
@@ -114,41 +114,60 @@ class OpenApiPlugin extends TracingPlugin {
 
     switch (methodName) {
       case 'createFineTune':
+      case 'fine_tuning.jobs.create':
+      case 'fine-tune.create':
         createFineTuneRequestExtraction(tags, payload)
         break
 
       case 'createImage':
+      case 'images.generate':
       case 'createImageEdit':
+      case 'images.edit':
       case 'createImageVariation':
+      case 'images.createVariation':
         commonCreateImageRequestExtraction(tags, payload, store)
         break
 
       case 'createChatCompletion':
+      case 'chat.completions.create':
         createChatCompletionRequestExtraction(tags, payload, store)
         break
 
       case 'createFile':
+      case 'files.create':
       case 'retrieveFile':
+      case 'files.retrieve':
         commonFileRequestExtraction(tags, payload)
         break
 
       case 'createTranscription':
+      case 'audio.transcriptions.create':
       case 'createTranslation':
+      case 'audio.translations.create':
         commonCreateAudioRequestExtraction(tags, payload, store)
         break
 
       case 'retrieveModel':
+      case 'models.retrieve':
         retrieveModelRequestExtraction(tags, payload)
         break
 
       case 'listFineTuneEvents':
+      case 'fine_tuning.jobs.listEvents':
+      case 'fine-tune.listEvents':
       case 'retrieveFineTune':
+      case 'fine_tuning.jobs.retrieve':
+      case 'fine-tune.retrieve':
       case 'deleteModel':
+      case 'models.del':
       case 'cancelFineTune':
+      case 'fine_tuning.jobs.cancel':
+      case 'fine-tune.cancel':
         commonLookupFineTuneRequestExtraction(tags, payload)
         break
 
       case 'createEdit':
+      case 'edits.create':
         createEditRequestExtraction(tags, payload, store)
         break
     }
@@ -157,6 +176,10 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   finish ({ headers, body, method, path }) {
+    if (headers.constructor.name === 'Headers') {
+      headers = Object.fromEntries(headers)
+    }
+
     const span = this.activeSpan
     const methodName = span._spanContext._tags['resource.name']
 
@@ -165,11 +188,16 @@ class OpenApiPlugin extends TracingPlugin {
     const fullStore = storage.getStore()
     const store = fullStore.openai
 
+    if (path.startsWith('https://') || path.startsWith('http://')) {
+      // basic checking for if the path was set as a full URL
+      // not using a full regex as it will likely be "https://api.openai.com/..."
+      path = new URL(path).pathname
+    }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
     const tags = {
       'openai.request.endpoint': endpoint,
-      'openai.request.method': method,
+      'openai.request.method': method.toUpperCase(),
 
       'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
       'openai.organization.name': headers['openai-organization'],
@@ -203,7 +231,7 @@ class OpenApiPlugin extends TracingPlugin {
 
     // We don't know most information about the request when it fails
 
-    const tags = [`error:1`]
+    const tags = ['error:1']
     this.metrics.distribution('openai.request.duration', span._duration * 1000, tags)
     this.metrics.increment('openai.request.error', 1, tags)
 
@@ -215,12 +243,12 @@ class OpenApiPlugin extends TracingPlugin {
       `org:${headers['openai-organization']}`,
       `endpoint:${endpoint}`, // just "/v1/models", no method
       `model:${headers['openai-model']}`,
-      `error:0`
+      'error:0'
     ]
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
-    if (body && ('usage' in body)) {
+    if (body && body.usage) {
       const promptTokens = body.usage.prompt_tokens
       const completionTokens = body.usage.completion_tokens
       this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
@@ -228,19 +256,19 @@ class OpenApiPlugin extends TracingPlugin {
       this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
     }
 
-    if ('x-ratelimit-limit-requests' in headers) {
+    if (headers['x-ratelimit-limit-requests']) {
       this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
     }
 
-    if ('x-ratelimit-remaining-requests' in headers) {
+    if (headers['x-ratelimit-remaining-requests']) {
       this.metrics.gauge('openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags)
     }
 
-    if ('x-ratelimit-limit-tokens' in headers) {
+    if (headers['x-ratelimit-limit-tokens']) {
       this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
     }
 
-    if ('x-ratelimit-remaining-tokens' in headers) {
+    if (headers['x-ratelimit-remaining-tokens']) {
       this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
     }
   }
@@ -275,17 +303,18 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
-    tags[`openai.request.${i}.content`] = truncateText(message.content)
-    tags[`openai.request.${i}.role`] = message.role
-    tags[`openai.request.${i}.name`] = message.name
-    tags[`openai.request.${i}.finish_reason`] = message.finish_reason
+    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tags[`openai.request.messages.${i}.role`] = message.role
+    tags[`openai.request.messages.${i}.name`] = message.name
+    tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
   }
 }
 
 function commonCreateImageRequestExtraction (tags, payload, store) {
   // createImageEdit, createImageVariation
-  if (payload.file && typeof payload.file === 'object' && payload.file.path) {
-    const file = path.basename(payload.file.path)
+  const img = payload.file || payload.image
+  if (img && typeof img === 'object' && img.path) {
+    const file = path.basename(img.path)
     tags['openai.request.image'] = file
     store.file = file
   }
@@ -305,60 +334,88 @@ function commonCreateImageRequestExtraction (tags, payload, store) {
 function responseDataExtractionByMethod (methodName, tags, body, store) {
   switch (methodName) {
     case 'createModeration':
+    case 'moderations.create':
       createModerationResponseExtraction(tags, body)
       break
 
     case 'createCompletion':
+    case 'completions.create':
     case 'createChatCompletion':
+    case 'chat.completions.create':
     case 'createEdit':
+    case 'edits.create':
       commonCreateResponseExtraction(tags, body, store)
       break
 
     case 'listFiles':
+    case 'files.list':
     case 'listFineTunes':
+    case 'fine_tuning.jobs.list':
+    case 'fine-tune.list':
     case 'listFineTuneEvents':
+    case 'fine_tuning.jobs.listEvents':
+    case 'fine-tune.listEvents':
       commonListCountResponseExtraction(tags, body)
       break
 
     case 'createEmbedding':
+    case 'embeddings.create':
       createEmbeddingResponseExtraction(tags, body)
       break
 
     case 'createFile':
+    case 'files.create':
     case 'retrieveFile':
+    case 'files.retrieve':
       createRetrieveFileResponseExtraction(tags, body)
       break
 
     case 'deleteFile':
+    case 'files.del':
       deleteFileResponseExtraction(tags, body)
       break
 
     case 'downloadFile':
+    case 'files.retrieveContent':
+    case 'files.content':
       downloadFileResponseExtraction(tags, body)
       break
 
     case 'createFineTune':
+    case 'fine_tuning.jobs.create':
+    case 'fine-tune.create':
     case 'retrieveFineTune':
+    case 'fine_tuning.jobs.retrieve':
+    case 'fine-tune.retrieve':
     case 'cancelFineTune':
+    case 'fine_tuning.jobs.cancel':
+    case 'fine-tune.cancel':
       commonFineTuneResponseExtraction(tags, body)
       break
 
     case 'createTranscription':
+    case 'audio.transcriptions.create':
     case 'createTranslation':
+    case 'audio.translations.create':
       createAudioResponseExtraction(tags, body)
       break
 
     case 'createImage':
+    case 'images.generate':
     case 'createImageEdit':
+    case 'images.edit':
     case 'createImageVariation':
+    case 'images.createVariation':
       commonImageResponseExtraction(tags, body)
       break
 
     case 'listModels':
+    case 'models.list':
       listModelsResponseExtraction(tags, body)
       break
 
     case 'retrieveModel':
+    case 'models.retrieve':
       retrieveModelResponseExtraction(tags, body)
       break
   }
@@ -431,15 +488,19 @@ function createFineTuneRequestExtraction (tags, body) {
 function commonFineTuneResponseExtraction (tags, body) {
   tags['openai.response.events_count'] = defensiveArrayLength(body.events)
   tags['openai.response.fine_tuned_model'] = body.fine_tuned_model
-  if (body.hyperparams) {
-    tags['openai.response.hyperparams.n_epochs'] = body.hyperparams.n_epochs
-    tags['openai.response.hyperparams.batch_size'] = body.hyperparams.batch_size
-    tags['openai.response.hyperparams.prompt_loss_weight'] = body.hyperparams.prompt_loss_weight
-    tags['openai.response.hyperparams.learning_rate_multiplier'] = body.hyperparams.learning_rate_multiplier
+
+  const hyperparams = body.hyperparams || body.hyperparameters
+  const hyperparamsKey = body.hyperparams ? 'hyperparams' : 'hyperparameters'
+
+  if (hyperparams) {
+    tags[`openai.response.${hyperparamsKey}.n_epochs`] = hyperparams.n_epochs
+    tags[`openai.response.${hyperparamsKey}.batch_size`] = hyperparams.batch_size
+    tags[`openai.response.${hyperparamsKey}.prompt_loss_weight`] = hyperparams.prompt_loss_weight
+    tags[`openai.response.${hyperparamsKey}.learning_rate_multiplier`] = hyperparams.learning_rate_multiplier
   }
-  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files)
+  tags['openai.response.training_files_count'] = defensiveArrayLength(body.training_files || body.training_file)
   tags['openai.response.result_files_count'] = defensiveArrayLength(body.result_files)
-  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files)
+  tags['openai.response.validation_files_count'] = defensiveArrayLength(body.validation_files || body.validation_file)
   tags['openai.response.updated_at'] = body.updated_at
   tags['openai.response.status'] = body.status
 }
@@ -528,18 +589,31 @@ function commonCreateResponseExtraction (tags, body, store) {
 
   store.choices = body.choices
 
-  for (let i = 0; i < body.choices.length; i++) {
-    const choice = body.choices[i]
-    tags[`openai.response.choices.${i}.finish_reason`] = choice.finish_reason
-    tags[`openai.response.choices.${i}.logprobs`] = ('logprobs' in choice) ? 'returned' : undefined
-    tags[`openai.response.choices.${i}.text`] = truncateText(choice.text)
+  for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
+    const choice = body.choices[choiceIdx]
+
+    // logprobs can be nullm and we still want to tag it as 'returned' even when set to 'null'
+    const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
+
+    tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
+    tags[`openai.response.choices.${choiceIdx}.logprobs`] = specifiesLogProb ? 'returned' : undefined
+    tags[`openai.response.choices.${choiceIdx}.text`] = truncateText(choice.text)
 
     // createChatCompletion only
-    if ('message' in choice) {
+    if (choice.message) {
       const message = choice.message
-      tags[`openai.response.choices.${i}.message.role`] = message.role
-      tags[`openai.response.choices.${i}.message.content`] = truncateText(message.content)
-      tags[`openai.response.choices.${i}.message.name`] = truncateText(message.name)
+      tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
+      tags[`openai.response.choices.${choiceIdx}.message.content`] = truncateText(message.content)
+      tags[`openai.response.choices.${choiceIdx}.message.name`] = truncateText(message.name)
+      if (message.tool_calls) {
+        const toolCalls = message.tool_calls
+        for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.name`] =
+            toolCalls[toolIdx].function.name
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.arguments`] =
+            toolCalls[toolIdx].function.arguments
+        }
+      }
     }
   }
 }
@@ -577,34 +651,62 @@ function truncateText (text) {
 function coerceResponseBody (body, methodName) {
   switch (methodName) {
     case 'downloadFile':
+    case 'files.retrieveContent':
+    case 'files.content':
       return { file: body }
   }
 
-  return typeof body === 'object' ? body : {}
+  const type = typeof body
+  if (type === 'string') {
+    try {
+      return JSON.parse(body)
+    } catch {
+      return body
+    }
+  } else if (type === 'object') {
+    return body
+  } else {
+    return {}
+  }
 }
 
 // This method is used to replace a dynamic URL segment with an asterisk
 function lookupOperationEndpoint (operationId, url) {
   switch (operationId) {
     case 'deleteModel':
+    case 'models.del':
     case 'retrieveModel':
+    case 'models.retrieve':
       return '/v1/models/*'
 
     case 'deleteFile':
+    case 'files.del':
     case 'retrieveFile':
+    case 'files.retrieve':
       return '/v1/files/*'
 
     case 'downloadFile':
+    case 'files.retrieveContent':
+    case 'files.content':
       return '/v1/files/*/content'
 
     case 'retrieveFineTune':
+    case 'fine-tune.retrieve':
       return '/v1/fine-tunes/*'
+    case 'fine_tuning.jobs.retrieve':
+      return '/v1/fine_tuning/jobs/*'
 
     case 'listFineTuneEvents':
+    case 'fine-tune.listEvents':
       return '/v1/fine-tunes/*/events'
+    case 'fine_tuning.jobs.listEvents':
+      return '/v1/fine_tuning/jobs/*/events'
 
     case 'cancelFineTune':
+    case 'fine-tune.cancel':
       return '/v1/fine-tunes/*/cancel'
+    case 'fine_tuning.jobs.cancel':
+      return '/v1/fine_tuning/jobs/*/cancel'
   }
 
   return url
@@ -618,12 +720,17 @@ function lookupOperationEndpoint (operationId, url) {
 function normalizeRequestPayload (methodName, args) {
   switch (methodName) {
     case 'listModels':
+    case 'models.list':
     case 'listFiles':
+    case 'files.list':
     case 'listFineTunes':
+    case 'fine_tuning.jobs.list':
+    case 'fine-tune.list':
       // no argument
       return {}
 
     case 'retrieveModel':
+    case 'models.retrieve':
       return { id: args[0] }
 
     case 'createFile':
@@ -633,19 +740,30 @@ function normalizeRequestPayload (methodName, args) {
       }
 
     case 'deleteFile':
+    case 'files.del':
     case 'retrieveFile':
+    case 'files.retrieve':
     case 'downloadFile':
+    case 'files.retrieveContent':
+    case 'files.content':
       return { file_id: args[0] }
 
     case 'listFineTuneEvents':
+    case 'fine_tuning.jobs.listEvents':
+    case 'fine-tune.listEvents':
       return {
         fine_tune_id: args[0],
         stream: args[1] // undocumented
       }
 
     case 'retrieveFineTune':
+    case 'fine_tuning.jobs.retrieve':
+    case 'fine-tune.retrieve':
     case 'deleteModel':
+    case 'models.del':
     case 'cancelFineTune':
+    case 'fine_tuning.jobs.cancel':
+    case 'fine-tune.cancel':
       return { fine_tune_id: args[0] }
 
     case 'createImageEdit':
@@ -702,7 +820,16 @@ function normalizeStringOrTokenArray (input, truncate) {
 }
 
 function defensiveArrayLength (maybeArray) {
-  return Array.isArray(maybeArray) ? maybeArray.length : undefined
+  if (maybeArray) {
+    if (Array.isArray(maybeArray)) {
+      return maybeArray.length
+    } else {
+      // case of a singular item (ie body.training_file vs body.training_files)
+      return 1
+    }
+  }
+
+  return undefined
 }
 
 module.exports = OpenApiPlugin

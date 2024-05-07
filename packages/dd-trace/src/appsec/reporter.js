@@ -8,7 +8,8 @@ const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
   incrementWafUpdatesMetric,
-  incrementWafRequestsMetric
+  incrementWafRequestsMetric,
+  getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
 
@@ -17,25 +18,35 @@ let limiter = new Limiter(100)
 
 const metricsQueue = new Map()
 
+// following header lists are ordered in the same way the spec orders them, it doesn't matter but it's easier to compare
 const contentHeaderList = [
-  'content-encoding',
-  'content-language',
   'content-length',
-  'content-type'
+  'content-type',
+  'content-encoding',
+  'content-language'
 ]
 
 const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  ...ipHeaderList,
+  'forwarded',
+  'via',
+  ...contentHeaderList,
+  'host',
+  'user-agent',
   'accept',
   'accept-encoding',
-  'accept-language',
-  'host',
-  'forwarded',
-  'user-agent',
-  'via',
-  'x-amzn-trace-id',
+  'accept-language'
+], 'http.request.headers.')
 
-  ...ipHeaderList,
-  ...contentHeaderList
+const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+  'x-amzn-trace-id',
+  'cloudfront-viewer-ja3-fingerprint',
+  'cf-ray',
+  'x-cloud-trace-context',
+  'x-appgw-trace-id',
+  'x-sigsci-requestid',
+  'x-sigsci-tags',
+  'akamai-user-risk'
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
@@ -82,18 +93,9 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 }
 
 function reportMetrics (metrics) {
-  // TODO: metrics should be incremental, there already is an RFC to report metrics
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
-
-  if (metrics.duration) {
-    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
-  }
-
-  if (metrics.durationExt) {
-    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
-  }
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
@@ -169,7 +171,19 @@ function finishRequest (req, res) {
     metricsQueue.clear()
   }
 
+  const metrics = getRequestMetrics(req)
+  if (metrics?.duration) {
+    rootSpan.setTag('_dd.appsec.waf.duration', metrics.duration)
+  }
+
+  if (metrics?.durationExt) {
+    rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
   incrementWafRequestsMetric(req)
+
+  // collect some headers even when no attack is detected
+  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
 
   if (!rootSpan.context()._tags['appsec.event']) return
 

@@ -14,7 +14,7 @@ const stubZlib = {
 const { DataStreamsWriter } = proxyquire(
   '../src/datastreams/writer', {
     '../exporters/common/request': stubRequest,
-    'zlib': stubZlib
+    zlib: stubZlib
   })
 
 describe('DataStreamWriter unix', () => {

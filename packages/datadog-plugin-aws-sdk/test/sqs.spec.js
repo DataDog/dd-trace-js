@@ -1,5 +1,6 @@
 'use strict'
 
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
@@ -11,7 +12,7 @@ const getQueueParams = (queueName) => {
   return {
     QueueName: queueName,
     Attributes: {
-      'MessageRetentionPeriod': '86400'
+      MessageRetentionPeriod: '86400'
     }
   }
 }
@@ -116,7 +117,7 @@ describe('Plugin', () => {
 
             expect(span.resource.startsWith('sendMessage')).to.equal(true)
             expect(span.meta).to.include({
-              'queuename': 'SQS_QUEUE_NAME'
+              queuename: 'SQS_QUEUE_NAME'
             })
 
             parentId = span.span_id.toString()
@@ -268,9 +269,9 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'queuename': 'SQS_QUEUE_NAME',
-              'aws_service': 'SQS',
-              'region': 'us-east-1'
+              queuename: 'SQS_QUEUE_NAME',
+              aws_service: 'SQS',
+              region: 'us-east-1'
             })
             total++
           }).catch(() => {}, { timeoutMs: 100 })
@@ -310,6 +311,7 @@ describe('Plugin', () => {
       describe('data stream monitoring', () => {
         const expectedProducerHash = '4673734031235697865'
         const expectedConsumerHash = '9749472979704578383'
+        let nowStub
 
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -344,6 +346,15 @@ describe('Plugin', () => {
 
         after(() => {
           return agent.close({ ritmReset: false })
+        })
+
+        afterEach(() => {
+          try {
+            nowStub.restore()
+          } catch {
+            // pass
+          }
+          agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
         })
 
         it('Should set pathway hash tag on a span when producing', (done) => {
@@ -433,6 +444,52 @@ describe('Plugin', () => {
           sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }, () => {
             sqs.receiveMessage({ QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] }, () => {})
           })
+        })
+
+        it('Should emit DSM stats to the agent when sending batch messages', done => {
+          // we need to stub Date.now() to ensure a new stats bucket is created for each call
+          // otherwise, all stats checkpoints will be combined into a single stats points
+          let now = Date.now()
+          nowStub = sinon.stub(Date, 'now')
+          nowStub.callsFake(() => {
+            now += 1000000
+            return now
+          })
+
+          agent.expectPipelineStats(dsmStats => {
+            let statsPointsReceived = 0
+            // we should have 3 dsm stats points
+            dsmStats.forEach((timeStatsBucket) => {
+              if (timeStatsBucket && timeStatsBucket.Stats) {
+                timeStatsBucket.Stats.forEach((statsBuckets) => {
+                  statsPointsReceived += statsBuckets.Stats.length
+                })
+              }
+            })
+            expect(statsPointsReceived).to.be.at.least(3)
+            expect(agent.dsmStatsExist(agent, expectedProducerHash)).to.equal(true)
+          }).then(done, done)
+
+          sqs.sendMessageBatch(
+            {
+              Entries: [
+                {
+                  Id: '1',
+                  MessageBody: 'test DSM 1'
+                },
+                {
+                  Id: '2',
+                  MessageBody: 'test DSM 2'
+                },
+                {
+                  Id: '3',
+                  MessageBody: 'test DSM 3'
+                }
+              ],
+              QueueUrl: QueueUrlDsm
+            }, () => {
+              nowStub.restore()
+            })
         })
       })
     })

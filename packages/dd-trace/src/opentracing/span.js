@@ -29,10 +29,11 @@ const OTEL_ENABLED = !!process.env.DD_TRACE_OTEL_ENABLED
 const ALLOWED = ['string', 'number', 'boolean']
 
 const integrationCounters = {
-  span_created: {},
-  span_finished: {}
+  spans_created: {},
+  spans_finished: {}
 }
 
+const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
 
 function getIntegrationCounter (event, integration) {
@@ -72,7 +73,7 @@ class DatadogSpan {
     this._name = operationName
     this._integrationName = fields.integrationName || 'opentracing'
 
-    getIntegrationCounter('span_created', this._integrationName).inc()
+    getIntegrationCounter('spans_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
@@ -96,6 +97,7 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
     spanleak.addSpan(this, operationName)
+    startCh.publish(this)
   }
 
   toString () {
@@ -172,7 +174,7 @@ class DatadogSpan {
       }
     }
 
-    getIntegrationCounter('span_finished', this._integrationName).inc()
+    getIntegrationCounter('spans_finished', this._integrationName).inc()
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
@@ -210,7 +212,7 @@ class DatadogSpan {
           // Wrap the value as a string if it's not already a string
           sanitizedAttributes[key] = typeof maybeScalar === 'string' ? maybeScalar : String(maybeScalar)
         } else {
-          log.warn(`Dropping span link attribute. It is not of an allowed type`)
+          log.warn('Dropping span link attribute. It is not of an allowed type')
         }
       }
     }
@@ -266,6 +268,8 @@ class DatadogSpan {
     if (startTime) {
       spanContext._trace.startTime = startTime
     }
+    // SpanContext was NOT propagated from a remote parent
+    spanContext._isRemote = false
 
     return spanContext
   }

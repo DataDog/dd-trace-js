@@ -33,8 +33,8 @@ module.exports = {
     kafkaContextPlugin.disable()
     kafkaConsumerPlugin.disable()
   },
-  setMaxTransactions: setMaxTransactions,
-  createTransaction: createTransaction,
-  removeTransaction: removeTransaction,
+  setMaxTransactions,
+  createTransaction,
+  removeTransaction,
   taintTrackingPlugin
 }

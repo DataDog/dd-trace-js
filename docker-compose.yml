@@ -2,7 +2,7 @@ version: "2"
 services:
   aerospike:
     image: aerospike:ce-6.4.0.3
-    ports: 
+    ports:
       - "127.0.0.1:3000-3002:3000-3002"
   couchbase:
     image: ghcr.io/datadog/couchbase-server-sandbox:latest
@@ -38,6 +38,7 @@ services:
       - "127.0.0.1:6379:6379"
   mongo:
     image: circleci/mongo:3.6
+    platform: linux/amd64
     ports:
       - "127.0.0.1:27017:27017"
   oracledb:
@@ -91,7 +92,7 @@ services:
     ports:
       - "127.0.0.1:4566:4566" # Edge
     environment:
-      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda
+      - LOCALSTACK_SERVICES=dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda,stepfunctions,events
       - EXTRA_CORS_ALLOWED_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - EXTRA_CORS_EXPOSE_HEADERS=x-amz-request-id,x-amzn-requestid,x-amz-id-2
       - AWS_DEFAULT_REGION=us-east-1

@@ -19,7 +19,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,
-        [`./packages/datadog-plugin-fastify/test/integration-test/*`])
+        ['./packages/datadog-plugin-fastify/test/integration-test/*'])
     })
 
     after(async () => {

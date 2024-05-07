@@ -3,12 +3,16 @@ stages:
   - deploy
   - benchmarks
   - benchmarks-pr-comment
+  - single-step-instrumentation-tests
+  - manual_images
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
   - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/single-step-instrumentation-tests.yml"
 
 variables:
+
   JS_PACKAGE_VERSION:
     description: "Version to build for .deb and .rpm. Must be already published in NPM"
   DOWNSTREAM_BRANCH:
@@ -17,6 +21,47 @@ variables:
 
 .common: &common
   tags: [ "runner:main", "size:large" ]
+
+
+package-snapshot:
+  extends: .package
+  stage: package
+  rules:
+    - if: $JS_PACKAGE_VERSION
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: on_success
+      allow_failure: true
+    - when: manual
+      allow_failure: true
+  script:
+   - |
+      export CI_VERSION_SUFFIX=".pipeline.${CI_PIPELINE_ID}.beta.${CI_COMMIT_SHORT_SHA}"
+      cd ..
+      ./.gitlab/build-deb-rpm-snapshot.sh
+      echo "done"
+
+package-snapshot-arm:
+  extends: .package-arm
+  stage: package
+  rules:
+    - if: $JS_PACKAGE_VERSION
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: on_success
+      allow_failure: true
+    - when: manual
+      allow_failure: true
+  script:
+   - |
+      export CI_VERSION_SUFFIX=".pipeline.${CI_PIPELINE_ID}.beta.${CI_COMMIT_SHORT_SHA}"
+      cd ..
+      ./.gitlab/build-deb-rpm-snapshot.sh
+      echo "done"
 
 package:
   extends: .package
@@ -27,6 +72,7 @@ package:
     when: on_success
   script:
     - ../.gitlab/build-deb-rpm.sh
+    - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
 package-arm:
   extends: .package-arm
@@ -37,6 +83,7 @@ package-arm:
     when: on_success
   script:
     - ../.gitlab/build-deb-rpm.sh
+    - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
 .release-package:
   stage: deploy
@@ -62,6 +109,7 @@ deploy_to_reliability_env:
 
 deploy_to_docker_registries:
   stage: deploy
+  needs: []
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v.*/ || $CI_COMMIT_TAG == "dev"'
       when: on_success
@@ -80,6 +128,7 @@ deploy_to_docker_registries:
 
 deploy_latest_to_docker_registries:
   stage: deploy
+  needs: []
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v.*/'
       when: on_success

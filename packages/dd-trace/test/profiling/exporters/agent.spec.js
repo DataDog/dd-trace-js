@@ -37,7 +37,7 @@ function wait (ms) {
 }
 
 async function createProfile (periodType) {
-  const [ type ] = periodType
+  const [type] = periodType
   const profiler = type === 'wall' ? new WallProfiler() : new SpaceProfiler()
   profiler.start({
     // Throw errors in test rather than logging them
@@ -45,6 +45,7 @@ async function createProfile (periodType) {
       error (err) {
         throw err
       },
+      // eslint-disable-next-line n/handle-callback-err
       warn (err) {
       }
     }
@@ -100,6 +101,26 @@ describe('exporters/agent', function () {
       'format:pprof',
       `runtime-id:${RUNTIME_ID}`
     ].join(','))
+    expect(event).to.have.property('info')
+    expect(event.info).to.have.property('application')
+    expect(Object.keys(event.info.application)).to.have.length(4)
+    expect(event.info.application).to.have.property('env', ENV)
+    expect(event.info.application).to.have.property('service', SERVICE)
+    expect(event.info.application).to.have.property('start_time')
+    expect(event.info.application).to.have.property('version', '1.2.3')
+    expect(event.info).to.have.property('platform')
+    expect(Object.keys(event.info.platform)).to.have.length(4)
+    expect(event.info.platform).to.have.property('hostname', HOST)
+    expect(event.info.platform).to.have.property('kernel_name', os.type())
+    expect(event.info.platform).to.have.property('kernel_release', os.release())
+    expect(event.info.platform).to.have.property('kernel_version', os.version())
+    expect(event.info).to.have.property('profiler')
+    expect(Object.keys(event.info.profiler)).to.have.length(1)
+    expect(event.info.profiler).to.have.property('version', version)
+    expect(event.info).to.have.property('runtime')
+    expect(Object.keys(event.info.runtime)).to.have.length(2)
+    expect(event.info.runtime).to.have.property('engine', 'nodejs')
+    expect(event.info.runtime).to.have.property('version', process.version.substring(1))
 
     expect(req.files[1]).to.have.property('fieldname', 'wall.pprof')
     expect(req.files[1]).to.have.property('originalname', 'wall.pprof')
@@ -132,7 +153,7 @@ describe('exporters/agent', function () {
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
       '../../exporters/common/docker': docker,
-      'http': http
+      http
     })
     AgentExporter = agent.AgentExporter
     computeRetries = agent.computeRetries
@@ -177,7 +198,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -220,7 +241,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -303,7 +324,7 @@ describe('exporters/agent', function () {
       const end = new Date()
       const tags = { foo: 'bar' }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])
@@ -335,6 +356,58 @@ describe('exporters/agent', function () {
     })
   })
 
+  describe('using ipv6', () => {
+    beforeEach(done => {
+      getPort().then(port => {
+        url = new URL(`http://[0:0:0:0:0:0:0:1]:${port}`)
+
+        listener = app.listen(port, '0:0:0:0:0:0:0:1', done)
+        listener.on('connection', socket => sockets.push(socket))
+        startSpan = sinon.spy(tracer._tracer, 'startSpan')
+      })
+    })
+
+    afterEach(done => {
+      listener.close(done)
+      sockets.forEach(socket => socket.end())
+      tracer._tracer.startSpan.restore()
+    })
+
+    it('should support ipv6 urls', async () => {
+      const exporter = newAgentExporter({ url, logger })
+      const start = new Date()
+      const end = new Date()
+      const tags = {
+        'runtime-id': RUNTIME_ID
+      }
+
+      const [wall, space] = await Promise.all([
+        createProfile(['wall', 'microseconds']),
+        createProfile(['space', 'bytes'])
+      ])
+
+      const profiles = {
+        wall,
+        space
+      }
+
+      await new Promise((resolve, reject) => {
+        app.post('/profiling/v1/input', upload.any(), (req, res) => {
+          try {
+            verifyRequest(req, profiles, start, end)
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+
+          res.send()
+        })
+
+        exporter.export({ profiles, start, end, tags }).catch(reject)
+      })
+    })
+  })
+
   describeOnUnix('using UDS', () => {
     let listener
 
@@ -358,7 +431,7 @@ describe('exporters/agent', function () {
         'runtime-id': RUNTIME_ID
       }
 
-      const [ wall, space ] = await Promise.all([
+      const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
         createProfile(['space', 'bytes'])
       ])

@@ -108,7 +108,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       'coverage1',
       buffer,
       {
-        filename: `coverage1.msgpack`,
+        filename: 'coverage1.msgpack',
         contentType: 'application/msgpack'
       }
     )

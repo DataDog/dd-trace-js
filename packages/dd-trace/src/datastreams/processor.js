@@ -4,7 +4,7 @@ const pkg = require('../../../../package.json')
 const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
-const { encodePathwayContext } = require('./pathway')
+const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { types } = require('util')
@@ -13,7 +13,6 @@ const { PATHWAY_HASH } = require('../../../../ext/tags')
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
-const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
@@ -274,28 +273,28 @@ class DataStreamsProcessor {
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
-      hash: hash,
-      edgeStartNs: edgeStartNs,
-      pathwayStartNs: pathwayStartNs,
+      hash,
+      edgeStartNs,
+      pathwayStartNs,
       previousDirection: direction,
-      closestOppositeDirectionHash: closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart: closestOppositeDirectionEdgeStart
+      closestOppositeDirectionHash,
+      closestOppositeDirectionEdgeStart
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
       // - 1 to account for extra byte for {
       const ddInfoContinued = {}
-      ddInfoContinued[CONTEXT_PROPAGATION_KEY] = encodePathwayContext(dataStreamsContext).toJSON()
+      DsmPathwayCodec.encode(dataStreamsContext, ddInfoContinued)
       payloadSize += getSizeOrZero(JSON.stringify(ddInfoContinued)) - 1
     }
     const checkpoint = {
       currentTimestamp: nowNs,
-      parentHash: parentHash,
-      hash: hash,
-      edgeTags: edgeTags,
-      edgeLatencyNs: edgeLatencyNs,
-      pathwayLatencyNs: pathwayLatencyNs,
-      payloadSize: payloadSize
+      parentHash,
+      hash,
+      edgeTags,
+      edgeLatencyNs,
+      pathwayLatencyNs,
+      payloadSize
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -321,7 +320,7 @@ class DataStreamsProcessor {
     // TimeBuckets
     const serializedBuckets = []
 
-    for (const [ timeNs, bucket ] of this.buckets.entries()) {
+    for (const [timeNs, bucket] of this.buckets.entries()) {
       const points = []
 
       // bucket: StatsBucket
@@ -355,15 +354,14 @@ class DataStreamsProcessor {
 }
 
 module.exports = {
-  DataStreamsProcessor: DataStreamsProcessor,
-  StatsPoint: StatsPoint,
-  StatsBucket: StatsBucket,
+  DataStreamsProcessor,
+  StatsPoint,
+  StatsBucket,
   Backlog,
   TimeBuckets,
   getMessageSize,
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
-  ENTRY_PARENT_HASH,
-  CONTEXT_PROPAGATION_KEY
+  ENTRY_PARENT_HASH
 }

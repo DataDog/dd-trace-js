@@ -47,6 +47,7 @@ describe('Plugin', () => {
 
           tracer.scope().activate(span, () => {
             const span = tracer.scope().active()
+            // eslint-disable-next-line n/handle-callback-err
             connection.query('SELECT 1 + 1 AS solution', (err, results, fields) => {
               expect(results).to.not.be.null
               expect(fields).to.not.be.null
@@ -305,7 +306,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          const plugin = tracer._pluginManager._pluginsByName['mysql']
+          const plugin = tracer._pluginManager._pluginsByName.mysql
           computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
           remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
         })
@@ -321,7 +322,8 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
+                `,ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -335,7 +337,8 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `/*dddbs='db',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'db\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\'' +
+                `,ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -349,7 +352,8 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `/*dddbs='remappedDB',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'remappedDB\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -377,7 +381,8 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `/*dddbs='serviced',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
+                `ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -423,8 +428,8 @@ describe('Plugin', () => {
           connection.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(connection._protocol._queue[0].sql).to.equal(
-                `/*dddbs='~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E',dde='tester',` +
-                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'~!%40%23%24%25%5E%26*()_%2B%7C%3F%3F%2F%3C%3E\',dde=\'tester\',' +
+                `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
               done()
             } catch (e) {
               done(e)
@@ -461,7 +466,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())
@@ -504,7 +509,8 @@ describe('Plugin', () => {
           pool.query('SELECT 1 + 1 AS solution', () => {
             try {
               expect(pool._allConnections[0]._protocol._queue[0].sql).to.equal(
-                `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+                '/*dddb=\'db\',dddbs=\'post\',dde=\'tester\',ddh=\'127.0.0.1\',' +
+                `ddps='test',ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
             } catch (e) {
               done(e)
             }
@@ -541,7 +547,7 @@ describe('Plugin', () => {
             const spanId = traces[0][0].span_id.toString(16).padStart(16, '0')
 
             expect(queryText).to.equal(
-              `/*dddbs='post',dde='tester',ddps='test',ddpv='${ddpv}',` +
+              `/*dddb='db',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}',` +
               `traceparent='00-${traceId}-${spanId}-00'*/ SELECT 1 + 1 AS solution`)
           }).then(done, done)
           const clock = sinon.useFakeTimers(new Date())

@@ -6,20 +6,45 @@ const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager } = require('./startup-log')
 const telemetry = require('./telemetry')
+const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const remoteConfig = require('./appsec/remote_config')
 const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
+const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
+const { SSITelemetry } = require('./profiling/ssi-telemetry')
+
+class LazyModule {
+  constructor (provider) {
+    this.provider = provider
+  }
+
+  enable (...args) {
+    this.module = this.provider()
+    this.module.enable(...args)
+  }
+
+  disable () {
+    this.module?.disable()
+  }
+}
 
 class Tracer extends NoopProxy {
   constructor () {
     super()
 
     this._initialized = false
+    this._nomenclature = nomenclature
     this._pluginManager = new PluginManager(this)
-    this.dogstatsd = new dogstatsd.NoopDogStatsDClient()
+    this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
+
+    // these requires must work with esm bundler
+    this._modules = {
+      appsec: new LazyModule(() => require('./appsec')),
+      iast: new LazyModule(() => require('./appsec/iast'))
+    }
   }
 
   init (options) {
@@ -54,7 +79,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        const rc = remoteConfig.enable(config)
+        const rc = remoteConfig.enable(config, this._modules.appsec)
 
         rc.on('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
@@ -70,6 +95,8 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
+      const ssiTelemetry = new SSITelemetry()
+      ssiTelemetry.start()
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported
         try {
@@ -78,6 +105,8 @@ class Tracer extends NoopProxy {
         } catch (e) {
           log.error(e)
         }
+      } else if (ssiTelemetry.enabled()) {
+        require('./profiling/ssi-telemetry-mock-profiler').start(config)
       }
       if (!this._profilerStarted) {
         this._profilerStarted = Promise.resolve(false)
@@ -105,9 +134,8 @@ class Tracer extends NoopProxy {
 
   _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
-      // dirty require for now so zero appsec code is executed unless explicitly enabled
       if (config.appsec.enabled) {
-        require('./appsec').enable(config)
+        this._modules.appsec.enable(config)
       }
       if (!this._tracingInitialized) {
         this._tracer = new DatadogTracer(config)
@@ -115,11 +143,11 @@ class Tracer extends NoopProxy {
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
-        require('./appsec/iast').enable(config, this._tracer)
+        this._modules.iast.enable(config, this._tracer)
       }
     } else if (this._tracingInitialized) {
-      require('./appsec').disable()
-      require('./appsec/iast').disable()
+      this._modules.appsec.disable()
+      this._modules.iast.disable()
     }
 
     if (this._tracingInitialized) {

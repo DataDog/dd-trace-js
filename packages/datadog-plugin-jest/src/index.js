@@ -17,8 +17,10 @@ const {
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  JEST_DISPLAY_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -50,6 +52,7 @@ class JestPlugin extends CiPlugin {
     }
     return this.unskippableSuites
   }
+
   getForcedToRunSuites (forcedToRunSuitesList) {
     if (!this.forcedToRunSuites) {
       this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
@@ -87,6 +90,7 @@ class JestPlugin extends CiPlugin {
       hasForcedToRunSuites,
       error,
       isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
       onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -113,7 +117,10 @@ class JestPlugin extends CiPlugin {
       )
 
       if (isEarlyFlakeDetectionEnabled) {
-        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
 
       this.testModuleSpan.finish()
@@ -144,7 +151,7 @@ class JestPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion }) => {
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion, displayName }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -178,6 +185,9 @@ class JestPlugin extends CiPlugin {
       }
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (displayName) {
+        testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -308,6 +318,7 @@ class JestPlugin extends CiPlugin {
       suite,
       name,
       runner,
+      displayName,
       testParameters,
       frameworkVersion,
       testStartLine,
@@ -327,10 +338,14 @@ class JestPlugin extends CiPlugin {
     // If for whatever we don't have the source file, we'll fall back to the suite name
     extraTags[TEST_SOURCE_FILE] = testSourceFile || suite
 
+    if (displayName) {
+      extraTags[JEST_DISPLAY_NAME] = displayName
+    }
+
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
-        extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
+        extraTags[TEST_IS_RETRY] = 'true'
       }
     }
 

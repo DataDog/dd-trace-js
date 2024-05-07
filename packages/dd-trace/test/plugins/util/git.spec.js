@@ -28,7 +28,7 @@ const {
 
 const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
   {
-    'child_process': {
+    child_process: {
       execFileSync: execFileSyncStub
     }
   }
@@ -144,8 +144,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
         '../../log': {
@@ -162,8 +162,8 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
         '../../log': {
@@ -171,9 +171,33 @@ describe('getCommitsRevList', () => {
         }
       }
     )
-    const commitsToUpload = getCommitsRevList([], [])
+    getCommitsRevList([], [])
     expect(logErrorSpy).to.have.been.called
-    expect(commitsToUpload.length).to.equal(0)
+  })
+
+  it('returns null if the repository is bigger than the limit', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: (command, flags, options) =>
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
+        }
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
+  })
+
+  it('returns null if execFileSync fails for whatever reason', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: () => { throw new Error('error!') }
+        }
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
   })
 })
 
@@ -194,8 +218,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -212,8 +236,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -230,8 +254,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )

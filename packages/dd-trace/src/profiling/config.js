@@ -21,6 +21,7 @@ class Config {
       DD_AGENT_HOST,
       DD_ENV,
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
@@ -165,7 +166,7 @@ class Config {
 
     this.timelineEnabled = isTrue(coalesce(options.timelineEnabled,
       DD_PROFILING_TIMELINE_ENABLED,
-      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, false))
+      DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED, samplingContextsAvailable))
     logExperimentalVarDeprecation('TIMELINE_ENABLED')
     checkOptionWithSamplingContextAllowed(this.timelineEnabled, 'Timeline view')
 
@@ -176,7 +177,9 @@ class Config {
     checkOptionWithSamplingContextAllowed(this.codeHotspotsEnabled, 'Code hotspots')
 
     this.cpuProfilingEnabled = isTrue(coalesce(options.cpuProfilingEnabled,
-      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, false))
+      DD_PROFILING_CPU_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_CPU_ENABLED, samplingContextsAvailable))
+    logExperimentalVarDeprecation('CPU_ENABLED')
     checkOptionWithSamplingContextAllowed(this.cpuProfilingEnabled, 'CPU profiling')
 
     this.profilers = ensureProfilers(profilers, this)
@@ -237,7 +240,7 @@ function ensureOOMExportStrategies (strategies, options) {
     }
   }
 
-  return [ ...new Set(strategies) ]
+  return [...new Set(strategies)]
 }
 
 function getExporter (name, options) {
@@ -288,8 +291,9 @@ function ensureProfilers (profilers, options) {
     }
   }
 
-  // Events profiler is a profiler for timeline events
-  if (options.timelineEnabled) {
+  // Events profiler is a profiler that produces timeline events. It is only
+  // added if timeline is enabled and there's a wall profiler.
+  if (options.timelineEnabled && profilers.some(p => p instanceof WallProfiler)) {
     profilers.push(new EventsProfiler(options))
   }
 

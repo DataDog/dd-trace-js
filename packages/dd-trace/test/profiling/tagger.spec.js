@@ -27,7 +27,7 @@ describe('tagger', () => {
     const tags = {
       foo: 'bar',
       baz: 'qux',
-      undefined: undefined,
+      undefined,
       null: null
     }
 

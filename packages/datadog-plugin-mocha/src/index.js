@@ -19,8 +19,8 @@ const {
   TEST_SOURCE_FILE,
   removeEfdStringFromTestName,
   TEST_IS_NEW,
-  TEST_EARLY_FLAKE_IS_RETRY,
-  TEST_EARLY_FLAKE_IS_ENABLED
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -144,10 +144,9 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:test:finish', (status) => {
       const store = storage.getStore()
+      const span = store?.span
 
-      if (store && store.span) {
-        const span = store.span
-
+      if (span) {
         span.setTag(TEST_STATUS, status)
 
         span.finish()
@@ -223,7 +222,7 @@ class MochaPlugin extends CiPlugin {
         )
 
         if (isEarlyFlakeDetectionEnabled) {
-          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
 
         this.testModuleSpan.finish()
@@ -270,7 +269,7 @@ class MochaPlugin extends CiPlugin {
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
       if (isEfdRetry) {
-        extraTags[TEST_EARLY_FLAKE_IS_RETRY] = 'true'
+        extraTags[TEST_IS_RETRY] = 'true'
       }
     }
 

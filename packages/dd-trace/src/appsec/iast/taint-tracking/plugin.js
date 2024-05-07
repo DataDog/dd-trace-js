@@ -14,6 +14,10 @@ const {
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI
 } = require('./source-types')
+const { EXECUTED_SOURCE } = require('../telemetry/iast-metric')
+
+const REQ_HEADER_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME)
+const REQ_URI_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_URI)
 
 class TaintTrackingPlugin extends SourceIastPlugin {
   constructor () {
@@ -26,9 +30,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'datadog:body-parser:read:finish', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
         const iastContext = getIastContext(storage.getStore())
-        if (iastContext && iastContext['body'] !== req.body) {
+        if (iastContext && iastContext.body !== req.body) {
           this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-          iastContext['body'] = req.body
+          iastContext.body = req.body
         }
       }
     )
@@ -43,9 +47,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ req }) => {
         if (req && req.body && typeof req.body === 'object') {
           const iastContext = getIastContext(storage.getStore())
-          if (iastContext && iastContext['body'] !== req.body) {
+          if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
-            iastContext['body'] = req.body
+            iastContext.body = req.body
           }
         }
       }
@@ -91,13 +95,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
   _cookiesTaintTrackingHandler (target) {
     const iastContext = getIastContext(storage.getStore())
-    taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE, true, HTTP_REQUEST_COOKIE_NAME)
+    // Prevent tainting cookie names since it leads to taint literal string with same value.
+    taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE)
   }
 
   taintHeaders (headers, iastContext) {
+    // Prevent tainting header names since it leads to taint literal string with same value.
     this.execSource({
-      handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE, true, HTTP_REQUEST_HEADER_NAME),
-      tag: [HTTP_REQUEST_HEADER_VALUE, HTTP_REQUEST_HEADER_NAME],
+      handler: () => taintObject(iastContext, headers, HTTP_REQUEST_HEADER_VALUE),
+      tags: REQ_HEADER_TAGS,
       iastContext
     })
   }
@@ -107,7 +113,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       handler: function () {
         req.url = newTaintedString(iastContext, req.url, HTTP_REQUEST_URI, HTTP_REQUEST_URI)
       },
-      tag: [HTTP_REQUEST_URI],
+      tags: REQ_URI_TAGS,
       iastContext
     })
   }

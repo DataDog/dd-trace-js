@@ -2,7 +2,8 @@
 
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const { getAmqpMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
+const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
@@ -28,10 +29,13 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
       }
     })
 
-    if (this.config.dsmEnabled && message) {
+    if (
+      this.config.dsmEnabled && message?.properties?.headers &&
+      DsmPathwayCodec.contextExists(message.properties.headers)
+    ) {
       const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
-      const queue = fields.queue ?? fields.routingKey
-      this.tracer.decodeDataStreamsContext(message.properties.headers[CONTEXT_PROPAGATION_KEY])
+      const queue = fields.queue ? fields.queue : fields.routingKey
+      this.tracer.decodeDataStreamsContext(message.properties.headers)
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:rabbitmq'], span, payloadSize)
     }

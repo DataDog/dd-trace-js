@@ -110,7 +110,7 @@ describe('Remote Config index', () => {
       beforeEach(() => {
         config.appsec = { enabled: undefined }
 
-        remoteConfig.enable(config)
+        remoteConfig.enable(config, appsec)
 
         listener = rc.on.firstCall.args[1]
       })
@@ -253,7 +253,7 @@ describe('Remote Config index', () => {
       })
 
       it('should not enable when custom appsec rules are provided', () => {
-        config.appsec = { enabled: true, rules: {}, customRulesProvided: true }
+        config.appsec = { enabled: true, rules: {} }
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 
@@ -262,7 +262,7 @@ describe('Remote Config index', () => {
       })
 
       it('should enable when using default rules', () => {
-        config.appsec = { enabled: true, rules: {}, customRulesProvided: false }
+        config.appsec = { enabled: true, rules: null }
         remoteConfig.enable(config)
         remoteConfig.enableWafUpdate(config.appsec)
 

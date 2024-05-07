@@ -11,7 +11,10 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SOURCE_FILE,
-  TEST_CONFIGURATION_BROWSER_NAME
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -30,10 +33,26 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuites = new Map()
+    this.numFailedTests = 0
+    this.numFailedSuites = 0
 
-    this.addSub('ci:playwright:session:finish', ({ status, onDone }) => {
+    this.addSub('ci:playwright:session:finish', ({ status, isEarlyFlakeDetectionEnabled, onDone }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
+
+      if (isEarlyFlakeDetectionEnabled) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+
+      if (this.numFailedSuites > 0) {
+        let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
+        if (this.numFailedTests > 0) {
+          errorMessage += ` Tests failed: ${this.numFailedTests}`
+        }
+        const error = new Error(errorMessage)
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -42,6 +61,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
+      this.numFailedTests = 0
     })
 
     this.addSub('ci:playwright:test-suite:start', (testSuiteAbsolutePath) => {
@@ -69,11 +89,21 @@ class PlaywrightPlugin extends CiPlugin {
       this._testSuites.set(testSuite, testSuiteSpan)
     })
 
-    this.addSub('ci:playwright:test-suite:finish', (status) => {
+    this.addSub('ci:playwright:test-suite:finish', ({ status, error }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
-      span.setTag(TEST_STATUS, status)
+      if (error) {
+        span.setTag('error', error)
+        span.setTag(TEST_STATUS, 'fail')
+      } else {
+        span.setTag(TEST_STATUS, status)
+      }
+
+      if (status === 'fail' || error) {
+        this.numFailedSuites++
+      }
+
       span.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
@@ -86,7 +116,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -98,6 +128,12 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (extraTags) {
         span.addTags(extraTags)
+      }
+      if (isNew) {
+        span.setTag(TEST_IS_NEW, 'true')
+        if (isEfdRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
       }
 
       steps.forEach(step => {
@@ -114,10 +150,18 @@ class PlaywrightPlugin extends CiPlugin {
         if (step.error) {
           stepSpan.setTag('error', step.error)
         }
-        stepSpan.finish(stepStartTime + step.duration)
+        let stepDuration = step.duration
+        if (stepDuration <= 0 || isNaN(stepDuration)) {
+          stepDuration = 0
+        }
+        stepSpan.finish(stepStartTime + stepDuration)
       })
 
       span.finish()
+
+      if (testStatus === 'fail') {
+        this.numFailedTests++
+      }
 
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,

@@ -160,78 +160,6 @@ describe('IAST TaintTracking Operations', () => {
       expect(result).to.be.deep.equal(expected)
     })
 
-    it('Should call newTaintedString in object keys when keyTainting is true', () => {
-      const iastContext = {}
-      const transactionId = 'id'
-      taintTrackingOperations.createTransaction(transactionId, iastContext)
-
-      const VALUE_TYPE = 'value.type'
-      const KEY_TYPE = 'key.type'
-
-      const obj = {
-        key1: 'parent',
-        key2: {
-          key3: 'child'
-        }
-      }
-
-      const result = taintTrackingOperations.taintObject(iastContext, obj, VALUE_TYPE, true, KEY_TYPE)
-      expect(taintedUtilsMock.newTaintedString.getCall(0)).to.have.been
-        .calledWithExactly(transactionId, 'key2', 'key2', KEY_TYPE)
-      expect(taintedUtilsMock.newTaintedString.getCall(1)).to.have.been
-        .calledWithExactly(transactionId, 'child', 'key2.key3', VALUE_TYPE)
-      expect(taintedUtilsMock.newTaintedString.getCall(2)).to.have.been
-        .calledWithExactly(transactionId, 'key3', 'key2.key3', KEY_TYPE)
-      expect(taintedUtilsMock.newTaintedString.getCall(3)).to.have.been
-        .calledWithExactly(transactionId, 'parent', 'key1', VALUE_TYPE)
-      expect(taintedUtilsMock.newTaintedString.getCall(4)).to.have.been
-        .calledWithExactly(transactionId, 'key1', 'key1', KEY_TYPE)
-      expect(result).to.equal(obj)
-
-      taintTrackingOperations.removeTransaction()
-    })
-
-    it('Should taint object keys when taintingKeys is true', () => {
-      delete require.cache[require.resolve('../../../../src/appsec/iast/taint-tracking/operations-taint-object')]
-      delete require.cache[require.resolve('../../../../src/appsec/iast/taint-tracking/operations')]
-
-      const taintTrackingOperations = require('../../../../src/appsec/iast/taint-tracking/operations')
-      const iastContext = {}
-      const transactionId = 'id'
-      taintTrackingOperations.createTransaction(transactionId, iastContext)
-
-      const VALUE_TYPE = 'value.type'
-      const KEY_TYPE = 'key.type'
-
-      const obj = {
-        keyLargerThan10Chars: 'parent',
-        anotherKeyLargerThan10Chars: {
-          shortKey: 'child'
-        }
-      }
-
-      const checkValueAndKeyAreTainted = (target, key) => {
-        // Strings shorter than 10 characters are not tainted directly, but a new instance of the string is created
-        // in dd-native-iast-taint-tracking. This leads to object keys that meet this condition not being detected
-        // as tainted
-        if (key && key.length >= 10) {
-          const isKeyTainted = taintTrackingOperations.isTainted(iastContext, key)
-          expect(isKeyTainted).to.be.true
-        }
-
-        const obj = key ? target[key] : target
-        if (!key || typeof obj === 'object') {
-          Object.keys(obj).forEach(k => checkValueAndKeyAreTainted(obj, k))
-        } else if (typeof obj === 'string') {
-          const isValueTainted = taintTrackingOperations.isTainted(iastContext, obj)
-          expect(isValueTainted).to.be.true
-        }
-      }
-
-      taintTrackingOperations.taintObject(iastContext, obj, VALUE_TYPE, true, KEY_TYPE)
-      checkValueAndKeyAreTainted(obj, null)
-    })
-
     it('Should handle the exception', () => {
       const iastContext = {}
       const transactionId = 'id'
@@ -324,12 +252,12 @@ describe('IAST TaintTracking Operations', () => {
         telemetry: { enabled: true, metrics: true }
       }, 'INFORMATION')
 
-      const requestTaintedAdd = sinon.stub(REQUEST_TAINTED, 'add')
+      const requestTaintedInc = sinon.stub(REQUEST_TAINTED, 'inc')
 
       taintTrackingOperations.enableTaintOperations(iastTelemetry.verbosity)
       taintTrackingOperations.removeTransaction(iastContext)
 
-      expect(requestTaintedAdd).to.be.calledOnceWith(5, null, iastContext)
+      expect(requestTaintedInc).to.be.calledOnceWith(iastContext, 5)
     })
   })
 
@@ -395,7 +323,7 @@ describe('IAST TaintTracking Operations', () => {
       global._ddiast.plusOperator('helloworld', 'hello', 'world')
       expect(taintedUtils.concat).to.be.called
 
-      expect(executedPropagationIncrease).to.be.calledOnceWith(null, context)
+      expect(executedPropagationIncrease).to.be.calledOnceWith(context)
     })
   })
 

@@ -16,8 +16,8 @@ describe('esm', () => {
   withVersions('google-cloud-pubsub', '@google-cloud/pubsub', '>=4.0.0', version => {
     before(async function () {
       this.timeout(20000)
-      sandbox = await createSandbox([`'@google-cloud/pubsub@${version}'`], false, [ './packages/dd-trace/src/id.js',
-        `./packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*`])
+      sandbox = await createSandbox([`'@google-cloud/pubsub@${version}'`], false, ['./packages/dd-trace/src/id.js',
+        './packages/datadog-plugin-google-cloud-pubsub/test/integration-test/*'])
     })
 
     after(async () => {

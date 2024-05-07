@@ -15,8 +15,13 @@ const zlib = require('zlib')
 const { Profile } = require('pprof-format')
 const semver = require('semver')
 
-async function checkProfiles (agent, proc, timeout,
-  expectedProfileTypes = ['wall', 'space'], expectBadExit = false, multiplicity = 1) {
+const DEFAULT_PROFILE_TYPES = ['wall', 'space']
+if (process.platform !== 'win32') {
+  DEFAULT_PROFILE_TYPES.push('events')
+}
+
+function checkProfiles (agent, proc, timeout,
+  expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, multiplicity = 1) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   const resultPromise = agent.assertMessageReceived(({ headers, payload, files }) => {
     assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -29,8 +34,7 @@ async function checkProfiles (agent, proc, timeout,
     }
   }, timeout, multiplicity)
 
-  await processExitPromise(proc, timeout, expectBadExit)
-  return resultPromise
+  return Promise.all([processExitPromise(proc, timeout, expectBadExit), resultPromise])
 }
 
 function processExitPromise (proc, timeout, expectBadExit = false) {
@@ -306,7 +310,7 @@ describe('profiler', () => {
                 })
               })
             })
-            const [ port1, port2 ] = await p
+            const [port1, port2] = await p
             const args = [String(port1), String(port2), msg]
             // Invoke the profiled program, passing it the ports of the servers and
             // the expected message.
@@ -343,7 +347,7 @@ describe('profiler', () => {
       await agent.stop()
     })
 
-    it('records profile on process exit', async () => {
+    it('records profile on process exit', () => {
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -351,11 +355,62 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: 1
         }
       })
-      return checkProfiles(agent, proc, timeout)
+      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
+      }, 1000, 'generate-metrics')
+      // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
+      // so throw if telemetry callback was invoked  and do nothing if it timed out
+      const checkNoTelemetry = checkTelemetry.then(
+        () => {
+          throw new Error('Received unexpected metrics')
+        }, (e) => {
+          if (e.message !== 'timeout') {
+            throw e
+          }
+        })
+      return Promise.all([checkProfiles(agent, proc, timeout), checkNoTelemetry])
+    })
+
+    it('records SSI telemetry on process exit', () => {
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_INJECTION_ENABLED: 'tracing',
+          DD_PROFILING_ENABLED: 1
+        }
+      })
+
+      function checkTags (tags) {
+        assert.include(tags, 'enablement_choice:manually_enabled')
+        assert.include(tags, 'heuristic_hypothetical_decision:no_span_short_lived')
+        assert.include(tags, 'installation:ssi')
+        // There's a race between metrics and on-shutdown profile, so tag value
+        // can be either false or true but it must be present
+        assert.isTrue(tags.some(tag => tag === 'has_sent_profiles:false' || tag === 'has_sent_profiles:true'))
+      }
+
+      const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
+        const pp = payload.payload
+        assert.equal(pp.namespace, 'profilers')
+        const series = pp.series
+        assert.lengthOf(series, 2)
+        assert.equal(series[0].metric, 'ssi_heuristic.number_of_profiles')
+        assert.equal(series[0].type, 'count')
+        checkTags(series[0].tags)
+        // There's a race between metrics and on-shutdown profile, so metric
+        // value will be either 0 or 1
+        assert.isAtMost(series[0].points[0][1], 1)
+
+        assert.equal(series[1].metric, 'ssi_heuristic.number_of_runtime_id')
+        assert.equal(series[1].type, 'count')
+        checkTags(series[1].tags)
+        assert.equal(series[1].points[0][1], 1)
+      }, timeout, 'generate-metrics')
+      return Promise.all([checkProfiles(agent, proc, timeout), checkTelemetry])
     })
 
     if (process.platform !== 'win32') { // PROF-8905
-      it('sends a heap profile on OOM with external process', async () => {
+      it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -364,7 +419,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
-      it('sends a heap profile on OOM with external process and exits successfully', async () => {
+      it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -377,7 +432,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], false, 2)
       })
 
-      it('sends a heap profile on OOM with async callback', async () => {
+      it('sends a heap profile on OOM with async callback', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -391,7 +446,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true)
       })
 
-      it('sends heap profiles on OOM with multiple strategies', async () => {
+      it('sends heap profiles on OOM with multiple strategies', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
@@ -405,7 +460,7 @@ describe('profiler', () => {
         return checkProfiles(agent, proc, timeout, ['space'], true, 2)
       })
 
-      it('sends a heap profile on OOM in worker thread and exits successfully', async () => {
+      it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, 50], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: 0 }

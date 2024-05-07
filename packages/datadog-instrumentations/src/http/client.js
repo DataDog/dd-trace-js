@@ -155,6 +155,7 @@ function patch (http, methodName) {
       try {
         return urlToOptions(new url.URL(inputURL))
       } catch (e) {
+        // eslint-disable-next-line n/no-deprecated-api
         return url.parse(inputURL)
       }
     } else if (inputURL instanceof url.URL) {

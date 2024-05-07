@@ -14,35 +14,36 @@ const {
   mergeCoverage,
   resetCoverage,
   removeInvalidMetadata,
-  parseAnnotations
+  parseAnnotations,
+  getIsFaultyEarlyFlakeDetection
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
 
 describe('getTestParametersString', () => {
   it('returns formatted test parameters and removes params from input', () => {
-    const input = { 'test_stuff': [['params'], [{ b: 'c' }]] }
+    const input = { test_stuff: [['params'], [{ b: 'c' }]] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params'], metadata: {} })
     )
-    expect(input).to.eql({ 'test_stuff': [[{ b: 'c' }]] })
+    expect(input).to.eql({ test_stuff: [[{ b: 'c' }]] })
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: [{ b: 'c' }], metadata: {} })
     )
-    expect(input).to.eql({ 'test_stuff': [] })
+    expect(input).to.eql({ test_stuff: [] })
   })
   it('does not crash when test name is not found and does not modify input', () => {
-    const input = { 'test_stuff': [['params'], ['params2']] }
+    const input = { test_stuff: [['params'], ['params2']] }
     expect(getTestParametersString(input, 'test_not_present')).to.equal('')
-    expect(input).to.eql({ 'test_stuff': [['params'], ['params2']] })
+    expect(input).to.eql({ test_stuff: [['params'], ['params2']] })
   })
   it('does not crash when parameters can not be serialized and removes params from input', () => {
     const circular = { a: 'b' }
     circular.b = circular
 
-    const input = { 'test_stuff': [[circular], ['params2']] }
+    const input = { test_stuff: [[circular], ['params2']] }
     expect(getTestParametersString(input, 'test_stuff')).to.equal('')
-    expect(input).to.eql({ 'test_stuff': [['params2']] })
+    expect(input).to.eql({ test_stuff: [['params2']] })
     expect(getTestParametersString(input, 'test_stuff')).to.equal(
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
@@ -269,5 +270,56 @@ describe('parseAnnotations', () => {
       { type: 'test.requirement', description: 'sure' }
     ])
     expect(tags).to.eql({})
+  })
+})
+
+describe('getIsFaultyEarlyFlakeDetection', () => {
+  it('returns false if the absolute number of new suites is smaller or equal than the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 50 tests and 25 are marked as new (50%): not faulty.
+    const projectSuites = Array.from({ length: 50 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 25 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.false
+
+    // Session has 60 tests and 30 are marked as new (50%): not faulty.
+    const projectSuites2 = Array.from({ length: 60 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites2 = Array.from({ length: 30 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+    const isFaulty2 = getIsFaultyEarlyFlakeDetection(
+      projectSuites2,
+      knownSuites2,
+      faultyThreshold
+    )
+    expect(isFaulty2).to.be.false
+  })
+
+  it('returns true if the percentage is above the threshold', () => {
+    const faultyThreshold = 30
+
+    // Session has 100 tests and 31 are marked as new (31%): faulty.
+    const projectSuites = Array.from({ length: 100 }).map((_, i) => `test${i}.spec.js`)
+    const knownSuites = Array.from({ length: 69 }).reduce((acc, _, i) => {
+      acc[`test${i}.spec.js`] = ['test']
+      return acc
+    }, {})
+
+    const isFaulty = getIsFaultyEarlyFlakeDetection(
+      projectSuites,
+      knownSuites,
+      faultyThreshold
+    )
+    expect(isFaulty).to.be.true
   })
 })

@@ -25,9 +25,9 @@ suite
       operation = () => {
         const span = tracer.startSpan('bench')
         span.addTags({
-          'tag1': str + generateString(10),
-          'tag2': str + str + generateString(10),
-          'tag3': str + str + str + generateString(10)
+          tag1: str + generateString(10),
+          tag2: str + str + generateString(10),
+          tag3: str + str + str + generateString(10)
         })
         span.finish()
       }
@@ -41,23 +41,23 @@ suite
       operation = () => {
         const rootSpan = tracer.startSpan('root')
         rootSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          tag1: generateString(20),
+          tag2: generateString(20),
+          tag3: generateString(20)
         })
 
         const parentSpan = tracer.startSpan('parent', { childOf: rootSpan })
         parentSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          tag1: generateString(20),
+          tag2: generateString(20),
+          tag3: generateString(20)
         })
 
         const childSpan = tracer.startSpan('child', { childOf: parentSpan })
         childSpan.addTags({
-          'tag1': generateString(20),
-          'tag2': generateString(20),
-          'tag3': generateString(20)
+          tag1: generateString(20),
+          tag2: generateString(20),
+          tag3: generateString(20)
         })
 
         childSpan.finish()

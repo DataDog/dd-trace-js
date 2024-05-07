@@ -33,10 +33,10 @@ describe('child process', () => {
         asyncFinish = sinon.stub()
 
         childProcessChannel.subscribe({
-          start: start,
+          start,
           end: finish,
           asyncEnd: asyncFinish,
-          error: error
+          error
         })
 
         childProcess = require(childProcessModuleName)
@@ -44,10 +44,10 @@ describe('child process', () => {
 
       afterEach(() => {
         childProcessChannel.unsubscribe({
-          start: start,
+          start,
           end: finish,
           asyncEnd: asyncFinish,
-          error: error
+          error
         })
       })
 
@@ -270,14 +270,14 @@ describe('child process', () => {
                 expect(start).to.have.been.calledOnceWith({
                   command: 'ls',
                   shell: false,
-                  result: result
+                  result
                 },
                 'tracing:datadog:child_process:execution:start')
 
                 expect(finish).to.have.been.calledOnceWith({
                   command: 'ls',
                   shell: false,
-                  result: result
+                  result
                 },
                 'tracing:datadog:child_process:execution:end')
 
