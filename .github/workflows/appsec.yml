@@ -33,7 +33,7 @@ jobs:
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@v3
 
@@ -67,7 +67,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -137,7 +137,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -151,7 +151,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -171,7 +171,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -191,7 +191,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -209,7 +209,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/20
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
 
@@ -224,7 +224,7 @@ jobs:
       - run: yarn install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
