@@ -8,8 +8,9 @@ const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const path = require('path')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
+const fs = require('fs')
 
-describe.only('HTTP Response Blocking', () => {
+describe('HTTP Response Blocking', () => {
   let server
   let responseHandler
   let axios
@@ -59,16 +60,6 @@ describe.only('HTTP Response Blocking', () => {
     return agent.close({ ritmReset: false })
   })
 
-  it('should not block with no attack', async () => {
-    responseHandler = (req, res) => {
-      res.setHeaders(new Map(Object.entries({ a: 'good', b: 'good' })))
-      res.setHeader('c', 'good')
-      res.writeHead(200, { d: 'good' })
-      res.flushHeaders()
-      res.end('end')
-    }
-  })
-
   it('should block with implicit statusCode and setHeader()', async () => {
     responseHandler = (req, res) => {
       res.statusCode = 404
@@ -106,11 +97,54 @@ describe.only('HTTP Response Blocking', () => {
     assertBlocked(res)
   })
 
-  it('should block with implicity statusCode, setHeader(), and flushHeaders()', async () => {
+  it('should block with implicit statusCode, setHeader(), and flushHeaders()', async () => {
     responseHandler = (req, res) => {
       res.statusCode = 404
       res.setHeader('k', '404')
       res.flushHeaders()
+      res.end('end')
+    }
+
+    const res = await axios.get('/')
+
+    assertBlocked(res)
+  })
+
+  it('should block with implicit statusCode, setHeader(), and write()', async () => {
+    responseHandler = (req, res) => {
+      res.statusCode = 404
+      res.setHeader('k', '404')
+      res.write('write')
+      res.end('end')
+    }
+
+    const res = await axios.get('/')
+
+    assertBlocked(res)
+  })
+
+  it('should block with streams', async () => {
+    responseHandler = (req, res) => {
+      res.statusCode = 404
+      res.setHeader('k', '404')
+      streamFile(res, true)
+    }
+
+    const res = await axios.get('/')
+
+    assertBlocked(res)
+  })
+
+  it('should block with every methods combined', async () => {
+    responseHandler = (req, res) => {
+      res.setHeaders(new Map(Object.entries({ a: 'bad1', b: 'good' })))
+      res.setHeader('c', 'bad2')
+      res.setHeader('d', 'good')
+      res.writeHead(200, 'OK', { d: 'good', e: 'bad3' })
+      res.flushHeaders()
+      res.write('write')
+      streamFile(res)
+      res.addTrailers({ 'k': 'v' })
       res.end('end')
     }
 
@@ -130,4 +164,12 @@ function assertBlocked (res) {
     'keep-alive'
   ])
   assert.deepEqual(res.data, blockingResponse)
+}
+
+function streamFile (res, end = false) {
+  const stream = fs.createReadStream(path.join(__dirname, '/streamtest.txt'), { encoding: 'utf8' })
+  stream.pipe(res, { end: false })
+  if (end) {
+    stream.on('end', () => res.end('end'))
+  }
 }
