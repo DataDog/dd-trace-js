@@ -15,8 +15,64 @@ const { isTrue, isFalse } = require('./util')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
+const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+const telemetryCounters = {
+  'otel.env.hiding': {},
+  'otel.env.invalid': {}
+}
+
+function getCounter (event, ddVar, otelVar, otelTracesSamplerArg) {
+  const counters = telemetryCounters[event]
+  const tags = []
+
+  if (ddVar) tags.push(ddVar)
+  if (otelVar) tags.push(otelVar)
+  if (otelTracesSamplerArg) tags.push(otelTracesSamplerArg)
+
+  if (!(ddVar in counters)) counters[ddVar] = {}
+
+  const counter = tracerMetrics.count(event, tags)
+  counters[ddVar][otelVar] = counter
+  return counter
+}
+
+const otelDdEnvMapping = {
+  DD_TRACE_LOG_LEVEL: 'OTEL_LOG_LEVEL',
+  DD_TRACE_PROPAGATION_STYLE: 'OTEL_PROPAGATORS',
+  DD_SERVICE: 'OTEL_SERVICE_NAME',
+  DD_TRACE_SAMPLE_RATE: 'OTEL_TRACES_SAMPLER',
+  DD_TRACE_ENABLED: 'OTEL_TRACES_EXPORTER',
+  DD_RUNTIME_METRICS_ENABLED: 'OTEL_METRICS_EXPORTER',
+  DD_TAGS: 'OTEL_RESOURCE_ATTRIBUTES',
+  DD_TRACE_OTEL_ENABLED: 'OTEL_SDK_DISABLED'
+}
+
+const otelInvalidEnv = ['OTEL_LOGS_EXPORTER']
+
+function checkIfBothOtelAndDdEnvVarSet () {
+  for (const [ddVar, otelVar] of Object.entries(otelDdEnvMapping)) {
+    if (process.env[ddVar] && process.env[otelVar]) {
+      log.warn(`both ${ddVar} and ${otelVar} environment variables are set`)
+      getCounter('otel.env.hiding', ddVar, otelVar,
+        otelVar === 'OTEL_TRACES_SAMPLER' &&
+        process.env.OTEL_TRACES_SAMPLER_ARG
+          ? 'OTEL_TRACES_SAMPLER_ARG'
+          : undefined).inc()
+    }
+  }
+
+  for (const otelVar of otelInvalidEnv) {
+    if (process.env[otelVar]) {
+      log.warn(`${otelVar} is not supported by the Datadog SDK`)
+      getCounter('otel.env.invalid', otelVar).inc()
+    }
+  }
+}
 
 const fromEntries = Object.fromEntries || (entries =>
   entries.reduce((obj, [k, v]) => Object.assign(obj, { [k]: v }), {}))
@@ -89,7 +145,8 @@ function propagationStyle (key, option, defaultValue) {
 
   // Otherwise, fallback to env var parsing
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
-  const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE)
+
+  const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE, process.env.OTEL_PROPAGATORS)
   if (typeof envVar !== 'undefined') {
     return envVar.split(',')
       .filter(v => v !== '')
@@ -108,15 +165,19 @@ class Config {
       iastOptions: options.experimental?.iast
     }
 
+    checkIfBothOtelAndDdEnvVarSet()
+
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
       false
     ))
     this.logger = options.logger
+
     this.logLevel = coalesce(
       options.logLevel,
       process.env.DD_TRACE_LOG_LEVEL,
+      process.env.OTEL_LOG_LEVEL,
       'debug'
     )
 
@@ -163,12 +224,12 @@ class Config {
         'environment variables'
       )
     }
-    const DD_TRACE_PROPAGATION_STYLE_INJECT = propagationStyle(
+    const PROPAGATION_STYLE_INJECT = propagationStyle(
       'inject',
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
-    const DD_TRACE_PROPAGATION_STYLE_EXTRACT = propagationStyle(
+    const PROPAGATION_STYLE_EXTRACT = propagationStyle(
       'extract',
       options.tracePropagationStyle,
       defaultPropagationStyle
@@ -253,8 +314,13 @@ class Config {
     this.apiKey = DD_API_KEY
     this.serviceMapping = DD_SERVICE_MAPPING
     this.tracePropagationStyle = {
-      inject: DD_TRACE_PROPAGATION_STYLE_INJECT,
-      extract: DD_TRACE_PROPAGATION_STYLE_EXTRACT
+      inject: PROPAGATION_STYLE_INJECT,
+      extract: PROPAGATION_STYLE_EXTRACT,
+      otelPropagators: process.env.DD_TRACE_PROPAGATION_STYLE ||
+        process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
+        process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+        ? false
+        : !!process.env.OTEL_PROPAGATORS
     }
     this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this.sampler = sampler
@@ -380,6 +446,7 @@ class Config {
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
+    this._setValue(defaults, 'appsec.sca.enabled', null)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -462,6 +529,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
+      DD_APPSEC_SCA_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -526,12 +594,18 @@ class Config {
       DD_TRACE_TELEMETRY_ENABLED,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
-      DD_VERSION
+      DD_VERSION,
+      OTEL_SERVICE_NAME,
+      OTEL_RESOURCE_ATTRIBUTES,
+      OTEL_TRACES_SAMPLER,
+      OTEL_TRACES_SAMPLER_ARG,
+      OTEL_METRICS_EXPORTER
     } = process.env
 
     const tags = {}
     const env = this._env = {}
 
+    tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
     tagger.add(tags, DD_TAGS)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
@@ -543,6 +617,8 @@ class Config {
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
+    // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
+    this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
@@ -592,11 +668,24 @@ class Config {
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
-    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED)
-    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE)
+    // only used to explicitly set runtimeMetrics to false
+    const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
+      ? false
+      : undefined
+    this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
+    otelSetRuntimeMetrics)
+    const OTEL_TRACES_SAMPLER_MAPPING = {
+      always_on: '1.0',
+      always_off: '0.0',
+      traceidratio: OTEL_TRACES_SAMPLER_ARG,
+      parentbased_always_on: '1.0',
+      parentbased_always_off: '0.0',
+      parentbased_traceidratio: OTEL_TRACES_SAMPLER_ARG
+    }
+    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
     this._setString(env, 'scope', DD_TRACE_SCOPE)
-    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service)
+    this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
