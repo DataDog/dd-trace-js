@@ -276,7 +276,22 @@ describe('encode', () => {
       expect(trace[0].meta_struct).to.deep.equal(metaStruct)
     })
 
-    it('should encode meta_struct with complex object', () => {
+    it('should encode meta_struct with empty object and array', () => {
+      const metaStruct = {
+        foo: {},
+        bar: []
+      }
+      data[0].meta_struct = metaStruct
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
+    })
+
+    it('should encode meta_struct with possible real use case', () => {
       const metaStruct = {
         '_dd.stack': {
           exploit: [
@@ -287,28 +302,28 @@ describe('encode', () => {
               message: 'Threat detected',
               frames: [
                 {
-                  id: 3333,
+                  id: 0,
                   file: 'test.js',
                   line: 1,
                   column: 31,
                   function: 'test'
                 },
                 {
-                  id: 444,
+                  id: 1,
                   file: 'test2.js',
                   line: 54,
                   column: 77,
                   function: 'test'
                 },
                 {
-                  id: 55,
+                  id: 2,
                   file: 'test.js',
                   line: 1245,
                   column: 41,
                   function: 'test'
                 },
                 {
-                  id: 6,
+                  id: 3,
                   file: 'test3.js',
                   line: 2024,
                   column: 32,
