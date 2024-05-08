@@ -290,7 +290,28 @@ describe('encode', () => {
                   id: 3333,
                   file: 'test.js',
                   line: 1,
-                  column: 12,
+                  column: 31,
+                  function: 'test'
+                },
+                {
+                  id: 444,
+                  file: 'test2.js',
+                  line: 54,
+                  column: 77,
+                  function: 'test'
+                },
+                {
+                  id: 55,
+                  file: 'test.js',
+                  line: 1245,
+                  column: 41,
+                  function: 'test'
+                },
+                {
+                  id: 6,
+                  file: 'test3.js',
+                  line: 2024,
+                  column: 32,
                   function: 'test'
                 }
               ]
