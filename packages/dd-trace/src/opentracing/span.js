@@ -57,15 +57,11 @@ class DatadogSpan {
   constructor (tracer, processor, prioritySampler, fields, debug) {
     const operationName = fields.operationName
     const parent = fields.parent || null
-    const tags = Object.assign({}, fields.tags)
-    const hostname = fields.hostname
 
     this._parentTracer = tracer
     this._debug = debug
-    this._processor = processor
     this._prioritySampler = prioritySampler
     this._store = storage.getStore()
-    this._duration = undefined
 
     this._events = []
 
@@ -78,13 +74,8 @@ class DatadogSpan {
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
     this._spanContext = this._createContext(parent, fields)
-    this._spanContext._name = operationName
-    this._spanContext._tags = tags
-    this._spanContext._hostname = hostname
-
-    this._spanContext._trace.started.push(this)
-
     this._startTime = fields.startTime || this._getTime()
+    this._start(tracer, processor, prioritySampler, fields, debug)
 
     this._links = []
     fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
@@ -211,6 +202,19 @@ class DatadogSpan {
     this._spanContext._isFinished = true
     finishCh.publish(this)
     this._processor.process(this)
+  }
+
+  _start (_tracer, processor, _prioritySampler, fields) {
+    const operationName = fields.operationName
+    const tags = Object.assign({}, fields.tags)
+    const hostname = fields.hostname
+
+    this._processor = processor
+    this._duration = undefined
+    this._spanContext._name = operationName
+    this._spanContext._tags = tags
+    this._spanContext._hostname = hostname
+    this._spanContext._trace.started.push(this)
   }
 
   _sanitizeAttributes (attributes = {}) {

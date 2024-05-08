@@ -1,6 +1,6 @@
 'use strict'
 
-const Tracer = require('./opentracing/tracer')
+const Tracer = getTracerClass()
 const tags = require('../../../ext/tags')
 const Scope = require('./scope')
 const { storage } = require('../../datadog-core')
@@ -137,7 +137,7 @@ class DatadogTracer extends Tracer {
   }
 
   setUrl (url) {
-    this._exporter.setUrl(url)
+    this._setUrl(url)
     this._dataStreamsProcessor.setUrl(url)
   }
 
@@ -178,6 +178,12 @@ function addTags (span, options) {
   tags[MEASURED] = options.measured
 
   span.addTags(tags)
+}
+
+function getTracerClass () {
+  return globalThis.__dd_collector
+    ? require('./collector/tracer')
+    : require('./opentracing/tracer')
 }
 
 module.exports = DatadogTracer
