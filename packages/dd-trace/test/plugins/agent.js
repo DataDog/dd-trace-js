@@ -247,7 +247,43 @@ module.exports = {
     })
 
     agent.put('/v0.5/traces', (req, res) => {
-      res.status(404).end()
+      const payload = req.body
+      const strings = payload[0]
+      const traces = payload[1].map(trace => {
+        return trace.map(span => {
+          const meta = {}
+          const metrics = {}
+
+          Object.keys(span[9]).forEach(key => { meta[strings[key]] = strings[span[9][key]] })
+          Object.keys(span[10]).forEach(key => { metrics[strings[key]] = span[10][key] })
+
+          span = {
+            service: strings[span[0]],
+            name: strings[span[1]],
+            resource: strings[span[2]],
+            trace_id: span[3],
+            span_id: span[4],
+            parent_id: span[5],
+            start: span[6],
+            duration: span[7],
+            error: span[8],
+            meta,
+            metrics,
+            type: strings[span[11]]
+          }
+
+          return span
+        })
+      })
+
+      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+
+      traceHandlers.forEach(({ handler, spanResourceMatch }) => {
+        const spans = traces.flatMap(span => span)
+        if (isMatchingTrace(spans, spanResourceMatch)) {
+          handler(traces)
+        }
+      })
     })
 
     agent.put('/v0.4/traces', (req, res) => {
