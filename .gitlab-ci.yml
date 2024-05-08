@@ -107,6 +107,25 @@ deploy_to_reliability_env:
     UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
     UPSTREAM_COMMIT_SHA: $CI_COMMIT_SHA
 
+generate-tag-values:
+  tags: ["arch:amd64"]
+  stage: deploy
+  rules:
+    # Don't deploy major/major.minor/latest on dev
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: on_success
+    - when: manual
+      allow_failure: true
+  # Extract the vMajor.Minor and vMajor from the tag
+  script:
+    - MAJOR_MINOR_VERSION="$(sed -nE 's/^(v[0-9]+\.[0-9]+)\.[0-9]+$/\1/p' <<< ${CI_COMMIT_TAG})"
+    - MAJOR_VERSION="$(sed -nE 's/^(v[0-9]+)\.[0-9]+\.[0-9]+$/\1/p' <<< ${CI_COMMIT_TAG})"
+    - echo "MAJOR_MINOR_VERSION=${MAJOR_MINOR_VERSION}" >> build.env
+    - echo "MAJOR_VERSION=${MAJOR_VERSION}" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+
 deploy_to_docker_registries:
   stage: deploy
   needs: []
@@ -125,6 +144,52 @@ deploy_to_docker_registries:
     IMG_SIGNING: "false"
     RETRY_COUNT: 5
     RETRY_DELAY: 300
+
+deploy_major_tag_to_docker_registries:
+  stage: deploy
+  rules:
+    # Don't deploy major tag if dev
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: on_success
+    - when: manual
+      allow_failure: true
+  trigger:
+    project: DataDog/public-images
+    branch: main
+    strategy: depend
+  variables:
+    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_SHA
+    IMG_DESTINATIONS: dd-lib-ks-init:$MAJOR_VERSION
+    IMG_SIGNING: "false"
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300
+  # needs the version from the generate-tag-values job
+  needs:
+    - job: generate-tag-values
+      artifacts: true
+
+deploy_major_minor_tag_to_docker_registries:
+  stage: deploy
+  rules:
+    # Don't deploy major tag if dev
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: on_success
+    - when: manual
+      allow_failure: true
+  trigger:
+    project: DataDog/public-images
+    branch: main
+    strategy: depend
+  variables:
+    IMG_SOURCES: ghcr.io/datadog/dd-trace-js/dd-lib-js-init:$CI_COMMIT_SHA
+    IMG_DESTINATIONS: dd-lib-js-init:$MAJOR_MINOR_VERSION
+    IMG_SIGNING: "false"
+    RETRY_COUNT: 5
+    RETRY_DELAY: 300
+  # needs the version from the generate-tag-values job
+  needs:
+    - job: generate-tag-values
+      artifacts: true
 
 deploy_latest_to_docker_registries:
   stage: deploy
