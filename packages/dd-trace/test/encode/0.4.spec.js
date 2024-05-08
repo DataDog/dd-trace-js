@@ -332,9 +332,12 @@ describe('encode', () => {
 
     it('should encode meta_struct ignoring circular references in objects', () => {
       const circular = {
-        bar: 'baz'
+        bar: 'baz',
+        deeper: {
+          foo: 'bar'
+        }
       }
-      circular.circular = circular
+      circular.deeper.circular = circular
       const metaStruct = {
         foo: circular
       }
@@ -349,7 +352,10 @@ describe('encode', () => {
 
       const expectedMetaStruct = {
         foo: {
-          bar: 'baz'
+          bar: 'baz',
+          deeper: {
+            foo: 'bar'
+          }
         }
       }
       expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)

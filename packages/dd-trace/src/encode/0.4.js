@@ -293,7 +293,7 @@ class AgentEncoder {
 
     for (const key of validKeys) {
       this._encodeString(bytes, key)
-      this._encodeObject(bytes, value[key])
+      this._encodeObject(bytes, value[key], circularReferencesDetector)
     }
   }
 
@@ -306,7 +306,7 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, validValue)
 
     for (const item of validValue) {
-      this._encodeObject(bytes, item)
+      this._encodeObject(bytes, item, circularReferencesDetector)
     }
   }
 
