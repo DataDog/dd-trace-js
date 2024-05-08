@@ -63,7 +63,10 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
-    span.context()._tags.component = name
+    span.addTags({
+      'span.name': `${name}.request`,
+      component: name
+    })
 
     web.setConfig(req, config)
   },
@@ -300,8 +303,6 @@ const web = {
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
-    addResourceTag(context)
-
     context.span.finish()
     context.finished = true
   },
@@ -459,19 +460,6 @@ function addResponseTags (context) {
   })
 
   web.addStatusError(req, res.statusCode)
-}
-
-function addResourceTag (context) {
-  const { req, span } = context
-  const tags = span.context()._tags
-
-  if (tags['resource.name']) return
-
-  const resource = [req.method, tags[HTTP_ROUTE]]
-    .filter(val => val)
-    .join(' ')
-
-  span.setTag(RESOURCE_NAME, resource)
 }
 
 function addHeaders (context) {

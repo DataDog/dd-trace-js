@@ -1471,13 +1471,13 @@ describe('Plugin', () => {
       })
 
       describe('with configuration for middleware disabled', () => {
-        before(() => {
+        beforeEach(() => {
           return agent.load(['express', 'http'], [{
             middleware: false
           }, { client: false }])
         })
 
-        after(() => {
+        afterEach(() => {
           return agent.close({ ritmReset: false })
         })
 
