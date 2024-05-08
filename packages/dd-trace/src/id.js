@@ -181,3 +181,4 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 module.exports = (value, radix) => new Identifier(value, radix)
+module.exports.zeroId = zeroId
