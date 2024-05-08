@@ -57,84 +57,79 @@ function withNamingSchema (
     desc = '',
     selectSpan = (traces) => traces[0][0]
   } = opts
-  let fullConfig
 
   const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
 
   describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
       describe(`in version ${versionName}`, () => {
-        before(() => {
-          fullConfig = Nomenclature.config
+        hooks(versionName, false)
+
+        const { opName, serviceName } = expected[versionName]
+
+        it('should conform to the naming schema', async () => {
+          const fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
             spanRemoveIntegrationFromService: false,
             service: fullConfig.service // Hack: only way to retrieve the test agent configuration
           })
-        })
+          try {
+            await new Promise((resolve, reject) => {
+              agent
+                .use(traces => {
+                  const span = selectSpan(traces)
+                  const expectedOpName = typeof opName === 'function'
+                    ? opName()
+                    : opName
+                  const expectedServiceName = typeof serviceName === 'function'
+                    ? serviceName()
+                    : serviceName
 
-        after(() => {
-          Nomenclature.configure(fullConfig)
-        })
-
-        hooks(versionName, false)
-
-        const { opName, serviceName } = expected[versionName]
-
-        it('should conform to the naming schema', () => {
-          return new Promise((resolve, reject) => {
-            agent
-              .use(traces => {
-                const span = selectSpan(traces)
-                const expectedOpName = typeof opName === 'function'
-                  ? opName()
-                  : opName
-                const expectedServiceName = typeof serviceName === 'function'
-                  ? serviceName()
-                  : serviceName
-
-                expect(span).to.have.property('name', expectedOpName)
-                expect(span).to.have.property('service', expectedServiceName)
-              })
-              .then(resolve)
-              .catch(reject)
-            spanProducerFn(reject)
-          })
+                  expect(span).to.have.property('name', expectedOpName)
+                  expect(span).to.have.property('service', expectedServiceName)
+                })
+                .then(resolve)
+                .catch(reject)
+              spanProducerFn(reject)
+            })
+          } finally {
+            Nomenclature.configure(fullConfig)
+          }
         })
       })
     })
 
     describe('service naming short-circuit in v0', () => {
-      before(() => {
-        fullConfig = Nomenclature.config
+      hooks('v0', true)
+
+      const { serviceName } = expected.v1
+
+      it('should pass service name through', async () => {
+        const fullConfig = Nomenclature.config
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
           spanRemoveIntegrationFromService: true
         })
-      })
+        try {
+          await new Promise((resolve, reject) => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const expectedServiceName = typeof serviceName === 'function'
+                  ? serviceName()
+                  : serviceName
+                expect(span).to.have.property('service', expectedServiceName)
+              })
+              .then(resolve)
+              .catch(reject)
 
-      after(() => {
-        Nomenclature.configure(fullConfig)
-      })
-
-      hooks('v0', true)
-
-      const { serviceName } = expected.v1
-
-      it('should pass service name through', done => {
-        agent
-          .use(traces => {
-            const span = traces[0][0]
-            const expectedServiceName = typeof serviceName === 'function'
-              ? serviceName()
-              : serviceName
-            expect(span).to.have.property('service', expectedServiceName)
+            spanProducerFn(reject)
           })
-          .then(done)
-          .catch(done)
-
-        spanProducerFn(done)
+        } finally {
+          Nomenclature.configure(fullConfig)
+        }
       })
     })
   })

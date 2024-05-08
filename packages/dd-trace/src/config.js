@@ -714,7 +714,7 @@ class Config {
     const opts = this._options = this._options || {}
     const tags = {}
 
-    options = this.options = Object.assign({ ingestion: {} }, options, opts)
+    options = this.options = Object.assign({ ingestion: {}, appsec: {} }, options, opts)
 
     tagger.add(tags, options.tags)
 

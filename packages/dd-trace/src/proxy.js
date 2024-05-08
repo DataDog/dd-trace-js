@@ -48,7 +48,15 @@ class Tracer extends NoopProxy {
   }
 
   init (options) {
-    if (this._initialized) return this
+    if (this._initialized) {
+      if (options) {
+        if (this._tracingInitialized) {
+          this._tracer._config.configure(options)
+        }
+        this._enableOrDisableTracing(this._tracer._config)
+      }
+      return this
+    }
 
     this._initialized = true
 
@@ -134,7 +142,7 @@ class Tracer extends NoopProxy {
 
   _enableOrDisableTracing (config) {
     if (config.tracing !== false) {
-      if (config.appsec.enabled) {
+      if (config.appsec && config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
       if (!this._tracingInitialized) {
@@ -142,7 +150,7 @@ class Tracer extends NoopProxy {
         this.appsec = new AppsecSdk(this._tracer, config)
         this._tracingInitialized = true
       }
-      if (config.iast.enabled) {
+      if (config.iast && config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
       }
     } else if (this._tracingInitialized) {
