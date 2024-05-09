@@ -3,6 +3,9 @@
 /* eslint-disable no-fallthrough */
 
 const url = require('url')
+
+const { AbortController } = require('node-abort-controller')
+
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -43,7 +46,10 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const ctx = { args, http }
+      const abortData = {
+        abortController: new AbortController()
+      }
+      const ctx = { args, http, abortData }
 
       return startChannel.runStores(ctx, () => {
         let finished = false
@@ -67,6 +73,10 @@ function patch (http, methodName) {
         }
 
         try {
+          if (abortData.abortController?.signal.aborted) {
+            throw abortData.error || new Error('Aborted')
+          }
+
           const req = request.call(this, options, callback)
           const emit = req.emit
           const setTimeout = req.setTimeout
