@@ -3,6 +3,7 @@
 require('../setup/tap')
 
 const Config = require('../../src/config')
+const { APM_TRACING_ENABLED_KEY } = require('../../src/constants')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Span', () => {
@@ -161,6 +162,54 @@ describe('Span', () => {
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._trace.tags).to.have.property('_dd.p.tid')
     expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
+  })
+
+  describe('apmTracingEnabled', () => {
+    it('should not add _dd.apm.enabled tag when apmTracingEnabled = undefined', () => {
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: true
+      })
+
+      expect(span.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+    })
+
+    it('should not add _dd.apm.enabled tag when apmTracingEnabled = true', () => {
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: true
+      })
+
+      expect(span.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+    })
+
+    it('should add _dd.apm.enabled tag when apmTracingEnabled = false', () => {
+      span = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: false
+      })
+
+      expect(span.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(span.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+    })
+
+    it('should add _dd.apm.enabled tag only in root spans', () => {
+      const parent = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: false
+      })
+
+      expect(parent.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(parent.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: false,
+        parent
+      })
+
+      expect(child.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+    })
   })
 
   describe('tracer', () => {

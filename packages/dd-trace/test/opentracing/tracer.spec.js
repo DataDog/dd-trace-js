@@ -120,6 +120,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
+        apmTracingEnabled: undefined,
         integrationName: undefined,
         links: undefined
       }, true)
@@ -179,6 +180,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
+        apmTracingEnabled: undefined,
         integrationName: undefined,
         links: undefined
       })
@@ -251,6 +253,29 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
+        apmTracingEnabled: undefined,
+        integrationName: undefined,
+        links: undefined
+      })
+
+      expect(testSpan).to.equal(span)
+    })
+
+    it('should start a span with the APM tracing configuration', () => {
+      config.apmTracingEnabled = true
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'service.name': 'service'
+        },
+        startTime: fields.startTime,
+        hostname: undefined,
+        traceId128BitGenerationEnabled: undefined,
+        apmTracingEnabled: true,
         integrationName: undefined,
         links: undefined
       })
@@ -273,6 +298,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
+        apmTracingEnabled: undefined,
         integrationName: undefined,
         links: [{ context }]
       })

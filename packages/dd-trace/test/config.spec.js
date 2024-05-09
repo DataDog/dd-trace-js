@@ -196,6 +196,7 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
+    expect(config).to.have.property('apmTracingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
@@ -324,6 +325,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
+      { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
       { name: 'version', value: '', origin: 'default' }
     ])
@@ -372,6 +374,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_TRACING_ENABLED = 'false'
+    process.env.DD_APM_TRACING_ENABLED = 'false'
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     process.env.DD_SERVICE = 'service'
@@ -443,6 +446,7 @@ describe('Config', () => {
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
+    expect(config).to.have.property('apmTracingEnabled', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('hostname', 'agent')
@@ -574,6 +578,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
+      { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' }
     ])
   })

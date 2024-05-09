@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const { APM_TRACING_ENABLED_KEY } = require('../constants')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -261,6 +262,10 @@ class DatadogSpan {
         spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
           .padStart(8, '0')
           .padEnd(16, '0')
+      }
+
+      if (fields.apmTracingEnabled === false) {
+        spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
       }
     }
 

@@ -515,6 +515,7 @@ class Config {
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
     this._setValue(defaults, 'tracing', true)
+    this._setValue(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
   }
@@ -594,6 +595,7 @@ class Config {
       DD_TRACE_TELEMETRY_ENABLED,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
       DD_TRACING_ENABLED,
+      DD_APM_TRACING_ENABLED,
       DD_VERSION,
       OTEL_SERVICE_NAME,
       OTEL_RESOURCE_ATTRIBUTES,
@@ -707,6 +709,7 @@ class Config {
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
+    this._setBoolean(env, 'apmTracingEnabled', DD_APM_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
   }
 
