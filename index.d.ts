@@ -1801,6 +1801,12 @@ declare namespace tracer {
     interface tedious extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * [undici](https://github.com/nodejs/undici) module.
+     */
+    interface undici extends HttpClient {}
+
+    /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled

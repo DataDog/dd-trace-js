@@ -94,6 +94,7 @@ tracer.use('pg', {
 <h5 id="restify-tags"></h5>
 <h5 id="restify-config"></h5>
 <h5 id="tedious"></h5>
+<h5 id="undici"></h5>
 <h5 id="when"></h5>
 <h5 id="winston"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
@@ -146,6 +147,7 @@ tracer.use('pg', {
 * [restify](./interfaces/export_.plugins.restify.html)
 * [router](./interfaces/export_.plugins.router.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
+* [undici](./interfaces/export_.plugins.undici.html)
 * [when](./interfaces/export_.plugins.when.html)
 * [winston](./interfaces/export_.plugins.winston.html)
 
