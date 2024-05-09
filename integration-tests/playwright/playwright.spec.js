@@ -26,7 +26,7 @@ const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const NUM_RETRIES_EFD = 3
 
-const versions = ['1.18.0', 'latest']
+const versions = ['1.18.0', '1.43.0']
 
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {

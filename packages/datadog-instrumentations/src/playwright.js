@@ -493,14 +493,14 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0 <=1.43.0']
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 // Hook used for early flake detection. EFD only works from >=1.38.0
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD} <=1.43.0`]
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -512,7 +512,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD}`]
+  versions: [`>=${MINIMUM_SUPPORTED_VERSION_EFD} <=1.43.0`]
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
