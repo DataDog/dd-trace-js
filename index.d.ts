@@ -197,6 +197,7 @@ interface Plugins {
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
+  "undici": tracer.plugins.undici;
   "winston": tracer.plugins.winston;
 }
 
