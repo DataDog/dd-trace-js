@@ -199,6 +199,7 @@ describe('Config', () => {
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
+    expect(config).to.have.property('instrumentation_config_id', undefined)
     expect(config).to.have.deep.property('serviceMapping', {})
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', ['datadog', 'tracecontext'])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', ['datadog', 'tracecontext'])
@@ -439,6 +440,7 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
+    process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
 
     const config = new Config()
 
@@ -462,6 +464,7 @@ describe('Config', () => {
     expect(config).to.have.property('spanAttributeSchema', 'v1')
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
+    expect(config).to.have.property('instrumentation_config_id', 'abcdef123')
     expect(config.tags).to.include({ foo: 'bar', baz: 'qux' })
     expect(config.tags).to.include({ service: 'service', version: '1.0.0', env: 'test' })
     expect(config).to.have.deep.nested.property('sampler', {
@@ -554,6 +557,7 @@ describe('Config', () => {
       { name: 'iast.redactionValuePattern', value: 'REDACTION_VALUE_PATTERN', origin: 'env_var' },
       { name: 'iast.requestSampling', value: 40, origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
+      { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: { c: 'cc', d: 'dd' }, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
