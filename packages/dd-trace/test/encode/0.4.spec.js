@@ -400,5 +400,45 @@ describe('encode', () => {
       }
       expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
     })
+
+    it('should encode meta_struct ignoring undefined properties', () => {
+      const metaStruct = {
+        foo: 'bar',
+        undefinedProperty: undefined
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: 'bar'
+      }
+      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+    })
+
+    it('should encode meta_struct ignoring null properties', () => {
+      const metaStruct = {
+        foo: 'bar',
+        nullProperty: null
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: 'bar'
+      }
+      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+    })
   })
 })

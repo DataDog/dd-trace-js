@@ -287,7 +287,7 @@ class AgentEncoder {
     const validKeys = keys.filter(
       key =>
         typeof value[key] === 'string' || typeof value[key] === 'number' ||
-        (typeof value[key] === 'object' && !circularReferencesDetector.has(value[key])))
+        (value[key] !== null && typeof value[key] === 'object' && !circularReferencesDetector.has(value[key])))
 
     this._encodeMapPrefix(bytes, validKeys.length)
 
@@ -301,7 +301,7 @@ class AgentEncoder {
     const validValue = value.filter(
       item =>
         typeof item === 'string' || typeof item === 'number' ||
-        (typeof item === 'object' && !circularReferencesDetector.has(item)))
+        (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item)))
 
     this._encodeArrayPrefix(bytes, validValue)
 
