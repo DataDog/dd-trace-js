@@ -24,6 +24,7 @@ const USER_KEEP = ext.priority.USER_KEEP
 describe('PrioritySampler', () => {
   let PrioritySampler
   let prioritySampler
+  let SamplingRule
   let Sampler
   let sampler
   let context
@@ -32,7 +33,8 @@ describe('PrioritySampler', () => {
   beforeEach(() => {
     context = {
       _tags: {
-        'service.name': 'test'
+        'service.name': 'test',
+        'resource.name': 'resource'
       },
       _sampling: {},
       _trace: {
@@ -65,8 +67,13 @@ describe('PrioritySampler', () => {
     })
     Sampler.withArgs(0.5).returns(sampler)
 
-    PrioritySampler = proxyquire('../src/priority_sampler', {
+    SamplingRule = proxyquire('../src/sampling_rule', {
       './sampler': Sampler
+    })
+
+    PrioritySampler = proxyquire('../src/priority_sampler', {
+      './sampler': Sampler,
+      './sampling_rule': SamplingRule
     })
 
     prioritySampler = new PrioritySampler('test')
@@ -182,60 +189,11 @@ describe('PrioritySampler', () => {
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
     })
 
-    it('should support a sample rate from a rule on service as string', () => {
-      context._tags['service.name'] = 'test'
-
+    it('should support a rule-based sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
-          { sampleRate: 0, service: 'foo' },
-          { sampleRate: 1, service: 'test' }
-        ]
-      })
-      prioritySampler.sample(context)
-
-      expect(context._sampling).to.have.property('priority', USER_KEEP)
-      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
-    })
-
-    it('should support a sample rate from a rule on service as regex', () => {
-      context._tags['service.name'] = 'test'
-
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, service: /fo/ },
-          { sampleRate: 1, service: /tes/ }
-        ]
-      })
-      prioritySampler.sample(context)
-
-      expect(context._sampling).to.have.property('priority', USER_KEEP)
-      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
-    })
-
-    it('should support a sample rate from a rule on name as string', () => {
-      context._name = 'foo'
-      context._tags['service.name'] = 'test'
-
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, name: 'bar' },
-          { sampleRate: 1, name: 'foo' }
-        ]
-      })
-      prioritySampler.sample(context)
-
-      expect(context._sampling).to.have.property('priority', USER_KEEP)
-      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
-    })
-
-    it('should support a sample rate from a rule on name as regex', () => {
-      context._name = 'foo'
-      context._tags['service.name'] = 'test'
-
-      prioritySampler = new PrioritySampler('test', {
-        rules: [
-          { sampleRate: 0, name: /ba/ },
-          { sampleRate: 1, name: /fo/ }
+          { sampleRate: 0, service: 'foo', resource: /res.*/ },
+          { sampleRate: 1, service: 'test', resource: /res.*/ }
         ]
       })
       prioritySampler.sample(context)
@@ -294,6 +252,29 @@ describe('PrioritySampler', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
         rateLimit: 1
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+
+      delete context._sampling.priority
+
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+    })
+
+    it('should support a global rate limit', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 1,
+        rateLimit: 1,
+        rules: [{
+          service: 'test',
+          sampleRate: 1,
+          rateLimit: 1000
+        }]
       })
       prioritySampler.sample(context)
 

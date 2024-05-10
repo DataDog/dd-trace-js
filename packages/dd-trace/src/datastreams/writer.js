@@ -15,12 +15,9 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack',
       'Content-Encoding': 'gzip'
-    }
+    },
+    url
   }
-
-  options.protocol = url.protocol
-  options.hostname = url.hostname
-  options.port = url.port
 
   log.debug(() => `Request to the intake: ${JSON.stringify(options)}`)
 
@@ -58,6 +55,15 @@ class DataStreamsWriter {
         }
       })
     })
+  }
+
+  setUrl (url) {
+    try {
+      url = new URL(url)
+      this._url = url
+    } catch (e) {
+      log.warn(e.stack)
+    }
   }
 }
 

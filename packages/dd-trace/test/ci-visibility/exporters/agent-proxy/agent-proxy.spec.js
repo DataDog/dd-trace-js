@@ -106,7 +106,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         spanId: '1',
         files: []
       }
-      agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
+      agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ spanId: '1', traceId: '1', files: [] })
     })
@@ -213,7 +213,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
         spanId: '1',
         files: []
       }
-      agentProxyCiVisibilityExporter._itrConfig = { isCodeCoverageEnabled: true }
+      agentProxyCiVisibilityExporter._libraryConfig = { isCodeCoverageEnabled: true }
       agentProxyCiVisibilityExporter.exportCoverage(coverage)
       expect(mockWriter.append).to.have.been.calledWith({ traceId: '1', spanId: '1', files: [] })
       await new Promise(resolve => setTimeout(resolve, flushInterval))
@@ -248,6 +248,76 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(agentProxyCiVisibilityExporter._coverageUrl).to.deep.equal(coverageUrl)
       expect(mockWriter.setUrl).to.have.been.calledWith(url)
       expect(mockCoverageWriter.setUrl).to.have.been.calledWith(coverageUrl)
+    })
+  })
+
+  describe('_isGzipCompatible', () => {
+    it('should set _isGzipCompatible to true if the newest version is v4 or newer', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/', '/evp_proxy/v5']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.true
+      expect(scope.isDone()).to.be.true
+    })
+    it('should set _isGzipCompatible to false if the newest version is v3 or older', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.false
+      expect(scope.isDone()).to.be.true
+    })
+  })
+
+  describe('evpProxyPrefix', () => {
+    it('should set evpProxyPrefix to v2 if the newest version is v3', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter.evpProxyPrefix).to.equal('/evp_proxy/v2')
+      expect(scope.isDone()).to.be.true
+    })
+    it('should set evpProxyPrefix to v4 if the newest version is v4', async () => {
+      const scope = nock('http://localhost:8126')
+        .get('/info')
+        .reply(200, JSON.stringify({
+          endpoints: ['/evp_proxy/v2', '/evp_proxy/v3', '/evp_proxy/v4/']
+        }))
+
+      const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+
+      expect(agentProxyCiVisibilityExporter).not.to.be.null
+
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
+
+      expect(agentProxyCiVisibilityExporter.evpProxyPrefix).to.equal('/evp_proxy/v4')
+      expect(scope.isDone()).to.be.true
     })
   })
 })

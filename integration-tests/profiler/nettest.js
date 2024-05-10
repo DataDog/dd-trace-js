@@ -1,5 +1,4 @@
-const net = require('node:net')
-const process = require('node:process')
+const net = require('net')
 
 async function streamToString (stream) {
   const chunks = []

@@ -27,7 +27,8 @@ describe('reporter', () => {
       incrementWafInitMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
-      incrementWafRequestsMetric: sinon.stub()
+      incrementWafRequestsMetric: sinon.stub(),
+      getRequestMetrics: sinon.stub()
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
@@ -141,17 +142,19 @@ describe('reporter', () => {
     })
 
     it('should set duration metrics if set', () => {
-      Reporter.reportMetrics({ duration: 1337 })
+      const metrics = { duration: 1337 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
     })
 
     it('should set ext duration metrics if set', () => {
-      Reporter.reportMetrics({ durationExt: 42 })
+      const metrics = { durationExt: 42 }
+      Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.waf.duration_ext', 42)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
     })
 
     it('should set rulesVersion if set', () => {
@@ -293,7 +296,7 @@ describe('reporter', () => {
     })
 
     it('should call addTags', () => {
-      const schemaValue = [{ 'key': [8] }]
+      const schemaValue = [{ key: [8] }]
       const derivatives = {
         '_dd.appsec.s.req.headers': schemaValue,
         '_dd.appsec.s.req.query': schemaValue,
@@ -349,22 +352,46 @@ describe('reporter', () => {
       Reporter.finishRequest(req, wafContext, {})
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({ a: 1, b: 2 })
+      expect(span.addTags).to.have.been.calledWithExactly({ a: 1, b: 2 })
       expect(Reporter.metricsQueue).to.be.empty
     })
 
-    it('should not add http response data when no attack was previously found', () => {
-      const req = {}
+    it('should only add identification headers when no attack was previously found', () => {
+      const req = {
+        headers: {
+          'not-included': 'hello',
+          'x-amzn-trace-id': 'a',
+          'cloudfront-viewer-ja3-fingerprint': 'b',
+          'cf-ray': 'c',
+          'x-cloud-trace-context': 'd',
+          'x-appgw-trace-id': 'e',
+          'x-sigsci-requestid': 'f',
+          'x-sigsci-tags': 'g',
+          'akamai-user-risk': 'h'
+        }
+      }
 
       Reporter.finishRequest(req)
       expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.not.have.been.called
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'http.request.headers.x-amzn-trace-id': 'a',
+        'http.request.headers.cloudfront-viewer-ja3-fingerprint': 'b',
+        'http.request.headers.cf-ray': 'c',
+        'http.request.headers.x-cloud-trace-context': 'd',
+        'http.request.headers.x-appgw-trace-id': 'e',
+        'http.request.headers.x-sigsci-requestid': 'f',
+        'http.request.headers.x-sigsci-tags': 'g',
+        'http.request.headers.akamai-user-risk': 'h'
+      })
     })
 
     it('should add http response data inside request span', () => {
       const req = {
         route: {
           path: '/path/:param'
+        },
+        headers: {
+          'x-cloud-trace-context': 'd'
         }
       }
 
@@ -382,7 +409,11 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledTwice
+      expect(span.addTags.firstCall).to.have.been.calledWithExactly({
+        'http.request.headers.x-cloud-trace-context': 'd'
+      })
+      expect(span.addTags.secondCall).to.have.been.calledWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
         'http.endpoint': '/path/:param'
@@ -405,7 +436,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
       expect(web.root).to.have.been.calledOnceWith(req)
 
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      expect(span.addTags).to.have.been.calledWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
@@ -417,6 +448,15 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
+    })
+
+    it('should set waf.duration tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ duration: 1337, durationExt: 42 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
     })
   })
 })

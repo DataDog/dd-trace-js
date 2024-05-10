@@ -10,7 +10,5 @@ const server = http.createServer(async (req, res) => {
   }
 }).listen(0, () => {
   const port = server.address().port
-  if (process.send) {
-    process.send({ port })
-  }
+  process.send({ port })
 })

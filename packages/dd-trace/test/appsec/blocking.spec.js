@@ -70,9 +70,10 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
-      expect(res.setHeader).to.have.been.calledTwice
-      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'text/html; charset=utf-8')
-      expect(res.setHeader.secondCall).to.have.been.calledWithExactly('Content-Length', 12)
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': 12
+      })
       expect(res.end).to.have.been.calledOnceWithExactly('htmlBodyéé')
     })
 
@@ -81,9 +82,10 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
-      expect(res.setHeader).to.have.been.calledTwice
-      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'application/json')
-      expect(res.setHeader.secondCall).to.have.been.calledWithExactly('Content-Length', 8)
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'application/json',
+        'Content-Length': 8
+      })
       expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
     })
 
@@ -91,9 +93,10 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
-      expect(res.setHeader).to.have.been.calledTwice
-      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'application/json')
-      expect(res.setHeader.secondCall).to.have.been.calledWithExactly('Content-Length', 8)
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'application/json',
+        'Content-Length': 8
+      })
       expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
     })
 
@@ -102,9 +105,10 @@ describe('blocking', () => {
       block(req, res, rootSpan, abortController)
 
       expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
-      expect(res.setHeader).to.have.been.calledTwice
-      expect(res.setHeader.firstCall).to.have.been.calledWithExactly('Content-Type', 'application/json')
-      expect(res.setHeader.secondCall).to.have.been.calledWithExactly('Content-Length', 8)
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'application/json',
+        'Content-Length': 8
+      })
       expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
       expect(abortController.signal.aborted).to.be.true
     })
@@ -158,8 +162,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with default json template and custom status ' +
@@ -177,8 +181,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with default html template and custom status ' +
@@ -196,8 +200,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with default json template and custom status', () => {
@@ -213,8 +217,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with default json template and custom status ' +
@@ -231,8 +235,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with default html template and custom status ' +
@@ -249,8 +253,8 @@ describe('blocking', () => {
 
       block(req, res, rootSpan)
 
+      expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
-      expect(res.statusCode).to.be.equal(401)
     })
 
     it('should block with custom redirect', () => {
@@ -267,7 +271,7 @@ describe('blocking', () => {
       block(req, res, rootSpan)
 
       expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
-        'Location': '/you-have-been-blocked'
+        Location: '/you-have-been-blocked'
       })
       expect(res.end).to.have.been.calledOnce
     })

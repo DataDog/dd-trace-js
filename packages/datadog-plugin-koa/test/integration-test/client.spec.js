@@ -17,7 +17,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(50000)
       sandbox = await createSandbox([`'koa@${version}'`], false,
-        [`./packages/datadog-plugin-koa/test/integration-test/*`])
+        ['./packages/datadog-plugin-koa/test/integration-test/*'])
     })
 
     after(async function () {

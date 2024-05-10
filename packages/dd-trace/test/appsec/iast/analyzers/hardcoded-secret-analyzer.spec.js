@@ -7,6 +7,7 @@ const os = require('os')
 const agent = require('../../../plugins/agent')
 const Config = require('../../../../src/config')
 
+const { NameAndValue, ValueOnly } = require('../../../../src/appsec/iast/analyzers/hardcoded-rule-type')
 const hardcodedSecretAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-secret-analyzer')
 const { suite } = require('./resources/hardcoded-secrets-suite.json')
 const iast = require('../../../../src/appsec/iast')
@@ -29,18 +30,23 @@ describe('Hardcoded Secret Analyzer', () => {
       testCase.samples.forEach((sample, sampleIndex) => {
         // sample values are arrays containing the parts of the original token
         it(`should match rule ${testCase.id} with #${sampleIndex + 1} value ${sample[0]}...`, () => {
+          const value = sample.join('')
+          const ident = testCase.type === NameAndValue ? value.split(' = ')[0] : undefined
+
           hardcodedSecretAnalyzer.analyze({
             file,
             literals: [{
-              value: sample.join(''),
+              value,
               locations: [{
                 line,
-                column
+                column,
+                ident
               }]
             }]
           })
 
-          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, data: testCase.id })
+          expect([NameAndValue, ValueOnly]).to.be.include(testCase.type)
+          expect(report).to.have.been.calledOnceWithExactly({ file: relFile, line, column, ident, data: testCase.id })
         })
       })
     })

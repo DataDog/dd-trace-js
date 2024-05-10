@@ -20,15 +20,17 @@ describe('Plugin', () => {
   let appListener
   let tracer
 
-  ['http', 'https'].forEach(protocol => {
-    describe(`http2/client, protocol ${protocol}`, () => {
+  ['http', 'https', 'node:http', 'node:https'].forEach(pluginToBeLoaded => {
+    const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
+    const loadPlugin = pluginToBeLoaded.includes('node:') ? 'node:http2' : 'http2'
+    describe(`http2/client, protocol ${pluginToBeLoaded}`, () => {
       function server (app, port, listener) {
         let server
-        if (protocol === 'https') {
+        if (pluginToBeLoaded === 'https' || pluginToBeLoaded === 'node:https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-          server = require('http2').createSecureServer({ key, cert })
+          server = require(loadPlugin).createSecureServer({ key, cert })
         } else {
-          server = require('http2').createServer()
+          server = require(loadPlugin).createServer()
         }
         server.on('stream', app)
         server.listen(port, 'localhost', listener)
@@ -51,7 +53,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           return agent.load('http2', { server: false })
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 
@@ -561,6 +563,7 @@ describe('Plugin', () => {
               .catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`)
+              // eslint-disable-next-line n/handle-callback-err
               .on('error', (err) => {})
 
             const req = client.request({ ':path': '/user' })
@@ -629,7 +632,7 @@ describe('Plugin', () => {
         })
 
         it('should only record a request once', done => {
-          require('http2')
+          require(loadPlugin)
           const app = (stream, headers) => {
             stream.respond({
               ':status': 200
@@ -658,7 +661,7 @@ describe('Plugin', () => {
                   .on('error', done)
                   .end()
 
-                client.request({ ':path': `/user?test=2` })
+                client.request({ ':path': '/user?test=2' })
                   .on('error', done)
                   .end()
 
@@ -682,7 +685,7 @@ describe('Plugin', () => {
 
           return agent.load('http2', config)
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 
@@ -729,7 +732,7 @@ describe('Plugin', () => {
 
           return agent.load('http2', config)
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 
@@ -777,7 +780,7 @@ describe('Plugin', () => {
 
           return agent.load('http2', config)
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 
@@ -856,7 +859,7 @@ describe('Plugin', () => {
 
           return agent.load('http2', config)
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 
@@ -905,7 +908,7 @@ describe('Plugin', () => {
 
           return agent.load('http2', config)
             .then(() => {
-              http2 = require('http2')
+              http2 = require(loadPlugin)
             })
         })
 

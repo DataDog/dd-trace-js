@@ -15,33 +15,31 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v3
 
   ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/18
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/node/20
       - run: yarn test:trace:core:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/21
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v3
 
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:trace:core:ci
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v3

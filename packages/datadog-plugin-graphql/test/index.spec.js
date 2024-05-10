@@ -8,6 +8,8 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 const axios = require('axios')
 const http = require('http')
 const getPort = require('get-port')
+const dc = require('dc-polyfill')
+const plugin = require('../src')
 
 describe('Plugin', () => {
   let tracer
@@ -110,7 +112,7 @@ describe('Plugin', () => {
           friends: {
             type: new graphql.GraphQLList(Human),
             resolve () {
-              return [ { name: 'alice' }, { name: 'bob' } ]
+              return [{ name: 'alice' }, { name: 'bob' }]
             }
           }
         }
@@ -166,7 +168,7 @@ describe('Plugin', () => {
       })
 
       describe('graphql-yoga', () => {
-        withVersions('graphql', 'graphql-yoga', version => {
+        withVersions(plugin, 'graphql-yoga', version => {
           let graphqlYoga
           let server
           let port
@@ -257,7 +259,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           () => {
-            const source = `query MyQuery { hello(name: "world") }`
+            const source = 'query MyQuery { hello(name: "world") }'
             const variableValues = { who: 'world' }
             graphql.graphql({ schema, source, variableValues })
           },
@@ -271,7 +273,7 @@ describe('Plugin', () => {
         )
 
         it('should instrument parsing', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
 
           agent
@@ -293,7 +295,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument validation', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
 
           agent
@@ -315,7 +317,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument execution', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
 
           agent
@@ -338,7 +340,7 @@ describe('Plugin', () => {
         })
 
         it('should not include variables by default', done => {
-          const source = `query MyQuery($who: String!) { hello(name: $who) }`
+          const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }
 
           agent
@@ -353,7 +355,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument schema resolvers', done => {
-          const source = `{ hello(name: "world") }`
+          const source = '{ hello(name: "world") }'
 
           agent
             .use(traces => {
@@ -493,7 +495,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument mutations', done => {
-          const source = `mutation { human { name } }`
+          const source = 'mutation { human { name } }'
 
           agent
             .use(traces => {
@@ -508,7 +510,7 @@ describe('Plugin', () => {
         })
 
         it('should instrument subscriptions', done => {
-          const source = `subscription { human { name } }`
+          const source = 'subscription { human { name } }'
 
           agent
             .use(traces => {
@@ -523,7 +525,7 @@ describe('Plugin', () => {
         })
 
         it('should handle a circular schema', done => {
-          const source = `{ human { pets { owner { name } } } }`
+          const source = '{ human { pets { owner { name } } } }'
 
           graphql.graphql({ schema, source })
             .then((result) => {
@@ -540,7 +542,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
           const rootValue = { hello: 'world' }
 
           agent
@@ -564,7 +566,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = { hello: 'world' }
 
@@ -587,7 +589,7 @@ describe('Plugin', () => {
         })
 
         it('should not instrument schema resolvers multiple times', done => {
-          const source = `{ hello(name: "world") }`
+          const source = '{ hello(name: "world") }'
 
           agent.use(() => { // skip first call
             agent
@@ -606,7 +608,7 @@ describe('Plugin', () => {
         })
 
         it('should run parsing, validation and execution in the current context', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
           const span = tracer.startSpan('test.request')
 
@@ -649,7 +651,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello () {
@@ -672,7 +674,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello () {
@@ -692,8 +694,8 @@ describe('Plugin', () => {
         })
 
         it('should handle unsupported operations', () => {
-          const source = `query MyQuery { hello(name: "world") }`
-          const subscription = `subscription { human { name } }`
+          const source = 'query MyQuery { hello(name: "world") }'
+          const subscription = 'subscription { human { name } }'
 
           return graphql.graphql({ schema, source })
             .then(() => graphql.graphql({ schema, source: subscription }))
@@ -703,7 +705,7 @@ describe('Plugin', () => {
         })
 
         it('should handle calling low level APIs directly', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
 
           Promise
             .all([
@@ -731,7 +733,7 @@ describe('Plugin', () => {
         })
 
         it('should handle Source objects', done => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(new graphql.Source(source))
 
           agent
@@ -804,7 +806,7 @@ describe('Plugin', () => {
         })
 
         it('should handle validation errors', done => {
-          const source = `{ human { address } }`
+          const source = '{ human { address } }'
           const document = graphql.parse(source)
 
           agent
@@ -827,7 +829,7 @@ describe('Plugin', () => {
         })
 
         it('should handle execution exceptions', done => {
-          const source = `{ hello }`
+          const source = '{ hello }'
           const document = graphql.parse(source)
 
           let error
@@ -856,7 +858,7 @@ describe('Plugin', () => {
         })
 
         it('should handle execution errors', done => {
-          const source = `{ hello }`
+          const source = '{ hello }'
           const document = graphql.parse(source)
 
           const schema = graphql.buildSchema(`
@@ -904,7 +906,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello: () => {
@@ -938,7 +940,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello: () => {
@@ -970,7 +972,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello: () => 'world'
@@ -985,17 +987,35 @@ describe('Plugin', () => {
         })
 
         it('should support multiple executions on a pre-parsed document', () => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
-
           expect(() => {
             graphql.execute({ schema, document })
             graphql.execute({ schema, document })
           }).to.not.throw()
         })
 
+        it('should not fail without directives in the document ' +
+          'and with subscription to datadog:graphql:resolver:start', () => {
+          const source = 'query MyQuery { hello(name: "world") }'
+          const document = graphql.parse(source)
+          delete document.definitions[0].directives
+          delete document.definitions[0].selectionSet.selections[0].directives
+
+          function noop () {}
+          dc.channel('datadog:graphql:resolver:start').subscribe(noop)
+
+          try {
+            expect(() => {
+              graphql.execute({ schema, document })
+            }).to.not.throw()
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
+          }
+        })
+
         it('should support multiple validations on a pre-parsed document', () => {
-          const source = `query MyQuery { hello(name: "world") }`
+          const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
 
           expect(() => {
@@ -1091,7 +1111,7 @@ describe('Plugin', () => {
         // https://github.com/graphql/graphql-js/pull/2904
         if (!semver.intersects(version, '>=16')) {
           it('should instrument using positional arguments', done => {
-            const source = `query MyQuery { hello(name: "world") }`
+            const source = 'query MyQuery { hello(name: "world") }'
             const variableValues = { who: 'world' }
 
             agent
@@ -1114,7 +1134,7 @@ describe('Plugin', () => {
           })
         } else {
           it('should not support positional arguments', done => {
-            const source = `query MyQuery { hello(name: "world") }`
+            const source = 'query MyQuery { hello(name: "world") }'
             const variableValues = { who: 'world' }
 
             graphql.graphql(schema, source, null, null, variableValues)
@@ -1181,7 +1201,7 @@ describe('Plugin', () => {
         })
 
         it('should be configured with the correct values', done => {
-          const source = `{ hello(name: "world") }`
+          const source = '{ hello(name: "world") }'
 
           agent
             .use(traces => {
@@ -1314,7 +1334,7 @@ describe('Plugin', () => {
             }
           `)
 
-          const source = `{ hello }`
+          const source = '{ hello }'
 
           const rootValue = {
             hello () {
@@ -1403,7 +1423,7 @@ describe('Plugin', () => {
         })
 
         it('should not collapse list field resolvers', done => {
-          const source = `{ friends { name } }`
+          const source = '{ friends { name } }'
 
           agent
             .use(traces => {
@@ -1457,7 +1477,7 @@ describe('Plugin', () => {
         })
 
         it('should fallback to the operation type and name', done => {
-          const source = `query WithoutSignature { friends { name } }`
+          const source = 'query WithoutSignature { friends { name } }'
 
           agent
             .use(traces => {
@@ -1615,7 +1635,7 @@ describe('Plugin', () => {
         })
       })
 
-      withVersions('graphql', 'apollo-server-core', apolloVersion => {
+      withVersions(plugin, 'apollo-server-core', apolloVersion => {
         // The precense of graphql@^15.2.0 in the /versions folder causes graphql-tools@3.1.1
         // to break in the before() hook. This test tests a library version that had its release occur 5 years ago
         // updating the test would require using newer version of apollo-core which have a completely different syntax
@@ -1635,7 +1655,7 @@ describe('Plugin', () => {
                 graphql = require(`../../../versions/graphql@${version}`).get()
 
                 const apolloCore = require(`../../../versions/apollo-server-core@${apolloVersion}`).get()
-                const graphqlTools = require(`../../../versions/graphql-tools@3.1.1`).get()
+                const graphqlTools = require('../../../versions/graphql-tools@3.1.1').get()
 
                 runQuery = apolloCore.runQuery
                 mergeSchemas = graphqlTools.mergeSchemas

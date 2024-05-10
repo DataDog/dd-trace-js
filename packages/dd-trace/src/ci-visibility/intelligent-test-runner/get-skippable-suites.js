@@ -1,9 +1,22 @@
 const request = require('../../exporters/common/request')
 const log = require('../../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_ITR_SKIPPABLE_TESTS,
+  TELEMETRY_ITR_SKIPPABLE_TESTS_MS,
+  TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS,
+  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
+  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
+  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
+  getErrorTypeFromStatusCode
+} = require('../../ci-visibility/telemetry')
 
 function getSkippableSuites ({
   url,
   isEvpProxy,
+  evpProxyPrefix,
+  isGzipCompatible,
   env,
   service,
   repositoryUrl,
@@ -26,8 +39,12 @@ function getSkippableSuites ({
     url
   }
 
+  if (isGzipCompatible) {
+    options.headers['accept-encoding'] = 'gzip'
+  }
+
   if (isEvpProxy) {
-    options.path = '/evp_proxy/v2/api/v2/ci/tests/skippable'
+    options.path = `${evpProxyPrefix}/api/v2/ci/tests/skippable`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
     const apiKey = process.env.DATADOG_API_KEY || process.env.DD_API_KEY
@@ -59,13 +76,21 @@ function getSkippableSuites ({
     }
   })
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS)
+
+  const startTime = Date.now()
+
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
+      const errorType = getErrorTypeFromStatusCode(statusCode)
+      incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS, { errorType })
       done(err)
     } else {
       let skippableSuites = []
       try {
-        skippableSuites = JSON.parse(res)
+        const parsedResponse = JSON.parse(res)
+        skippableSuites = parsedResponse
           .data
           .filter(({ type }) => type === testLevel)
           .map(({ attributes: { suite, name } }) => {
@@ -74,8 +99,17 @@ function getSkippableSuites ({
             }
             return { suite, name }
           })
+        const { meta: { correlation_id: correlationId } } = parsedResponse
+        incrementCountMetric(
+          testLevel === 'test'
+            ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
+            : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
+          {},
+          skippableSuites.length
+        )
+        distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
         log.debug(() => `Number of received skippable ${testLevel}s: ${skippableSuites.length}`)
-        done(null, skippableSuites)
+        done(null, skippableSuites, correlationId)
       } catch (err) {
         done(err)
       }

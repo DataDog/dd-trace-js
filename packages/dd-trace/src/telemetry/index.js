@@ -6,9 +6,12 @@ const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')
 const { manager: metricsManager } = require('./metrics')
+const telemetryLogger = require('./logs')
+const logger = require('../log')
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
 const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
+const telemetryAppClosingChannel = dc.channel('datadog:telemetry:app-closing')
 
 let config
 let pluginManager
@@ -19,6 +22,7 @@ let heartbeatTimeout
 let heartbeatInterval
 let extendedInterval
 let integrations
+let configWithOrigin = []
 let retryData = null
 const extendedHeartbeatPayload = {}
 
@@ -33,7 +37,7 @@ function updateRetryData (error, retryObj) {
     if (retryObj.reqType === 'message-batch') {
       const payload = retryObj.payload[0].payload
       const reqType = retryObj.payload[0].request_type
-      retryData = { payload: payload, reqType: reqType }
+      retryData = { payload, reqType }
 
       // Since this payload failed twice it now gets save in to the extended heartbeat
       const failedPayload = retryObj.payload[1].payload
@@ -41,17 +45,17 @@ function updateRetryData (error, retryObj) {
 
       // save away the dependencies and integration request for extended heartbeat.
       if (failedReqType === 'app-integrations-change') {
-        if (extendedHeartbeatPayload['integrations']) {
-          extendedHeartbeatPayload['integrations'].push(failedPayload)
+        if (extendedHeartbeatPayload.integrations) {
+          extendedHeartbeatPayload.integrations.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['integrations'] = [failedPayload]
+          extendedHeartbeatPayload.integrations = [failedPayload]
         }
       }
       if (failedReqType === 'app-dependencies-loaded') {
-        if (extendedHeartbeatPayload['dependencies']) {
-          extendedHeartbeatPayload['dependencies'].push(failedPayload)
+        if (extendedHeartbeatPayload.dependencies) {
+          extendedHeartbeatPayload.dependencies.push(failedPayload)
         } else {
-          extendedHeartbeatPayload['dependencies'] = [failedPayload]
+          extendedHeartbeatPayload.dependencies = [failedPayload]
         }
       }
     } else {
@@ -95,27 +99,25 @@ function getProducts (config) {
   return products
 }
 
-function flatten (input, result = [], prefix = [], traversedObjects = null) {
-  traversedObjects = traversedObjects || new WeakSet()
-  if (traversedObjects.has(input)) {
-    return
-  }
-  traversedObjects.add(input)
-  for (const [key, value] of Object.entries(input)) {
-    if (typeof value === 'object' && value !== null) {
-      flatten(value, result, [...prefix, key], traversedObjects)
-    } else {
-      // TODO: add correct origin value
-      result.push({ name: [...prefix, key].join('.'), value, origin: 'unknown' })
+function getInstallSignature (config) {
+  const { installSignature: sig } = config
+  if (sig && (sig.id || sig.time || sig.type)) {
+    return {
+      install_id: sig.id,
+      install_time: sig.time,
+      install_type: sig.type
     }
   }
-  return result
 }
 
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: flatten(config)
+    configuration: configWithOrigin
+  }
+  const installSignature = getInstallSignature(config)
+  if (installSignature) {
+    app.install_signature = installSignature
   }
   // TODO: add app.error with correct error codes
   // if (errors.agentError) {
@@ -125,10 +127,21 @@ function appStarted (config) {
   return app
 }
 
-function onBeforeExit () {
-  process.removeListener('beforeExit', onBeforeExit)
+function appClosing () {
+  if (!config?.telemetry?.enabled) {
+    return
+  }
+  // Give chance to listeners to update metrics before shutting down.
+  telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  // We flush before shutting down.
+  metricsManager.send(config, application, host)
+}
+
+function onBeforeExit () {
+  process.removeListener('beforeExit', onBeforeExit)
+  appClosing()
 }
 
 function createAppObject (config) {
@@ -176,12 +189,11 @@ function getTelemetryData () {
 }
 
 function createBatchPayload (payload) {
-  const batchPayload = []
-  payload.map(item => {
-    batchPayload.push({
+  const batchPayload = payload.map(item => {
+    return {
       request_type: item.reqType,
       payload: item.payload
-    })
+    }
   })
 
   return batchPayload
@@ -191,15 +203,16 @@ function createPayload (currReqType, currPayload = {}) {
   if (getRetryData()) {
     const payload = { reqType: currReqType, payload: currPayload }
     const batchPayload = createBatchPayload([payload, retryData])
-    return { 'reqType': 'message-batch', 'payload': batchPayload }
+    return { reqType: 'message-batch', payload: batchPayload }
   }
 
-  return { 'reqType': currReqType, 'payload': currPayload }
+  return { reqType: currReqType, payload: currPayload }
 }
 
 function heartbeat (config, application, host) {
   heartbeatTimeout = setTimeout(() => {
     metricsManager.send(config, application, host)
+    telemetryLogger.send(config, application, host)
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
@@ -223,6 +236,10 @@ function extendedHeartbeat (config) {
 
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
+    if (aConfig.sca?.enabled) {
+      logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
+    }
+
     return
   }
   config = aConfig
@@ -233,6 +250,7 @@ function start (aConfig, thePluginManager) {
   integrations = getIntegrations()
 
   dependencies.start(config, application, host, getRetryData, updateRetryData)
+  telemetryLogger.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
@@ -276,30 +294,66 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
+function formatMapForTelemetry (map) {
+  // format from an object to a string map in order for
+  // telemetry intake to accept the configuration
+  return map
+    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
+    : ''
+}
+
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return
 
-  // Hack to make system tests happy until we ship telemetry v2
-  if (process.env.DD_INTERNAL_TELEMETRY_V2_ENABLED !== '1') return
-
   const application = createAppObject(config)
   const host = createHostObject()
 
-  const configuration = changes.map(change => ({
-    name: change.name,
-    value: Array.isArray(change.value) ? change.value.join(',') : change.value,
-    origin: change.origin
-  }))
+  const nameMapping = {
+    sampleRate: 'DD_TRACE_SAMPLE_RATE',
+    logInjection: 'DD_LOG_INJECTION',
+    headerTags: 'DD_TRACE_HEADER_TAGS',
+    tags: 'DD_TAGS'
+  }
 
-  const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
 
-  sendData(config, application, host, reqType, payload, updateRetryData)
+  const configuration = []
+  const names = [] // list of config names whose values have been changed
+
+  for (const change of changes) {
+    const name = nameMapping[change.name] || change.name
+
+    names.push(name)
+    const { origin, value } = change
+    const entry = { name, value, origin }
+
+    if (Array.isArray(value)) entry.value = value.join(',')
+    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
+    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+
+    configuration.push(entry)
+  }
+
+  function isNotModified (entry) {
+    return !names.includes(entry.name)
+  }
+
+  if (!configWithOrigin.length) {
+    configWithOrigin = configuration
+  } else {
+    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
+    configWithOrigin = configWithOrigin.filter(isNotModified)
+    configWithOrigin = configWithOrigin.concat(configuration)
+    const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
+    sendData(config, application, host, reqType, payload, updateRetryData)
+  }
 }
 
 module.exports = {
   start,
   stop,
   updateIntegrations,
-  updateConfig
+  updateConfig,
+  appClosing
 }

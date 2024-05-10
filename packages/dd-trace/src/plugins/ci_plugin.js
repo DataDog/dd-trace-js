@@ -15,11 +15,20 @@ const {
   TEST_MODULE,
   getTestSuiteCommonTags,
   TEST_STATUS,
-  TEST_SKIPPED_BY_ITR
+  TEST_SKIPPED_BY_ITR,
+  ITR_CORRELATION_ID
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_EVENT_CREATED,
+  TELEMETRY_ITR_SKIPPED
+} = require('../ci-visibility/telemetry')
+const { CI_PROVIDER_NAME, GIT_REPOSITORY_URL, GIT_COMMIT_SHA, GIT_BRANCH, CI_WORKSPACE_PATH } = require('./util/tags')
+const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 
 module.exports = class CiPlugin extends Plugin {
   constructor (...args) {
@@ -27,29 +36,31 @@ module.exports = class CiPlugin extends Plugin {
 
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
 
-    this.addSub(`ci:${this.constructor.id}:itr-configuration`, ({ onDone }) => {
-      if (!this.tracer._exporter || !this.tracer._exporter.getItrConfiguration) {
+    this.addSub(`ci:${this.constructor.id}:library-configuration`, ({ onDone }) => {
+      if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getItrConfiguration(this.testConfiguration, (err, itrConfig) => {
+      this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
-          log.error(`Intelligent Test Runner configuration could not be fetched. ${err.message}`)
+          log.error(`Library configuration could not be fetched. ${err.message}`)
         } else {
-          this.itrConfig = itrConfig
+          this.libraryConfig = libraryConfig
         }
-        onDone({ err, itrConfig })
+        onDone({ err, libraryConfig })
       })
     })
 
     this.addSub(`ci:${this.constructor.id}:test-suite:skippable`, ({ onDone }) => {
-      if (!this.tracer._exporter || !this.tracer._exporter.getSkippableSuites) {
+      if (!this.tracer._exporter?.getSkippableSuites) {
         return onDone({ err: new Error('CI Visibility was not initialized correctly') })
       }
-      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites) => {
+      this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
           log.error(`Skippable suites could not be fetched. ${err.message}`)
+        } else {
+          this.itrCorrelationId = itrCorrelationId
         }
-        onDone({ err, skippableSuites })
+        onDone({ err, skippableSuites, itrCorrelationId })
       })
     })
 
@@ -71,6 +82,7 @@ module.exports = class CiPlugin extends Plugin {
           ...testSessionSpanMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
       this.testModuleSpan = this.tracer.startSpan(`${this.constructor.id}.test_module`, {
         childOf: this.testSessionSpan,
         tags: {
@@ -79,12 +91,16 @@ module.exports = class CiPlugin extends Plugin {
           ...testModuleSpanMetadata
         }
       })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
       skippedSuites.forEach((testSuite) => {
         const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
+        if (this.itrCorrelationId) {
+          testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
+        }
 
         this.tracer.startSpan(`${this.constructor.id}.test_suite`, {
           childOf: this.testModuleSpan,
@@ -97,24 +113,65 @@ module.exports = class CiPlugin extends Plugin {
           }
         }).finish()
       })
+      this.telemetry.count(TELEMETRY_ITR_SKIPPED, { testLevel: 'suite' }, skippedSuites.length)
     })
+
+    this.addSub(`ci:${this.constructor.id}:known-tests`, ({ onDone }) => {
+      if (!this.tracer._exporter?.getKnownTests) {
+        return onDone({ err: new Error('CI Visibility was not initialized correctly') })
+      }
+      this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
+        if (err) {
+          log.error(`Known tests could not be fetched. ${err.message}`)
+          this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+        }
+        onDone({ err, knownTests })
+      })
+    })
+  }
+
+  get telemetry () {
+    const testFramework = this.constructor.id
+    return {
+      ciVisEvent: function (name, testLevel, tags = {}) {
+        incrementCountMetric(name, {
+          testLevel,
+          testFramework,
+          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          ...tags
+        })
+      },
+      count: function (name, tags, value = 1) {
+        incrementCountMetric(name, tags, value)
+      },
+      distribution: function (name, tags, measure) {
+        distributionMetric(name, tags, measure)
+      }
+    }
   }
 
   configure (config) {
     super.configure(config)
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(this.constructor.id, this.config)
-    this.codeOwnersEntries = getCodeOwnersFileEntries()
 
     const {
-      'git.repository_url': repositoryUrl,
-      'git.commit.sha': sha,
-      'os.version': osVersion,
-      'os.platform': osPlatform,
-      'os.architecture': osArchitecture,
-      'runtime.name': runtimeName,
-      'runtime.version': runtimeVersion,
-      'git.branch': branch
+      [GIT_REPOSITORY_URL]: repositoryUrl,
+      [GIT_COMMIT_SHA]: sha,
+      [OS_VERSION]: osVersion,
+      [OS_PLATFORM]: osPlatform,
+      [OS_ARCHITECTURE]: osArchitecture,
+      [RUNTIME_NAME]: runtimeName,
+      [RUNTIME_VERSION]: runtimeVersion,
+      [GIT_BRANCH]: branch,
+      [CI_PROVIDER_NAME]: ciProviderName,
+      [CI_WORKSPACE_PATH]: repositoryRoot
     } = this.testEnvironmentMetadata
+
+    this.repositoryRoot = repositoryRoot || process.cwd()
+
+    this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
+
+    this.isUnsupportedCIProvider = !ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -169,6 +226,8 @@ module.exports = class CiPlugin extends Plugin {
         ...suiteTags
       }
     }
+
+    this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'test', { hasCodeOwners: !!codeOwners })
 
     const testSpan = this.tracer
       .startSpan(`${this.constructor.id}.test`, {

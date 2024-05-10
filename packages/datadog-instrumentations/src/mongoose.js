@@ -21,7 +21,8 @@ addHook({
   name: 'mongoose',
   versions: ['>=4.6.4 <5', '5', '6', '>=7']
 }, mongoose => {
-  if (mongoose.Promise !== global.Promise) {
+  // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
+  if (mongoose.Promise && mongoose.Promise !== global.Promise) {
     shimmer.wrap(mongoose.Promise.prototype, 'then', wrapThen)
   }
 
@@ -79,20 +80,25 @@ addHook({
         })
 
         let callbackWrapped = false
-        const lastArgumentIndex = arguments.length - 1
 
-        if (typeof arguments[lastArgumentIndex] === 'function') {
-          // is a callback, wrap it to execute finish()
-          shimmer.wrap(arguments, lastArgumentIndex, originalCb => {
-            return function () {
-              finish()
+        const wrapCallbackIfExist = (args) => {
+          const lastArgumentIndex = args.length - 1
 
-              return originalCb.apply(this, arguments)
-            }
-          })
+          if (typeof args[lastArgumentIndex] === 'function') {
+            // is a callback, wrap it to execute finish()
+            shimmer.wrap(args, lastArgumentIndex, originalCb => {
+              return function () {
+                finish()
 
-          callbackWrapped = true
+                return originalCb.apply(this, arguments)
+              }
+            })
+
+            callbackWrapped = true
+          }
         }
+
+        wrapCallbackIfExist(arguments)
 
         return asyncResource.runInAsyncScope(() => {
           startCh.publish({
@@ -106,7 +112,15 @@ addHook({
           if (!callbackWrapped) {
             shimmer.wrap(res, 'exec', originalExec => {
               return function wrappedExec () {
+                if (!callbackWrapped) {
+                  wrapCallbackIfExist(arguments)
+                }
+
                 const execResult = originalExec.apply(this, arguments)
+
+                if (callbackWrapped || typeof execResult?.then !== 'function') {
+                  return execResult
+                }
 
                 // wrap them method, wrap resolve and reject methods
                 shimmer.wrap(execResult, 'then', originalThen => {

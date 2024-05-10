@@ -65,7 +65,7 @@ function wrapRenderToHTML (renderToHTML) {
 
 function wrapRenderErrorToHTML (renderErrorToHTML) {
   return function (err, req, res, pathname, query) {
-    return instrument(req, res, () => renderErrorToHTML.apply(this, arguments))
+    return instrument(req, res, err, () => renderErrorToHTML.apply(this, arguments))
   }
 }
 
@@ -76,8 +76,8 @@ function wrapRenderToResponse (renderToResponse) {
 }
 
 function wrapRenderErrorToResponse (renderErrorToResponse) {
-  return function (ctx) {
-    return instrument(ctx.req, ctx.res, () => renderErrorToResponse.apply(this, arguments))
+  return function (ctx, err) {
+    return instrument(ctx.req, ctx.res, err, () => renderErrorToResponse.apply(this, arguments))
   }
 }
 
@@ -111,13 +111,23 @@ function getPageFromPath (page, dynamicRoutes = []) {
   return getPagePath(page)
 }
 
-function instrument (req, res, handler) {
+function instrument (req, res, error, handler) {
+  if (typeof error === 'function') {
+    handler = error
+    error = null
+  }
+
   req = req.originalRequest || req
   res = res.originalResponse || res
 
   // TODO support middleware properly in the future?
   const isMiddleware = req.headers[MIDDLEWARE_HEADER]
-  if (isMiddleware || requests.has(req)) return handler()
+  if (isMiddleware || requests.has(req)) {
+    if (error) {
+      errorChannel.publish({ error })
+    }
+    return handler()
+  }
 
   requests.add(req)
 
@@ -280,9 +290,23 @@ addHook({
   shimmer.massWrap(request.NextRequest.prototype, ['text', 'json'], function (originalMethod) {
     return async function wrappedJson () {
       const body = await originalMethod.apply(this, arguments)
-      bodyParsedChannel.publish({
-        body
-      })
+
+      bodyParsedChannel.publish({ body })
+
+      return body
+    }
+  })
+
+  shimmer.wrap(request.NextRequest.prototype, 'formData', function (originalFormData) {
+    return async function wrappedFormData () {
+      const body = await originalFormData.apply(this, arguments)
+
+      let normalizedBody = body
+      if (typeof body.entries === 'function') {
+        normalizedBody = Object.fromEntries(body.entries())
+      }
+      bodyParsedChannel.publish({ body: normalizedBody })
+
       return body
     }
   })

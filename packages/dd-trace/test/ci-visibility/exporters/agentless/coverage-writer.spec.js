@@ -23,7 +23,8 @@ describe('CI Visibility Coverage Writer', () => {
       count: sinon.stub().returns(0),
       makePayload: sinon.stub().returns({
         getHeaders: () => ({}),
-        pipe: () => {}
+        pipe: () => {},
+        size: () => 1
       })
     }
 
@@ -80,7 +81,8 @@ describe('CI Visibility Coverage Writer', () => {
       encoder.count.returns(2)
       const payload = {
         getHeaders: () => ({}),
-        pipe: () => {}
+        pipe: () => {},
+        size: () => 1
       }
 
       encoder.makePayload.returns(payload)
@@ -101,7 +103,8 @@ describe('CI Visibility Coverage Writer', () => {
 
       const payload = {
         getHeaders: () => ({}),
-        pipe: () => {}
+        pipe: () => {},
+        size: () => 1
       }
 
       encoder.count.returns(1)

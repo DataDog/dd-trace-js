@@ -48,7 +48,7 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     if (ranges?.length > 0) {
       return !(this.isCookieExclusion(lowerCasedHeaderName, ranges) ||
         this.isSameHeaderExclusion(lowerCasedHeaderName, ranges) ||
-        this.isAccessControlAllowOriginExclusion(lowerCasedHeaderName, ranges))
+        this.isAccessControlAllowExclusion(lowerCasedHeaderName, ranges))
     }
 
     return false
@@ -84,8 +84,8 @@ class HeaderInjectionAnalyzer extends InjectionAnalyzer {
     return false
   }
 
-  isAccessControlAllowOriginExclusion (name, ranges) {
-    if (name === 'access-control-allow-origin') {
+  isAccessControlAllowExclusion (name, ranges) {
+    if (name?.startsWith('access-control-allow-')) {
       return ranges
         .every(range => range.iinfo.type === HTTP_REQUEST_HEADER_VALUE)
     }

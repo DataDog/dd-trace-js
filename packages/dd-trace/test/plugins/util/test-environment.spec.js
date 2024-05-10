@@ -6,19 +6,19 @@ const fs = require('fs')
 const path = require('path')
 
 const proxyquire = require('proxyquire')
-const sanitizedExecStub = sinon.stub().returns('')
+const execFileSyncStub = sinon.stub().returns('')
 
 const { getCIMetadata } = require('../../../src/plugins/util/ci')
 const { CI_ENV_VARS, CI_NODE_LABELS } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
-  './exec': {
-    'sanitizedExec': sanitizedExecStub
+  child_process: {
+    execFileSync: execFileSyncStub
   }
 })
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
   './git': {
-    'getGitMetadata': getGitMetadata
+    getGitMetadata
   }
 })
 
@@ -39,6 +39,7 @@ describe('test environment data', () => {
     assertions.forEach(([env, expectedSpanTags], index) => {
       it(`reads env info for spec ${index} from ${ciProvider}`, () => {
         process.env = env
+        const { DD_TEST_CASE_NAME: testCaseName } = env
         const { [CI_ENV_VARS]: envVars, [CI_NODE_LABELS]: nodeLabels, ...restOfTags } = getTestEnvironmentMetadata()
         const {
           [CI_ENV_VARS]: expectedEnvVars,
@@ -46,7 +47,7 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags).to.contain(restOfExpectedTags)
+        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
         // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
         if (envVars && expectedEnvVars) {
           expect(JSON.parse(envVars)).to.eql(JSON.parse(expectedEnvVars))
