@@ -480,7 +480,8 @@ addHook({
 addHook({
   name: '@playwright/test',
   file: 'lib/runner/runner.js',
-  versions: ['>=1.31.0 <1.38.0']
+  versions: ['>=1.31.0 <1.38.0'],
+  pinned: true
 }, runnerHook)
 
 // From >=1.38.0

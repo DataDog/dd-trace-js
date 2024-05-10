@@ -12,6 +12,7 @@
     "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
     "type:doc": "cd docs && yarn && yarn build",
     "type:test": "cd docs && yarn && yarn test",
+    "outdated-integrations": "node scripts/outdated.js",
     "lint": "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "SERVICES=* yarn services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
