@@ -72,15 +72,13 @@ Eventually we plan to look into putting these permission-required tests behind a
 
 ## Development Requirements
 
-Since this project supports multiple Node versions, using a version
+Since this project supports multiple Node.js versions, using a version
 manager such as [nvm](https://github.com/creationix/nvm) is recommended.
 
-We use [yarn](https://yarnpkg.com/) for its workspace functionality, so make sure to install that as well.
-
-To install dependencies once you have Node and yarn installed, run:
+To install dependencies once you have Node.js, run:
 
 ```sh
-$ yarn
+$ npm install
 ```
 
 
@@ -92,7 +90,7 @@ docker-compose configuration:
 
 ```sh
 $ docker-compose up -d -V --remove-orphans --force-recreate
-$ yarn services
+$ npm run services
 ```
 
 > **Note**
@@ -107,11 +105,11 @@ following commands may be useful:
 
 ```sh
 # Tracer core tests (i.e. testing `packages/dd-trace`)
-$ yarn test:trace:core
+$ npm run test:trace:core
 # "Core" library tests (i.e. testing `packages/datadog-core`
-$ yarn test:core
+$ npm run test:core
 # Instrumentations tests (i.e. testing `packages/datadog-instrumentations`
-$ yarn test:instrumentations
+$ npm run test:instrumentations
 ```
 
 Several other components have test commands as well. See `package.json` for
@@ -124,7 +122,7 @@ plugins you may separate then with a pipe (`|`) delimiter. Here's an
 example testing the `express` and `bluebird` plugins:
 
 ```sh
-PLUGINS="express|bluebird" yarn test:plugins
+PLUGINS="express|bluebird" npm run test:plugins
 ```
 
 
@@ -133,11 +131,11 @@ PLUGINS="express|bluebird" yarn test:plugins
 To run the memory leak tests, use:
 
 ```sh
-$ yarn leak:core
+$ npm run leak:core
 
 # or
 
-$ yarn leak:plugins
+$ npm run leak:plugins
 ```
 
 
@@ -149,7 +147,7 @@ conforms to our coding standards.
 To run the linter, use:
 
 ```sh
-$ yarn lint
+$ npm run lint
 ```
 
 
@@ -164,7 +162,7 @@ a benchmark in the `benchmark/index.js` module so that we can keep track of the
 most efficient algorithm. To run your benchmark, use:
 
 ```sh
-$ yarn bench
+$ npm run bench
 ```
 
 

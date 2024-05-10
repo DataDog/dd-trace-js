@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:trace:core:ci
+      - run: npm install
+      - run: npm run test:trace:core:ci
       - uses: codecov/codecov-action@v3
 
   ubuntu:
@@ -26,13 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/18
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: ./.github/actions/node/21
-      - run: yarn test:trace:core:ci
+      - run: npm run test:trace:core:ci
       - uses: codecov/codecov-action@v3
 
   windows:
@@ -40,6 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:trace:core:ci
+      - run: npm install
+      - run: npm run test:trace:core:ci
       - uses: codecov/codecov-action@v3

@@ -17,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:shimmer:ci
+      - run: npm run test:shimmer:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:shimmer:ci
+      - run: npm run test:shimmer:ci
       - uses: codecov/codecov-action@v3

@@ -26,9 +26,9 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
-      - run: yarn install
+      - run: npm install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
+      - run: npm run test:integration
 
   integration-ci:
     strategy:
@@ -64,8 +64,8 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
         if: ${{ matrix.framework == 'selenium' }}
-      - run: yarn install
-      - run: yarn test:integration:${{ matrix.framework }}
+      - run: npm install
+      - run: npm run test:integration:${{ matrix.framework }}
         env:
           NODE_OPTIONS: '-r ./ci/init'
 
@@ -86,12 +86,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engines
+      - run: npm install
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
+      - run: npm run test:integration:cypress
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
@@ -101,14 +100,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn lint
+      - run: npm install
+      - run: npm run lint
 
   typescript:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn type:test
-      - run: yarn type:doc
+      - run: npm install
+      - run: npm run type:test
+      - run: npm run type:doc

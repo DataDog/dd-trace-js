@@ -67,12 +67,12 @@ jobs:
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
-      - run: yarn
+      - run: npm install
       - name: Build
         working-directory: docs
         run: |
-          yarn
-          yarn build
+          npm install
+          npm run build
           mv out /tmp/out
       - uses: actions/checkout@v4
         with:

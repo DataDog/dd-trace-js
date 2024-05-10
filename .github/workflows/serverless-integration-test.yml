@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -30,4 +30,4 @@ jobs:
       - name: Setup Google Cloud SDK
         uses: 'google-github-actions/setup-gcloud@v1'
       - name: Run serverless integration test
-        run: yarn test:integration:serverless
+        run: npm run test:integration:serverless

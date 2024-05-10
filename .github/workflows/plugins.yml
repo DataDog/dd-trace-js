@@ -63,9 +63,8 @@ jobs:
             python3 python3-pip \
             wget \
             g++ libssl1.0.0 libssl-dev zlib1g-dev && \
-          npm install -g yarn
-          yarn install --ignore-engines
-          yarn test:plugins:ci
+          npm install --ignore-engines
+          npm run test:plugins:ci
       - if: always()
         uses: codecov/codecov-action@v2
 
@@ -98,8 +97,8 @@ jobs:
       - name: Install dependencies and run tests
         if: env.MAJOR_VERSION == '4'
         run: |
-          yarn install --ignore-engines
-          yarn test:plugins:ci
+          npm install --ignore-engines
+          npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -142,8 +141,8 @@ jobs:
       - name: Install dependencies and run tests
         if: env.MAJOR_VERSION >= '5'
         run: |
-          yarn install --ignore-engines
-          yarn test:plugins:ci
+          npm install --ignore-engines
+          npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -166,13 +165,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -191,13 +190,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -210,13 +209,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -261,11 +260,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -278,11 +277,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -295,11 +294,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -312,13 +311,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -339,11 +338,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -355,13 +354,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: codecov/codecov-action@v2
 
   couchbase:
@@ -379,9 +378,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: codecov/codecov-action@v3
 
   connect:
@@ -392,13 +391,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -411,11 +410,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -429,8 +428,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:plugins:ci
+      - run: npm install
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -443,13 +442,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -470,9 +469,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -485,11 +484,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -502,11 +501,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -519,11 +518,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -536,11 +535,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -559,11 +558,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -576,13 +575,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -595,11 +594,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -612,11 +611,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -629,13 +628,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -648,13 +647,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -668,8 +667,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
-      - run: yarn test:plugins:ci
+      - run: npm install
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -696,11 +695,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -713,11 +712,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -730,13 +729,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -759,11 +758,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -782,11 +781,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -799,11 +798,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -816,11 +815,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: codecov/codecov-action@v3
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -833,11 +832,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -856,11 +855,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -879,11 +878,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -905,11 +904,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -922,13 +921,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -942,11 +941,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -959,11 +958,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -985,11 +984,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1024,12 +1023,10 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          cache: yarn
+          cache: npm
           node-version: '16'
-      - run: yarn install --ignore-engines
-      - run: yarn config set ignore-engines true
-      - run: yarn services --ignore-engines
-      - run: yarn test:plugins --ignore-engines
+      - run: npm install
+      - run: npm run test:plugins
       - uses: codecov/codecov-action@v2
 
   paperplane:
@@ -1040,9 +1037,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1056,12 +1053,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      # - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      # - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1083,11 +1080,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1100,13 +1097,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1119,11 +1116,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1136,11 +1133,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1159,11 +1156,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1176,11 +1173,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1193,11 +1190,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1210,9 +1207,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1235,10 +1232,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
-      - run: yarn test:plugins:upstream
+      - run: npm run test:plugins:ci
+      - run: npm run test:plugins:upstream
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1251,11 +1248,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -1268,10 +1265,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: npm install
       - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - uses: ./.github/actions/node/latest
-      - run: yarn test:plugins:ci
+      - run: npm run test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
