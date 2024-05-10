@@ -33,7 +33,8 @@ function createWrapPool () {
 
 addHook({
   name: 'generic-pool',
-  versions: ['^2.4']
+  versions: ['^2.4'],
+  pinned: true
 }, genericPool => {
   shimmer.wrap(genericPool.Pool.prototype, 'acquire', createWrapAcquire())
   return genericPool
