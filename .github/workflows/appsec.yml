@@ -218,7 +218,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  propagation:
+  lodash:
     runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
