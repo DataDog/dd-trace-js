@@ -1,3 +1,5 @@
+'use strict'
+
 function trimLodash (_, str) {
   return _.trim(str)
 }
