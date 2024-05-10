@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const rasp = require('./rasp')
 const RuleManager = require('./rule_manager')
 const remoteConfig = require('./remote_config')
 const {
@@ -36,6 +37,7 @@ function enable (_config) {
   try {
     appsecTelemetry.enable(_config.telemetry)
     graphql.enable()
+    rasp.enable()
 
     setTemplates(_config)
 
@@ -236,6 +238,7 @@ function disable () {
 
   appsecTelemetry.disable()
   graphql.disable()
+  rasp.disable()
 
   remoteConfig.disableWafUpdate()
 

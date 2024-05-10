@@ -4,6 +4,7 @@ const METHODS = require('methods').concat('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
+const { AbortController } = require('node-abort-controller')
 
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
@@ -49,10 +50,13 @@ function createWrapRouterMethod (name) {
       try {
         return original.apply(this, arguments)
       } catch (error) {
-        errorChannel.publish({ req, error })
+        const abortController = new AbortController()
+        errorChannel.publish({ req, error, abortController })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
-
+        // TODO we could abort the request here if the error is our error
+        //  something like abort error propagation and do our own error blocking
+        if (abortController.signal.aborted) return
         throw error
       } finally {
         exitChannel.publish({ req })
