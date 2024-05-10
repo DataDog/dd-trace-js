@@ -54,6 +54,7 @@ function createWrapRouterMethod (name) {
         errorChannel.publish({ req, error, abortController })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
+
         // TODO we could abort the request here if the error is our error
         //  something like abort error propagation and do our own error blocking
         if (abortController.signal.aborted) return
@@ -94,14 +95,19 @@ function createWrapRouterMethod (name) {
 
   function wrapNext (req, next) {
     return function (error) {
+      let abortController
       if (error && error !== 'route' && error !== 'router') {
-        errorChannel.publish({ req, error })
+        // to support blocking on router.param() error handling
+        abortController = new AbortController()
+        errorChannel.publish({ req, error, abortController })
       }
 
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      next.apply(this, arguments)
+      if (!abortController?.signal.aborted) {
+        next.apply(this, arguments)
+      }
     }
   }
 

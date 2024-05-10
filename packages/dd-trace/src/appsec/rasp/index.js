@@ -34,8 +34,13 @@ function analyzeSsrf (ctx) {
   // TODO - analyze SSRF
   //  currently just for testing purpose, blocking 50% of the requests that are not calling to the agent
   if (!ctx.args.uri.includes(':8126') && Math.random() >= 0.5 && ctx.abortData) {
-    ctx.abortData.abortController.abort()
-    ctx.abortData.error = new AbortError()
+    const store = storage.getStore()
+    const req = store?.req
+
+    if (req) {
+      ctx.abortData.abortController.abort()
+      ctx.abortData.error = new AbortError(req)
+    }
   }
 }
 
@@ -52,7 +57,7 @@ function handleAbortError ({ req, error, abortController }) {
       res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Blocked by AppSec')
     }
 
-    abortController.abort()
+    abortController?.abort()
   }
 }
 
