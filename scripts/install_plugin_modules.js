@@ -12,6 +12,7 @@ const {
   getInternals,
   npmView
 } = require('./helpers/versioning')
+const latests = require('../packages/datadog-instrumentations/src/helpers/latests.json')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
@@ -135,7 +136,17 @@ async function assertPackage (name, version, dependency, external) {
 }
 
 async function addDependencies (dependencies, name, versionRange) {
-  const versionList = await getVersionList(name)
+  let versionList = await getVersionList(name)
+  if (!latests.pinned.includes(name)) {
+    const maxVersion = latests.latests[name]
+    versionList = versionList.map(version => {
+      if (version.startsWith('>=') && !version.includes('<')) {
+        return version + ' <=' + maxVersion
+      } else {
+        return version
+      }
+    })
+  }
   const version = semver.maxSatisfying(versionList, versionRange)
   const pkgJson = await npmView(`${name}@${version}`)
   for (const dep of deps[name]) {
