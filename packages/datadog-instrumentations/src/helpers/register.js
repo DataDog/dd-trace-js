@@ -79,7 +79,7 @@ for (const packageName of names) {
 }
 
 function matchesLatestSupported (name, version) {
-  if (latest.pinned.includes(name)) {
+  if (latests.pinned.includes(name)) {
     // These ones are deliberately pinned to a specific version. That
     // means we can skip this check, since it will already have been checked
     // to be lower than latest.
