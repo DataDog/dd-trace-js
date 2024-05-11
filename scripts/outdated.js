@@ -1,58 +1,51 @@
-/* eslint-disable no-console */
-
-const semver = require('semver')
 const {
   getInternals,
   npmView
 } = require('./helpers/versioning')
+const path = require('path')
+const fs = require('fs')
 
-function satisfiesAny (version, versions) {
-  for (const ver of versions) {
-    if (semver.satisfies(version, ver)) {
-      return true
-    }
+const latestsPath = path.join(
+  __dirname,
+  '..',
+  'packages',
+  'datadog-instrumentations',
+  'src',
+  'helpers',
+  'latests.json'
+)
+const latestsJson = require(latestsPath)
+const internalsNames = Array.from(new Set(getInternals().map(n => n.name)))
+  .filter(x => typeof x === 'string' && x !== 'child_process' && !x.startsWith('node:'))
+
+// TODO A lot of this can be optimized by using `npm outdated`.
+
+async function fix () {
+  const latests = {}
+  for (const name of internalsNames) {
+    const distTags = await npmView(name + ' dist-tags')
+    const latest = distTags.latest
+    latests[name] = latest
   }
-  return false
+  latestsJson.latests = latests
+  fs.writeFileSync(latestsPath, JSON.stringify(latestsJson, null, 2))
 }
 
-async function run () {
-  const internals = consolidateInternals(getInternals())
-  for (const inst in internals) {
-    const distTags = await npmView(inst + ' dist-tags')
-    const satisfied = satisfiesAny(distTags.latest, internals[inst])
-    if (!satisfied) {
-      console.log(
-        `latest version of "${inst}" (${distTags.latest}) not supported in ranges: ${
-          Array.from(internals[inst]).map(x => `"${x}"`).join(', ')
-        }`
-      )
-      if (internals[inst].pinned) {
-        console.log(`^----- "${inst}" pinned intentionally`)
-      } else {
-        process.exitCode = 1
-      }
+async function check () {
+  for (const name of internalsNames) {
+    const latest = latestsJson.latests[name]
+    if (!latest) {
+      console.log(`No latest version found for "${name}"`)
+      process.exitCode = 1
+    }
+    const distTags = await npmView(name + ' dist-tags')
+    const npmLatest = distTags.latest
+    if (npmLatest !== latest) {
+      console.log(`"latests.json: is not up to date for "${name}": expected "${npmLatest}", got "${latest}"`)
+      process.exitCode = 1
     }
   }
 }
 
-function consolidateInternals (internals) {
-  const consolidated = {}
-  for (const inst of internals) {
-    if (Array.isArray(inst.name)) continue
-    if (inst.name.startsWith('node:')) continue
-    if (!inst.versions) continue
-    if (!consolidated[inst.name] && inst.versions.length > 0) {
-      consolidated[inst.name] = new Set(inst.versions)
-    } else {
-      for (const ver of inst.versions) {
-        consolidated[inst.name].add(ver)
-      }
-    }
-    if (inst.pinned) {
-      consolidated[inst.name].pinned = true
-    }
-  }
-  return consolidated
-}
-
-run()
+if (process.argv.includes('fix')) fix()
+else check()
