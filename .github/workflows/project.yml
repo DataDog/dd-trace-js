@@ -113,10 +113,3 @@ jobs:
       - run: yarn type:test
       - run: yarn type:doc
 
-  outdated-integrations:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup # TODO should this run on all supported node versions?
-      - run: yarn install
-      - run: yarn outdated-integrations

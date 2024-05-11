@@ -1,0 +1,18 @@
+name: Outdated Integrations
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    # Yes, this runs a _lot_. We don't want to be out of date for very long.
+    - cron: '37 12,16,22 * * *'
+
+jobs:
+  outdated-integrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - run: yarn outdated-integrations
