@@ -115,7 +115,7 @@ addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   return redis
 })
 
-addHook({ name: 'redis', versions: ['>=0.12 <2.6'], pinned: true }, redis => {
+addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'send_command', sendCommand => function (command, args, callback) {
     if (!startCh.hasSubscribers) {
       return sendCommand.apply(this, arguments)
