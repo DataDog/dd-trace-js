@@ -1,6 +1,6 @@
 'use strict'
 
-require('../setup/tap')
+// require('../setup/tap')
 
 const { expect } = require('chai')
 const msgpack = require('msgpack-lite')
@@ -439,6 +439,19 @@ describe('encode', () => {
         foo: 'bar'
       }
       expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+    })
+
+    it('should not encode null meta_struct', () => {
+      data[0].meta_struct = null
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      expect(trace[0].meta_struct).to.be.undefined
     })
   })
 })
