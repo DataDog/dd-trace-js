@@ -144,6 +144,7 @@ interface Plugins {
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
+  "child_process": tracer.plugins.child_process;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
