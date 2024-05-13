@@ -51,7 +51,12 @@ function Hook (modules, options, onrequire) {
   if (patchedRequire) return
 
   patchedRequire = Module.prototype.require = function (request) {
-    const filename = Module._resolveFilename(request, this)
+    let filename
+    try {
+      filename = Module._resolveFilename(request, this)
+    } catch (resolveErr) {
+      return origRequire.apply(this, arguments)
+    }
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
     // return known patched modules immediately
