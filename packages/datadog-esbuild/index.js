@@ -75,7 +75,10 @@ module.exports.setup = function (build) {
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     } catch (err) {
-      console.warn(`MISSING: Unable to find "${args.path}". Is the package dead code?`)
+      if (DEBUG) {
+        console.warn(`Warning: Unable to find "${args.path}".` +
+          "Unless it's dead code this could cause a problem at runtime.")
+      }
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
@@ -93,7 +96,10 @@ module.exports.setup = function (build) {
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
-            console.warn(`MISSING: Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
+            if (DEBUG) {
+              console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
+              "Unless it's dead code this could cause a problem at runtime.")
+            }
           }
           return
         } else {
