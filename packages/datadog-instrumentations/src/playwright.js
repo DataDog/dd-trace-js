@@ -297,7 +297,12 @@ function dispatcherRunWrapper (run) {
 }
 
 function dispatcherRunWrapperNew (run) {
-  return function () {
+  return function (testGroups) {
+    if (!this._allTests) {
+      // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
+      // Not available from >=1.44.0
+      this._allTests = testGroups.map(g => g.tests).flat()
+    }
     remainingTestsByFile = getTestsBySuiteFromTestGroups(arguments[0])
     return run.apply(this, arguments)
   }
