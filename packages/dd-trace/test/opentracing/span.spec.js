@@ -167,8 +167,7 @@ describe('Span', () => {
   describe('apmTracingEnabled', () => {
     it('should not add _dd.apm.enabled tag when apmTracingEnabled = undefined', () => {
       span = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: true
+        operationName: 'operation'
       })
 
       expect(span.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
