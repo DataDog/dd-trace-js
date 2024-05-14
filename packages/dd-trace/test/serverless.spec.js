@@ -54,7 +54,7 @@ describe('Serverless', () => {
     expect(spawnStub).to.have.been.calledOnce
   })
 
-  it('should spawn mini agent when Azure FUNCTIONS_WORKER_RUNTIME, FUNCTIONS_EXTENSION_VERSION env vars are defined', () => {
+  it('should spawn mini agent when Azure env vars are defined', () => {
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_EXTENSION_VERSION = '4'
 
