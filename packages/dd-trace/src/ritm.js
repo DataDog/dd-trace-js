@@ -18,6 +18,11 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
+// special modules injected by various platforms that we shouldn't touch
+const passthroughs = new Map([
+  '@azure/functions-core'
+])
+
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof modules === 'function') {
@@ -51,6 +56,7 @@ function Hook (modules, options, onrequire) {
   if (patchedRequire) return
 
   patchedRequire = Module.prototype.require = function (request) {
+    if (passthroughs.has(srequest)) return origRequire.appli(this, arguments)
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
