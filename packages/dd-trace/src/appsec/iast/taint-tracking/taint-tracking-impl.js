@@ -18,6 +18,7 @@ function noop (res) { return res }
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
   concat: noop,
+  join: noop,
   parse: noop,
   plusOperator: noop,
   random: noop,
@@ -25,6 +26,7 @@ const TaintTrackingNoop = {
   slice: noop,
   substr: noop,
   substring: noop,
+  stringCase: noop,
   trim: noop,
   trimEnd: noop
 }
@@ -113,6 +115,13 @@ function csiMethodsOverrides (getContext) {
       return res
     },
 
+    stringCase: getCsiFn(
+      (transactionId, res, target) => TaintedUtils.stringCase(transactionId, res, target),
+      getContext,
+      String.prototype.toLowerCase,
+      String.prototype.toUpperCase
+    ),
+
     trim: getCsiFn(
       (transactionId, res, target) => TaintedUtils.trim(transactionId, res, target),
       getContext,
@@ -148,6 +157,22 @@ function csiMethodsOverrides (getContext) {
       }
 
       return res
+    },
+
+    join: function (res, fn, target, separator) {
+      if (fn === Array.prototype.join) {
+        try {
+          const iastContext = getContext()
+          const transactionId = getTransactionId(iastContext)
+          if (transactionId) {
+            res = TaintedUtils.arrayJoin(transactionId, res, target, separator)
+          }
+        } catch (e) {
+          iastLog.error(e)
+        }
+      }
+
+      return res
     }
   }
 }
@@ -176,7 +201,36 @@ function getTaintTrackingNoop () {
   return getTaintTrackingImpl(null, true)
 }
 
+const lodashFns = {
+  join: TaintedUtils.arrayJoin,
+  toLower: TaintedUtils.stringCase,
+  toUpper: TaintedUtils.stringCase,
+  trim: TaintedUtils.trim,
+  trimEnd: TaintedUtils.trimEnd,
+  trimStart: TaintedUtils.trim
+
+}
+
+function getLodashTaintedUtilFn (lodashFn) {
+  return lodashFns[lodashFn] || ((transactionId, result) => result)
+}
+
+function lodashTaintTrackingHandler (message) {
+  try {
+    if (!message.result) return
+    const context = getContextDefault()
+    const transactionId = getTransactionId(context)
+    if (transactionId) {
+      message.result = getLodashTaintedUtilFn(message.operation)(transactionId, message.result, ...message.arguments)
+    }
+  } catch (e) {
+    iastLog.error(`Error invoking CSI lodash ${message.operation}`)
+      .errorAndPublish(e)
+  }
+}
+
 module.exports = {
   getTaintTrackingImpl,
-  getTaintTrackingNoop
+  getTaintTrackingNoop,
+  lodashTaintTrackingHandler
 }
