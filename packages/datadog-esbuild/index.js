@@ -4,6 +4,7 @@
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+const extractPackageAndModulePath = require('../datadog-core/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
   hook()
@@ -21,7 +22,6 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const NM = 'node_modules/'
 const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
@@ -180,34 +180,4 @@ function dotFriendlyResolve (path, directory) {
   }
 
   return require.resolve(path, { paths: [directory] })
-}
-
-/**
- * For a given full path to a module,
- *   return the package name it belongs to and the local path to the module
- *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
- *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
- */
-function extractPackageAndModulePath (fullPath) {
-  const nm = fullPath.lastIndexOf(NM)
-  if (nm < 0) {
-    return { pkg: null, path: null }
-  }
-
-  const subPath = fullPath.substring(nm + NM.length)
-  const firstSlash = subPath.indexOf('/')
-
-  if (subPath[0] === '@') {
-    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
-
-    return {
-      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
-      path: subPath.substring(firstSlash + 1 + secondSlash + 1)
-    }
-  }
-
-  return {
-    pkg: subPath.substring(0, firstSlash),
-    path: subPath.substring(firstSlash + 1)
-  }
 }

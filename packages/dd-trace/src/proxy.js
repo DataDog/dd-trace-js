@@ -15,6 +15,7 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSITelemetry } = require('./profiling/ssi-telemetry')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
+const checkRequireCache = require('./check_require_cache')
 
 class LazyModule {
   constructor (provider) {
@@ -55,7 +56,10 @@ class Tracer extends NoopProxy {
 
     try {
       const config = new Config(options) // TODO: support dynamic code config
+
       telemetry.start(config, this._pluginManager)
+
+      if (config.debug) checkRequireCache()
 
       if (config.dogstatsd) {
         // Custom Metrics
