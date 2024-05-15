@@ -196,18 +196,19 @@ function spawnProc (filename, options = {}, stdioHandler) {
 async function createSandbox (dependencies = [], isGitRepo = false,
   integrationTestsPaths = ['./integration-tests/*'], followUpCommand) {
   /* To execute integration tests without a sandbox uncomment the next line
-   * and do `yarn link && yarn link dd-trace` */
+   * and do `npm link && npm link dd-trace` */
   // return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
   const folder = path.join(os.tmpdir(), id().toString())
-  const out = path.join(folder, 'dd-trace.tgz')
-  const allDependencies = [`file:${out}`].concat(dependencies)
 
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   await fs.mkdir(folder)
-  await exec(`yarn pack --filename ${out}`) // TODO: cache this
-  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
+  await exec(`npm pack --pack-destination ${folder}`) // TODO cache this
+
+  const out = path.join(folder, fs.readdirSync(folder).find(f => f.endsWith('.tgz')[0]))
+  const allDependencies = [`file:${out}`].concat(dependencies)
+  await exec(`npm install ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
