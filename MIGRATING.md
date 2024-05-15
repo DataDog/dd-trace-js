@@ -149,19 +149,19 @@ respectively.
 The use of `'dd-trace/ci/jest/env'` in [`testEnvironment`](https://jestjs.io/docs/configuration#testenvironment-string)
 is no longer supported. 
 To instrument `jest` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
-variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.
+variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' npm test`.
 
 #### Mocha
 
 The use of `--require dd-trace/ci/init` as a `mocha` flag is no longer supported. 
 To instrument `mocha` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
-variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.
+variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' npm test`.
 
 #### Cucumber
 
 The use of `--require-module dd-trace/ci/init` as a `cucumber-js` flag is no longer supported.
 To instrument `cucumber-js` tests now, add `'-r dd-trace/ci/init'` to the `NODE_OPTIONS` environment
-variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' yarn test`.
+variable passed to the process running the tests, for example, `NODE_OPTIONS='-r dd-trace/ci/init' npm test`.
 
 ## 1.0 to 2.0
 

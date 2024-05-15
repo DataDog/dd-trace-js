@@ -117,7 +117,7 @@ details.
 
 To test _plugins_ (i.e. components in `packages/datadog-plugin-XXXX`
 directories, set the `PLUGINS` environment variable to the plugin you're
-interested in, and use `yarn test:plugins`. If you need to test multiple
+interested in, and use `npm run test:plugins`. If you need to test multiple
 plugins you may separate then with a pipe (`|`) delimiter. Here's an
 example testing the `express` and `bluebird` plugins:
 

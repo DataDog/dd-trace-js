@@ -8,7 +8,7 @@
     "build": "DD_TRACE_DEBUG=true node ./build.js",
     "built": "DD_TRACE_DEBUG=true node ./out.js",
     "raw": "DD_TRACE_DEBUG=true node ./app.js",
-    "link": "pushd ../.. && yarn link && popd && yarn link dd-trace",
+    "link": "pushd ../.. && npm link && popd && npm link dd-trace",
     "request": "curl http://localhost:3000 | jq"
   },
   "keywords": [
