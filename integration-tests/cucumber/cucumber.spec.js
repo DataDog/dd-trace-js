@@ -27,10 +27,11 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_SOURCE_FILE,
-  TEST_EARLY_FLAKE_IS_ENABLED,
+  TEST_EARLY_FLAKE_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_NAME
+  TEST_NAME,
+  CUCUMBER_IS_PARALLEL
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -44,7 +45,7 @@ const moduleType = [
       './node_modules/nyc/bin/nyc.js -r=text-summary ' +
       'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
     parallelModeCommand: './node_modules/.bin/cucumber-js ' +
-    'ci-visibility/features/farewell.feature --parallel 2 --publish-quiet',
+    'ci-visibility/features/*.feature --parallel 2',
     featuresPath: 'ci-visibility/features/',
     fileExtension: 'js'
   }
@@ -86,35 +87,8 @@ versions.forEach(version => {
         childProcess.kill()
         await receiver.stop()
       })
-      const reportMethods = ['agentless', 'evp proxy']
 
-      it('does not crash with parallel mode', (done) => {
-        let testOutput
-        childProcess = exec(
-          parallelModeCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              DD_TRACE_DEBUG: 1,
-              DD_TRACE_LOG_LEVEL: 'warn'
-            },
-            stdio: 'inherit'
-          }
-        )
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.on('exit', (code) => {
-          assert.notInclude(testOutput, 'TypeError')
-          assert.include(testOutput, 'Unable to initialize CI Visibility because Cucumber is running in parallel mode.')
-          assert.equal(code, 0)
-          done()
-        })
-      }).timeout(50000)
+      const reportMethods = ['agentless', 'evp proxy']
 
       reportMethods.forEach((reportMethod) => {
         context(`reporting via ${reportMethod}`, () => {
@@ -123,112 +97,134 @@ versions.forEach(version => {
             isAgentless = reportMethod === 'agentless'
             envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
           })
-          it('can run and report tests', (done) => {
-            receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
+          const runModes = ['serial']
 
-              const testSessionEvent = events.find(event => event.type === 'test_session_end')
-              const testModuleEvent = events.find(event => event.type === 'test_module_end')
-              const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-              const testEvents = events.filter(event => event.type === 'test')
+          if (version !== '7.0.0') { // only on latest or 9 if node is old
+            runModes.push('parallel')
+          }
 
-              const stepEvents = events.filter(event => event.type === 'span')
+          runModes.forEach((runMode) => {
+            it(`(${runMode}) can run and report tests`, (done) => {
+              const runCommand = runMode === 'parallel' ? parallelModeCommand : runTestsCommand
 
-              const { content: testSessionEventContent } = testSessionEvent
-              const { content: testModuleEventContent } = testModuleEvent
+              const receiverPromise = receiver
+                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                  const events = payloads.flatMap(({ payload }) => payload.events)
 
-              assert.exists(testSessionEventContent.test_session_id)
-              assert.exists(testSessionEventContent.meta[TEST_COMMAND])
-              assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
-              assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
-              assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
+                  const testSessionEvent = events.find(event => event.type === 'test_session_end')
+                  const testModuleEvent = events.find(event => event.type === 'test_module_end')
+                  const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+                  const testEvents = events.filter(event => event.type === 'test')
 
-              assert.exists(testModuleEventContent.test_session_id)
-              assert.exists(testModuleEventContent.test_module_id)
-              assert.exists(testModuleEventContent.meta[TEST_COMMAND])
-              assert.exists(testModuleEventContent.meta[TEST_MODULE])
-              assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
-              assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
-              assert.equal(
-                testModuleEventContent.test_session_id.toString(10),
-                testSessionEventContent.test_session_id.toString(10)
+                  const stepEvents = events.filter(event => event.type === 'span')
+
+                  const { content: testSessionEventContent } = testSessionEvent
+                  const { content: testModuleEventContent } = testModuleEvent
+
+                  if (runMode === 'parallel') {
+                    assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
+                  }
+
+                  assert.exists(testSessionEventContent.test_session_id)
+                  assert.exists(testSessionEventContent.meta[TEST_COMMAND])
+                  assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
+                  assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
+                  assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
+
+                  assert.exists(testModuleEventContent.test_session_id)
+                  assert.exists(testModuleEventContent.test_module_id)
+                  assert.exists(testModuleEventContent.meta[TEST_COMMAND])
+                  assert.exists(testModuleEventContent.meta[TEST_MODULE])
+                  assert.equal(testModuleEventContent.resource.startsWith('test_module.'), true)
+                  assert.equal(testModuleEventContent.meta[TEST_STATUS], 'fail')
+                  assert.equal(
+                    testModuleEventContent.test_session_id.toString(10),
+                    testSessionEventContent.test_session_id.toString(10)
+                  )
+
+                  assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
+                    `test_suite.${featuresPath}farewell.feature`,
+                    `test_suite.${featuresPath}greetings.feature`
+                  ])
+                  assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+                    'pass',
+                    'fail'
+                  ])
+
+                  testSuiteEvents.forEach(({
+                    content: {
+                      meta,
+                      test_suite_id: testSuiteId,
+                      test_module_id: testModuleId,
+                      test_session_id: testSessionId
+                    }
+                  }) => {
+                    assert.exists(meta[TEST_COMMAND])
+                    assert.exists(meta[TEST_MODULE])
+                    assert.exists(testSuiteId)
+                    assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+                    assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                  })
+
+                  assert.includeMembers(testEvents.map(test => test.content.resource), [
+                    `${featuresPath}farewell.feature.Say farewell`,
+                    `${featuresPath}greetings.feature.Say greetings`,
+                    `${featuresPath}greetings.feature.Say yeah`,
+                    `${featuresPath}greetings.feature.Say yo`,
+                    `${featuresPath}greetings.feature.Say skip`
+                  ])
+                  assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+                    'pass',
+                    'pass',
+                    'pass',
+                    'fail',
+                    'skip'
+                  ])
+
+                  testEvents.forEach(({
+                    content: {
+                      meta,
+                      test_suite_id: testSuiteId,
+                      test_module_id: testModuleId,
+                      test_session_id: testSessionId
+                    }
+                  }) => {
+                    assert.exists(meta[TEST_COMMAND])
+                    assert.exists(meta[TEST_MODULE])
+                    assert.exists(testSuiteId)
+                    assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+                    assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+                    assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
+                    // Can read DD_TAGS
+                    assert.propertyVal(meta, 'test.customtag', 'customvalue')
+                    assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
+                    if (runMode === 'parallel') {
+                      assert.propertyVal(meta, CUCUMBER_IS_PARALLEL, 'true')
+                    }
+                  })
+
+                  stepEvents.forEach(stepEvent => {
+                    assert.equal(stepEvent.content.name, 'cucumber.step')
+                    assert.property(stepEvent.content.meta, 'cucumber.step')
+                  })
+                }, 5000)
+
+              childProcess = exec(
+                runCommand,
+                {
+                  cwd,
+                  env: {
+                    ...envVars,
+                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                  },
+                  stdio: 'pipe'
+                }
               )
 
-              assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
-                `test_suite.${featuresPath}farewell.feature`,
-                `test_suite.${featuresPath}greetings.feature`
-              ])
-              assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-                'pass',
-                'fail'
-              ])
-
-              testSuiteEvents.forEach(({
-                content: {
-                  meta,
-                  test_suite_id: testSuiteId,
-                  test_module_id: testModuleId,
-                  test_session_id: testSessionId
-                }
-              }) => {
-                assert.exists(meta[TEST_COMMAND])
-                assert.exists(meta[TEST_MODULE])
-                assert.exists(testSuiteId)
-                assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-                assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+              childProcess.on('exit', () => {
+                receiverPromise.then(() => done()).catch(done)
               })
-
-              assert.includeMembers(testEvents.map(test => test.content.resource), [
-                `${featuresPath}farewell.feature.Say farewell`,
-                `${featuresPath}greetings.feature.Say greetings`,
-                `${featuresPath}greetings.feature.Say yeah`,
-                `${featuresPath}greetings.feature.Say yo`,
-                `${featuresPath}greetings.feature.Say skip`
-              ])
-              assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-                'pass',
-                'pass',
-                'pass',
-                'fail',
-                'skip'
-              ])
-
-              testEvents.forEach(({
-                content: {
-                  meta,
-                  test_suite_id: testSuiteId,
-                  test_module_id: testModuleId,
-                  test_session_id: testSessionId
-                }
-              }) => {
-                assert.exists(meta[TEST_COMMAND])
-                assert.exists(meta[TEST_MODULE])
-                assert.exists(testSuiteId)
-                assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-                assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-                assert.equal(meta[TEST_SOURCE_FILE].startsWith('ci-visibility/features'), true)
-                // Can read DD_TAGS
-                assert.propertyVal(meta, 'test.customtag', 'customvalue')
-                assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
-              })
-
-              stepEvents.forEach(stepEvent => {
-                assert.equal(stepEvent.content.name, 'cucumber.step')
-                assert.property(stepEvent.content.meta, 'cucumber.step')
-              })
-            }, 5000).then(() => done()).catch(done)
-
-            childProcess = exec(
-              runTestsCommand,
-              {
-                cwd,
-                env: {
-                  ...envVars,
-                  DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
-                },
-                stdio: 'pipe'
-              }
-            )
+            })
           })
           context('intelligent test runner', () => {
             it('can report git metadata', (done) => {
@@ -809,7 +805,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   const newTests = tests.filter(test =>
@@ -862,7 +858,7 @@ versions.forEach(version => {
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
 
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
                   const newTests = tests.filter(test =>
@@ -914,7 +910,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   tests.forEach(test => {
@@ -971,7 +967,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED, 'true')
+                  assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   const skippedNewTest = tests.filter(test =>
@@ -1015,7 +1011,7 @@ versions.forEach(version => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_IS_ENABLED)
+                  assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
                   const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
                   assert.equal(tests.length, 6)

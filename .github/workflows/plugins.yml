@@ -55,7 +55,7 @@ jobs:
           majorVersion=$(echo "$version" | cut -d '.' -f 1)
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
-      - name: Install dependencies and run tests 
+      - name: Install dependencies and run tests
         if: env.MAJOR_VERSION == '3'
         run: |
           apt-get update && \
@@ -95,7 +95,7 @@ jobs:
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
-      - name: Install dependencies and run tests 
+      - name: Install dependencies and run tests
         if: env.MAJOR_VERSION == '4'
         run: |
           yarn install --ignore-engines
@@ -139,7 +139,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Install dependencies and run tests 
+      - name: Install dependencies and run tests
         if: env.MAJOR_VERSION >= '5'
         run: |
           yarn install --ignore-engines
@@ -227,7 +227,7 @@ jobs:
       localstack:
         image: localstack/localstack:3.0.2
         env:
-          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda
+          LOCALSTACK_SERVICES: dynamodb,kinesis,s3,sqs,sns,redshift,route53,logs,serverless,lambda,stepfunctions,events
           EXTRA_CORS_ALLOWED_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           EXTRA_CORS_EXPOSE_HEADERS: x-amz-request-id,x-amzn-requestid,x-amz-id-2
           AWS_DEFAULT_REGION: us-east-1

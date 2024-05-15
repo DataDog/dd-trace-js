@@ -4,7 +4,12 @@ const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const tracer = require('../../dd-trace')
 
-if (process.env.DD_TRACE_OTEL_ENABLED) {
+const otelSdkEnabled = process.env.DD_TRACE_OTEL_ENABLED ||
+process.env.OTEL_SDK_DISABLED
+  ? !process.env.OTEL_SDK_DISABLED
+  : undefined
+
+if (otelSdkEnabled) {
   addHook({
     name: '@opentelemetry/sdk-trace-node',
     file: 'build/src/NodeTracerProvider.js',

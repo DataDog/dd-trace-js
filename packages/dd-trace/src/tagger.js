@@ -2,7 +2,13 @@
 
 const log = require('./log')
 
-function add (carrier, keyValuePairs) {
+const otelTagMap = {
+  'deployment.environment': 'env',
+  'service.name': 'service',
+  'service.version': 'version'
+}
+
+function add (carrier, keyValuePairs, parseOtelTags = false) {
   if (!carrier || !keyValuePairs) return
 
   if (Array.isArray(keyValuePairs)) {
@@ -13,11 +19,15 @@ function add (carrier, keyValuePairs) {
     if (typeof keyValuePairs === 'string') {
       const segments = keyValuePairs.split(',')
       for (const segment of segments) {
-        const separatorIndex = segment.indexOf(':')
+        const separatorIndex = parseOtelTags ? segment.indexOf('=') : segment.indexOf(':')
         if (separatorIndex === -1) continue
 
-        const key = segment.slice(0, separatorIndex)
+        let key = segment.slice(0, separatorIndex)
         const value = segment.slice(separatorIndex + 1)
+
+        if (parseOtelTags && key in otelTagMap) {
+          key = otelTagMap[key]
+        }
 
         carrier[key.trim()] = value.trim()
       }

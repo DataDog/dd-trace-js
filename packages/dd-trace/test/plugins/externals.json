@@ -31,6 +31,10 @@
       "versions": [">=3"]
     },
     {
+      "name": "@aws-sdk/client-sfn",
+      "versions": [">=3"]
+    },
+    {
       "name": "@aws-sdk/client-sns",
       "versions": [">=3"]
     },
@@ -241,6 +245,12 @@
     {
       "name": "ldapjs-promise",
       "versions": [">=2"]
+    }
+  ],
+  "lodash": [
+    {
+      "name": "lodash",
+      "versions": [">=4"]
     }
   ],
   "mariadb": [

@@ -224,13 +224,19 @@ class TextMapPropagator {
         case 'tracecontext':
           spanContext = this._extractTraceparentContext(carrier)
           break
-        case 'b3': // TODO: should match "b3 single header" in next major
-        case 'b3multi':
-          spanContext = this._extractB3MultiContext(carrier)
-          break
+        case 'b3' && this
+          ._config
+          .tracePropagationStyle
+          .otelPropagators: // TODO: should match "b3 single header" in next major
         case 'b3 single header': // TODO: delete in major after singular "b3"
           spanContext = this._extractB3SingleContext(carrier)
           break
+        case 'b3':
+        case 'b3multi':
+          spanContext = this._extractB3MultiContext(carrier)
+          break
+        default:
+          log.warn(`Unknown propagation style: ${extractor}`)
       }
 
       if (spanContext !== null) {
