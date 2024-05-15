@@ -99,18 +99,7 @@ class Tracer extends NoopProxy {
       const ssiTelemetry = new SSITelemetry(config.profiling)
       ssiTelemetry.start()
       if (config.profiling.enabled) {
-        // do not stop tracer initialization if the profiler fails to be imported
-        try {
-          const profiler = require('./profiler')
-          this._profilerStarted = profiler.start(config)
-        } catch (e) {
-          log.error(e)
-          telemetryLog.publish({
-            message: e.message,
-            level: 'ERROR',
-            stack_trace: e.stack
-          })
-        }
+        this._profilerStarted = this._startProfiler(config)
       } else if (ssiTelemetry.enabled()) {
         require('./profiling/ssi-telemetry-mock-profiler').start(config)
       }
@@ -136,6 +125,22 @@ class Tracer extends NoopProxy {
     }
 
     return this
+  }
+
+  _startProfiler (config) {
+    // do not stop tracer initialization if the profiler fails to be imported
+    try {
+      return require('./profiler').start(config)
+    } catch (e) {
+      log.error(e)
+      if (telemetryLog.hasSubscribers) {
+        telemetryLog.publish({
+          message: e.message,
+          level: 'ERROR',
+          stack_trace: e.stack
+        })
+      }
+    }
   }
 
   _enableOrDisableTracing (config) {
