@@ -12,16 +12,11 @@ module.exports = {
     // Copied from packages/dd-trace/src/profiler.js
     const flushInterval = coalesce(config.interval, Number(DD_PROFILING_UPLOAD_PERIOD) * 1000, 65 * 1000)
 
-    function scheduleProfileSubmit () {
-      timerId = setTimeout(emitProfileSubmit, flushInterval)
-    }
-
-    function emitProfileSubmit () {
+    timerId = setTimeout(() => {
       profileSubmittedChannel.publish()
-      scheduleProfileSubmit()
-    }
-
-    scheduleProfileSubmit()
+      timerId.refresh()
+    }, flushInterval)
+    timerId.unref()
   },
 
   stop: () => {
