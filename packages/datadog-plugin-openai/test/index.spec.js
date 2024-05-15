@@ -5,6 +5,7 @@ const Path = require('path')
 const { expect } = require('chai')
 const semver = require('semver')
 const nock = require('nock')
+const { ReadableStream } = require('stream/web')
 const sinon = require('sinon')
 const { spawn } = require('child_process')
 
@@ -12,11 +13,8 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
-const { DD_MAJOR } = require('../../../version')
 
 const tracerRequirePath = '../../dd-trace'
-
-const VERSIONS_TO_TEST = DD_MAJOR >= 4 ? '>=3' : '>=3 <4'
 
 describe('Plugin', () => {
   let openai
@@ -26,7 +24,7 @@ describe('Plugin', () => {
   let realVersion
 
   describe('openai', () => {
-    withVersions('openai', 'openai', VERSIONS_TO_TEST, version => {
+    withVersions('openai', 'openai', version => {
       const moduleRequirePath = `../../../versions/openai@${version}`
 
       beforeEach(() => {
@@ -2925,6 +2923,112 @@ describe('Plugin', () => {
               prompt: 'greeting',
               file: 'guten-tag.m4a'
             })
+          })
+        })
+      }
+
+      if (semver.intersects('>4.1.0', version)) {
+        // streamed responses
+        describe('streamed responses', () => {
+          let scope
+
+          function createOpenAiResponseStream (content) {
+            const baseAttrs = {
+              id: 'chatcmpl-123',
+              object: 'chat.completion.chunk',
+              created: Date.now(),
+              model: 'gpt-3.5-turbo-0125',
+              system_fingerprint: 'fp_44709d6fcb'
+            }
+
+            // Split string into chunks of 4 characters
+            const contentChunks = content.match(/.{1,4}/g)
+
+            const contentStreamChunks = contentChunks.map((content) => ({
+              ...baseAttrs,
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    content
+                  },
+                  logprobs: null,
+                  finish_reason: null
+                }
+              ]
+            }))
+
+            const streamChunks = [
+              {
+                ...baseAttrs,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {
+                      role: 'assistant'
+                    },
+                    logprobs: null,
+                    finish_reason: 'stop'
+                  }
+                ]
+              },
+              ...contentStreamChunks,
+              {
+                ...baseAttrs,
+                choices: [
+                  {
+                    index: 0,
+                    delta: {},
+                    logprobs: null,
+                    finish_reason: 'stop'
+                  }
+                ]
+              }
+            ]
+
+            const encoder = new TextEncoder()
+
+            return new ReadableStream({
+              start (controller) {
+                try {
+                  for (const chunk of streamChunks) {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
+                  }
+                } finally {
+                  controller.close()
+                }
+              }
+            })
+          }
+
+          beforeEach(() => {
+            scope = nock('https://api.openai.com')
+              .post('/v1/chat/completions')
+              .reply(200, createOpenAiResponseStream('This is a streamed response test!'), {
+                Date: 'Fri, 19 May 2023 03:41:25 GMT',
+                'Content-Type': 'text/event-stream',
+                'Cache-Control': 'no-cache',
+                Connection: 'keep-alive',
+                'openai-organization': 'kill-9',
+                'openai-processing-ms': '520',
+                'openai-version': '2020-10-01'
+              })
+          })
+
+          afterEach(() => {
+            nock.removeInterceptor(scope)
+            scope.done()
+          })
+
+          it.only('makes a successful chat completion call', async () => {
+            const stream = await openai.chat.completions.create({
+              model: 'gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+              temperature: 0.5,
+              stream: true
+            })
+
+            // this currently doesn't work...
           })
         })
       }
