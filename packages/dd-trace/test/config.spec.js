@@ -307,6 +307,7 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
       { name: 'site', value: 'datadoghq.com', origin: 'default' },
@@ -325,7 +326,6 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: false, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
-      { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'url', value: undefined, origin: 'default' },
       { name: 'version', value: '', origin: 'default' }
     ])
