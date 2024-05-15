@@ -56,7 +56,7 @@ function Hook (modules, options, onrequire) {
   if (patchedRequire) return
 
   patchedRequire = Module.prototype.require = function (request) {
-    if (passthroughs.has(srequest)) return origRequire.appli(this, arguments)
+    if (passthroughs.has(request)) return origRequire.apply(this, arguments)
     const filename = Module._resolveFilename(request, this)
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
