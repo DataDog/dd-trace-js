@@ -5,6 +5,7 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 
 const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
@@ -141,6 +142,102 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
+function addStreamedChunk (content, chunk) {
+  return content.choices.map((oldChoice, choiceIdx) => {
+    const newChoice = oldChoice
+    const chunkChoice = chunk.choices[choiceIdx]
+    if (!oldChoice.finish_reason) {
+      newChoice.finish_reason = chunkChoice.finish_reason
+    }
+
+    // delta exists on chat completions
+    const delta = chunkChoice.delta
+
+    if (delta) {
+      const content = delta.content
+      if (content) {
+        if (newChoice.delta.content) { // we don't want to append to undefined
+          newChoice.delta.content += content
+        } else {
+          newChoice.delta.content = content
+        }
+      }
+    } else {
+      const text = chunkChoice.text
+      if (text) {
+        if (newChoice.text) {
+          newChoice.text += text
+        } else {
+          newChoice.text = text
+        }
+      }
+    }
+
+    // tools only exist on chat completions
+    const tools = delta && chunkChoice.delta.tool_calls
+
+    if (tools) {
+      newChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
+        const oldTool = oldChoice.delta.tool_calls[toolIdx]
+
+        if (oldTool) {
+          oldTool.function.arguments += newTool.function.arguments
+        }
+
+        return oldTool
+      })
+    }
+
+    return newChoice
+  })
+}
+
+function wrapStreamIterator (body, response, options) {
+  let content // the total build up of the response
+  return function (itr) {
+    return function () {
+      const iterator = itr.apply(this, arguments)
+      shimmer.wrap(iterator, 'next', next => function () {
+        return next.apply(this, arguments)
+          .then(res => {
+            const { done, value: chunk } = res
+
+            if (!content) {
+              content = chunk
+            } else if (chunk) {
+              if (chunk instanceof Buffer) {
+                // we need to skip adding the chunk I think...
+              } else {
+                content.choices = addStreamedChunk(content, chunk)
+              }
+            }
+
+            if (done) {
+              finishCh.publish({
+                headers: response.headers,
+                body: content,
+                path: response.url,
+                method: options.method
+              })
+            }
+
+            return res
+          })
+          .catch(err => {
+            errorCh.publish({ err })
+
+            throw err
+          })
+          .finally(() => {
+            shimmer.unwrap(body, 'iterator')
+            shimmer.unwrap(iterator, 'next')
+          })
+      })
+      return iterator
+    }
+  }
+}
+
 for (const shim of V4_PACKAGE_SHIMS) {
   const { file, targetClass, baseResource, methods } = shim
   addHook({ name: 'openai', file, versions: shim.versions || ['>=4'] }, exports => {
@@ -151,6 +248,8 @@ for (const shim of V4_PACKAGE_SHIMS) {
         if (!startCh.hasSubscribers) {
           return methodFn.apply(this, arguments)
         }
+
+        const stream = arguments[0].stream
 
         const client = this._client || this.client
 
@@ -170,12 +269,29 @@ for (const shim of V4_PACKAGE_SHIMS) {
             // the original response is wrapped in a promise, so we need to unwrap it
             .then(body => Promise.all([this.responsePromise, body]))
             .then(([{ response, options }, body]) => {
-              finishCh.publish({
-                headers: response.headers,
-                body,
-                path: response.url,
-                method: options.method
-              })
+              if (stream) {
+                if (body.iterator) {
+                  shimmer.wrap(body, 'iterator', wrapStreamIterator(body, response, options))
+                } else {
+                  log.warn('Streamed responses using Buffers are not supported')
+                  finishCh.publish({
+                    headers: response.headers,
+                    body: undefined,
+                    path: response.url,
+                    method: options.method
+                  })
+                  // shimmer.wrap(
+                  //   body.response.body, Symbol.asyncIterator, wrapStreamIterator(body, response, options)
+                  // )
+                }
+              } else {
+                finishCh.publish({
+                  headers: response.headers,
+                  body,
+                  path: response.url,
+                  method: options.method
+                })
+              }
 
               return body
             })
