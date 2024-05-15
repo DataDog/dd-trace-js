@@ -79,6 +79,7 @@ class SSITelemetry {
       // tracer is initialized early in the process lifetime.
       setTimeout(() => {
         this.shortLived = false
+        this._maybeTriggered()
       }, this.shortLivedThreshold).unref()
 
       this._onSpanCreated = this._onSpanCreated.bind(this)
@@ -93,8 +94,31 @@ class SSITelemetry {
     }
   }
 
+  onHeuristicsTriggered (callback) {
+    switch (typeof callback) {
+      case 'undefined':
+      case 'function':
+        this.triggeredCallback = callback
+        process.nextTick(() => {
+          this._maybeTriggered()
+        })
+        break
+      default:
+        throw new TypeError('callback must be a function or undefined')
+    }
+  }
+
+  _maybeTriggered () {
+    if (!this.shortLived && !this.noSpan) {
+      if (typeof this.triggeredCallback === 'function') {
+        this.triggeredCallback.call(null)
+      }
+    }
+  }
+
   _onSpanCreated () {
     this.noSpan = false
+    this._maybeTriggered()
     dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
   }
 

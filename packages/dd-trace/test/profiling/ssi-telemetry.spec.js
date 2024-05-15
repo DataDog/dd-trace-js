@@ -169,15 +169,29 @@ function testSpan (enablementChoice) {
 }
 
 function testLongLived (enablementChoice) {
-  return executeTelemetryEnabledScenario(_ => {
+  let callbackInvoked = false
+  return executeTelemetryEnabledScenario(telemetry => {
+    telemetry.onTriggered(() => {
+      callbackInvoked = true
+      telemetry.onTriggered()
+    })
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 1, true, enablementChoice, 'no_span', true)
+  }, 1, true, enablementChoice, 'no_span', true).then(() => {
+    expect(callbackInvoked).to.equal(false)
+  })
 }
 
 function testTriggered (enablementChoice) {
+  let callbackInvoked = false
   return executeTelemetryEnabledScenario(telemetry => {
+    telemetry.onTriggered(() => {
+      callbackInvoked = true
+      telemetry.onTriggered()
+    })
     dc.channel('dd-trace:span:start').publish()
     expect(telemetry.noSpan).to.equal(false)
     dc.channel('datadog:profiling:profile-submitted').publish()
-  }, 1, true, enablementChoice, 'triggered', true)
+  }, 1, true, enablementChoice, 'triggered', true).then(() => {
+    expect(callbackInvoked).to.equal(true)
+  })
 }
