@@ -1210,6 +1210,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [child_process](https://nodejs.org/api/child_process.html) module.
+     */
+    interface child_process extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [connect](https://github.com/senchalabs/connect) module.
      */
     interface connect extends HttpServer {}
