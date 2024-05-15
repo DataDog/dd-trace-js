@@ -206,7 +206,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   await fs.mkdir(folder)
   await exec(`npm pack --pack-destination ${folder}`) // TODO cache this
 
-  const out = path.join(folder, fs.readdirSync(folder).find(f => f.endsWith('.tgz')[0]))
+  const out = path.join(folder, (await fs.readdir(folder)).find(f => f.endsWith('.tgz')))
   const allDependencies = [`file:${out}`].concat(dependencies)
   await exec(`npm install ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
