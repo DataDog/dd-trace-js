@@ -41,7 +41,7 @@ describe('Ritm', () => {
 
   it('should fall back to monkey patched module', () => {
     Module.prototype.require = new Proxy(Module.prototype.require, {
-      apply(target, thisArg, argArray) {
+      apply (target, thisArg, argArray) {
         if (argArray[0] === '@azure/functions-core') {
           return {
             version: '1.0.0',
@@ -53,7 +53,7 @@ describe('Ritm', () => {
       }
     })
 
-    const httpHook = new Hook(['http'], function onRequire(exports, name, basedir) {
+    const httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
