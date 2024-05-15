@@ -13,7 +13,7 @@ describe('check_require_cache', () => {
   }
 
   it('should be no warnings when tracer is loaded first', (done) => {
-    exec('node ./check_require_cache/good-order.js', opts, (error, stdout, stderr) => {
+    exec(`${process.execPath} ./check_require_cache/good-order.js`, opts, (error, stdout, stderr) => {
       if (error) {
         return done(error)
       }
@@ -31,7 +31,7 @@ describe('check_require_cache', () => {
   })
 
   it('should find warnings when tracer loaded late', (done) => {
-    exec('node ./check_require_cache/bad-order.js', opts, (error, stdout, stderr) => {
+    exec(`${process.execPath} ./check_require_cache/bad-order.js`, opts, (error, stdout, stderr) => {
       if (error) {
         return done(error)
       }
