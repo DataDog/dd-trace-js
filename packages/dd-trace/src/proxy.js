@@ -100,8 +100,17 @@ class Tracer extends NoopProxy {
       ssiTelemetry.start()
       if (config.profiling.enabled) {
         this._profilerStarted = this._startProfiler(config)
-      } else if (ssiTelemetry.enabled()) {
-        require('./profiling/ssi-telemetry-mock-profiler').start(config)
+      } else if (config.profiling.ssi) {
+        const mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
+        mockProfiler.start(config)
+
+        if (config.profiling.heuristicsEnabled) {
+          ssiTelemetry.onHeuristicsTriggered(() => {
+            mockProfiler.stop()
+            this._startProfiler(config)
+            ssiTelemetry.onHeuristicsTriggered()
+          })
+        }
       }
       if (!this._profilerStarted) {
         this._profilerStarted = Promise.resolve(false)

@@ -158,8 +158,14 @@ class SSITelemetry {
     this._profileCount = profilersNamespace.count('ssi_heuristic.number_of_profiles', tags)
     this._runtimeIdCount = profilersNamespace.count('ssi_heuristic.number_of_runtime_id', tags)
 
-    if (!this._emittedRuntimeId && decision[0] === 'triggered') {
-      // Tags won't change anymore, so we can emit the runtime ID metric now
+    if (
+      !this._emittedRuntimeId &&
+      decision[0] === 'triggered' &&
+      // When enablement choice is SSI_ENABLED, hasSentProfiles can transition from false to true when the
+      // profiler gets started and the first profile is submitted, so we have to wait for it.
+      (this.enablementChoice !== EnablementChoice.SSI_ENABLED || this.hasSentProfiles)
+    ) {
+      // Tags won't change anymore, so we can emit the runtime ID metric now.
       this._emittedRuntimeId = true
       this._runtimeIdCount.inc()
     }

@@ -55,7 +55,7 @@ class Profiler extends EventEmitter {
     if (this._enabled) return true
 
     const config = this._config = new Config(options)
-    if (!config.enabled) return false
+    if (!config.enabled && !config.heuristicsEnabled) return false
 
     this._logger = config.logger
     this._enabled = true
