@@ -2,7 +2,6 @@
 
 const telemetryMetrics = require('../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
-const performance = require('perf_hooks').performance
 const dc = require('dc-polyfill')
 const { isTrue, isFalse } = require('../util')
 
@@ -71,6 +70,7 @@ class SSITelemetry {
 
     this.hasSentProfiles = false
     this.noSpan = true
+    this.shortLived = true
   }
 
   enabled () {
@@ -83,7 +83,9 @@ class SSITelemetry {
       // reference point, but the tracer initialization point is more relevant, as we couldn't be
       // collecting profiles earlier anyway. The difference is not particularly significant if the
       // tracer is initialized early in the process lifetime.
-      this.startTime = performance.now()
+      setTimeout(() => {
+        this.shortLived = false
+      }, this.shortLivedThreshold).unref()
 
       this._onSpanCreated = this._onSpanCreated.bind(this)
       this._onProfileSubmitted = this._onProfileSubmitted.bind(this)
@@ -121,7 +123,7 @@ class SSITelemetry {
     if (this.noSpan) {
       decision.push('no_span')
     }
-    if (performance.now() - this.startTime < this.shortLivedThreshold) {
+    if (this.shortLived) {
       decision.push('short_lived')
     }
     if (decision.length === 0) {

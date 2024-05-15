@@ -26,13 +26,13 @@ describe('SSI Telemetry', () => {
   it('should be enabled when SSI is present', () => {
     process.env.DD_INJECTION_ENABLED = 'tracing'
     delete process.env.DD_PROFILING_ENABLED
-    testEnabledTelemetry('not_enabled')
+    return testEnabledTelemetry('not_enabled')
   })
 
   it('should be enabled when SSI is present and profiling is manually enabled', () => {
     process.env.DD_INJECTION_ENABLED = 'tracing'
     process.env.DD_PROFILING_ENABLED = 'true'
-    testEnabledTelemetry('manually_enabled')
+    return testEnabledTelemetry('manually_enabled')
   })
 })
 
@@ -100,12 +100,17 @@ function executeTelemetryEnabledScenario (
   const telemetry = longLived ? new SSITelemetry({ shortLivedThreshold: 2 }) : new SSITelemetry()
   telemetry.start()
   expect(telemetry.enabled()).to.equal(true)
-  if (longLived) {
-    for (const now = new Date().getTime(); new Date().getTime() - now < 3;);
-  }
-  scenario(telemetry)
 
-  createAndCheckMetrics(stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision)
+  function runScenarioAndCheck () {
+    scenario(telemetry)
+    createAndCheckMetrics(stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision)
+  }
+
+  if (longLived) {
+    return new Promise(resolve => setTimeout(resolve, 3)).then(runScenarioAndCheck)
+  } else {
+    runScenarioAndCheck()
+  }
 }
 
 function createAndCheckMetrics (stubs, profileCount, sentProfiles, enablementChoice, heuristicDecision) {
@@ -129,8 +134,7 @@ function testEnabledTelemetry (enablementChoice) {
   testProfilesSent(enablementChoice)
   testMockProfilesSent(enablementChoice)
   testSpan(enablementChoice)
-  testLongLived(enablementChoice)
-  testTriggered(enablementChoice)
+  return testLongLived(enablementChoice).then(() => testTriggered(enablementChoice))
 }
 
 function testNoOp (enablementChoice) {
@@ -160,13 +164,13 @@ function testSpan (enablementChoice) {
 }
 
 function testLongLived (enablementChoice) {
-  executeTelemetryEnabledScenario(_ => {
+  return executeTelemetryEnabledScenario(_ => {
     dc.channel('datadog:profiling:profile-submitted').publish()
   }, 1, true, enablementChoice, 'no_span', true)
 }
 
 function testTriggered (enablementChoice) {
-  executeTelemetryEnabledScenario(telemetry => {
+  return executeTelemetryEnabledScenario(telemetry => {
     dc.channel('dd-trace:span:start').publish()
     expect(telemetry.noSpan).to.equal(false)
     dc.channel('datadog:profiling:profile-submitted').publish()
