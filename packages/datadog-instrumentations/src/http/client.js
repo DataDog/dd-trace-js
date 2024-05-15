@@ -5,6 +5,7 @@
 const url = require('url')
 
 const { AbortController } = require('node-abort-controller')
+const { EventEmitter } = require('events')
 
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -28,6 +29,25 @@ function hookFn (http) {
   return http
 }
 
+// TODO Implement all methods in ClientRequest with noop functions
+class AbortedClientRequest extends EventEmitter {
+  abort () {}
+  cork () {}
+  end () {}
+  destroy () {}
+  flushHeaders () {}
+  getHeader () {}
+  getHeaderNames () {}
+  getHeaders () {}
+  getRawHeaderNames () { return [] }
+  hasHeader () { return false }
+  setHeader () {}
+  setNoDelay () {}
+  setSocketKeepAlive () {}
+  setTimeout () {}
+  uncork () {}
+  write () {}
+}
 function patch (http, methodName) {
   shimmer.wrap(http, methodName, instrumentRequest)
 
@@ -73,11 +93,15 @@ function patch (http, methodName) {
         }
 
         try {
+          let req
           if (abortData.abortController?.signal.aborted) {
-            throw abortData.error || new Error('Aborted')
+            req = new AbortedClientRequest()
+            process.nextTick(() => {
+              req.emit('error', abortData.error || new Error('Aborted'))
+            })
+          } else {
+            req = request.call(this, options, callback)
           }
-
-          const req = request.call(this, options, callback)
           const emit = req.emit
           const setTimeout = req.setTimeout
 
