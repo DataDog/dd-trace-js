@@ -3,7 +3,6 @@
 const telemetryMetrics = require('../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 const dc = require('dc-polyfill')
-const { isTrue, isFalse } = require('../util')
 
 // If the process lived for less than 30 seconds, it's considered short-lived
 const DEFAULT_SHORT_LIVED_THRESHOLD = 30000
@@ -12,17 +11,16 @@ const EnablementChoice = {
   MANUALLY_ENABLED: Symbol('SSITelemetry.EnablementChoice.MANUALLY_ENABLED'),
   SSI_ENABLED: Symbol('SSITelemetry.EnablementChoice.SSI_ENABLED'),
   SSI_NOT_ENABLED: Symbol('SSITelemetry.EnablementChoice.SSI_NOT_ENABLED'),
-  DISABLED: Symbol('SSITelemetry.EnablementChoice.MANUALLY_DISABLED')
+  DISABLED: Symbol('SSITelemetry.EnablementChoice.DISABLED')
 }
 Object.freeze(EnablementChoice)
 
-function getEnablementChoiceFromEnv () {
-  const { DD_PROFILING_ENABLED, DD_INJECTION_ENABLED } = process.env
-  if (DD_INJECTION_ENABLED === undefined || isFalse(DD_PROFILING_ENABLED)) {
+function getEnablementChoiceFromConfig (config) {
+  if (config.ssi === false || config.enabled === false) {
     return EnablementChoice.DISABLED
-  } else if (DD_INJECTION_ENABLED.split(',').includes('profiling')) {
+  } else if (config.heuristicsEnabled === true) {
     return EnablementChoice.SSI_ENABLED
-  } else if (isTrue(DD_PROFILING_ENABLED)) {
+  } else if (config.enabled === true) {
     return EnablementChoice.MANUALLY_ENABLED
   } else {
     return EnablementChoice.SSI_NOT_ENABLED
@@ -55,17 +53,13 @@ function enablementChoiceToTagValue (enablementChoice) {
  * profiling. Note that telemetry is per tracer instance, and each worker thread will have its own instance.
  */
 class SSITelemetry {
-  constructor ({
-    enablementChoice = getEnablementChoiceFromEnv(),
-    shortLivedThreshold = DEFAULT_SHORT_LIVED_THRESHOLD
-  } = {}) {
-    if (!Object.values(EnablementChoice).includes(enablementChoice)) {
-      throw new Error('Invalid enablement choice')
-    }
+  constructor (config) {
+    this.enablementChoice = getEnablementChoiceFromConfig(config)
+
+    const shortLivedThreshold = config.shortLivedThreshold || DEFAULT_SHORT_LIVED_THRESHOLD
     if (typeof shortLivedThreshold !== 'number' || shortLivedThreshold <= 0) {
       throw new Error('Short-lived threshold must be a positive number')
     }
-    this.enablementChoice = enablementChoice
     this.shortLivedThreshold = shortLivedThreshold
 
     this.hasSentProfiles = false

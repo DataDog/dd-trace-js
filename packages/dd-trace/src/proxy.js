@@ -96,7 +96,7 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      const ssiTelemetry = new SSITelemetry()
+      const ssiTelemetry = new SSITelemetry(config.profiling)
       ssiTelemetry.start()
       if (config.profiling.enabled) {
         // do not stop tracer initialization if the profiler fails to be imported

@@ -9,6 +9,7 @@ const telemetryManagerNamespace = sinon.stub()
 telemetryManagerNamespace.returns()
 
 const dc = require('dc-polyfill')
+const Config = require('../../src/config')
 
 describe('SSI Telemetry', () => {
   it('should be disabled without SSI even if the profiler is manually enabled', () => {
@@ -72,7 +73,7 @@ function setupHarness () {
 
 function testDisabledTelemetry () {
   const { stubs, SSITelemetry, EnablementChoice } = setupHarness()
-  const telemetry = new SSITelemetry()
+  const telemetry = new SSITelemetry(new Config().profiling)
   telemetry.start()
   dc.channel('dd-trace:span:start').publish()
   dc.channel('datadog:profiling:profile-submitted').publish()
@@ -97,7 +98,11 @@ function executeTelemetryEnabledScenario (
   longLived = false
 ) {
   const { stubs, SSITelemetry } = setupHarness()
-  const telemetry = longLived ? new SSITelemetry({ shortLivedThreshold: 2 }) : new SSITelemetry()
+  const config = new Config()
+  if (longLived) {
+    config.profiling.shortLivedThreshold = 2
+  }
+  const telemetry = new SSITelemetry(config.profiling)
   telemetry.start()
   expect(telemetry.enabled()).to.equal(true)
 
