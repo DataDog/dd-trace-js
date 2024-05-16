@@ -8,7 +8,10 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
 
-const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
+const {
+  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
+  DD_TRACE_DEBUG = ''
+} = process.env
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -28,7 +31,7 @@ if (!disabledInstrumentations.has('fetch')) {
 const HOOK_SYMBOL = Symbol('hookExportsMap')
 // TODO: make this more efficient
 
-checkRequireCache()
+if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') checkRequireCache()
 
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
