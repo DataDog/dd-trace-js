@@ -549,6 +549,7 @@ class Config {
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
       DD_IAST_TELEMETRY_VERBOSITY,
+      DD_INJECTION_ENABLED,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
@@ -705,7 +706,14 @@ class Config {
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
-    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
+    const hasTelemetryLogsUsingFeatures =
+      isTrue(DD_IAST_ENABLED) ||
+      isTrue(DD_PROFILING_ENABLED) ||
+      (typeof DD_INJECTION_ENABLED === 'string' && DD_INJECTION_ENABLED.split(',').includes('profiling'))
+        ? true
+        : undefined
+    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      hasTelemetryLogsUsingFeatures))
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -786,8 +794,10 @@ class Config {
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
-    this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
-    (options.iastOptions === true || options.iastOptions.enabled === true))
+    const hasTelemetryLogsUsingFeatures =
+      (options.iastOptions && (options.iastOptions === true || options.iastOptions?.enabled === true)) ||
+      (options.profiling && options.profiling === true)
+    this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
