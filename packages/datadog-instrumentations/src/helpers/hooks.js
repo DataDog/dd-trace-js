@@ -66,6 +66,7 @@ module.exports = {
   kafkajs: () => require('../kafkajs'),
   ldapjs: () => require('../ldapjs'),
   'limitd-client': () => require('../limitd-client'),
+  lodash: () => require('../lodash'),
   mariadb: () => require('../mariadb'),
   memcached: () => require('../memcached'),
   'microgateway-core': () => require('../microgateway-core'),
