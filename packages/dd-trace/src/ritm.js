@@ -35,9 +35,7 @@ function Hook (modules, options, onrequire) {
   this.modules = modules
   this.options = options
   this.onrequire = onrequire
-  this._origRequire = Module.prototype.require
-
-  const self = this
+  const _origRequire = Module.prototype.require
 
   if (Array.isArray(modules)) {
     for (const mod of modules) {
@@ -63,7 +61,7 @@ function Hook (modules, options, onrequire) {
     try {
       filename = Module._resolveFilename(request, this)
     } catch (resolveErr) {
-      return self._origRequire.apply(this, arguments)
+      return _origRequire.apply(this, arguments)
     }
 
     const core = filename.indexOf(path.sep) === -1
