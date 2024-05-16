@@ -853,12 +853,12 @@ class Config {
   }
 
   _setArray (obj, name, value) {
-    if (value === null || value === undefined) {
+    if (value == null) {
       return this._setValue(obj, name, null)
     }
 
     if (typeof value === 'string') {
-      value = value && value.split(',')
+      value = value?.split(',')
     }
 
     if (Array.isArray(value)) {
@@ -867,12 +867,12 @@ class Config {
   }
 
   _setSamplingRule (obj, name, value) {
-    if (value === null || value === undefined) {
+    if (value == null) {
       return this._setValue(obj, name, null)
     }
 
     if (typeof value === 'string') {
-      value = value && value.split(',')
+      value = value?.split(',')
     }
 
     if (Array.isArray(value)) {
