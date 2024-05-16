@@ -391,13 +391,13 @@ describe('Telemetry extended heartbeat', () => {
       {
         name: 'sampler.rules', // one of the config names that require a remapping
         value: [
-          { 'service': '*', 'sampling_rate': 1 },
+          { service: '*', sampling_rate: 1 },
           {
-            'service': 'svc*',
-            'resource': '*abc',
-            'name': 'op-??',
-            'tags': { 'tag-a': 'ta-v*', 'tag-b': 'tb-v?', 'tag-c': 'tc-v' },
-            'sample_rate': 0.5
+            service: 'svc*',
+            resource: '*abc',
+            name: 'op-??',
+            tags: { 'tag-a': 'ta-v*', 'tag-b': 'tb-v?', 'tag-c': 'tc-v' },
+            sample_rate: 0.5
           }
         ],
         origin: 'code'
