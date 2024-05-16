@@ -960,7 +960,7 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value?.split(',')
+      value = value.split(',')
     }
 
     if (Array.isArray(value)) {
@@ -974,7 +974,7 @@ class Config {
     }
 
     if (typeof value === 'string') {
-      value = value?.split(',')
+      value = value.split(',')
     }
 
     if (Array.isArray(value)) {
