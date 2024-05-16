@@ -16,7 +16,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -339,7 +339,7 @@ class Config {
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-    this.isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
+    this.isAzureFunction = getIsAzureFunction()
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
     this.installSignature = {
       id: DD_INSTRUMENTATION_INSTALL_ID,
@@ -417,8 +417,8 @@ class Config {
   _isInServerlessEnvironment () {
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const isGCPFunction = getIsGCPFunction()
-    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-    return inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
+    const isAzureFunction = getIsAzureFunction()
+    return inAWSLambda || isGCPFunction || isAzureFunction
   }
 
   // for _merge to work, every config value must have a default value
@@ -877,7 +877,7 @@ class Config {
     return coalesce(
       this.options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      getIsGCPFunction() || getIsAzureFunctionConsumptionPlan()
+      getIsGCPFunction() || getIsAzureFunction()
     )
   }
 
