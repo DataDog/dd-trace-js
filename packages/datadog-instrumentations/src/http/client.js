@@ -11,6 +11,7 @@ const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const log = require('../../../dd-trace/src/log')
+const { storage } = require('../../../datadog-core')
 
 const startChannel = channel('apm:http:client:request:start')
 const finishChannel = channel('apm:http:client:request:finish')
@@ -29,25 +30,39 @@ function hookFn (http) {
   return http
 }
 
-// TODO Implement all methods in ClientRequest with noop functions
-class AbortedClientRequest extends EventEmitter {
-  abort () {}
-  cork () {}
-  end () {}
-  destroy () {}
-  flushHeaders () {}
-  getHeader () {}
-  getHeaderNames () {}
-  getHeaders () {}
-  getRawHeaderNames () { return [] }
-  hasHeader () { return false }
-  setHeader () {}
-  setNoDelay () {}
-  setSocketKeepAlive () {}
-  setTimeout () {}
-  uncork () {}
-  write () {}
+let clientRequest
+
+function noop () {}
+
+function createAbortedClientRequest (http) {
+  if (!clientRequest) {
+    const store = storage.getStore()
+    storage.enterWith({ noop: true })
+
+    clientRequest = http.get('<invalid-url>')
+    clientRequest.on('error', noop)
+
+    storage.enterWith(store)
+  }
+
+  const target = new EventEmitter()
+
+  // TODO dig into clientRequest object to find what methods/properties should return something
+  return new Proxy(target, {
+    get: (target, name, receiver) => {
+      if (target[name] !== undefined) {
+        return target[name]
+      }
+
+      if (typeof clientRequest[name] === 'function') {
+        return noop
+      } else {
+        return undefined
+      }
+    }
+  })
 }
+
 function patch (http, methodName) {
   shimmer.wrap(http, methodName, instrumentRequest)
 
@@ -95,7 +110,7 @@ function patch (http, methodName) {
         try {
           let req
           if (abortData.abortController?.signal.aborted) {
-            req = new AbortedClientRequest()
+            req = createAbortedClientRequest(http)
             process.nextTick(() => {
               req.emit('error', abortData.error || new Error('Aborted'))
             })
