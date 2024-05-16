@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 
-const extractPackageAndModulePath = require('../../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
+const extractPackageAndModulePath = require('./utils/src/extract-package-and-module-path')
 
 /**
  * The lowest hanging fruit to debug an app that isn't tracing

@@ -6,6 +6,7 @@ const semver = require('semver')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
+const checkRequireCache = require('../check_require_cache')
 
 const { DD_TRACE_DISABLED_INSTRUMENTATIONS = '' } = process.env
 
@@ -26,6 +27,8 @@ if (!disabledInstrumentations.has('fetch')) {
 
 const HOOK_SYMBOL = Symbol('hookExportsMap')
 // TODO: make this more efficient
+
+checkRequireCache()
 
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue

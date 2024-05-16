@@ -1,7 +1,5 @@
 'use strict'
 
-require('./setup/tap')
-const { expect } = require('chai')
 const { exec } = require('node:child_process')
 
 describe('check_require_cache', () => {
