@@ -386,7 +386,6 @@ describe('Telemetry extended heartbeat', () => {
     telemetry.updateConfig(changeNeedingNameRemapping, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigList)
-    done()
 
     const samplingRule = [
       {
@@ -408,16 +407,15 @@ describe('Telemetry extended heartbeat', () => {
       expectedConfigList.concat([
         {
           name: 'DD_TRACE_SAMPLING_RULES',
-          value: `["{service:*,sampling_rate:1}",
-          "{service:svc*,resource:*abc,name:op-??,tags:{tag-a:ta-v*,tag-b:tb-v?,tag-c:tc-v},sample_rate:0.5}"]`,
+          value:
+          // eslint-disable-next-line max-len
+          `["{service:*,sampling_rate:1}","{service:svc*,resource:*abc,name:op-??,tags:{tag-a:ta-v*,tag-b:tb-v?,tag-c:tc-v},sample_rate:0.5}"]`,
           origin: 'code'
         }
       ])
     telemetry.updateConfig(samplingRule, config)
     clock.tick(86400000)
     expect(configuration).to.deep.equal(expectedConfigListWithSamplingRules)
-    console.log(1, expectedConfigList)
-    console.log(2, configuration)
     done()
   })
 })
