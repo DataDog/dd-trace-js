@@ -4,7 +4,7 @@
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-const extractPackageAndModulePath = require('../datadog-core/src/utils/src/extract-package-and-module-path')
+const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
   hook()
