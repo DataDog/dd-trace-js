@@ -5,6 +5,8 @@ const Module = require('module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
 
+const origRequire = Module.prototype.require
+
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -52,17 +54,18 @@ function Hook (modules, options, onrequire) {
   if (patchedRequire) return
 
   patchedRequire = Module.prototype.require = function (request) {
-    let filename
     /*
     If resolving the filename for a `require(...)` fails, defer to the wrapped
     require implementation rather than failing right away. This allows a
     possibly monkey patched `require` to work.
     */
+    let filename
     try {
       filename = Module._resolveFilename(request, this)
     } catch (resolveErr) {
       return self._origRequire.apply(this, arguments)
     }
+
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
     // return known patched modules immediately
@@ -80,7 +83,7 @@ function Hook (modules, options, onrequire) {
     const patched = patching[filename]
     if (patched) {
       // If it's already patched, just return it as-is.
-      return self._origRequire.apply(this, arguments)
+      return origRequire.apply(this, arguments)
     } else {
       patching[filename] = true
     }
@@ -93,7 +96,7 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    const exports = self._origRequire.apply(this, arguments)
+    const exports = origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
@@ -158,7 +161,7 @@ function Hook (modules, options, onrequire) {
 }
 
 Hook.reset = function () {
-  Module.prototype.require = this._origRequire
+  Module.prototype.require = origRequire
   patchedRequire = null
   patching = Object.create(null)
   cache = Object.create(null)

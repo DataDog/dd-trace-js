@@ -17,11 +17,13 @@ describe('Ritm', () => {
 
     moduleLoadStartChannel.subscribe(startListener)
     moduleLoadEndChannel.subscribe(endListener)
-    Hook('util')
+    const utilHook = Hook('util')
     require('util')
 
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+
+    utilHook.unhook()
   })
 
   it('should handle module load cycles', () => {
@@ -30,13 +32,16 @@ describe('Ritm', () => {
 
     moduleLoadStartChannel.subscribe(startListener)
     moduleLoadEndChannel.subscribe(endListener)
-    Hook('module-a')
-    Hook('module-b')
+    const aHook = Hook('module-a')
+    const bHook = Hook('module-b')
     const { a } = require('./ritm-tests/module-a')
 
     assert.equal(startListener.callCount, 2)
     assert.equal(endListener.callCount, 2)
     assert.equal(a(), 'Called by AJ')
+
+    aHook.unhook()
+    bHook.unhook()
   })
 
   it('should fall back to monkey patched module', () => {
