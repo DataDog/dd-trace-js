@@ -8,17 +8,17 @@
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark",
     "bench:profiler": "node benchmark/profiler",
-    "bench:e2e": "SERVICES=mongo yarn services && cd benchmark/e2e && node benchmark-run.js --duration=30",
+    "bench:e2e": "SERVICES=mongo npm run services && cd benchmark/e2e && node benchmark-run.js --duration=30",
     "bench:e2e:ci-visibility": "node benchmark/e2e-ci/benchmark-run.js",
-    "type:doc": "cd docs && yarn && yarn build",
-    "type:test": "cd docs && yarn && yarn test",
-    "lint": "node scripts/check_licenses.js && eslint . && yarn audit --groups dependencies",
+    "type:doc": "cd docs && npm install && npm run build",
+    "type:test": "cd docs && npm install && npm test",
+    "lint": "node scripts/check_licenses.js && eslint . && npm audit audit --groups dependencies",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
-    "test": "SERVICES=* yarn services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
+    "test": "SERVICES=* npm run services && mocha --colors --exit --expose-gc 'packages/dd-trace/test/setup/node.js' 'packages/*/test/**/*.spec.js'",
     "test:appsec": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
     "test:appsec:ci": "nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" -- npm run test:appsec",
     "test:appsec:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\"",
-    "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
+    "test:appsec:plugins:ci": "npm run services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
     "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:instrumentations": "mocha --colors -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
@@ -28,7 +28,7 @@
     "test:lambda": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/lambda/**/*.spec.js\"",
     "test:lambda:ci": "nyc --no-clean --include \"packages/dd-trace/src/lambda/**/*.js\" -- npm run test:lambda",
     "test:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\"",
-    "test:plugins:ci": "yarn services && nyc --no-clean --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS)).js\" --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS))/**/*.js\" --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
+    "test:plugins:ci": "npm run services && nyc --no-clean --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS)).js\" --include \"packages/datadog-instrumentations/src/@($(echo $PLUGINS))/**/*.js\" --include \"packages/datadog-plugin-@($(echo $PLUGINS))/src/**/*.js\" -- npm run test:plugins",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
@@ -43,8 +43,8 @@
     "test:unit:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-instrumentations/test/@($(echo $PLUGINS)).spec.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:shimmer": "mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'",
     "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
-    "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
-    "leak:plugins": "yarn services && (cd packages/memwatch && yarn) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\""
+    "leak:core": "node ./scripts/install_plugin_modules && (cd packages/memwatch && npm install) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape 'packages/dd-trace/test/leak/**/*.js'",
+    "leak:plugins": "npm services && (cd packages/memwatch && npm) && NODE_PATH=./packages/memwatch/node_modules node --no-warnings ./node_modules/.bin/tape \"packages/datadog-plugin-@($(echo $PLUGINS))/test/leak.js\""
   },
   "repository": {
     "type": "git",
@@ -121,7 +121,7 @@
     "eslint-plugin-import": "^2.8.0",
     "eslint-plugin-mocha": "^10.1.0",
     "eslint-plugin-n": "^15.7.0",
-    "eslint-plugin-promise": "^3.6.0",
+    "eslint-plugin-promise": "^6.1.1",
     "eslint-plugin-standard": "^3.0.1",
     "express": "^4.18.2",
     "get-port": "^3.2.0",
@@ -139,6 +139,7 @@
     "sinon": "^15.2.0",
     "sinon-chai": "^3.7.0",
     "tap": "^16.3.7",
-    "tape": "^5.6.5"
+    "tape": "^5.6.5",
+    "yarn": "^1.22.22"
   }
 }

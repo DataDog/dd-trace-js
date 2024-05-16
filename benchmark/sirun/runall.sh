@@ -14,12 +14,10 @@ fi
 
 nvm use 18
 
-# using Node.js v18 for the global yarn package
 (
   cd ../../ &&
-  npm install --global yarn \
-    && yarn install --ignore-engines \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+  npm install\
+    && PLUGINS="bluebird|q|graphql|express" npm run services
 )
 
 # run each test in parallel for a given version of Node.js

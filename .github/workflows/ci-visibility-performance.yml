@@ -22,4 +22,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/18
       - name: CI Visibility Performance Overhead Test
-        run: yarn bench:e2e:ci-visibility
+        run: npm run bench:e2e:ci-visibility

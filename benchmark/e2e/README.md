@@ -20,7 +20,7 @@ the root of this repo, you should be ready.
 
 ## Usage
 
-To start the test, run `yarn bench:e2e`. This will install AcmeAir if it hasn't
+To start the test, run `npm run bench:e2e`. This will install AcmeAir if it hasn't
 yet been installed, and populate MongoDB if that hasn't already been done.
 
 Next, it will run three tests for 10 seconds each, sequentially, on each of the

@@ -83,7 +83,7 @@ async function ensureAppIsInstalled () {
     await sh('git clone git@github.com:acmeair/acmeair-nodejs.git')
   }
   cd('acmeair-nodejs')
-  await sh('yarn')
+  await sh('npm install')
   cd(__dirname)
 }
 
