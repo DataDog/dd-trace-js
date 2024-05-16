@@ -3,6 +3,7 @@ const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
+const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 
 const options = {
   startupLogs: false,
@@ -34,6 +35,12 @@ if (isAgentlessEnabled) {
 if (isJestWorker) {
   options.experimental = {
     exporter: 'jest_worker'
+  }
+}
+
+if (isCucumberWorker) {
+  options.experimental = {
+    exporter: 'cucumber_worker'
   }
 }
 

@@ -8,7 +8,7 @@ const apiSecuritySampler = require('../api_security_sampler')
 
 let rc
 
-function enable (config) {
+function enable (config, appsec) {
   rc = new RemoteConfigManager(config)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
@@ -32,7 +32,7 @@ function enable (config) {
       if (!rcConfig) return
 
       if (activation === Activation.ONECLICK) {
-        enableOrDisableAppsec(action, rcConfig, config)
+        enableOrDisableAppsec(action, rcConfig, config, appsec)
       }
 
       apiSecuritySampler.setRequestSampling(rcConfig.api_security?.request_sample_rate)
@@ -42,7 +42,7 @@ function enable (config) {
   return rc
 }
 
-function enableOrDisableAppsec (action, rcConfig, config) {
+function enableOrDisableAppsec (action, rcConfig, config, appsec) {
   if (typeof rcConfig.asm?.enabled === 'boolean') {
     let shouldEnable
 
@@ -53,9 +53,9 @@ function enableOrDisableAppsec (action, rcConfig, config) {
     }
 
     if (shouldEnable) {
-      require('..').enable(config)
+      appsec.enable(config)
     } else {
-      require('..').disable()
+      appsec.disable()
     }
   }
 }

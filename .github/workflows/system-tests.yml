@@ -83,7 +83,7 @@ jobs:
       - name: Build
         run: ./build.sh -i runner
       - name: Run
-        run: ./run.sh PARAMETRIC
+        run: ./run.sh PARAMETRIC -F tests/parametric/test_dynamic_configuration.py::TestDynamicConfigSamplingRules
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
