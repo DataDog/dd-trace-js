@@ -228,7 +228,7 @@ class TextMapPropagator {
 
         const w3cCtx = this._extractTraceparentContext(carrier)
 
-        if (w3cCtx !== null && spanContext.toTraceId() === w3cCtx.toTraceId() &&
+        if (w3cCtx !== null && spanContext.toTraceId(true) === w3cCtx.toTraceId(true) &&
         spanContext.toSpanId() !== w3cCtx.toSpanId()) {
           if ('_dd.parent_id' in w3cCtx._trace.tags && w3cCtx._trace.tags['_dd.parent_id'] !==
           '0000000000000000') {
