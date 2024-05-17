@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-latest
+    runs-on: macos-11
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
@@ -210,7 +210,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
+      - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci

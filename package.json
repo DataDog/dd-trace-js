@@ -67,7 +67,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=14"
   },
   "dependencies": {
     "@datadog/native-appsec": "7.1.1",
