@@ -523,6 +523,19 @@ describe('TextMapPropagator', () => {
       expect(spanContext._tracestate).to.be.undefined
     })
 
+    it('extracts span_id from tracecontext headers and stores datadog parent-id in trace_distributed_tags', () => {
+      textMap['x-datadog-trace-id'] = '61185'
+      textMap['x-datadog-parent-id'] = '15'
+      textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+      expect(parseInt(spanContext._spanId.toString(), 16)).to.equal(73456)
+      expect(parseInt(spanContext._traceId.toString(), 16)).to.equal(61185)
+      expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '000000000000000f')
+    })
+
     describe('with B3 propagation as multiple headers', () => {
       beforeEach(() => {
         config.tracePropagationStyle.extract = ['b3multi']

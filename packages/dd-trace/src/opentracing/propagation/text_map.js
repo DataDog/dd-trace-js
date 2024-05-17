@@ -215,8 +215,35 @@ class TextMapPropagator {
   }
 
   _extractSpanContext (carrier) {
+    let spanContext = null
     for (const extractor of this._config.tracePropagationStyle.extract) {
-      let spanContext = null
+      if (spanContext !== null) {
+        if (this._config.tracePropagationExtractFirst) {
+          return spanContext
+        }
+
+        if (extractor !== 'tracecontext') {
+          continue
+        }
+
+        const w3cCtx = this._extractTraceparentContext(carrier)
+
+        if (w3cCtx !== null && spanContext.toTraceId() === w3cCtx.toTraceId() &&
+        spanContext.toSpanId() !== w3cCtx.toSpanId()) {
+          if ('_dd.parent_id' in w3cCtx._trace.tags && w3cCtx._trace.tags['_dd.parent_id'] !==
+          '0000000000000000') {
+            spanContext._trace.tags['_dd.parent_id'] = w3cCtx._trace.tags['_dd.parent_id']
+          } else {
+            const ddCtx = this._extractDatadogContext(carrier)
+            if (ddCtx !== null) {
+              spanContext._trace.tags['_dd.parent_id'] = ddCtx._spanId.toString().padStart(16, '0')
+            }
+          }
+          spanContext._spanId = w3cCtx._spanId
+        }
+        break
+      }
+
       switch (extractor) {
         case 'datadog':
           spanContext = this._extractDatadogContext(carrier)
@@ -238,10 +265,10 @@ class TextMapPropagator {
         default:
           log.warn(`Unknown propagation style: ${extractor}`)
       }
+    }
 
-      if (spanContext !== null) {
-        return spanContext
-      }
+    if (spanContext !== null) {
+      return spanContext
     }
 
     return this._extractSqsdContext(carrier)
