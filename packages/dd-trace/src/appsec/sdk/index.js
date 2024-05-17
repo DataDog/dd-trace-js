@@ -8,21 +8,22 @@ const { setUser } = require('./set_user')
 class AppsecSdk {
   constructor (tracer, config) {
     this._tracer = tracer
+    this.standaloneEnabled = !!config.appsec.standalone?.enabled
     if (config) {
       setTemplates(config)
     }
   }
 
   trackUserLoginSuccessEvent (user, metadata) {
-    return trackUserLoginSuccessEvent(this._tracer, user, metadata)
+    return trackUserLoginSuccessEvent(this._tracer, user, metadata, this.standaloneEnabled)
   }
 
   trackUserLoginFailureEvent (userId, exists, metadata) {
-    return trackUserLoginFailureEvent(this._tracer, userId, exists, metadata)
+    return trackUserLoginFailureEvent(this._tracer, userId, exists, metadata, this.standaloneEnabled)
   }
 
   trackCustomEvent (eventName, metadata) {
-    return trackCustomEvent(this._tracer, eventName, metadata)
+    return trackCustomEvent(this._tracer, eventName, metadata, this.standaloneEnabled)
   }
 
   isUserBlocked (user) {

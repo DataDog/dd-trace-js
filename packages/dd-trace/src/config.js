@@ -448,6 +448,7 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
+    this._setValue(defaults, 'appsec.standalone.enabled', undefined)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -524,7 +525,6 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
-      DD_APM_TRACING_ENABLED,
       DD_APPSEC_ENABLED,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
@@ -539,6 +539,7 @@ class Config {
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
       DD_ENV,
+      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
       JEST_WORKER_ID,
       DD_IAST_DEDUPLICATION_ENABLED,
@@ -612,7 +613,6 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
-    this._setBoolean(env, 'apmTracingEnabled', DD_APM_TRACING_ENABLED)
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
@@ -622,6 +622,7 @@ class Config {
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(env, 'appsec.standalone.enabled', DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
@@ -728,6 +729,7 @@ class Config {
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._setString(opts, 'appsec.rules', options.appsec.rules)
+    this._setBoolean(opts, 'appsec.standalone.enabled', options.experimental?.appsec?.standalone?.enabled)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
@@ -849,6 +851,14 @@ class Config {
     return spanComputePeerService
   }
 
+  _isAppsecStandaloneEnabled () {
+    return isTrue(coalesce(
+      this.options.experimental?.appsec?.standalone?.enabled,
+      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
+      false
+    ))
+  }
+
   _isCiVisibilityGitUploadEnabled () {
     return coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
@@ -904,6 +914,7 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
+    this._setBoolean(calc, 'apmTracingEnabled', !this._isAppsecStandaloneEnabled())
   }
 
   _applyRemote (options) {

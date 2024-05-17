@@ -261,8 +261,8 @@ describe('Tracer', () => {
       expect(testSpan).to.equal(span)
     })
 
-    it('should start a span with the APM tracing configuration', () => {
-      config.apmTracingEnabled = true
+    it('should start a span with APM tracing disabled', () => {
+      config.apmTracingEnabled = false
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
@@ -275,7 +275,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
-        apmTracingEnabled: true,
+        apmTracingEnabled: false,
         integrationName: undefined,
         links: undefined
       })

@@ -13,9 +13,12 @@ const {
 } = require('./telemetry')
 const zlib = require('zlib')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
+const { APPSEC_PROPAGATION_KEY } = require('../constants')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
+
+let standaloneEnabled = false
 
 const metricsQueue = new Map()
 
@@ -89,6 +92,9 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   }
 
   metricsQueue.set(MANUAL_KEEP, 'true')
+  if (standaloneEnabled) {
+    metricsQueue.set(APPSEC_PROPAGATION_KEY, '1')
+  }
 
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
@@ -117,8 +123,11 @@ function reportAttack (attackData) {
 
   newTags['appsec.event'] = 'true'
 
-  if (limiter.isAllowed()) {
+  if (standaloneEnabled) {
     newTags[MANUAL_KEEP] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
+    newTags[APPSEC_PROPAGATION_KEY] = '1'
+  } else if (limiter.isAllowed()) {
+    newTags[MANUAL_KEEP] = 'true'
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -168,7 +177,6 @@ function finishRequest (req, res) {
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
-
     metricsQueue.clear()
   }
 
@@ -201,6 +209,11 @@ function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
 }
 
+function configure (config) {
+  setRateLimit(config.rateLimit)
+  standaloneEnabled = !!config.standalone?.enabled
+}
+
 module.exports = {
   metricsQueue,
   filterHeaders,
@@ -212,5 +225,6 @@ module.exports = {
   reportSchemas,
   finishRequest,
   setRateLimit,
-  mapHeaderAndTags
+  mapHeaderAndTags,
+  configure
 }
