@@ -679,7 +679,7 @@ describe('Config', () => {
       clientIpHeader: 'x-true-client-ip',
       sampleRate: 0.5,
       rateLimit: 1000,
-      samplingRules: samplingRules,
+      samplingRules,
       spanSamplingRules: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
