@@ -53,12 +53,7 @@ function createAbortedClientRequest (http) {
       if (target[name] !== undefined) {
         return target[name]
       }
-
-      if (typeof clientRequest[name] === 'function') {
-        return noop
-      } else {
-        return undefined
-      }
+      return clientRequest[name]
     }
   })
 }
