@@ -5,7 +5,6 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const log = require('../../dd-trace/src/log')
 
 const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
@@ -192,8 +191,28 @@ function addStreamedChunk (content, chunk) {
   })
 }
 
-function wrapStreamIterator (body, response, options) {
+const DONE_PILL = '[DONE]'
+
+function buffersToJSON (chunks = []) {
+  return Buffer
+    .concat(chunks) // combine the buffers
+    .toString() // stringify
+    .split(/(?=data:)/) // split on "data:"
+    .map(chunk => chunk.split('\n').join('')) // remove newlines
+    .map(chunk => chunk.substring(6)) // remove 'data: ' from the front
+    .filter(chunk => chunk !== DONE_PILL) // remove the last [DONE] message
+    .map(JSON.parse) // parse all of the returned objects
+}
+
+/**
+ * For streamed responses, we need to accumulate all of the content in
+ * the chunks, and let the combined content be the final response.
+ * This way, spans look the same as when not streamed.
+ */
+function wrapStreamIterator (response, options) {
   let content // the total build up of the response
+  let processChunksAsBuffers = false
+  const chunks = []
   return function (itr) {
     return function () {
       const iterator = itr.apply(this, arguments)
@@ -202,17 +221,27 @@ function wrapStreamIterator (body, response, options) {
           .then(res => {
             const { done, value: chunk } = res
 
-            if (!content) {
-              content = chunk
-            } else if (chunk) {
+            if (chunk) {
+              chunks.push(chunk)
               if (chunk instanceof Buffer) {
-                // we need to skip adding the chunk I think...
-              } else {
-                content.choices = addStreamedChunk(content, chunk)
+                // this operation should be safe
+                // if one chunk is a buffer (versus a plain object), the rest should be as well
+                processChunksAsBuffers = true
               }
             }
 
             if (done) {
+              content = chunks.filter(chunk => chunk == null) // filter null or undefined values
+
+              if (processChunksAsBuffers) {
+                content = buffersToJSON(chunks)
+              }
+
+              content = content.reduce((content, chunk) => {
+                content.choices = addStreamedChunk(content, chunk)
+                return content
+              })
+
               finishCh.publish({
                 headers: response.headers,
                 body: content,
@@ -227,10 +256,6 @@ function wrapStreamIterator (body, response, options) {
             errorCh.publish({ err })
 
             throw err
-          })
-          .finally(() => {
-            shimmer.unwrap(body, 'iterator')
-            shimmer.unwrap(iterator, 'next')
           })
       })
       return iterator
@@ -271,18 +296,11 @@ for (const shim of V4_PACKAGE_SHIMS) {
             .then(([{ response, options }, body]) => {
               if (stream) {
                 if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(body, response, options))
+                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options))
                 } else {
-                  log.warn('Streamed responses using Buffers are not supported')
-                  finishCh.publish({
-                    headers: response.headers,
-                    body: undefined,
-                    path: response.url,
-                    method: options.method
-                  })
-                  // shimmer.wrap(
-                  //   body.response.body, Symbol.asyncIterator, wrapStreamIterator(body, response, options)
-                  // )
+                  shimmer.wrap(
+                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options)
+                  )
                 }
               } else {
                 finishCh.publish({
