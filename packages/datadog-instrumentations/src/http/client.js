@@ -30,30 +30,26 @@ function hookFn (http) {
   return http
 }
 
-let clientRequest
+let ClientRequest
 
 function noop () {}
 
-function createAbortedClientRequest (http) {
-  if (!clientRequest) {
+function createAbortedClientRequest (http, args) {
+  if (!ClientRequest) {
     const store = storage.getStore()
     storage.enterWith({ noop: true })
 
-    clientRequest = http.get('<invalid-url>')
+    const clientRequest = http.get('<invalid-url>')
     clientRequest.on('error', noop)
+    ClientRequest = Object.getPrototypeOf(clientRequest).constructor
 
     storage.enterWith(store)
   }
 
-  const target = new EventEmitter()
-
-  // TODO dig into clientRequest object to find what methods/properties should return something
-  return new Proxy(target, {
-    get: (target, name, receiver) => {
-      if (target[name] !== undefined) {
-        return target[name]
-      }
-      return clientRequest[name]
+  return new ClientRequest({
+    ...args.options,
+    agent: {
+      addRequest: noop
     }
   })
 }
@@ -105,7 +101,7 @@ function patch (http, methodName) {
         try {
           let req
           if (abortData.abortController?.signal.aborted) {
-            req = createAbortedClientRequest(http)
+            req = createAbortedClientRequest(http, args)
             process.nextTick(() => {
               req.emit('error', abortData.error || new Error('Aborted'))
             })

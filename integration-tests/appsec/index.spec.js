@@ -6,7 +6,7 @@ const path = require('path')
 const axios = require('axios')
 const { assert } = require('chai')
 
-describe('rasp', () => {
+describe('RASP', () => {
   let sandbox, cwd, appPort, appFile, agent, proc
 
   before(async () => {

@@ -39,8 +39,7 @@ function analyzeSsrf (ctx) {
   // TODO - analyze SSRF
   //  currently just for testing purpose, blocking 50% of the requests that are not calling to the agent
   if (
-    !ctx.args.uri.includes(':8126') &&
-    (ctx.args.uri.includes('rasp-block') || Math.random() >= 0.5) &&
+    ctx.args.uri.includes('rasp-block') &&
     ctx.abortData
   ) {
     const store = storage.getStore()
