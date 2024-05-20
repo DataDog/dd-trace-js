@@ -193,8 +193,6 @@ function addStreamedChunk (content, chunk) {
   })
 }
 
-const DONE_PILL = '[DONE]'
-
 function buffersToJSON (chunks = []) {
   return Buffer
     .concat(chunks) // combine the buffers
@@ -202,7 +200,7 @@ function buffersToJSON (chunks = []) {
     .split(/(?=data:)/) // split on "data:"
     .map(chunk => chunk.split('\n').join('')) // remove newlines
     .map(chunk => chunk.substring(6)) // remove 'data: ' from the front
-    .filter(chunk => chunk !== DONE_PILL) // remove the last [DONE] message
+    .slice(0, -1) // remove the last [DONE] message
     .map(JSON.parse) // parse all of the returned objects
 }
 
