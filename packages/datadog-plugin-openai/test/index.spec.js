@@ -262,8 +262,7 @@ describe('Plugin', () => {
           const params = {
             model: 'text-davinci-002',
             prompt: 'Hello, ',
-            suffix: 'foo',
-            stream: true
+            suffix: 'foo'
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -2637,9 +2636,10 @@ describe('Plugin', () => {
             const checkTraces = agent
               .use(traces => {
                 expect(traces[0][0].meta)
-                  .to.have.property('openai.response.choices.0.message.tool_calls.0.name', 'extract_fictional_info')
+                  .to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
+                    'extract_fictional_info')
                 expect(traces[0][0].meta)
-                  .to.have.property('openai.response.choices.0.message.tool_calls.0.arguments',
+                  .to.have.property('openai.response.choices.0.message.tool_calls.0.function.arguments',
                     '{"name":"SpongeBob","origin":"Bikini Bottom"}')
                 expect(traces[0][0].meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
               })
@@ -2928,90 +2928,17 @@ describe('Plugin', () => {
       }
 
       if (semver.intersects('>4.1.0', version)) {
-        // streamed responses
         describe('streamed responses', () => {
           let scope
 
-          function createOpenAiResponseStream (content) {
-            const baseAttrs = {
-              id: 'chatcmpl-123',
-              object: 'chat.completion.chunk',
-              created: Date.now(),
-              model: 'gpt-3.5-turbo-0125',
-              system_fingerprint: 'fp_44709d6fcb'
-            }
-
-            // Split string into chunks of 4 characters
-            const contentChunks = content.match(/.{1,4}/g)
-
-            const contentStreamChunks = contentChunks.map((content) => ({
-              ...baseAttrs,
-              choices: [
-                {
-                  index: 0,
-                  delta: {
-                    content
-                  },
-                  logprobs: null,
-                  finish_reason: null
-                }
-              ]
-            }))
-
-            const streamChunks = [
-              {
-                ...baseAttrs,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {
-                      role: 'assistant'
-                    },
-                    logprobs: null,
-                    finish_reason: 'stop'
-                  }
-                ]
-              },
-              ...contentStreamChunks,
-              {
-                ...baseAttrs,
-                choices: [
-                  {
-                    index: 0,
-                    delta: {},
-                    logprobs: null,
-                    finish_reason: 'stop'
-                  }
-                ]
-              }
-            ]
-
-            const encoder = new TextEncoder()
-
-            return new ReadableStream({
-              start (controller) {
-                try {
-                  for (const chunk of streamChunks) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
-                  }
-                } finally {
-                  controller.close()
-                }
-              }
-            })
-          }
-
           beforeEach(() => {
-            scope = nock('https://api.openai.com')
+            scope = nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
-              .reply(200, createOpenAiResponseStream('This is a streamed response test!'), {
-                Date: 'Fri, 19 May 2023 03:41:25 GMT',
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                Connection: 'keep-alive',
-                'openai-organization': 'kill-9',
-                'openai-processing-ms': '520',
-                'openai-version': '2020-10-01'
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.simple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
               })
           })
 
@@ -3020,7 +2947,28 @@ describe('Plugin', () => {
             scope.done()
           })
 
-          it.only('makes a successful chat completion call', async () => {
+          it('makes a successful chat completion call', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-3.5-turbo')
+                expect(span.meta).to.have.property('openai.request.messages.0.content',
+                  'Hello, OpenAI!')
+                expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.content',
+                  'Hello! How can I assist you today?')
+              })
+
             const stream = await openai.chat.completions.create({
               model: 'gpt-3.5-turbo',
               messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
@@ -3028,7 +2976,12 @@ describe('Plugin', () => {
               stream: true
             })
 
-            // this currently doesn't work...
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('delta')
+            }
+
+            await checkTraces
           })
         })
       }

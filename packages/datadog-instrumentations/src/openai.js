@@ -234,14 +234,16 @@ function wrapStreamIterator (response, options) {
             if (done) {
               let content = chunks.filter(chunk => chunk != null) // filter null or undefined values
 
-              if (processChunksAsBuffers) {
-                content = buffersToJSON(content)
-              }
+              if (chunks) {
+                if (processChunksAsBuffers) {
+                  content = buffersToJSON(content)
+                }
 
-              content = content.reduce((content, chunk) => {
-                content.choices = addStreamedChunk(content, chunk)
-                return content
-              })
+                content = content.reduce((content, chunk) => {
+                  content.choices = addStreamedChunk(content, chunk)
+                  return content
+                })
+              }
 
               finishCh.publish({
                 headers: response.headers,
