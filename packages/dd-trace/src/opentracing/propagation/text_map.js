@@ -39,6 +39,8 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 // Tag values in tracestate replace ',', '~' and ';' with '_'
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
+const ddParentIdTagKey = '_dd.parent_id'
+const zeroHex = '0000000000000000'
 
 class TextMapPropagator {
   constructor (config) {
@@ -175,9 +177,9 @@ class TextMapPropagator {
         // SpanContext was created by a ddtrace span.
         // Last datadog span id should be set to the current span.
         state.set('p', spanContext._spanId)
-      } else if (spanContext._trace.tags['_dd.parent_id']) {
+      } else if (spanContext._trace.tags[ddParentIdTagKey]) {
         // Propagate the last Datadog span id set on the remote span.
-        state.set('p', spanContext._trace.tags['_dd.parent_id'])
+        state.set('p', spanContext._trace.tags[ddParentIdTagKey])
       }
       state.set('s', priority)
       if (mechanism) {
@@ -214,33 +216,40 @@ class TextMapPropagator {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
 
+  _ensureTraceContextTakePrecedence (traceContext, spanContext, carrier) {
+    if (traceContext !== null && spanContext.toTraceId(true) === traceContext.toTraceId(true) &&
+        spanContext.toSpanId() !== traceContext.toSpanId()) {
+      if (ddParentIdTagKey in traceContext._trace.tags && traceContext._trace.tags[ddParentIdTagKey] !==
+          zeroHex) {
+        // tracecontext headers contain a p value, ensure this value is sent to backend
+        spanContext._trace.tags[ddParentIdTagKey] = traceContext._trace.tags[ddParentIdTagKey]
+      } else {
+        // if p value is not present in tracestate, use the parent id from the datadog headers
+        const ddCtx = this._extractDatadogContext(carrier)
+        if (ddCtx !== null) {
+          spanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
+        }
+      }
+      // the span_id in tracecontext takes precedence over the first extracted propagation style
+      spanContext._spanId = traceContext._spanId
+    }
+    // the first extracted context will be used to propagate the distributed trace
+    return spanContext
+  }
+
   _extractSpanContext (carrier) {
     let spanContext = null
     for (const extractor of this._config.tracePropagationStyle.extract) {
+      // add logic to ensure tracecontext headers takes precedence over other extracted headers
       if (spanContext !== null) {
         if (this._config.tracePropagationExtractFirst) {
           return spanContext
         }
-
         if (extractor !== 'tracecontext') {
           continue
         }
-
-        const w3cCtx = this._extractTraceparentContext(carrier)
-
-        if (w3cCtx !== null && spanContext.toTraceId(true) === w3cCtx.toTraceId(true) &&
-        spanContext.toSpanId() !== w3cCtx.toSpanId()) {
-          if ('_dd.parent_id' in w3cCtx._trace.tags && w3cCtx._trace.tags['_dd.parent_id'] !==
-          '0000000000000000') {
-            spanContext._trace.tags['_dd.parent_id'] = w3cCtx._trace.tags['_dd.parent_id']
-          } else {
-            const ddCtx = this._extractDatadogContext(carrier)
-            if (ddCtx !== null) {
-              spanContext._trace.tags['_dd.parent_id'] = ddCtx._spanId.toString().padStart(16, '0')
-            }
-          }
-          spanContext._spanId = w3cCtx._spanId
-        }
+        spanContext = this._ensureTraceContextTakePrecedence(
+          this._extractTraceparentContext(carrier), spanContext, carrier)
         break
       }
 
@@ -267,11 +276,7 @@ class TextMapPropagator {
       }
     }
 
-    if (spanContext !== null) {
-      return spanContext
-    }
-
-    return this._extractSqsdContext(carrier)
+    return spanContext || this._extractSqsdContext(carrier)
   }
 
   _extractDatadogContext (carrier) {
@@ -381,7 +386,7 @@ class TextMapPropagator {
         for (const [key, value] of state.entries()) {
           switch (key) {
             case 'p': {
-              spanContext._trace.tags['_dd.parent_id'] = value
+              spanContext._trace.tags[ddParentIdTagKey] = value
               break
             }
             case 's': {
@@ -414,8 +419,8 @@ class TextMapPropagator {
         }
       })
 
-      if (!spanContext._trace.tags['_dd.parent_id']) {
-        spanContext._trace.tags['_dd.parent_id'] = '0000000000000000'
+      if (!spanContext._trace.tags[ddParentIdTagKey]) {
+        spanContext._trace.tags[ddParentIdTagKey] = zeroHex
       }
 
       this._extractBaggageItems(carrier, spanContext)
@@ -558,7 +563,7 @@ class TextMapPropagator {
 
     const tid = traceId.substring(0, 16)
 
-    if (tid === '0000000000000000') return
+    if (tid === zeroHex) return
 
     spanContext._trace.tags['_dd.p.tid'] = tid
   }
