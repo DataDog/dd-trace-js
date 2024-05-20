@@ -732,6 +732,7 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true
     })
 
+    expect(config).to.have.property('apmTracingEnabled', false)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -804,6 +805,7 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
+      { name: 'apmTracingEnabled', value: false, origin: 'calculated' },
       { name: 'appsec.enabled', value: false, origin: 'code' },
       { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
