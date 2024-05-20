@@ -216,25 +216,25 @@ class TextMapPropagator {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
 
-  _ensureTraceContextTakePrecedence (traceContext, spanContext, carrier) {
-    if (traceContext !== null && spanContext.toTraceId(true) === traceContext.toTraceId(true) &&
-        spanContext.toSpanId() !== traceContext.toSpanId()) {
-      if (ddParentIdTagKey in traceContext._trace.tags && traceContext._trace.tags[ddParentIdTagKey] !==
+  _resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
+    if (w3cSpanContext !== null && firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
+    firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()) {
+      if (ddParentIdTagKey in w3cSpanContext._trace.tags && w3cSpanContext._trace.tags[ddParentIdTagKey] !==
           zeroHex) {
         // tracecontext headers contain a p value, ensure this value is sent to backend
-        spanContext._trace.tags[ddParentIdTagKey] = traceContext._trace.tags[ddParentIdTagKey]
+        firstSpanContext._trace.tags[ddParentIdTagKey] = w3cSpanContext._trace.tags[ddParentIdTagKey]
       } else {
         // if p value is not present in tracestate, use the parent id from the datadog headers
         const ddCtx = this._extractDatadogContext(carrier)
         if (ddCtx !== null) {
-          spanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
+          firstSpanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
         }
       }
       // the span_id in tracecontext takes precedence over the first extracted propagation style
-      spanContext._spanId = traceContext._spanId
+      firstSpanContext._spanId = w3cSpanContext._spanId
     }
     // the first extracted context will be used to propagate the distributed trace
-    return spanContext
+    return firstSpanContext
   }
 
   _extractSpanContext (carrier) {
@@ -248,7 +248,7 @@ class TextMapPropagator {
         if (extractor !== 'tracecontext') {
           continue
         }
-        spanContext = this._ensureTraceContextTakePrecedence(
+        spanContext = this._resolveTraceContextConflicts(
           this._extractTraceparentContext(carrier), spanContext, carrier)
         break
       }
