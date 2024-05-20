@@ -2,7 +2,6 @@
 
 [![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=blue&label=dd-trace%40v5&logo=npm)](https://www.npmjs.com/package/dd-trace)
 [![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=blue&label=dd-trace%40v4&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node16)
-[![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=blue&label=dd-trace%40v3&logo=npm)](https://www.npmjs.com/package/dd-trace/v/latest-node14)
 [![codecov](https://codecov.io/gh/DataDog/dd-trace-js/branch/master/graph/badge.svg)](https://codecov.io/gh/DataDog/dd-trace-js)
 
 <img align="right" src="https://user-images.githubusercontent.com/551402/208212084-1d0c07e2-4135-4c61-b2da-8f2fddbc66ed.png" alt="Bits the dog  JavaScript" width="200px"/>
@@ -28,12 +27,12 @@ Most of the documentation for `dd-trace` is available on these webpages:
 | :---:                                                    | :---:                                                                                                  | :---:    | :---:           | :---:          | :---:       |
 | [`v1`](https://github.com/DataDog/dd-trace-js/tree/v1.x) | ![npm v1](https://img.shields.io/npm/v/dd-trace/legacy-v1?color=white&label=%20&style=flat-square)     | `>= v12` | **End of Life** | 2021-07-13     | 2022-02-25  |
 | [`v2`](https://github.com/DataDog/dd-trace-js/tree/v2.x) | ![npm v2](https://img.shields.io/npm/v/dd-trace/latest-node12?color=white&label=%20&style=flat-square) | `>= v12` | **End of Life** | 2022-01-28     | 2023-08-15  |
-| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | **Maintenance** | 2022-08-15     | 2024-05-15  |
+| [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | **End of Life** | 2022-08-15     | 2024-05-15  |
 | [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square)        | `>= v16` | **Maintenance**     | 2023-05-12     | 2025-01-11     |
 | [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)        | `>= v18` | **Current**     | 2024-01-11     | Unknown     |
 
-We currently maintain three release lines, namely `v5`, `v4` and `v3`.
-Features and bug fixes that are merged are released to the `v5` line and, if appropriate, also the `v4` & `v3` line.
+We currently maintain two release lines, namely `v5`, and `v4`.
+Features and bug fixes that are merged are released to the `v5` line and, if appropriate, also `v4`.
 
 For any new projects it is recommended to use the `v5` release line:
 
@@ -42,7 +41,7 @@ $ npm install dd-trace
 $ yarn add dd-trace
 ```
 
-However, existing projects that already use the `v4` & `v3` release line, or projects that need to support EOL versions of Node.js, may continue to use these release lines.
+However, existing projects that already use the `v4` release line, or projects that need to support EOL versions of Node.js, may continue to use these release lines.
 This is done by specifying the version when installing the package.
 
 ```sh
@@ -110,9 +109,9 @@ If you would like to trace your bundled application then please read this page o
 
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.
 
+
 ## Datadog With OpenTelemetery
 
-Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js
+Please refer to the [Node.js Custom Instrumentation using OpenTelemetry API](https://docs.datadoghq.com/tracing/trace_collection/custom_instrumentation/nodejs/otel/) document. It includes information on how to use the OpenTelemetry API with dd-trace-js.
 
 Note that our internal implementation of the OpenTelemetry API is currently set within the version range `>=1.0.0 <1.9.0`. This range will be updated at a regular cadence therefore, we recommend updating your tracer to the latest release to ensure up to date support.
-
