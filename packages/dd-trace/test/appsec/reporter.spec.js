@@ -119,6 +119,17 @@ describe('reporter', () => {
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
     })
+
+    it('should add _dd.p.appsec entrie if standalone ASM enabled', () => {
+      Reporter.configure({
+        standalone: {
+          enabled: true
+        }
+      })
+
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.eq('1')
+    })
   })
 
   describe('reportMetrics', () => {
@@ -268,6 +279,33 @@ describe('reporter', () => {
         'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
+        'http.useragent': 'arachni',
+        'network.client.ip': '8.8.8.8'
+      })
+    })
+
+    it('should add _dd.p.appsec tag if standalone ASM enabled', () => {
+      Reporter.configure({
+        rateLimit: 1,
+        standalone: {
+          enabled: true
+        }
+      })
+
+      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
+
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
+
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'appsec.event': 'true',
+        'manual.keep': 'true',
+        '_dd.p.appsec': '1',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'http.useragent': 'arachni',
