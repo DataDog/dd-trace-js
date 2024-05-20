@@ -66,18 +66,9 @@ Changes associated with each individual release are documented on the [GitHub Re
 Please read the [CONTRIBUTING.md](https://github.com/DataDog/dd-trace-js/blob/master/CONTRIBUTING.md) document before contributing to this open source project.
 
 
-## Experimental ESM Support
+## EcmaScript Modules (ESM) Support
 
-> **Warning**
-> 
-> ESM support has been temporarily disabled starting from Node 20 as significant
-> changes are in progress.
-
-ESM support is currently in the experimental stages, while CJS has been supported
-since inception. This means that code loaded using `require()` should work fine
-but code loaded using `import` might not always work.
-
-Use the following command to enable experimental ESM support with your application:
+ESM support requires an additional command-line argument. Use the following to enable experimental ESM support with your application:
 
 Node.js < v20.6
 
