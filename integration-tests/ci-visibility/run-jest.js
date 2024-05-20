@@ -20,6 +20,10 @@ if (process.env.OLD_RUNNER) {
   options.testRunner = 'jest-jasmine2'
 }
 
+if (process.env.ENABLE_JSDOM) {
+  options.testEnvironment = 'jsdom'
+}
+
 jest.runCLI(
   options,
   options.projects
