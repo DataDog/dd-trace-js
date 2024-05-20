@@ -45,7 +45,7 @@ const mochaCommonOptions = {
 
 const jestCommonOptions = {
   name: 'jest',
-  dependencies: ['jest', 'chai@v4', 'jest-jasmine2'],
+  dependencies: ['jest', 'chai@v4', 'jest-jasmine2', 'jest-environment-jsdom'],
   expectedStdout: 'Test Suites: 2 passed',
   expectedCoverageFiles: [
     'ci-visibility/test/sum.js',
@@ -328,6 +328,7 @@ testFrameworks.forEach(({
             done()
           }).catch(done)
         })
+
         it('reports tests when using agentless', (done) => {
           childProcess = fork(testFile, {
             cwd,
@@ -347,6 +348,7 @@ testFrameworks.forEach(({
             done()
           }).catch(done)
         })
+
         it('reports tests when using evp proxy', (done) => {
           childProcess = fork(testFile, {
             cwd,
@@ -1412,6 +1414,88 @@ testFrameworks.forEach(({
 
             childProcess.on('exit', () => {
               eventsPromise.then(() => done()).catch(done)
+            })
+          })
+
+          it('works with jsdom', (done) => {
+            const envVars = reportingOption === 'agentless'
+              ? getCiVisAgentlessConfig(receiver.port)
+              : getCiVisEvpProxyConfig(receiver.port)
+            if (reportingOption === 'evp proxy') {
+              receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+            }
+            // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
+            receiver.setKnownTests({
+              [name]: {
+                'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests']
+              }
+            })
+            const NUM_RETRIES_EFD = 3
+            receiver.setSettings({
+              itr_enabled: false,
+              code_coverage: false,
+              tests_skipping: false,
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: {
+                  '5s': NUM_RETRIES_EFD
+                },
+                faulty_session_threshold: 100
+              }
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                // no other tests are considered new
+                const oldTests = tests.filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+                )
+                oldTests.forEach(test => {
+                  assert.notProperty(test.meta, TEST_IS_NEW)
+                })
+                assert.equal(oldTests.length, 1)
+
+                const newTests = tests.filter(test =>
+                  test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+                )
+                newTests.forEach(test => {
+                  assert.propertyVal(test.meta, TEST_IS_NEW, 'true')
+                })
+                const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                // all but one has been retried
+                assert.equal(
+                  newTests.length - 1,
+                  retriedTests.length
+                )
+                assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+                // Test name does not change
+                newTests.forEach(test => {
+                  assert.equal(test.meta[TEST_NAME], 'ci visibility 2 can report tests 2')
+                })
+              })
+
+            childProcess = exec(
+              runTestsWithCoverageCommand,
+              {
+                cwd,
+                env: {
+                  ...envVars,
+                  TESTS_TO_RUN: 'test/ci-visibility-test',
+                  ENABLE_JSDOM: true,
+                  DD_TRACE_DEBUG: 1,
+                  DD_TRACE_LOG_LEVEL: 'warn'
+                },
+                stdio: 'inherit'
+              }
+            )
+            childProcess.on('exit', () => {
+              eventsPromise.then(() => {
+                done()
+              }).catch(done)
             })
           })
         }

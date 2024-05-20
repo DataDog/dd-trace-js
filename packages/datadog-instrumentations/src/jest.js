@@ -148,7 +148,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       let hasSnapshotTests = true
       try {
-        const { _snapshotData } = this.context.expect.getState().snapshotState
+        const { _snapshotData } = this.getVmContext().expect.getState().snapshotState
         hasSnapshotTests = Object.keys(_snapshotData).length > 0
       } catch (e) {
         // if we can't be sure, we'll err on the side of caution and assume it has snapshots
