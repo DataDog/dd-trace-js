@@ -112,7 +112,7 @@ class OpenApiPlugin extends TracingPlugin {
       }
     }
 
-    if ('stream' in payload) {
+    if (payload.stream) {
       tags['openai.request.stream'] = payload.stream
     }
 
