@@ -93,7 +93,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 
   metricsQueue.set(MANUAL_KEEP, 'true')
   if (standaloneEnabled) {
-    metricsQueue.set(APPSEC_PROPAGATION_KEY, '1')
+    metricsQueue.set(APPSEC_PROPAGATION_KEY, 1)
   }
 
   incrementWafInitMetric(wafVersion, rulesVersion)
@@ -125,7 +125,7 @@ function reportAttack (attackData) {
 
   if (standaloneEnabled) {
     newTags[MANUAL_KEEP] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
-    newTags[APPSEC_PROPAGATION_KEY] = '1'
+    newTags[APPSEC_PROPAGATION_KEY] = 1
   } else if (limiter.isAllowed()) {
     newTags[MANUAL_KEEP] = 'true'
   }

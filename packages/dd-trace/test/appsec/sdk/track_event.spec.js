@@ -255,7 +255,7 @@ describe('track_event', () => {
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true',
-          '_dd.p.appsec': '1'
+          '_dd.p.appsec': 1
         })
       })
     })

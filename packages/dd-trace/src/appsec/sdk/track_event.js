@@ -61,7 +61,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, standalon
   }
 
   if (standaloneEnabled) {
-    tags[APPSEC_PROPAGATION_KEY] = '1'
+    tags[APPSEC_PROPAGATION_KEY] = 1
   }
 
   if (mode === 'sdk') {

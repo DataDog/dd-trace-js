@@ -128,7 +128,7 @@ describe('reporter', () => {
       })
 
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
-      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.eq('1')
+      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.eq(1)
     })
   })
 
@@ -305,7 +305,7 @@ describe('reporter', () => {
         'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
-        '_dd.p.appsec': '1',
+        '_dd.p.appsec': 1,
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'http.useragent': 'arachni',
