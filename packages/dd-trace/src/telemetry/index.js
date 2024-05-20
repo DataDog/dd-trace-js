@@ -302,14 +302,14 @@ function formatMapForTelemetry (map) {
     : ''
 }
 
-function formatSamplingRulesForTelemetry (samplingRules) {
-  const rules = []
-  for (const rule of samplingRules) {
-    if (rule.tags) { rule.tags = '{' + formatMapForTelemetry(rule.tags) + '}' }
-    rules.push('{' + formatMapForTelemetry(rule) + '}')
-  }
-  return JSON.stringify(rules)
-}
+// function formatSamplingRulesForTelemetry (samplingRules) {
+//   const rules = []
+//   for (const rule of samplingRules) {
+//     if (rule.tags) { rule.tags = '{' + formatMapForTelemetry(rule.tags) + '}' }
+//     rules.push('{' + formatMapForTelemetry(rule) + '}')
+//   }
+//   return JSON.stringify(rules)
+// }
 
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
@@ -341,7 +341,7 @@ function updateConfig (changes, config) {
     if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
     if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
     if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
-      entry.value = formatSamplingRulesForTelemetry(entry.value)
+      entry.value = JSON.stringify(entry.value)
     }
     if (Array.isArray(entry.value)) entry.value = value.join(',')
 
