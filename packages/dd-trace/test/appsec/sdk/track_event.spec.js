@@ -249,6 +249,15 @@ describe('track_event', () => {
           'appsec.events.event.metakey2': 'metaValue2'
         })
       })
+
+      it('should add _dd.p.appsec tag if standaloneEnabled', () => {
+        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined, true)
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true',
+          '_dd.p.appsec': '1'
+        })
+      })
     })
   })
 
