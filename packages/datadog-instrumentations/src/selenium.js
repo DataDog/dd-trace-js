@@ -43,7 +43,7 @@ addHook({
       isRumActive
     })
 
-    if (traceId) {
+    if (traceId && isRumActive) {
       await this.manage().addCookie({
         name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
         value: traceId
@@ -66,9 +66,8 @@ addHook({
           resolve()
         }, DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
       })
+      await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
     }
-
-    await this.manage().deleteCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME)
 
     return quit.apply(this, arguments)
   })
