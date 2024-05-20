@@ -15,13 +15,15 @@ const V4_PACKAGE_SHIMS = [
     file: 'resources/chat/completions.js',
     targetClass: 'Completions',
     baseResource: 'chat.completions',
-    methods: ['create']
+    methods: ['create'],
+    streamedResponse: true
   },
   {
     file: 'resources/completions.js',
     targetClass: 'Completions',
     baseResource: 'completions',
-    methods: ['create']
+    methods: ['create'],
+    streamedResponse: true
   },
   {
     file: 'resources/embeddings.js',
@@ -210,7 +212,6 @@ function buffersToJSON (chunks = []) {
  * This way, spans look the same as when not streamed.
  */
 function wrapStreamIterator (response, options) {
-  let content // the total build up of the response
   let processChunksAsBuffers = false
   const chunks = []
   return function (itr) {
@@ -231,10 +232,10 @@ function wrapStreamIterator (response, options) {
             }
 
             if (done) {
-              content = chunks.filter(chunk => chunk == null) // filter null or undefined values
+              let content = chunks.filter(chunk => chunk != null) // filter null or undefined values
 
               if (processChunksAsBuffers) {
-                content = buffersToJSON(chunks)
+                content = buffersToJSON(content)
               }
 
               content = content.reduce((content, chunk) => {
@@ -264,8 +265,8 @@ function wrapStreamIterator (response, options) {
 }
 
 for (const shim of V4_PACKAGE_SHIMS) {
-  const { file, targetClass, baseResource, methods } = shim
-  addHook({ name: 'openai', file, versions: shim.versions || ['>=4'] }, exports => {
+  const { file, targetClass, baseResource, methods, versions, streamedResponse } = shim
+  addHook({ name: 'openai', file, versions: versions || ['>=4'] }, exports => {
     const targetPrototype = exports[targetClass].prototype
 
     for (const methodName of methods) {
@@ -274,7 +275,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
           return methodFn.apply(this, arguments)
         }
 
-        const stream = arguments[0].stream
+        // The OpenAI library lets you set `stream: true` on the options arg to any method
+        // However, we only want to handle streamed responses in specific cases
+        // chat.completions and completions
+        const stream = streamedResponse && arguments[arguments.length - 1]?.stream
 
         const client = this._client || this.client
 
