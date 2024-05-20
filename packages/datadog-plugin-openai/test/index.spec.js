@@ -5,7 +5,6 @@ const Path = require('path')
 const { expect } = require('chai')
 const semver = require('semver')
 const nock = require('nock')
-const { ReadableStream } = require('stream/web')
 const sinon = require('sinon')
 const { spawn } = require('child_process')
 
