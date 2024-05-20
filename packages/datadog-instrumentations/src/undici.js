@@ -5,8 +5,9 @@ const {
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
-const tracingChannel = require('node:diagnostics_channel')
-const ch = tracingChannel.tracingChannel('undici:fetch')
+const tracingChannel = require('dc-polyfill').tracingChannel
+const ch = tracingChannel('apm:undici:fetch')
+
 const { createWrapFetch } = require('./helpers/fetch')
 
 addHook({

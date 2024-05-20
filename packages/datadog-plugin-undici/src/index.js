@@ -5,7 +5,7 @@ const FetchPlugin = require('../../datadog-plugin-fetch/src/index.js')
 class UndiciPlugin extends FetchPlugin {
   static get id () { return 'undici' }
   static get prefix () {
-    return 'tracing:undici:fetch'
+    return 'tracing:apm:undici:fetch'
   }
 }
 

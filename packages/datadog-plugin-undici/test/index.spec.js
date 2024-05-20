@@ -38,8 +38,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        beforeEach(function () {
-        // this.timeout(10000)
+        beforeEach(() => {
           return agent.load('undici', {
             service: 'test'
           })
@@ -47,6 +46,10 @@ describe('Plugin', () => {
               express = require('express')
               fetch = require(`../../../versions/undici@${version}`, {}).get()
             })
+        })
+
+        afterEach(() => {
+          express = null
         })
 
         withNamingSchema(
@@ -64,6 +67,36 @@ describe('Plugin', () => {
           },
           rawExpectedSchema.client
         )
+
+        it('FIRST TEST FAILS BECAUSE.', () => {
+        })
+
+        it('should do automatic instrumentation', function (done) {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          getPort().then(port => {
+            agent
+              .use(traces => {
+                expect(traces[0][0]).to.have.property('service', 'test')
+                expect(traces[0][0]).to.have.property('type', 'http')
+                expect(traces[0][0]).to.have.property('resource', 'GET')
+                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
+                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
+                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
+                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
+                expect(traces[0][0].meta).to.have.property('component', 'undici')
+                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port, () => {
+              fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
+            })
+          })
+        })
 
         it('should support URL input', done => {
           const app = express()
@@ -89,39 +122,6 @@ describe('Plugin', () => {
             appListener = server(app, port, () => {
               fetch.fetch(new URL(`http://localhost:${port}/user`), { method: 'POST' })
             })
-          })
-        })
-
-        it('should do automatic instrumentation', function (done) {
-        // this.timeout(10000)
-          const app = express()
-          // setTimeout(done, 1000)
-          app.get('/user', (req, res) => {
-            res.status(200).send()
-          })
-          // setTimeout(done, 1000)
-          getPort().then(port => {
-            agent
-              .use(traces => {
-                //   console.log('traces', traces[0][0])
-                expect(traces[0][0]).to.have.property('service', 'test')
-                expect(traces[0][0]).to.have.property('type', 'http')
-                expect(traces[0][0]).to.have.property('resource', 'GET')
-                expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-                expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
-                expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-                expect(traces[0][0].meta).to.have.property('http.status_code', '200')
-                expect(traces[0][0].meta).to.have.property('component', 'undici')
-                expect(traces[0][0].meta).to.have.property('out.host', 'localhost')
-              })
-              .then(done)
-              .catch(done)
-
-            appListener = server(app, port, () => {
-            // setTimeout(done, 1000)
-              fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
-            })
-            //   setTimeout(() => {}, 1000)
           })
         })
 
