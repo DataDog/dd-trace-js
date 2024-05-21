@@ -10,6 +10,7 @@ const Hook = require('../src/ritm')
 describe('Ritm', () => {
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
   let utilHook, aHook, bHook, httpHook
+  const origRequire = Module.prototype.require
 
   before(() => {
     moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -50,6 +51,7 @@ describe('Ritm', () => {
     aHook.unhook()
     bHook.unhook()
     httpHook.unhook()
+    Module.prototype.require = origRequire
   })
 
   it('should shim util', () => {

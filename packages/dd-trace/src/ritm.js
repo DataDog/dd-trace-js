@@ -5,8 +5,6 @@ const Module = require('module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
 
-const origRequire = Module.prototype.require
-
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -35,7 +33,9 @@ function Hook (modules, options, onrequire) {
   this.modules = modules
   this.options = options
   this.onrequire = onrequire
-  const _origRequire = Module.prototype.require
+  this.origRequire = Module.prototype.require
+
+  const self = this
 
   if (Array.isArray(modules)) {
     for (const mod of modules) {
@@ -61,7 +61,7 @@ function Hook (modules, options, onrequire) {
     try {
       filename = Module._resolveFilename(request, this)
     } catch (resolveErr) {
-      return _origRequire.apply(this, arguments)
+      return self.origRequire.apply(this, arguments)
     }
 
     const core = filename.indexOf(path.sep) === -1
@@ -81,7 +81,7 @@ function Hook (modules, options, onrequire) {
     const patched = patching[filename]
     if (patched) {
       // If it's already patched, just return it as-is.
-      return _origRequire.apply(this, arguments)
+      return self.origRequire.apply(this, arguments)
     } else {
       patching[filename] = true
     }
@@ -94,7 +94,7 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    const exports = _origRequire.apply(this, arguments)
+    const exports = self.origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
@@ -159,7 +159,7 @@ function Hook (modules, options, onrequire) {
 }
 
 Hook.reset = function () {
-  Module.prototype.require = origRequire
+  Module.prototype.require = this.origRequire
   patchedRequire = null
   patching = Object.create(null)
   cache = Object.create(null)
