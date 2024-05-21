@@ -35,7 +35,6 @@ function Hook (modules, options, onrequire) {
   this.modules = modules
   this.options = options
   this.onrequire = onrequire
-  const _origRequire = Module.prototype.require
 
   if (Array.isArray(modules)) {
     for (const mod of modules) {
@@ -51,6 +50,7 @@ function Hook (modules, options, onrequire) {
 
   if (patchedRequire) return
 
+  const _origRequire = Module.prototype.require
   patchedRequire = Module.prototype.require = function (request) {
     /*
     If resolving the filename for a `require(...)` fails, defer to the wrapped
