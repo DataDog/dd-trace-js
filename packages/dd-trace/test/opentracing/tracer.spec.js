@@ -71,7 +71,8 @@ describe('Tracer', () => {
       logger: 'logger',
       tags: {},
       debug: true,
-      experimental: {}
+      experimental: {},
+      apmTracingEnabled: true
     }
 
     log = {
@@ -120,7 +121,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
-        apmTracingEnabled: undefined,
+        apmTracingEnabled: true,
         integrationName: undefined,
         links: undefined
       }, true)
@@ -180,7 +181,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
-        apmTracingEnabled: undefined,
+        apmTracingEnabled: true,
         integrationName: undefined,
         links: undefined
       })
@@ -253,7 +254,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
-        apmTracingEnabled: undefined,
+        apmTracingEnabled: true,
         integrationName: undefined,
         links: undefined
       })
@@ -298,7 +299,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
-        apmTracingEnabled: undefined,
+        apmTracingEnabled: true,
         integrationName: undefined,
         links: [{ context }]
       })
