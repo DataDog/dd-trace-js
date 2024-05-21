@@ -592,7 +592,9 @@ function coverageReporterWrapper (coverageReporter) {
    * This calculation adds no value, so we'll skip it.
    */
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
-    if (isSuitesSkippingEnabled) {
+    // If the user has added coverage manually, they're willing to pay the price of this execution, so
+    // we will not skip it
+    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
