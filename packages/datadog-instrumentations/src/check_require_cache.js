@@ -15,13 +15,13 @@ const potentialConflicts = new Set([
   '@instana/azure-container-services',
   '@instana/collector',
   '@instana/google-cloud-run',
-  '@opentelemetry/sdk-node',
   '@sentry/node',
   'appoptics-apm',
   'atatus-nodejs',
   'elastic-apm-node',
   'newrelic',
-  'stackify-node-apm'
+  'stackify-node-apm',
+  'sqreen'
 ])
 
 const extractPackageAndModulePath = require('./utils/src/extract-package-and-module-path')
@@ -53,13 +53,13 @@ module.exports.checkForRequiredModules = function () {
     if (naughties.has(pkg)) continue
     if (!(pkg in packages)) continue
 
-    console.error(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
+    console.warn(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) console.error('Warning: Please ensure dd-trace is loaded before other modules.')
+  if (didWarn) console.warn('Warning: Please ensure dd-trace is loaded before other modules.')
 }
 
 /**
@@ -85,11 +85,11 @@ module.exports.checkForPotentialConflicts = function () {
     if (naughties.has(pkg)) continue
     if (!potentialConflicts.has(pkg)) continue
 
-    console.error(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
+    console.warn(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) console.error('Warning: Packages were loaded that may conflict with dd-trace.')
+  if (didWarn) console.warn('Warning: Packages were loaded that may conflict with dd-trace.')
 }
