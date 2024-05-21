@@ -548,6 +548,19 @@ declare namespace tracer {
          */
         redactionValuePattern?: string
       }
+
+      appsec?: {
+        /**
+         * Configuration of Standalone ASM mode
+         */
+        standalone?: {
+          /**
+           * Whether to enable Standalone ASM.
+           * @default false
+           */
+          enabled?: boolean
+        }
+      }
     };
 
     /**
