@@ -81,7 +81,7 @@ function Hook (modules, options, onrequire) {
     const patched = patching[filename]
     if (patched) {
       // If it's already patched, just return it as-is.
-      return origRequire.apply(this, arguments)
+      return _origRequire.apply(this, arguments)
     } else {
       patching[filename] = true
     }
@@ -94,7 +94,7 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    const exports = origRequire.apply(this, arguments)
+    const exports = _origRequire.apply(this, arguments)
     payload.module = exports
     if (moduleLoadEndChannel.hasSubscribers) {
       moduleLoadEndChannel.publish(payload)
