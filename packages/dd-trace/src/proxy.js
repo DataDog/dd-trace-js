@@ -13,7 +13,7 @@ const AppsecSdk = require('./appsec/sdk')
 const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
-const { SSITelemetry } = require('./profiling/ssi-telemetry')
+const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 
 class LazyModule {
@@ -96,8 +96,8 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      const ssiTelemetry = new SSITelemetry(config.profiling)
-      ssiTelemetry.start()
+      const ssiHeuristics = new SSIHeuristics(config.profiling)
+      ssiHeuristics.start()
       if (config.profiling.enabled) {
         this._profilerStarted = this._startProfiler(config)
       } else if (config.profiling.ssi) {
@@ -105,10 +105,10 @@ class Tracer extends NoopProxy {
         mockProfiler.start(config)
 
         if (config.profiling.heuristicsEnabled) {
-          ssiTelemetry.onHeuristicsTriggered(() => {
+          ssiHeuristics.onTriggered(() => {
             mockProfiler.stop()
             this._startProfiler(config)
-            ssiTelemetry.onHeuristicsTriggered()
+            ssiHeuristics.onTriggered()
           })
         }
       }

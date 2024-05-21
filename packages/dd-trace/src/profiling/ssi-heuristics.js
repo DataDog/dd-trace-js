@@ -42,17 +42,19 @@ function enablementChoiceToTagValue (enablementChoice) {
 }
 
 /**
- * This class emits telemetry metrics about the profiler behavior under SSI. It will only emit metrics
- * when the application closes, and will emit the following metrics:
+ * This class embodies the SSI profiler-triggering heuristics and also emits telemetry metrics about
+ * the profiler behavior under SSI. It emits the following metrics:
  * - `number_of_profiles`: The number of profiles that were submitted
- * - `number_of_runtime_id`: The number of runtime IDs in the app (always 1 for Node.js)
- * It will also add tags describing the state of heuristics triggers, the enablement choice, and whether
- * actual profiles were sent (as opposed to mock profiles). There is a mock profiler that is activated
- * when the profiler is not enabled, and it will emit mock profile submission events at the same cadence
- * the profiler would, providing insight into how many profiles would've been emitted if SSI enabled
- * profiling. Note that telemetry is per tracer instance, and each worker thread will have its own instance.
+ * - `number_of_runtime_id`: The number of runtime IDs in the app (always 1 for Node.js, emitted
+ *   once when the tags won't change for the remaineder of of the app's lifetime.)
+ * It will also add tags describing the state of heuristics triggers, the enablement choice, and
+ * whether actual profiles were sent (as opposed to mock profiles). There is a mock profiler that is
+ * activated when the profiler is not enabled, and it will emit mock profile submission events at
+ * the same cadence the profiler would, providing insight into how many profiles would've been
+ * emitted if SSI enabled profiling. Note that heuristics (and thus telemetry) is per tracer
+ * instance, and each worker thread will have its own instance.
  */
-class SSITelemetry {
+class SSIHeuristics {
   constructor (config) {
     this.enablementChoice = getEnablementChoiceFromConfig(config)
 
@@ -94,7 +96,7 @@ class SSITelemetry {
     }
   }
 
-  onHeuristicsTriggered (callback) {
+  onTriggered (callback) {
     switch (typeof callback) {
       case 'undefined':
       case 'function':
@@ -190,4 +192,4 @@ class SSITelemetry {
   }
 }
 
-module.exports = { SSITelemetry, EnablementChoice }
+module.exports = { SSIHeuristics, EnablementChoice }
