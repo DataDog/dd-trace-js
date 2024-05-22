@@ -85,6 +85,12 @@ package-arm:
     - ../.gitlab/build-deb-rpm.sh
     - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
+package-oci:
+  extends: .package-oci
+  stage: package
+  script:
+    - ../.gitlab/build_oci_package.sh
+
 .release-package:
   stage: deploy
   variables:
