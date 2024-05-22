@@ -1,3 +1,5 @@
+'use strict'
+
 const { createCoverageMap } = require('istanbul-lib-coverage')
 const { addHook, channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -261,6 +263,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return runMocha.apply(this, arguments)
     }
+
     const mocha = arguments[0]
     /**
      * This attaches `run` to the global context, which we'll call after
@@ -413,6 +416,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
+
     this.worker.on('message', function (message) {
       if (Array.isArray(message)) {
         const [messageCode, payload] = message
@@ -471,6 +475,7 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
