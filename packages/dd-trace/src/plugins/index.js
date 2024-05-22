@@ -44,7 +44,6 @@ module.exports = {
   get 'jest-config' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-node' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-environment-jsdom' () { return require('../../../datadog-plugin-jest/src') },
-  get 'jest-jasmine2' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-runtime' () { return require('../../../datadog-plugin-jest/src') },
   get 'jest-worker' () { return require('../../../datadog-plugin-jest/src') },
   get koa () { return require('../../../datadog-plugin-koa/src') },

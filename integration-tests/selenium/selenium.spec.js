@@ -113,5 +113,34 @@ versionRange.forEach(version => {
         })
       })
     })
+
+    it('does not crash when used outside a known test framework', (done) => {
+      let testOutput = ''
+      childProcess = exec(
+        'node ./ci-visibility/test/selenium-no-framework.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            WEB_APP_URL: `http://localhost:${webAppPort}`,
+            TESTS_TO_RUN: '**/ci-visibility/test/selenium-test*'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', (code) => {
+        assert.equal(code, 0)
+        assert.notInclude(testOutput, 'InvalidArgumentError')
+        done()
+      })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+    })
   })
 })

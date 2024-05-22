@@ -265,6 +265,7 @@ tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
+tracer.use('child_process');
 tracer.use('connect');
 tracer.use('connect', httpServerOptions);
 tracer.use('cypress');

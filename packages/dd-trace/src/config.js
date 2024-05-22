@@ -16,7 +16,7 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('./plugins/util/tags')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo } = require('./git_properties')
 const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
-const { getIsGCPFunction, getIsAzureFunctionConsumptionPlan } = require('./serverless')
+const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
@@ -339,7 +339,7 @@ class Config {
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
-    this.isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
+    this.isAzureFunction = getIsAzureFunction()
     this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
     this.installSignature = {
       id: DD_INSTRUMENTATION_INSTALL_ID,
@@ -417,8 +417,8 @@ class Config {
   _isInServerlessEnvironment () {
     const inAWSLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined
     const isGCPFunction = getIsGCPFunction()
-    const isAzureFunctionConsumptionPlan = getIsAzureFunctionConsumptionPlan()
-    return inAWSLambda || isGCPFunction || isAzureFunctionConsumptionPlan
+    const isAzureFunction = getIsAzureFunction()
+    return inAWSLambda || isGCPFunction || isAzureFunction
   }
 
   // for _merge to work, every config value must have a default value
@@ -519,6 +519,7 @@ class Config {
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
+    this._setValue(defaults, 'instrumentation_config_id', undefined)
   }
 
   _applyEnvironment () {
@@ -551,7 +552,9 @@ class Config {
       DD_IAST_REDACTION_VALUE_PATTERN,
       DD_IAST_REQUEST_SAMPLING,
       DD_IAST_TELEMETRY_VERBOSITY,
+      DD_INJECTION_ENABLED,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
+      DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
@@ -703,10 +706,18 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED, // to comply with instrumentation telemetry specs
       !(this._isInServerlessEnvironment() || JEST_WORKER_ID)
     ))
+    this._setString(env, 'instrumentation_config_id', DD_INSTRUMENTATION_CONFIG_ID)
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
-    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED, DD_IAST_ENABLED))
+    const hasTelemetryLogsUsingFeatures =
+      isTrue(DD_IAST_ENABLED) ||
+      isTrue(DD_PROFILING_ENABLED) ||
+      (typeof DD_INJECTION_ENABLED === 'string' && DD_INJECTION_ENABLED.split(',').includes('profiling'))
+        ? true
+        : undefined
+    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
+      hasTelemetryLogsUsingFeatures))
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -788,8 +799,10 @@ class Config {
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
-    this._setBoolean(opts, 'telemetry.logCollection', options.iastOptions &&
-    (options.iastOptions === true || options.iastOptions.enabled === true))
+    const hasTelemetryLogsUsingFeatures =
+      (options.iastOptions && (options.iastOptions === true || options.iastOptions?.enabled === true)) ||
+      (options.profiling && options.profiling === true)
+    this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
@@ -877,7 +890,7 @@ class Config {
     return coalesce(
       this.options.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
-      getIsGCPFunction() || getIsAzureFunctionConsumptionPlan()
+      getIsGCPFunction() || getIsAzureFunction()
     )
   }
 

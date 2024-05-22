@@ -19,7 +19,6 @@ const {
   getJestTestName,
   getJestSuitesToRun
 } = require('../../datadog-plugin-jest/src/util')
-const { DD_MAJOR } = require('../../../version')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -67,14 +66,6 @@ let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
 
 const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
-const specStatusToTestStatus = {
-  pending: 'skip',
-  disabled: 'skip',
-  todo: 'skip',
-  passed: 'pass',
-  failed: 'fail'
-}
 
 const asyncResources = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -157,7 +148,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       let hasSnapshotTests = true
       try {
-        const { _snapshotData } = this.context.expect.getState().snapshotState
+        const { _snapshotData } = this.getVmContext().expect.getState().snapshotState
         hasSnapshotTests = Object.keys(_snapshotData).length > 0
       } catch (e) {
         // if we can't be sure, we'll err on the side of caution and assume it has snapshots
@@ -836,45 +827,6 @@ addHook({
   name: 'jest-config',
   versions: ['24.8.0 - 24.9.0']
 }, jestConfigSyncWrapper)
-
-function jasmineAsyncInstallWraper (jasmineAsyncInstallExport, jestVersion) {
-  log.warn('jest-jasmine2 support is removed from dd-trace@v4. Consider changing to jest-circus as `testRunner`.')
-  return function (globalConfig, globalInput) {
-    globalInput._ddtrace = global._ddtrace
-    shimmer.wrap(globalInput.jasmine.Spec.prototype, 'execute', execute => function (onComplete) {
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      asyncResource.runInAsyncScope(() => {
-        const testSuite = getTestSuitePath(this.result.testPath, globalConfig.rootDir)
-        testStartCh.publish({
-          name: this.getFullName(),
-          suite: testSuite,
-          runner: 'jest-jasmine2',
-          frameworkVersion: jestVersion
-        })
-        const spec = this
-        const callback = asyncResource.bind(function () {
-          if (spec.result.failedExpectations && spec.result.failedExpectations.length) {
-            const formattedError = formatJestError(spec.result.failedExpectations[0].error)
-            testErrCh.publish(formattedError)
-          }
-          testRunFinishCh.publish({ status: specStatusToTestStatus[spec.result.status] })
-          onComplete.apply(this, arguments)
-        })
-        arguments[0] = callback
-        execute.apply(this, arguments)
-      })
-    })
-    return jasmineAsyncInstallExport.default(globalConfig, globalInput)
-  }
-}
-
-if (DD_MAJOR < 4) {
-  addHook({
-    name: 'jest-jasmine2',
-    versions: ['>=24.8.0'],
-    file: 'build/jasmineAsyncInstall.js'
-  }, jasmineAsyncInstallWraper)
-}
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = [
   'selenium-webdriver'

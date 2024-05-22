@@ -1,9 +1,5 @@
 const { expect } = require('chai')
 const proxyquire = require('proxyquire')
-const { calculateDDBasePath } = require('../../../src/util')
-
-const ddBasePath = calculateDDBasePath(__dirname)
-const EOL = '\n'
 
 describe('IAST log', () => {
   let iastLog
@@ -97,57 +93,6 @@ describe('IAST log', () => {
       expect(log.error.getCall(1).args[0]).to.be.eq('errorAndPublish')
       expect(log.error.getCall(2).args[0]).to.be.eq('error2')
       expect(telemetryLog.publish).to.be.calledOnceWith({ message: 'errorAndPublish', level: 'ERROR' })
-    })
-
-    it('should include original message and dd frames', () => {
-      const ddFrame = `at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
-      const stack = new Error('Error 1')
-        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
-
-      const ddFrames = stack
-        .split(EOL)
-        .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, ''))
-
-      iastLog.errorAndPublish({ message: 'Error 1', stack })
-
-      expect(telemetryLog.publish).to.be.calledOnce
-      const log = telemetryLog.publish.getCall(0).args[0]
-
-      expect(log.message).to.be.eq('Error 1')
-      expect(log.level).to.be.eq('ERROR')
-
-      log.stack_trace.split(EOL).forEach((frame, index) => {
-        if (index !== 0) {
-          expect(ddFrames.indexOf(frame) !== -1).to.be.true
-        }
-      })
-    })
-
-    it('should not include original message if first frame is not a dd frame', () => {
-      const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
-        at T (${ddBasePath}packages/dd-trace/test/telemetry/logs/log_collector.spec.js:29:21)`
-      const stack = new Error('Error 1')
-        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${thirdPartyFrame}${EOL}`)
-
-      const ddFrames = stack
-        .split(EOL)
-        .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, ''))
-
-      iastLog.errorAndPublish({ message: 'Error 1', stack })
-
-      expect(telemetryLog.publish).to.be.calledOnce
-
-      const log = telemetryLog.publish.getCall(0).args[0]
-      expect(log.message).to.be.eq('omitted')
-      expect(log.level).to.be.eq('ERROR')
-
-      log.stack_trace.split(EOL).forEach((frame, index) => {
-        if (index !== 0) {
-          expect(ddFrames.indexOf(frame) !== -1).to.be.true
-        }
-      })
     })
   })
 })
