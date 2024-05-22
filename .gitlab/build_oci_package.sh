@@ -6,7 +6,7 @@ cd ..
 
 npm pack
 
-cp dd-trace-js*.tar.gz packaging/dd-trace-js.tar.gz
+cp dd-trace-*.tgz packaging/dd-trace.tgz
 
 mkdir -p packaging/sources
 
@@ -14,7 +14,7 @@ jq --raw-output '.version' package.json > packaging/sources/version
 
 cd packaging
 
-npm install dd-trace-js.tar.gz
+npm install dd-trace.tgz
 
 cp -R node_modules sources/
 
