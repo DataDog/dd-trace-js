@@ -35,7 +35,7 @@ describe('RemoteConfigManager', () => {
     extraServices = []
 
     RemoteConfigManager = proxyquire('../src/appsec/remote_config/manager', {
-      'crypto': { randomUUID },
+      crypto: { randomUUID },
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },
       '../../exporters/common/request': request,
