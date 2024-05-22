@@ -6,17 +6,13 @@ cd ..
 
 npm pack
 
-cp dd-trace-*.tgz packaging/dd-trace.tgz
-
 mkdir -p packaging/sources
+
+npm install --prefix ./packaging/sources/ dd-trace-*.tgz
 
 jq --raw-output '.version' package.json > packaging/sources/version
 
 cd packaging
-
-npm install dd-trace.tgz
-
-cp -R node_modules sources/
 
 export VERSION=$(<sources/version)
 
