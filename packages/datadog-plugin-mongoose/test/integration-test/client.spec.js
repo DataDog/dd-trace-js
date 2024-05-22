@@ -25,7 +25,7 @@ describe('esm', () => {
     before(async function () {
       this.timeout(20000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [
-        `./packages/datadog-plugin-mongoose/test/integration-test/*`])
+        './packages/datadog-plugin-mongoose/test/integration-test/*'])
     })
 
     after(async () => {

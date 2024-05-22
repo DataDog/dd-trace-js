@@ -151,7 +151,7 @@ describe('Plugin', () => {
                   'amqp.link.role': 'sender',
                   'amqp.delivery.state': 'accepted',
                   'out.host': 'localhost',
-                  'component': 'rhea'
+                  component: 'rhea'
                 })
                 expect(span.metrics).to.include({
                   'network.destination.port': 5673
@@ -205,7 +205,7 @@ describe('Plugin', () => {
                   'span.kind': 'consumer',
                   'amqp.link.source.address': 'amq.topic',
                   'amqp.link.role': 'receiver',
-                  'component': 'rhea'
+                  component: 'rhea'
                 })
               })
                 .then(done, done)
@@ -442,7 +442,7 @@ describe('Plugin', () => {
                     [ERROR_MESSAGE]: 'this is an error',
                     [ERROR_TYPE]: 'Error',
                     [ERROR_STACK]: error.stack,
-                    'component': 'rhea'
+                    component: 'rhea'
                   })
                   Session.prototype.on_transfer = onTransfer
                 }).then(done, done)
@@ -650,7 +650,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: 'Error',
                 [ERROR_MESSAGE]: 'fake protocol error',
                 [ERROR_STACK]: err.stack,
-                'component': 'rhea'
+                component: 'rhea'
               })
               expect(span.metrics).to.include({
                 'network.destination.port': expectedServerPort
@@ -682,7 +682,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: 'Error',
                 [ERROR_MESSAGE]: 'fake protocol error',
                 [ERROR_STACK]: err.stack,
-                'component': 'rhea'
+                component: 'rhea'
               })
             }).then(done, done)
             client.on('message', msg => {
@@ -715,7 +715,7 @@ function expectReceiving (agent, expectedSchema, deliveryState, topic) {
       'span.kind': 'consumer',
       'amqp.link.source.address': topic,
       'amqp.link.role': 'receiver',
-      'component': 'rhea'
+      component: 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState
@@ -740,7 +740,7 @@ function expectSending (agent, expectedSchema, deliveryState, topic) {
       'span.kind': 'producer',
       'amqp.link.target.address': topic,
       'amqp.link.role': 'sender',
-      'component': 'rhea'
+      component: 'rhea'
     }
     if (deliveryState) {
       expectedMeta['amqp.delivery.state'] = deliveryState

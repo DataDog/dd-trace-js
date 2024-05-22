@@ -4,12 +4,29 @@ const { EventEmitter } = require('events')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
+const dc = require('dc-polyfill')
+const telemetryLog = dc.channel('datadog:telemetry:log')
+
+const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 
 function maybeSourceMap (sourceMap, SourceMapper, debug) {
   if (!sourceMap) return
   return SourceMapper.create([
     process.cwd()
   ], debug)
+}
+
+function logError (logger, err) {
+  if (logger) {
+    logger.error(err)
+  }
+  if (telemetryLog.hasSubscribers) {
+    telemetryLog.publish({
+      message: err.message,
+      level: 'ERROR',
+      stack_trace: err.stack
+    })
+  }
 }
 
 class Profiler extends EventEmitter {
@@ -25,11 +42,13 @@ class Profiler extends EventEmitter {
 
   start (options) {
     return this._start(options).catch((err) => {
-      if (options.logger) {
-        options.logger.error(err)
-      }
+      logError(options.logger, err)
       return false
     })
+  }
+
+  _logError (err) {
+    logError(this._logger, err)
   }
 
   async _start (options) {
@@ -58,7 +77,7 @@ class Profiler extends EventEmitter {
         })
       }
     } catch (err) {
-      this._logger.error(err)
+      this._logError(err)
     }
 
     try {
@@ -75,7 +94,7 @@ class Profiler extends EventEmitter {
       this._capture(this._timeoutInterval, start)
       return true
     } catch (e) {
-      this._logger.error(e)
+      this._logError(e)
       this._stop()
       return false
     }
@@ -161,9 +180,10 @@ class Profiler extends EventEmitter {
         this._capture(this._timeoutInterval, endDate)
       }
       await this._submit(encodedProfiles, startDate, endDate, snapshotKind)
+      profileSubmittedChannel.publish()
       this._logger.debug('Submitted profiles')
     } catch (err) {
-      this._logger.error(err)
+      this._logError(err)
       this._stop()
     }
   }
@@ -178,7 +198,7 @@ class Profiler extends EventEmitter {
     tags.snapshot = snapshotKind
     for (const exporter of this._config.exporters) {
       const task = exporter.export({ profiles, start, end, tags })
-        .catch(err => this._logger.error(err))
+        .catch(err => this._logError(err))
 
       tasks.push(task)
     }

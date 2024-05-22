@@ -120,11 +120,12 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
       }, true)
 
       expect(span.addTags).to.have.been.calledWith({
-        'foo': 'bar'
+        foo: 'bar'
       })
 
       expect(testSpan).to.equal(span)
@@ -178,7 +179,8 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
       })
 
       expect(testSpan).to.equal(span)
@@ -219,13 +221,13 @@ describe('Tracer', () => {
 
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
-        'foo': 'tracer',
-        'bar': 'tracer'
+        foo: 'tracer',
+        bar: 'tracer'
       }
 
       fields.tags = {
-        'bar': 'span',
-        'baz': 'span'
+        bar: 'span',
+        baz: 'span'
       }
 
       tracer = new Tracer(config)
@@ -249,7 +251,30 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
-        integrationName: undefined
+        integrationName: undefined,
+        links: undefined
+      })
+
+      expect(testSpan).to.equal(span)
+    })
+
+    it('should start a span with span links attached', () => {
+      const context = new SpanContext()
+      fields.links = [{ context }]
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
+        operationName: 'name',
+        parent: null,
+        tags: {
+          'service.name': 'service'
+        },
+        startTime: fields.startTime,
+        hostname: undefined,
+        traceId128BitGenerationEnabled: undefined,
+        integrationName: undefined,
+        links: [{ context }]
       })
 
       expect(testSpan).to.equal(span)

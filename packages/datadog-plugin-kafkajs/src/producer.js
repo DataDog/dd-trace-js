@@ -1,8 +1,8 @@
 'use strict'
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
-const { encodePathwayContext } = require('../../dd-trace/src/datastreams/pathway')
-const { getMessageSize, CONTEXT_PROPAGATION_KEY } = require('../../dd-trace/src/datastreams/processor')
+const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
+const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
 
 const BOOTSTRAP_SERVERS_KEY = 'messaging.kafka.bootstrap.servers'
 
@@ -67,11 +67,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   }
 
   start ({ topic, messages, bootstrapServers }) {
-    let pathwayCtx
     const span = this.startSpan({
       resource: topic,
       meta: {
-        'component': 'kafkajs',
+        component: 'kafkajs',
         'kafka.topic': topic
       },
       metrics: {
@@ -88,8 +87,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
           const payloadSize = getMessageSize(message)
           const dataStreamsContext = this.tracer
             .setCheckpoint(['direction:out', `topic:${topic}`, 'type:kafka'], span, payloadSize)
-          pathwayCtx = encodePathwayContext(dataStreamsContext)
-          message.headers[CONTEXT_PROPAGATION_KEY] = pathwayCtx
+          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
         }
       }
     }

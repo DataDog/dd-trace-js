@@ -14,7 +14,13 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  JEST_DISPLAY_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -46,6 +52,7 @@ class JestPlugin extends CiPlugin {
     }
     return this.unskippableSuites
   }
+
   getForcedToRunSuites (forcedToRunSuitesList) {
     if (!this.forcedToRunSuites) {
       this.forcedToRunSuites = JSON.parse(forcedToRunSuitesList)
@@ -81,7 +88,10 @@ class JestPlugin extends CiPlugin {
       numSkippedSuites,
       hasUnskippableSuites,
       hasForcedToRunSuites,
-      error
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionFaulty,
+      onDone
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -106,27 +116,42 @@ class JestPlugin extends CiPlugin {
         }
       )
 
+      if (isEarlyFlakeDetectionEnabled) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+      }
+      if (isEarlyFlakeDetectionFaulty) {
+        this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
+      }
+
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
-      this.tracer._exporter.flush()
+
+      this.tracer._exporter.flush(() => {
+        if (onDone) {
+          onDone()
+        }
+      })
     })
 
     // Test suites can be run in a different process from jest's main one.
     // This subscriber changes the configuration objects from jest to inject the trace id
-    // of the test session to the processes that run the test suites.
+    // of the test session to the processes that run the test suites, and other data.
     this.addSub('ci:jest:session:configuration', configs => {
       configs.forEach(config => {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
         config._ddItrCorrelationId = this.itrCorrelationId
+        config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
+        config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddRepositoryRoot = this.repositoryRoot
       })
     })
 
-    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion }) => {
+    this.addSub('ci:jest:test-suite:start', ({ testSuite, testEnvironmentOptions, frameworkVersion, displayName }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
@@ -160,6 +185,9 @@ class JestPlugin extends CiPlugin {
       }
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (displayName) {
+        testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -223,7 +251,7 @@ class JestPlugin extends CiPlugin {
     })
 
     /**
-     * This can't use `this.itrConfig` like `ci:mocha:test-suite:code-coverage`
+     * This can't use `this.libraryConfig` like `ci:mocha:test-suite:code-coverage`
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */
@@ -286,7 +314,18 @@ class JestPlugin extends CiPlugin {
   }
 
   startTestSpan (test) {
-    const { suite, name, runner, testParameters, frameworkVersion, testStartLine } = test
+    const {
+      suite,
+      name,
+      runner,
+      displayName,
+      testParameters,
+      frameworkVersion,
+      testStartLine,
+      testSourceFile,
+      isNew,
+      isEfdRetry
+    } = test
 
     const extraTags = {
       [JEST_TEST_RUNNER]: runner,
@@ -295,6 +334,19 @@ class JestPlugin extends CiPlugin {
     }
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
+    }
+    // If for whatever we don't have the source file, we'll fall back to the suite name
+    extraTags[TEST_SOURCE_FILE] = testSourceFile || suite
+
+    if (displayName) {
+      extraTags[JEST_DISPLAY_NAME] = displayName
+    }
+
+    if (isNew) {
+      extraTags[TEST_IS_NEW] = 'true'
+      if (isEfdRetry) {
+        extraTags[TEST_IS_RETRY] = 'true'
+      }
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

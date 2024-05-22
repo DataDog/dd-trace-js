@@ -16,6 +16,7 @@ function getSkippableSuites ({
   url,
   isEvpProxy,
   evpProxyPrefix,
+  isGzipCompatible,
   env,
   service,
   repositoryUrl,
@@ -36,6 +37,10 @@ function getSkippableSuites ({
     },
     timeout: 20000,
     url
+  }
+
+  if (isGzipCompatible) {
+    options.headers['accept-encoding'] = 'gzip'
   }
 
   if (isEvpProxy) {
@@ -97,7 +102,8 @@ function getSkippableSuites ({
         const { meta: { correlation_id: correlationId } } = parsedResponse
         incrementCountMetric(
           testLevel === 'test'
-            ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
+            ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
+            : TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
           {},
           skippableSuites.length
         )

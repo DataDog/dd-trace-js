@@ -11,7 +11,8 @@ const {
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
   queryParser,
-  passportVerify
+  passportVerify,
+  responseBody
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -21,6 +22,7 @@ const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
+const addresses = require('../../src/appsec/addresses')
 
 describe('AppSec Index', () => {
   let config
@@ -31,6 +33,7 @@ describe('AppSec Index', () => {
   let log
   let appsecTelemetry
   let graphql
+  let apiSecuritySampler
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -84,13 +87,18 @@ describe('AppSec Index', () => {
       disable: sinon.stub()
     }
 
+    apiSecuritySampler = require('../../src/appsec/api_security_sampler')
+    sinon.spy(apiSecuritySampler, 'sampleRequest')
+    sinon.spy(apiSecuritySampler, 'isSampled')
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
       './blocking': blocking,
       './passport': passport,
       './telemetry': appsecTelemetry,
-      './graphql': graphql
+      './graphql': graphql,
+      './api_security_sampler': apiSecuritySampler
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -238,7 +246,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -285,7 +293,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -323,7 +331,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -366,7 +374,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -441,7 +449,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -476,7 +484,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -511,7 +519,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost',
+          host: 'localhost',
           cookie: 'a=1;b=2'
         },
         method: 'POST',
@@ -534,6 +542,53 @@ describe('AppSec Index', () => {
         }
       }, req)
     })
+
+    describe('onResponseBody', () => {
+      beforeEach(() => {
+        config.appsec.apiSecurity = {
+          enabled: true,
+          requestSampling: 1
+        }
+        AppSec.enable(config)
+      })
+
+      afterEach(() => {
+        AppSec.disable()
+      })
+
+      it('should not do anything if body is not an object', () => {
+        responseBody.publish({ req: {}, body: 'string' })
+        responseBody.publish({ req: {}, body: null })
+
+        expect(apiSecuritySampler.isSampled).to.not.been.called
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should not call to the waf if it is not a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
+        const req = {}
+
+        responseBody.publish({ req, body: {} })
+
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(waf.run).to.not.been.called
+      })
+
+      it('should call to the waf if it is a sampled request', () => {
+        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+        const req = {}
+        const body = {}
+
+        responseBody.publish({ req, body })
+
+        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(waf.run).to.been.calledOnceWith({
+          persistent: {
+            [addresses.HTTP_OUTGOING_BODY]: body
+          }
+        }, req)
+      })
+    })
   })
 
   describe('Channel handlers', () => {
@@ -551,7 +606,7 @@ describe('AppSec Index', () => {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          'host': 'localhost'
+          host: 'localhost'
         },
         method: 'POST',
         socket: {
@@ -905,7 +960,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': '*/*'
+            Accept: '*/*'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -917,7 +972,7 @@ describe('IP blocking', () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).catch((err) => {
           expect(err.response.status).to.be.equal(403)
@@ -975,7 +1030,7 @@ describe('IP blocking', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
-            'Accept': 'text/html'
+            Accept: 'text/html'
           }
         }).then(() => {
           throw new Error('Not expected')

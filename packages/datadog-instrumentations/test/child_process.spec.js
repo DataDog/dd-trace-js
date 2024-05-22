@@ -3,6 +3,7 @@
 const { promisify } = require('util')
 const agent = require('../../dd-trace/test/plugins/agent')
 const dc = require('dc-polyfill')
+const { NODE_MAJOR } = require('../../../version')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
@@ -32,10 +33,10 @@ describe('child process', () => {
         asyncFinish = sinon.stub()
 
         childProcessChannel.subscribe({
-          start: start,
+          start,
           end: finish,
           asyncEnd: asyncFinish,
-          error: error
+          error
         })
 
         childProcess = require(childProcessModuleName)
@@ -43,10 +44,10 @@ describe('child process', () => {
 
       afterEach(() => {
         childProcessChannel.unsubscribe({
-          start: start,
+          start,
           end: finish,
           asyncEnd: asyncFinish,
-          error: error
+          error
         })
       })
 
@@ -269,14 +270,14 @@ describe('child process', () => {
                 expect(start).to.have.been.calledOnceWith({
                   command: 'ls',
                   shell: false,
-                  result: result
+                  result
                 },
                 'tracing:datadog:child_process:execution:start')
 
                 expect(finish).to.have.been.calledOnceWith({
                   command: 'ls',
                   shell: false,
-                  result: result
+                  result
                 },
                 'tracing:datadog:child_process:execution:end')
 
@@ -303,18 +304,37 @@ describe('child process', () => {
               it('should execute error callback with `exit 1` command', () => {
                 let childError
                 try {
-                  childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
+                  childProcess[methodName]('node -e "process.exit(1)"')
                 } catch (error) {
                   childError = error
                 } finally {
                   expect(start).to.have.been.calledOnceWith({
                     command: 'node -e "process.exit(1)"',
-                    shell: true,
+                    shell: false,
                     error: childError
                   })
                   expect(finish).to.have.been.calledOnce
                 }
               })
+              if (methodName !== 'execFileSync' || NODE_MAJOR > 16) {
+                // when a process return an invalid code, in node <=16, in execFileSync with shell:true
+                // an exception is not thrown
+                it('should execute error callback with `exit 1` command with shell: true', () => {
+                  let childError
+                  try {
+                    childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
+                  } catch (error) {
+                    childError = error
+                  } finally {
+                    expect(start).to.have.been.calledOnceWith({
+                      command: 'node -e "process.exit(1)"',
+                      shell: true,
+                      error: childError
+                    })
+                    expect(finish).to.have.been.calledOnce
+                  }
+                })
+              }
             })
           })
         })

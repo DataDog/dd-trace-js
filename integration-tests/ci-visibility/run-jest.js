@@ -7,7 +7,8 @@ const options = {
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !process.env.DISABLE_CODE_COVERAGE,
   runInBand: true,
-  shard: process.env.TEST_SHARD || undefined
+  shard: process.env.TEST_SHARD || undefined,
+  testSequencer: process.env.CUSTOM_TEST_SEQUENCER
 }
 
 if (process.env.RUN_IN_PARALLEL) {
@@ -17,6 +18,10 @@ if (process.env.RUN_IN_PARALLEL) {
 
 if (process.env.OLD_RUNNER) {
   options.testRunner = 'jest-jasmine2'
+}
+
+if (process.env.ENABLE_JSDOM) {
+  options.testEnvironment = 'jsdom'
 }
 
 jest.runCLI(

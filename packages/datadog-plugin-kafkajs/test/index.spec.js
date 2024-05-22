@@ -2,6 +2,7 @@
 
 const { expect } = require('chai')
 const semver = require('semver')
+const dc = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -38,7 +39,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
         beforeEach(async () => {
-          process.env['DD_DATA_STREAMS_ENABLED'] = 'true'
+          process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
           await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
@@ -56,7 +57,7 @@ describe('Plugin', () => {
               service: expectedSchema.send.serviceName,
               meta: {
                 'span.kind': 'producer',
-                'component': 'kafkajs',
+                component: 'kafkajs',
                 'pathway.hash': expectedProducerHash.readBigUInt64BE(0).toString()
               },
               metrics: {
@@ -99,7 +100,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: error.name,
                 [ERROR_MESSAGE]: error.message,
                 [ERROR_STACK]: error.stack,
-                'component': 'kafkajs'
+                component: 'kafkajs'
               })
             })
 
@@ -157,7 +158,7 @@ describe('Plugin', () => {
               service: expectedSchema.receive.serviceName,
               meta: {
                 'span.kind': 'consumer',
-                'component': 'kafkajs',
+                component: 'kafkajs',
                 'pathway.hash': expectedConsumerHash.readBigUInt64BE(0).toString()
               },
               resource: testTopic,
@@ -221,7 +222,7 @@ describe('Plugin', () => {
                 [ERROR_TYPE]: fakeError.name,
                 [ERROR_MESSAGE]: fakeError.message,
                 [ERROR_STACK]: fakeError.stack,
-                'component': 'kafkajs'
+                component: 'kafkajs'
               },
               resource: testTopic,
               error: 1,
@@ -261,6 +262,69 @@ describe('Plugin', () => {
             runResult
               .then(() => sendMessages(kafka, testTopic, messages))
               .catch(done)
+          })
+
+          it('should publish on afterStart channel', (done) => {
+            const afterStart = dc.channel('dd-trace:kafkajs:consumer:afterStart')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+              afterStart.unsubscribe(spy)
+            })
+            afterStart.subscribe(spy)
+
+            let eachMessage = async ({ topic, partition, message }) => {
+              try {
+                expect(spy).to.have.been.calledOnce
+
+                const channelMsg = spy.firstCall.args[0]
+                expect(channelMsg).to.not.undefined
+                expect(channelMsg.topic).to.eq(testTopic)
+                expect(channelMsg.message.key).to.not.undefined
+                expect(channelMsg.message.key.toString()).to.eq(messages[0].key)
+                expect(channelMsg.message.value).to.not.undefined
+                expect(channelMsg.message.value.toString()).to.eq(messages[0].value)
+
+                const name = spy.firstCall.args[1]
+                expect(name).to.eq(afterStart.name)
+
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachMessage = () => {}
+              }
+            }
+
+            consumer.run({ eachMessage: (...args) => eachMessage(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
+          })
+
+          it('should publish on beforeFinish channel', (done) => {
+            const beforeFinish = dc.channel('dd-trace:kafkajs:consumer:beforeFinish')
+
+            const spy = sinon.spy(() => {
+              expect(tracer.scope().active()).to.not.be.null
+              beforeFinish.unsubscribe(spy)
+            })
+            beforeFinish.subscribe(spy)
+
+            let eachMessage = async ({ topic, partition, message }) => {
+              setImmediate(() => {
+                try {
+                  expect(spy).to.have.been.calledOnceWith(undefined, beforeFinish.name)
+
+                  done()
+                } catch (e) {
+                  done(e)
+                }
+              })
+
+              eachMessage = () => {}
+            }
+
+            consumer.run({ eachMessage: (...args) => eachMessage(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
           })
 
           withNamingSchema(

@@ -13,12 +13,7 @@ describe('IAST Rewriter', () => {
   })
 
   describe('Enabling rewriter', () => {
-    let rewriter, iastTelemetry
-
-    const shimmer = {
-      wrap: sinon.spy(),
-      unwrap: sinon.spy()
-    }
+    let rewriter, iastTelemetry, shimmer
 
     class Rewriter {
       rewrite (content, filename) {
@@ -35,27 +30,102 @@ describe('IAST Rewriter', () => {
       iastTelemetry = {
         add: sinon.spy()
       }
+
+      shimmer = {
+        wrap: sinon.spy(),
+        unwrap: sinon.spy()
+      }
+
+      const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
+
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
-        '@datadog/native-iast-rewriter': { Rewriter, getPrepareStackTrace: function () {} },
+        '@datadog/native-iast-rewriter': {
+          Rewriter,
+          getPrepareStackTrace: function (fn) {
+            const testWrap = function testWrappedPrepareStackTrace (_, callsites) {
+              return fn(_, callsites)
+            }
+            Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
+              value: true
+            })
+            return testWrap
+          },
+          kSymbolPrepareStackTrace
+        },
         '../../../../../datadog-shimmer': shimmer,
         '../../telemetry': iastTelemetry
       })
     })
 
     afterEach(() => {
-      sinon.restore()
+      sinon.reset()
     })
 
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enableRewriter()
       expect(shimmer.wrap).to.be.calledOnce
       expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
+
+      rewriter.disableRewriter()
     })
 
     it('Should unwrap module compile method on taint tracking disable', () => {
       rewriter.disableRewriter()
+
       expect(shimmer.unwrap).to.be.calledOnce
       expect(shimmer.unwrap.getCall(0).args[1]).eq('_compile')
+    })
+
+    it('Should keep original prepareStackTrace fn when calling enable and then disable', () => {
+      const orig = Error.prepareStackTrace
+
+      rewriter.enableRewriter()
+
+      const testPrepareStackTrace = (_, callsites) => {
+        // do nothing
+      }
+      Error.prepareStackTrace = testPrepareStackTrace
+
+      rewriter.disableRewriter()
+
+      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+
+      Error.prepareStackTrace = orig
+    })
+
+    it('Should keep original prepareStackTrace fn when calling disable only', () => {
+      const orig = Error.prepareStackTrace
+
+      const testPrepareStackTrace = (_, callsites) => {
+        // do nothing
+      }
+      Error.prepareStackTrace = testPrepareStackTrace
+
+      rewriter.disableRewriter()
+
+      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+
+      Error.prepareStackTrace = orig
+    })
+
+    it('Should keep original prepareStackTrace fn when calling disable if not marked with the Symbol', () => {
+      const orig = Error.prepareStackTrace
+
+      rewriter.enableRewriter()
+
+      // remove iast property to avoid wrapping the new testPrepareStackTrace fn
+      delete Error.prepareStackTrace
+
+      const testPrepareStackTrace = (_, callsites) => {
+        // do nothing
+      }
+      Error.prepareStackTrace = testPrepareStackTrace
+
+      rewriter.disableRewriter()
+
+      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+
+      Error.prepareStackTrace = orig
     })
   })
 

@@ -1,15 +1,12 @@
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
-const { ORIGIN_KEY } = require('../packages/dd-trace/src/constants')
 const { isTrue } = require('../packages/dd-trace/src/util')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
+const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 
 const options = {
   startupLogs: false,
-  tags: {
-    [ORIGIN_KEY]: 'ciapp-test'
-  },
   isCiVisibility: true,
   flushInterval: isJestWorker ? 0 : 5000
 }
@@ -24,9 +21,9 @@ if (isAgentlessEnabled) {
       exporter: 'datadog'
     }
   } else {
-    console.error(`DD_CIVISIBILITY_AGENTLESS_ENABLED is set, \
-but neither DD_API_KEY nor DATADOG_API_KEY are set in your environment, \
-so dd-trace will not be initialized.`)
+    console.error('DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
+      'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
+      'dd-trace will not be initialized.')
     shouldInit = false
   }
 } else {
@@ -38,6 +35,12 @@ so dd-trace will not be initialized.`)
 if (isJestWorker) {
   options.experimental = {
     exporter: 'jest_worker'
+  }
+}
+
+if (isCucumberWorker) {
+  options.experimental = {
+    exporter: 'cucumber_worker'
   }
 }
 

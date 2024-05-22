@@ -63,8 +63,8 @@ describe('dogstatsd', () => {
     })
 
     const dogstatsd = proxyquire('../src/dogstatsd', {
-      'dgram': dgram,
-      'dns': dns
+      dgram,
+      dns
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
@@ -121,6 +121,20 @@ describe('dogstatsd', () => {
     expect(udp4.send.firstCall.args[0].toString()).to.equal('test.avg:10|g\n')
     expect(udp4.send.firstCall.args[1]).to.equal(0)
     expect(udp4.send.firstCall.args[2]).to.equal(14)
+    expect(udp4.send.firstCall.args[3]).to.equal(8125)
+    expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
+  })
+
+  it('should send histograms', () => {
+    client = new DogStatsDClient()
+
+    client.histogram('test.histogram', 10)
+    client.flush()
+
+    expect(udp4.send).to.have.been.called
+    expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
+    expect(udp4.send.firstCall.args[1]).to.equal(0)
+    expect(udp4.send.firstCall.args[2]).to.equal(20)
     expect(udp4.send.firstCall.args[3]).to.equal(8125)
     expect(udp4.send.firstCall.args[4]).to.equal('127.0.0.1')
   })
@@ -296,7 +310,7 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
-  it('should fail over to UDP', (done) => {
+  it('should fail over to UDP when receiving HTTP 404 error from agent', (done) => {
     assertData = () => {
       setTimeout(() => {
         try {
@@ -317,6 +331,32 @@ describe('dogstatsd', () => {
     })
 
     client.increment('test.count', 10)
+
+    client.flush()
+  })
+
+  it('should fail over to UDP when receiving network error from agent', (done) => {
+    udp4.send = sinon.stub().callsFake(() => {
+      try {
+        expect(udp4.send).to.have.been.called
+        expect(udp4.send.firstCall.args[0].toString()).to.equal('test.foo:10|c\n')
+        expect(udp4.send.firstCall.args[2]).to.equal(14)
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    statusCode = null
+
+    // host exists but port does not, ECONNREFUSED
+    client = new DogStatsDClient({
+      metricsProxyUrl: 'http://localhost:32700',
+      host: 'localhost',
+      port: 8125
+    })
+
+    client.increment('test.foo', 10)
 
     client.flush()
   })
@@ -380,6 +420,16 @@ describe('dogstatsd', () => {
 
       expect(udp4.send).to.have.been.called
       expect(udp4.send.firstCall.args[0].toString()).to.equal('test.dist:10|d\n')
+    })
+
+    it('.histogram()', () => {
+      client = new CustomMetrics({ dogstatsd: {} })
+
+      client.histogram('test.histogram', 10)
+      client.flush()
+
+      expect(udp4.send).to.have.been.called
+      expect(udp4.send.firstCall.args[0].toString()).to.equal('test.histogram:10|h\n')
     })
   })
 })

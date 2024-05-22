@@ -6,6 +6,7 @@ const vulnerabilities = require('../../vulnerabilities')
 const { contains, intersects, remove } = require('./range-utils')
 
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
 const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
 const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-analyzer')
@@ -31,6 +32,9 @@ class SensitiveHandler {
     this._sensitiveAnalyzers.set(vulnerabilities.HEADER_INJECTION, (evidence) => {
       return headerSensitiveAnalyzer(evidence, this._namePattern, this._valuePattern)
     })
+    this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
+      return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
+    })
   }
 
   isSensibleName (name) {
@@ -51,7 +55,9 @@ class SensitiveHandler {
     const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
     if (sensitiveAnalyzer) {
       const sensitiveRanges = sensitiveAnalyzer(evidence)
-      return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
+      if (evidence.ranges || sensitiveRanges?.length) {
+        return this.toRedactedJson(evidence, sensitiveRanges, sourcesIndexes, sources)
+      }
     }
     return null
   }
@@ -67,7 +73,7 @@ class SensitiveHandler {
     let nextTaintedIndex = 0
     let sourceIndex
 
-    let nextTainted = ranges.shift()
+    let nextTainted = ranges?.shift()
     let nextSensitive = sensitive.shift()
 
     for (let i = 0; i < value.length; i++) {

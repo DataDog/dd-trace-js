@@ -83,13 +83,17 @@ class AgentEncoder {
       span = formatSpan(span)
       bytes.reserve(1)
 
-      if (span.type) {
+      if (span.type && span.meta_struct) {
+        bytes.buffer[bytes.length++] = 0x8d
+      } else if (span.type || span.meta_struct) {
         bytes.buffer[bytes.length++] = 0x8c
-
-        this._encodeString(bytes, 'type')
-        this._encodeString(bytes, span.type)
       } else {
         bytes.buffer[bytes.length++] = 0x8b
+      }
+
+      if (span.type) {
+        this._encodeString(bytes, 'type')
+        this._encodeString(bytes, span.type)
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -114,6 +118,10 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+      if (span.meta_struct) {
+        this._encodeString(bytes, 'meta_struct')
+        this._encodeObject(bytes, span.meta_struct)
+      }
     }
   }
 
@@ -260,6 +268,45 @@ class AgentEncoder {
       for (let i = 7; i >= 0; i--) {
         bytes.buffer[bytes.length - i - 1] = uInt8Float64Array[i]
       }
+    }
+  }
+
+  _encodeObject (bytes, value, circularReferencesDetector = new Set()) {
+    circularReferencesDetector.add(value)
+    if (Array.isArray(value)) {
+      return this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
+    } else if (value !== null && typeof value === 'object') {
+      return this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
+    } else if (typeof value === 'string' || typeof value === 'number') {
+      this._encodeValue(bytes, value)
+    }
+  }
+
+  _encodeObjectAsMap (bytes, value, circularReferencesDetector) {
+    const keys = Object.keys(value)
+    const validKeys = keys.filter(key =>
+      typeof value[key] === 'string' ||
+      typeof value[key] === 'number' ||
+      (value[key] !== null && typeof value[key] === 'object' && !circularReferencesDetector.has(value[key])))
+
+    this._encodeMapPrefix(bytes, validKeys.length)
+
+    for (const key of validKeys) {
+      this._encodeString(bytes, key)
+      this._encodeObject(bytes, value[key], circularReferencesDetector)
+    }
+  }
+
+  _encodeObjectAsArray (bytes, value, circularReferencesDetector) {
+    const validValue = value.filter(item =>
+      typeof item === 'string' ||
+      typeof item === 'number' ||
+      (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item)))
+
+    this._encodeArrayPrefix(bytes, validValue)
+
+    for (const item of validValue) {
+      this._encodeObject(bytes, item, circularReferencesDetector)
     }
   }
 

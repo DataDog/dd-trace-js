@@ -1,21 +1,16 @@
 'use strict'
 
-/* eslint-disable no-console */
-
 require('./core')
 
 const os = require('os')
 const path = require('path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
-const slackReport = require('./slack-report')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
-const mochaVersion = require('mocha/package.json').version
-console.log('MOCHA VERSION', mochaVersion)
 
 global.withVersions = withVersions
 global.withExports = withExports
@@ -23,8 +18,6 @@ global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 
 const testedPlugins = agent.testedPlugins
-
-const packageVersionFailures = Object.create({})
 
 function loadInst (plugin) {
   const instrumentations = []
@@ -88,7 +81,7 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it(`should conform to the naming schema`, () => {
+        it('should conform to the naming schema', () => {
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {
@@ -127,7 +120,7 @@ function withNamingSchema (
 
       hooks('v0', true)
 
-      const { serviceName } = expected['v1']
+      const { serviceName } = expected.v1
 
       it('should pass service name through', done => {
         agent
@@ -198,7 +191,8 @@ function withVersions (plugin, modules, range, cb) {
     instrumentations
       .filter(instrumentation => instrumentation.name === moduleName)
       .forEach(instrumentation => {
-        const versions = process.env.PACKAGE_VERSION_RANGE ? [process.env.PACKAGE_VERSION_RANGE]
+        const versions = process.env.PACKAGE_VERSION_RANGE
+          ? [process.env.PACKAGE_VERSION_RANGE]
           : instrumentation.versions
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
@@ -216,11 +210,10 @@ function withVersions (plugin, modules, range, cb) {
       .sort(v => v[0].localeCompare(v[0]))
       .map(v => Object.assign({}, v[1], { version: v[0] }))
       .forEach(v => {
-        const versionPath = `${__dirname}/../../../../versions/${moduleName}@${v.test}/node_modules`
-
-        // afterEach contains currentTest data
-        // after doesn't contain test data nor know if any tests passed/failed
-        let moduleVersionDidFail = false
+        const versionPath = path.resolve(
+          __dirname, '../../../../versions/',
+          `${moduleName}@${v.test}/node_modules`
+        )
 
         describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
@@ -243,22 +236,7 @@ function withVersions (plugin, modules, range, cb) {
 
           cb(v.test, moduleName)
 
-          afterEach(function () {
-            if (this.currentTest.state === 'failed') {
-              moduleVersionDidFail = true
-            }
-          })
-
           after(() => {
-            console.log('MOCHA AFTER', moduleVersionDidFail, v.version)
-            if (moduleVersionDidFail) {
-              if (!packageVersionFailures[moduleName]) {
-                packageVersionFailures[moduleName] = new Set()
-              }
-
-              packageVersionFailures[moduleName].add(v.version)
-            }
-
             process.env.NODE_PATH = nodePath
             require('module').Module._initPaths()
           })
@@ -285,11 +263,6 @@ function withExports (moduleName, version, exportNames, versionRange, fn) {
 }
 
 exports.mochaHooks = {
-  // TODO: Figure out how to do this with tap too.
-  async afterAll () {
-    await slackReport(packageVersionFailures)
-  },
-
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()

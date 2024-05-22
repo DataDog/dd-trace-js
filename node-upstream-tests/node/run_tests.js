@@ -6,8 +6,8 @@ const childProcess = require('child_process')
 const path = require('path')
 const fsUtils = require('./fs_utils')
 
-const NODE_BIN = process.env['NODE_BIN'] || '/usr/bin/node'
-const NODE_REPO_PATH = process.env['NODE_REPO_PATH']
+const NODE_BIN = process.env.NODE_BIN || '/usr/bin/node'
+const NODE_REPO_PATH = process.env.NODE_REPO_PATH
 if (NODE_REPO_PATH === undefined) {
   throw new Error('The env variable NODE_REPO_PATH is not set. This is required to locate the root of the nodejs repo')
 }
@@ -244,6 +244,7 @@ class TestResult {
     this.isPass = null
     this.isIgnore = null
   }
+
   async init () {
     this.isPass = this.rc === 0
 
@@ -257,6 +258,7 @@ class TestResult {
 
     return this
   }
+
   errorMessage () {
     let message = ''
     message += `Test output: rc ${this.rc}\n`

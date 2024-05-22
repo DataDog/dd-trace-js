@@ -186,7 +186,7 @@ describe('OTel Span', () => {
 
       it(`should map span name when ${kindName} kind with network.protocol.name`, () => {
         const span = makeSpan(undefined, {
-          kind: kind,
+          kind,
           attributes: {
             'network.protocol.name': 'protocol'
           }
@@ -197,7 +197,7 @@ describe('OTel Span', () => {
 
       it(`should map span name when ${kindName} kind without network.protocol.name`, () => {
         const span = makeSpan(undefined, {
-          kind: kind
+          kind
         })
 
         expect(span.name).to.equal(`${kindName}.request`)
@@ -216,7 +216,7 @@ describe('OTel Span', () => {
         expect(span.name).to.equal(kindName)
       })
     }
-    it(`should map span name with default span kind of internal`, () => {
+    it('should map span name with default span kind of internal', () => {
       const span = makeSpan()
       expect(span.name).to.equal('internal')
     })
@@ -285,6 +285,20 @@ describe('OTel Span', () => {
 
     span.setAttributes({ baz: 'buz' })
     expect(_tags).to.have.property('baz', 'buz')
+  })
+
+  it('should set span links', () => {
+    const span = makeSpan('name')
+    const span2 = makeSpan('name2')
+    const span3 = makeSpan('name3')
+
+    const { _links } = span._ddSpan
+
+    span.addLink(span2.spanContext())
+    expect(_links).to.have.lengthOf(1)
+
+    span.addLink(span3.spanContext())
+    expect(_links).to.have.lengthOf(2)
   })
 
   it('should set status', () => {

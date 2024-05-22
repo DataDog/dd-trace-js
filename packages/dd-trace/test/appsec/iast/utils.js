@@ -59,9 +59,9 @@ function testInRequest (app, tests) {
   tests(config)
 }
 
-function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
+function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, timeout) {
   beforeEach(async () => {
-    await agent.load()
+    await agent.load(plugins)
   })
   afterEach(() => {
     return agent.close({ ritmReset: false })
@@ -82,13 +82,17 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability) {
     iast.disable()
   })
   it(`should detect ${vulnerability} vulnerability out of request`, function (done) {
+    if (timeout) {
+      this.timeout(timeout)
+    }
     agent
       .use(traces => {
         expect(traces[0][0].meta['_dd.iast.json']).to.include(`"${vulnerability}"`)
         expect(traces[0][0].metrics['_dd.iast.enabled']).to.be.equal(1)
-      })
+      }, { timeoutMs: 10000 })
       .then(done)
       .catch(done)
+
     fnToTest()
   })
 }
@@ -292,14 +296,14 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     before((done) => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
-      const bodyParser = require(`../../../../../versions/body-parser`).get()
+      const bodyParser = require('../../../../../versions/body-parser').get()
       const expressApp = express()
 
       if (loadMiddlewares) loadMiddlewares(expressApp)
 
       expressApp.use(bodyParser.json())
       try {
-        const cookieParser = require(`../../../../../versions/cookie-parser`).get()
+        const cookieParser = require('../../../../../versions/cookie-parser').get()
         expressApp.use(cookieParser())
       } catch (e) {
         // do nothing, in some scenarios we don't have cookie-parser dependency available, and we don't need

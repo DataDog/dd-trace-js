@@ -158,7 +158,7 @@ function pad (str, num) {
 function logResult (results, type, testAsyncHooks) {
   console.log(`\n${type.toUpperCase()}:`)
   if (testAsyncHooks) {
-    console.log(`                  without tracer        with async_hooks             with tracer`)
+    console.log('                  without tracer        with async_hooks             with tracer')
     for (const name in results.withoutTracer[type]) {
       console.log(
         pad(name, 7),
@@ -168,7 +168,7 @@ function logResult (results, type, testAsyncHooks) {
       )
     }
   } else {
-    console.log(`                  without tracer             with tracer`)
+    console.log('                  without tracer             with tracer')
     for (const name in results.withoutTracer[type]) {
       console.log(
         pad(name, 7),

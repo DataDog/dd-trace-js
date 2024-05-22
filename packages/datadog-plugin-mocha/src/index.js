@@ -15,7 +15,12 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_CODE_OWNERS,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE,
+  removeEfdStringFromTestName,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -38,11 +43,11 @@ class MochaPlugin extends CiPlugin {
     super(...args)
 
     this._testSuites = new Map()
-    this._testNameToParams = {}
+    this._testTitleToParams = {}
     this.sourceRoot = process.cwd()
 
     this.addSub('ci:mocha:test-suite:code-coverage', ({ coverageFiles, suiteFile }) => {
-      if (!this.itrConfig || !this.itrConfig.isCodeCoverageEnabled) {
+      if (!this.libraryConfig?.isCodeCoverageEnabled) {
         return
       }
       const testSuiteSpan = this._testSuites.get(suiteFile)
@@ -98,7 +103,7 @@ class MochaPlugin extends CiPlugin {
         }
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
-      if (this.itrConfig?.isCodeCoverageEnabled) {
+      if (this.libraryConfig?.isCodeCoverageEnabled) {
         this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
       }
       if (itrCorrelationId) {
@@ -130,19 +135,18 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:start', ({ test, testStartLine }) => {
+    this.addSub('ci:mocha:test:start', (testInfo) => {
       const store = storage.getStore()
-      const span = this.startTestSpan(test, testStartLine)
+      const span = this.startTestSpan(testInfo)
 
       this.enter(span, store)
     })
 
     this.addSub('ci:mocha:test:finish', (status) => {
       const store = storage.getStore()
+      const span = store?.span
 
-      if (store && store.span) {
-        const span = store.span
-
+      if (span) {
         span.setTag(TEST_STATUS, status)
 
         span.finish()
@@ -155,12 +159,12 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:skip', (test) => {
+    this.addSub('ci:mocha:test:skip', (testInfo) => {
       const store = storage.getStore()
       // skipped through it.skip, so the span is not created yet
       // for this test
       if (!store) {
-        const testSpan = this.startTestSpan(test)
+        const testSpan = this.startTestSpan(testInfo)
         this.enter(testSpan, store)
       }
     })
@@ -178,8 +182,8 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:parameterize', ({ name, params }) => {
-      this._testNameToParams[name] = params
+    this.addSub('ci:mocha:test:parameterize', ({ title, params }) => {
+      this._testTitleToParams[title] = params
     })
 
     this.addSub('ci:mocha:session:finish', ({
@@ -189,10 +193,11 @@ class MochaPlugin extends CiPlugin {
       numSkippedSuites,
       hasForcedToRunSuites,
       hasUnskippableSuites,
-      error
+      error,
+      isEarlyFlakeDetectionEnabled
     }) => {
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.itrConfig || {}
+        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -216,23 +221,34 @@ class MochaPlugin extends CiPlugin {
           }
         )
 
+        if (isEarlyFlakeDetectionEnabled) {
+          this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
+        }
+
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
       }
-      this.itrConfig = null
+      this.libraryConfig = null
       this.tracer._exporter.flush()
     })
   }
 
-  startTestSpan (test, testStartLine) {
-    const testName = test.fullTitle()
-    const { file: testSuiteAbsolutePath, title } = test
+  startTestSpan (testInfo) {
+    const {
+      testSuiteAbsolutePath,
+      title,
+      isNew,
+      isEfdRetry,
+      testStartLine
+    } = testInfo
+
+    const testName = removeEfdStringFromTestName(testInfo.testName)
 
     const extraTags = {}
-    const testParametersString = getTestParametersString(this._testNameToParams, title)
+    const testParametersString = getTestParametersString(this._testTitleToParams, title)
     if (testParametersString) {
       extraTags[TEST_PARAMETERS] = testParametersString
     }
@@ -243,6 +259,19 @@ class MochaPlugin extends CiPlugin {
 
     const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
     const testSuiteSpan = this._testSuites.get(testSuiteAbsolutePath)
+
+    if (this.repositoryRoot !== this.sourceRoot && !!this.repositoryRoot) {
+      extraTags[TEST_SOURCE_FILE] = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+    } else {
+      extraTags[TEST_SOURCE_FILE] = testSuite
+    }
+
+    if (isNew) {
+      extraTags[TEST_IS_NEW] = 'true'
+      if (isEfdRetry) {
+        extraTags[TEST_IS_RETRY] = 'true'
+      }
+    }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }

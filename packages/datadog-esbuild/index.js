@@ -4,6 +4,7 @@
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
+const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
   hook()
@@ -21,7 +22,6 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const NM = 'node_modules/'
 const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
@@ -75,7 +75,10 @@ module.exports.setup = function (build) {
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     } catch (err) {
-      console.warn(`MISSING: Unable to find "${args.path}". Is the package dead code?`)
+      if (DEBUG) {
+        console.warn(`Warning: Unable to find "${args.path}".` +
+          "Unless it's dead code this could cause a problem at runtime.")
+      }
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
@@ -89,11 +92,14 @@ module.exports.setup = function (build) {
 
       let pathToPackageJson
       try {
-        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
+        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [args.resolveDir] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
-            console.warn(`MISSING: Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
+            if (DEBUG) {
+              console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
+              "Unless it's dead code this could cause a problem at runtime.")
+            }
           }
           return
         } else {
@@ -173,35 +179,5 @@ function dotFriendlyResolve (path, directory) {
     path = '../'
   }
 
-  return require.resolve(path, { paths: [ directory ] })
-}
-
-/**
- * For a given full path to a module,
- *   return the package name it belongs to and the local path to the module
- *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
- *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
- */
-function extractPackageAndModulePath (fullPath) {
-  const nm = fullPath.lastIndexOf(NM)
-  if (nm < 0) {
-    return { pkg: null, path: null }
-  }
-
-  const subPath = fullPath.substring(nm + NM.length)
-  const firstSlash = subPath.indexOf('/')
-
-  if (subPath[0] === '@') {
-    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
-
-    return {
-      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
-      path: subPath.substring(firstSlash + 1 + secondSlash + 1)
-    }
-  }
-
-  return {
-    pkg: subPath.substring(0, firstSlash),
-    path: subPath.substring(firstSlash + 1)
-  }
+  return require.resolve(path, { paths: [directory] })
 }
