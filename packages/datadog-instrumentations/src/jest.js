@@ -589,11 +589,12 @@ function coverageReporterWrapper (coverageReporter) {
 
   /**
    * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
-   * This calculation adds no value, so we'll skip it.
+   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
+   * in which case we'll leave it.
    */
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => async function () {
     // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it
+    // we will not skip it.
     if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
       return Promise.resolve()
     }
