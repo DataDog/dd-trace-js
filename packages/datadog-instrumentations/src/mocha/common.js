@@ -1,10 +1,10 @@
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { getCallSites } = require('../../../dd-trace/src/plugins/util/test')
+const { testToStartLine } = require('./utils')
 
 const parameterizedTestCh = channel('ci:mocha:test:parameterize')
 const patched = new WeakSet()
-const testToStartLine = new WeakMap()
 
 // mocha-each support
 addHook({

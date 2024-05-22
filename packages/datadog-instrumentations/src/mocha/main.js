@@ -16,17 +16,17 @@ const {
   isNewTest,
   retryTest,
   getSuitesByTestFile,
-  isMochaRetry,
-  getTestFullName,
-  getTestStatus
+  runnableWrapper,
+  getOnTestHandler,
+  getOnTestEndHandler,
+  getOnHookEndHandler,
+  getOnFailHandler,
+  getOnPendingHandler
 } = require('./utils')
-const { testToStartLine } = require('./common')
 
 const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 const patched = new WeakSet()
 const newTests = {}
-const testToAr = new WeakMap()
-const originalFns = new WeakMap()
 let suitesToSkip = []
 const unskippableSuites = []
 let isSuitesSkipped = false
@@ -44,9 +44,6 @@ const originalCoverageMap = createCoverageMap()
 
 // test channels
 const testStartCh = channel('ci:mocha:test:start')
-const testFinishCh = channel('ci:mocha:test:finish')
-const errorCh = channel('ci:mocha:test:error')
-const skipCh = channel('ci:mocha:test:skip')
 
 // test suite channels
 const testSuiteStartCh = channel('ci:mocha:test-suite:start')
@@ -77,15 +74,77 @@ function getFilteredSuites (originalSuites) {
   }, { suitesToRun: [], skippedSuites: new Set() })
 }
 
-function getTestAsyncResource (test) {
-  if (!test.fn) {
-    return testToAr.get(test)
-  }
-  if (!test.fn.asyncResource) {
-    return testToAr.get(test.fn)
-  }
-  const originalFn = originalFns.get(test.fn)
-  return testToAr.get(originalFn)
+function getOnStartHandler (isParallel, frameworkVersion) {
+  return testSessionAsyncResource.bind(function () {
+    const processArgv = process.argv.slice(2).join(' ')
+    const command = `mocha ${processArgv}`
+    testSessionStartCh.publish({ command, frameworkVersion })
+    if (!isParallel && skippedSuites.length) {
+      itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+    }
+  })
+}
+
+function getOnEndHandler (isParallel) {
+  return testSessionAsyncResource.bind(function () {
+    let status = 'pass'
+    let error
+    if (this.stats) {
+      status = this.stats.failures === 0 ? 'pass' : 'fail'
+      if (this.stats.tests === 0) {
+        status = 'skip'
+      }
+    } else if (this.failures !== 0) {
+      status = 'fail'
+    }
+
+    if (!isParallel && isEarlyFlakeDetectionEnabled) {
+      /**
+       * If Early Flake Detection (EFD) is enabled the logic is as follows:
+       * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
+       * - If just a single attempt passes, we will prevent the test process from failing.
+       * The rationale behind is the following: you may still be able to block your CI pipeline by gating
+       * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
+       */
+      for (const tests of Object.values(newTests)) {
+        const failingNewTests = tests.filter(test => test.isFailed())
+        const areAllNewTestsFailing = failingNewTests.length === tests.length
+        if (failingNewTests.length && !areAllNewTestsFailing) {
+          this.stats.failures -= failingNewTests.length
+          this.failures -= failingNewTests.length
+        }
+      }
+    }
+
+    if (status === 'fail') {
+      error = new Error(`Failed tests: ${this.failures}.`)
+    }
+
+    testFileToSuiteAr.clear()
+
+    let testCodeCoverageLinesTotal
+    if (global.__coverage__) {
+      try {
+        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+      } catch (e) {
+        // ignore errors
+      }
+      // restore the original coverage
+      global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+    }
+
+    testSessionFinishCh.publish({
+      status,
+      isSuitesSkipped,
+      testCodeCoverageLinesTotal,
+      numSkippedSuites: skippedSuites.length,
+      hasForcedToRunSuites: isForcedToRun,
+      hasUnskippableSuites: !!unskippableSuites.length,
+      error,
+      isEarlyFlakeDetectionEnabled,
+      isParallel
+    })
+  })
 }
 
 // In this hook we delay the execution with options.delay to grab library configuration,
@@ -246,211 +305,20 @@ addHook({
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
 
-    this.once('start', testSessionAsyncResource.bind(function () {
-      const processArgv = process.argv.slice(2).join(' ')
-      const command = `mocha ${processArgv}`
-      testSessionStartCh.publish({ command, frameworkVersion })
-      if (skippedSuites.length) {
-        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
-      }
-    }))
+    this.once('start', getOnStartHandler(false, frameworkVersion))
 
-    this.once('end', testSessionAsyncResource.bind(function () {
-      let status = 'pass'
-      let error
-      if (this.stats) {
-        status = this.stats.failures === 0 ? 'pass' : 'fail'
-        if (this.stats.tests === 0) {
-          status = 'skip'
-        }
-      } else if (this.failures !== 0) {
-        status = 'fail'
-      }
+    this.once('end', getOnEndHandler(false))
 
-      if (isEarlyFlakeDetectionEnabled) {
-        /**
-         * If Early Flake Detection (EFD) is enabled the logic is as follows:
-         * - If all attempts for a test are failing, the test has failed and we will let the test process fail.
-         * - If just a single attempt passes, we will prevent the test process from failing.
-         * The rationale behind is the following: you may still be able to block your CI pipeline by gating
-         * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
-         */
-        for (const tests of Object.values(newTests)) {
-          const failingNewTests = tests.filter(test => test.isFailed())
-          const areAllNewTestsFailing = failingNewTests.length === tests.length
-          if (failingNewTests.length && !areAllNewTestsFailing) {
-            this.stats.failures -= failingNewTests.length
-            this.failures -= failingNewTests.length
-          }
-        }
-      }
+    this.on('test', getOnTestHandler(true, newTests))
 
-      if (status === 'fail') {
-        error = new Error(`Failed tests: ${this.failures}.`)
-      }
-
-      testFileToSuiteAr.clear()
-
-      let testCodeCoverageLinesTotal
-      if (global.__coverage__) {
-        try {
-          testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-        } catch (e) {
-          // ignore errors
-        }
-        // restore the original coverage
-        global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
-      }
-
-      testSessionFinishCh.publish({
-        status,
-        isSuitesSkipped,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites: skippedSuites.length,
-        hasForcedToRunSuites: isForcedToRun,
-        hasUnskippableSuites: !!unskippableSuites.length,
-        error,
-        isEarlyFlakeDetectionEnabled
-      })
-    }))
-
-    this.on('test', (test) => {
-      if (isMochaRetry(test)) {
-        return
-      }
-      const testStartLine = testToStartLine.get(test)
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      testToAr.set(test.fn, asyncResource)
-
-      const {
-        file: testSuiteAbsolutePath,
-        title,
-        _ddIsNew: isNew,
-        _ddIsEfdRetry: isEfdRetry
-      } = test
-
-      const testInfo = {
-        testName: test.fullTitle(),
-        testSuiteAbsolutePath,
-        title,
-        isNew,
-        isEfdRetry,
-        testStartLine
-      }
-
-      // We want to store the result of the new tests
-      if (isNew) {
-        const testFullName = getTestFullName(test)
-        if (newTests[testFullName]) {
-          newTests[testFullName].push(test)
-        } else {
-          newTests[testFullName] = [test]
-        }
-      }
-
-      asyncResource.runInAsyncScope(() => {
-        testStartCh.publish(testInfo)
-      })
-    })
-
-    this.on('test end', (test) => {
-      const asyncResource = getTestAsyncResource(test)
-      const status = getTestStatus(test)
-
-      // if there are afterEach to be run, we don't finish the test yet
-      if (asyncResource && !test.parent._afterEach.length) {
-        asyncResource.runInAsyncScope(() => {
-          testFinishCh.publish(status)
-        })
-      }
-    })
+    this.on('test end', getOnTestEndHandler())
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', (hook) => {
-      const test = hook.ctx.currentTest
-      if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
-        const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
-        if (isLastAfterEach) {
-          const status = getTestStatus(test)
-          const asyncResource = getTestAsyncResource(test)
-          asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish(status)
-          })
-        }
-      }
-    })
+    this.on('hook end', getOnHookEndHandler())
 
-    this.on('fail', (testOrHook, err) => {
-      const testFile = testOrHook.file
-      let test = testOrHook
-      const isHook = testOrHook.type === 'hook'
-      if (isHook && testOrHook.ctx) {
-        test = testOrHook.ctx.currentTest
-      }
-      let testAsyncResource
-      if (test) {
-        testAsyncResource = getTestAsyncResource(test)
-      }
-      if (testAsyncResource) {
-        testAsyncResource.runInAsyncScope(() => {
-          if (isHook) {
-            err.message = `${testOrHook.fullTitle()}: ${err.message}`
-            errorCh.publish(err)
-            // if it's a hook and it has failed, 'test end' will not be called
-            testFinishCh.publish('fail')
-          } else {
-            errorCh.publish(err)
-          }
-        })
-      }
+    this.on('fail', getOnFailHandler(true))
 
-      const testSuiteAsyncResource = testFileToSuiteAr.get(testFile)
-
-      if (testSuiteAsyncResource) {
-        // we propagate the error to the suite
-        const testSuiteError = new Error(
-          `"${testOrHook.parent.fullTitle()}" failed with message "${err.message}"`
-        )
-        testSuiteError.stack = err.stack
-        testSuiteAsyncResource.runInAsyncScope(() => {
-          testSuiteErrorCh.publish(testSuiteError)
-        })
-      }
-    })
-
-    this.on('pending', (test) => {
-      const testStartLine = testToStartLine.get(test)
-      const {
-        file: testSuiteAbsolutePath,
-        title
-      } = test
-
-      const testInfo = {
-        testName: test.fullTitle(),
-        testSuiteAbsolutePath,
-        title,
-        testStartLine
-      }
-
-      const asyncResource = getTestAsyncResource(test)
-      if (asyncResource) {
-        asyncResource.runInAsyncScope(() => {
-          skipCh.publish(testInfo)
-        })
-      } else {
-        // if there is no async resource, the test has been skipped through `test.skip`
-        // or the parent suite is skipped
-        const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
-        if (test.fn) {
-          testToAr.set(test.fn, skippedTestAsyncResource)
-        } else {
-          testToAr.set(test, skippedTestAsyncResource)
-        }
-        skippedTestAsyncResource.runInAsyncScope(() => {
-          skipCh.publish(testInfo)
-        })
-      }
-    })
+    this.on('pending', getOnPendingHandler())
 
     this.on('suite', function (suite) {
       if (suite.root || !suite.tests.length) {
@@ -523,54 +391,13 @@ addHook({
   return Runner
 })
 
-// Used both in serial and parallel mode:
-// In serial mode, this hook is used to set the correct async resource to the test.
-// In parallel mode, the same hook is executed in the worker, so this needs to be repeated in
-// mocha/worker.js
+// Used both in serial and parallel mode, and by both the main process and the workers
+// Used to set the correct async resource to the test.
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/runnable.js'
-}, (Runnable) => {
-  shimmer.wrap(Runnable.prototype, 'run', run => function () {
-    if (!testStartCh.hasSubscribers) {
-      return run.apply(this, arguments)
-    }
-    const isBeforeEach = this.parent._beforeEach.includes(this)
-    const isAfterEach = this.parent._afterEach.includes(this)
-
-    const isTestHook = isBeforeEach || isAfterEach
-
-    // we restore the original user defined function
-    if (this.fn.asyncResource) {
-      const originalFn = originalFns.get(this.fn)
-      this.fn = originalFn
-    }
-
-    if (isTestHook || this.type === 'test') {
-      const test = isTestHook ? this.ctx.currentTest : this
-      const asyncResource = getTestAsyncResource(test)
-
-      if (asyncResource) {
-        // we bind the test fn to the correct async resource
-        const newFn = asyncResource.bind(this.fn)
-
-        // we store the original function, not to lose it
-        originalFns.set(newFn, this.fn)
-        this.fn = newFn
-
-        // Temporarily keep functionality when .asyncResource is removed from node
-        // in https://github.com/nodejs/node/pull/46432
-        if (!this.fn.asyncResource) {
-          this.fn.asyncResource = asyncResource
-        }
-      }
-    }
-
-    return run.apply(this, arguments)
-  })
-  return Runnable
-})
+}, runnableWrapper)
 
 // Only used in parallel mode (--parallel flag is passed)
 // Used to generate suite events and receive test payloads from workers
@@ -582,7 +409,7 @@ addHook({
   versions: ['>=6.0.0'],
   file: 'src/WorkerHandler.js'
 }, (workerHandlerPackage) => {
-  shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => async function (message, [testSuiteAbsolutePath]) {
+  shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (message, [testSuiteAbsolutePath]) {
     if (!testStartCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
@@ -604,14 +431,30 @@ addHook({
       })
     })
 
-    const result = await exec.apply(this, arguments)
-
-    const status = result.failureCount === 0 ? 'pass' : 'fail'
-    testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteFinishCh.publish(status)
-    })
-
-    return result
+    try {
+      const promise = exec.apply(this, arguments)
+      promise.then(
+        (result) => {
+          const status = result.failureCount === 0 ? 'pass' : 'fail'
+          testSuiteAsyncResource.runInAsyncScope(() => {
+            testSuiteFinishCh.publish(status)
+          })
+        },
+        (err) => {
+          testSuiteAsyncResource.runInAsyncScope(() => {
+            testSuiteErrorCh.publish(err)
+            testSuiteFinishCh.publish('fail')
+          })
+        }
+      )
+      return promise
+    } catch (err) {
+      testSuiteAsyncResource.runInAsyncScope(() => {
+        testSuiteErrorCh.publish(err)
+        testSuiteFinishCh.publish('fail')
+      })
+      throw err
+    }
   })
 
   return workerHandlerPackage
@@ -628,48 +471,8 @@ addHook({
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    this.once('start', testSessionAsyncResource.bind(function () {
-      const processArgv = process.argv.slice(2).join(' ')
-      const command = `mocha ${processArgv}`
-      testSessionStartCh.publish({ command, frameworkVersion })
-    }))
-
-    this.once('end', testSessionAsyncResource.bind(function () {
-      let status = 'pass'
-      let error
-      if (this.stats) {
-        status = this.stats.failures === 0 ? 'pass' : 'fail'
-        if (this.stats.tests === 0) {
-          status = 'skip'
-        }
-      } else if (this.failures !== 0) {
-        status = 'fail'
-      }
-
-      if (status === 'fail') {
-        error = new Error(`Failed tests: ${this.failures}.`)
-      }
-
-      testFileToSuiteAr.clear()
-
-      let testCodeCoverageLinesTotal
-      if (global.__coverage__) {
-        try {
-          testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
-        } catch (e) {
-          // ignore errors
-        }
-        // restore the original coverage
-        global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
-      }
-
-      testSessionFinishCh.publish({
-        status,
-        testCodeCoverageLinesTotal,
-        error,
-        isParallel: true
-      })
-    }))
+    this.once('start', getOnStartHandler(true, frameworkVersion))
+    this.once('end', getOnEndHandler(true))
 
     return run.apply(this, arguments)
   })
