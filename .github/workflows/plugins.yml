@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: '0 4 * * *'
 
+env:
+  OLDEST_NODE: 18
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -937,7 +940,9 @@ jobs:
   next:
     strategy:
       matrix:
-        version: [18, latest] # note that 18 is currently "oldest". change when necessary.
+        version:
+          - ${{ env.OLDEST_NODE }}
+          - latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
