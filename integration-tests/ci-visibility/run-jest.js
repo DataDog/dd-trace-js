@@ -24,6 +24,10 @@ if (process.env.ENABLE_JSDOM) {
   options.testEnvironment = 'jsdom'
 }
 
+if (process.env.COLLECT_COVERAGE_FROM) {
+  options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
+}
+
 jest.runCLI(
   options,
   options.projects
