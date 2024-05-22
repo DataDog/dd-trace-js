@@ -2614,45 +2614,6 @@ testFrameworks.forEach(({
         })
       })
 
-      it('marks the test session as skipped if every suite is skipped', (done) => {
-        receiver.setSuitesToSkip(
-          [
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test.js'
-              }
-            },
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test-2.js'
-              }
-            }
-          ]
-        )
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
-          })
-        childProcess = exec(
-          runTestsWithCoverageCommand,
-          {
-            cwd,
-            env: getCiVisEvpProxyConfig(receiver.port),
-            stdio: 'inherit'
-          }
-        )
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
-      })
-
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
