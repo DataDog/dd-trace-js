@@ -685,6 +685,49 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+      it('calculates executable lines even if there have been skipped suites', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: true
+        })
+
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test-total-code-coverage/test-skipped.js'
+          }
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Before https://github.com/DataDog/dd-trace-js/pull/4336, this would've been 100%
+            // The reason is that skipping jest's `addUntestedFiles`, we would not see unexecuted lines.
+            // In this cause, these would be from the `unused-dependency.js` file.
+            // It is 50% now because we only cover 1 out of 2 files (`used-dependency.js`).
+            assert.propertyVal(testSession.metrics, TEST_CODE_COVERAGE_LINES_PCT, 50)
+          })
+
+        childProcess = exec(
+          runTestsWithCoverageCommand, // Requirement: the user must've opted in to code coverage
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'ci-visibility/test-total-code-coverage/test-',
+              COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**'
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(done).catch(done)
+        })
+      })
     }
     const reportingOptions = ['agentless', 'evp proxy']
 
