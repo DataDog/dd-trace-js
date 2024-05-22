@@ -2,17 +2,17 @@
 
 set -e
 
-cd ../dd-trace-js
+cd ..
 
 npm pack
 
-cp dd-trace-js*.tar.gz ../packaging/dd-trace-js.tar.gz
+cp dd-trace-js*.tar.gz packaging/dd-trace-js.tar.gz
 
-mkdir -p ../packaging/sources
+mkdir -p packaging/sources
 
-jq --raw-output '.version' package.json > ../packaging/sources/version
+jq --raw-output '.version' package.json > packaging/sources/version
 
-cd ../packaging
+cd packaging
 
 npm install dd-trace-js.tar.gz
 
