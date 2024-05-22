@@ -112,3 +112,13 @@ jobs:
       - run: yarn install
       - run: yarn type:test
       - run: yarn type:doc
+
+  all-green:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+      contents: read
+    steps:
+      - uses: wechuli/allcheckspassed@v1
+        with:
+          retries: 20 # once per minute, some checks take up to 15 min
