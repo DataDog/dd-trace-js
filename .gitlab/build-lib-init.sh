@@ -35,8 +35,8 @@ git fetch --tags
 # So we fetch all tags and sort them to find both the latest, and the latest in this major.
 # 'sort' technically gets prerelease versions in the wrong order here, but we explicitly
 # exclude them anyway, as they're ignored for the purposes of determining the 'latest' tags.
-LATEST_TAG="$(git tag | grep -v '-' | sort -V -r | head -n 1)"
-LATEST_MAJOR_TAG="$(git tag -l "$MAJOR_VERSION.*" | grep -v '-' | sort -V -r | head -n 1)"
+LATEST_TAG="$(git tag | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V -r | head -n 1)"
+LATEST_MAJOR_TAG="$(git tag -l "$MAJOR_VERSION.*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V -r | head -n 1)"
 echo "This tag: $CI_COMMIT_TAG"
 echo "Latest repository tag: $LATEST_TAG"
 echo "Latest repository tag for this major: $LATEST_MAJOR_TAG"
