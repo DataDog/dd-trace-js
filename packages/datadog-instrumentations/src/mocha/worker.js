@@ -11,6 +11,7 @@ const {
   getOnFailHandler,
   getOnPendingHandler
 } = require('./utils')
+require('./common')
 
 const workerFinishCh = channel('ci:mocha:worker:finish')
 

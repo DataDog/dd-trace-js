@@ -25,6 +25,7 @@ const {
   getOnFailHandler,
   getOnPendingHandler
 } = require('./utils')
+require('./common')
 
 const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 const patched = new WeakSet()

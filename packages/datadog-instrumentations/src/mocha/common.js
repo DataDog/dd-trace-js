@@ -46,5 +46,3 @@ addHook({
   })
   return Suite
 })
-
-module.exports = { testToStartLine }

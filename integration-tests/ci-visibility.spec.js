@@ -34,7 +34,8 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_COMMAND,
   TEST_MODULE,
-  MOCHA_IS_PARALLEL
+  MOCHA_IS_PARALLEL,
+  TEST_SOURCE_START
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -90,7 +91,7 @@ testFrameworks.forEach(({
   runTestsWithCoverageCommand,
   type
 }) => {
-  describe(`${name} ${type}`, () => {
+  describe.only(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
@@ -184,6 +185,7 @@ testFrameworks.forEach(({
 
             tests.forEach(({
               meta,
+              metrics,
               test_suite_id: testSuiteId,
               test_module_id: testModuleId,
               test_session_id: testSessionId
@@ -194,6 +196,7 @@ testFrameworks.forEach(({
               assert.equal(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
               assert.equal(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
               assert.propertyVal(meta, MOCHA_IS_PARALLEL, 'true')
+              assert.exists(metrics[TEST_SOURCE_START])
             })
           })
 
@@ -1628,6 +1631,7 @@ testFrameworks.forEach(({
 
         testSpans.forEach(testSpan => {
           assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testSpan.metrics[TEST_SOURCE_START])
         })
 
         done()
