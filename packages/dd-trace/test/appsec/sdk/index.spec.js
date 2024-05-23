@@ -7,13 +7,7 @@ describe('Appsec SDK', () => {
   let checkUserAndSetUser, blockRequest, setUser, setTemplates
   let appsecSdk
   const tracer = {}
-  const config = {
-    appsec: {
-      standalone: {
-        enabled: null
-      }
-    }
-  }
+  const config = {}
 
   beforeEach(() => {
     trackUserLoginSuccessEvent = sinon.stub()
