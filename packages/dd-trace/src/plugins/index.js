@@ -54,6 +54,7 @@ module.exports = {
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
   get mocha () { return require('../../../datadog-plugin-mocha/src') },
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
+  get workerpool () { return require('../../../datadog-plugin-mocha/src') },
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },
   get 'mongodb-core' () { return require('../../../datadog-plugin-mongodb-core/src') },
