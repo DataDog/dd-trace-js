@@ -85,6 +85,35 @@ package-arm:
     - ../.gitlab/build-deb-rpm.sh
     - find . -iregex '.*\.\(deb\|rpm\)' -printf '%f\0' | xargs -0 dd-pkg lint
 
+package-oci:
+  extends: .package-oci
+  stage: package
+  script:
+    - ../.gitlab/build_oci_package.sh
+
+oci-internal-publish:
+  extends: .oci-internal-publish
+  stage: package
+  needs: [ package-oci ]
+  rules:
+    - when: on_success
+  variables:
+    FLAVOR: datadog-apm-library-js
+
+oci-internal-test-ecr-publish:
+  stage: package
+  needs: [ oci-internal-publish ]
+  rules:
+    - when: on_success
+  trigger:
+    project: DataDog/public-images
+    branch: main
+    strategy: depend
+  variables:
+    IMG_SOURCES: registry.ddbuild.io/ci/remote-updates/datadog-apm-library-js:pipeline-${CI_PIPELINE_ID}-1
+    IMG_DESTINATIONS: apm-library-js-package:pipeline-${CI_PIPELINE_ID}
+    IMG_REGISTRIES: agent-qa
+
 .release-package:
   stage: deploy
   variables:
