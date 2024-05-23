@@ -91,6 +91,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   }
 
   metricsQueue.set(MANUAL_KEEP, 'true')
+
   if (isStandaloneEnabled()) {
     metricsQueue.set(APPSEC_PROPAGATION_KEY, 1)
   }
