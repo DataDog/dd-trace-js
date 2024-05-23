@@ -1,7 +1,7 @@
 'use strict'
 
 const { URL, format } = require('url')
-const { randomUUID: uuid } = require('crypto')
+const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
 const tracerVersion = require('../../../../../package.json').version
 const request = require('../../exporters/common/request')
