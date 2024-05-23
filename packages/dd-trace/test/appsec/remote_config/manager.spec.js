@@ -6,7 +6,7 @@ const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/rem
 const noop = () => {}
 
 describe('RemoteConfigManager', () => {
-  let randomUUID
+  let uuid
   let scheduler
   let Scheduler
   let request
@@ -17,7 +17,7 @@ describe('RemoteConfigManager', () => {
   let rc
 
   beforeEach(() => {
-    randomUUID = sinon.stub().returns('1234-5678')
+    uuid = sinon.stub().returns('1234-5678')
 
     scheduler = {
       start: sinon.spy(),
@@ -35,7 +35,7 @@ describe('RemoteConfigManager', () => {
     extraServices = []
 
     RemoteConfigManager = proxyquire('../src/appsec/remote_config/manager', {
-      crypto: { randomUUID },
+      'crypto-randomuuid': uuid,
       './scheduler': Scheduler,
       '../../../../../package.json': { version: '3.0.0' },
       '../../exporters/common/request': request,
