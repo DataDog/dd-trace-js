@@ -111,7 +111,7 @@ oci-internal-test-ecr-publish:
     strategy: depend
   variables:
     IMG_SOURCES: registry.ddbuild.io/ci/remote-updates/datadog-apm-library-js:pipeline-${CI_PIPELINE_ID}-1
-    IMG_DESTINATIONS: apm-library-java-package:pipeline-${CI_PIPELINE_ID}
+    IMG_DESTINATIONS: apm-library-js-package:pipeline-${CI_PIPELINE_ID}
     IMG_REGISTRIES: agent-qa
 
 .release-package:
