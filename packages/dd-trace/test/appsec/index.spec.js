@@ -104,7 +104,7 @@ describe('AppSec Index', () => {
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(RuleManager, 'loadRules')
-    sinon.stub(Reporter, 'configure')
+    sinon.stub(Reporter, 'setRateLimit')
     sinon.stub(incomingHttpRequestStart, 'subscribe')
     sinon.stub(incomingHttpRequestEnd, 'subscribe')
   })
@@ -121,7 +121,7 @@ describe('AppSec Index', () => {
 
       expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
       expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.configure).to.have.been.calledOnceWithExactly(config.appsec)
+      expect(Reporter.setRateLimit).to.have.been.calledOnceWithExactly(42)
       expect(incomingHttpRequestStart.subscribe)
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)

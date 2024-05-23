@@ -5,8 +5,9 @@ const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const { setUserTags } = require('./set_user')
 const { APPSEC_PROPAGATION_KEY } = require('../../constants')
+const { isStandaloneEnabled } = require('../standalone')
 
-function trackUserLoginSuccessEvent (tracer, user, metadata, standaloneEnabled) {
+function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
   if (!user || !user.id) {
     log.warn('Invalid user provided to trackUserLoginSuccessEvent')
@@ -21,10 +22,10 @@ function trackUserLoginSuccessEvent (tracer, user, metadata, standaloneEnabled) 
 
   setUserTags(user, rootSpan)
 
-  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan, 'sdk', standaloneEnabled)
+  trackEvent('users.login.success', metadata, 'trackUserLoginSuccessEvent', rootSpan, 'sdk')
 }
 
-function trackUserLoginFailureEvent (tracer, userId, exists, metadata, standaloneEnabled) {
+function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   if (!userId || typeof userId !== 'string') {
     log.warn('Invalid userId provided to trackUserLoginFailureEvent')
     return
@@ -36,20 +37,19 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata, standalon
     ...metadata
   }
 
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk',
-    standaloneEnabled)
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer), 'sdk')
 }
 
-function trackCustomEvent (tracer, eventName, metadata, standaloneEnabled) {
+function trackCustomEvent (tracer, eventName, metadata) {
   if (!eventName || typeof eventName !== 'string') {
     log.warn('Invalid eventName provided to trackCustomEvent')
     return
   }
 
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk', standaloneEnabled)
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer), 'sdk')
 }
 
-function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, standaloneEnabled) {
+function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   if (!rootSpan) {
     log.warn(`Root span not available in ${sdkMethodName}`)
     return
@@ -60,7 +60,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode, standalon
     [MANUAL_KEEP]: 'true'
   }
 
-  if (standaloneEnabled) {
+  if (isStandaloneEnabled()) {
     tags[APPSEC_PROPAGATION_KEY] = 1
   }
 

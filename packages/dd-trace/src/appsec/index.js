@@ -43,7 +43,7 @@ function enable (_config) {
 
     remoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.configure(_config.appsec)
+    Reporter.setRateLimit(_config.appsec.rateLimit)
 
     apiSecuritySampler.configure(_config.appsec)
 

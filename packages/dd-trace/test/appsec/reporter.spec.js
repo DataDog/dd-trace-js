@@ -9,6 +9,7 @@ describe('reporter', () => {
   let span
   let web
   let telemetry
+  let isStandaloneEnabled
 
   beforeEach(() => {
     span = {
@@ -31,9 +32,14 @@ describe('reporter', () => {
       getRequestMetrics: sinon.stub()
     }
 
+    isStandaloneEnabled = sinon.stub().returns(false)
+
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry
+      './telemetry': telemetry,
+      './standalone': {
+        isStandaloneEnabled
+      }
     })
   })
 
@@ -121,11 +127,7 @@ describe('reporter', () => {
     })
 
     it('should add _dd.p.appsec entrie if standalone ASM enabled', () => {
-      Reporter.configure({
-        standalone: {
-          enabled: true
-        }
-      })
+      isStandaloneEnabled.returns(true)
 
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
       expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.eq(1)
@@ -287,12 +289,7 @@ describe('reporter', () => {
     })
 
     it('should add _dd.p.appsec tag if standalone ASM enabled', () => {
-      Reporter.configure({
-        rateLimit: 1,
-        standalone: {
-          enabled: true
-        }
-      })
+      isStandaloneEnabled.returns(true)
 
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 

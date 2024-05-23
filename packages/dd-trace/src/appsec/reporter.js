@@ -14,11 +14,10 @@ const {
 const zlib = require('zlib')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { APPSEC_PROPAGATION_KEY } = require('../constants')
+const { isStandaloneEnabled } = require('./standalone')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
-
-let standaloneEnabled = false
 
 const metricsQueue = new Map()
 
@@ -92,7 +91,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   }
 
   metricsQueue.set(MANUAL_KEEP, 'true')
-  if (standaloneEnabled) {
+  if (isStandaloneEnabled()) {
     metricsQueue.set(APPSEC_PROPAGATION_KEY, 1)
   }
 
@@ -123,7 +122,7 @@ function reportAttack (attackData) {
 
   newTags['appsec.event'] = 'true'
 
-  if (standaloneEnabled) {
+  if (isStandaloneEnabled()) {
     newTags[MANUAL_KEEP] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
     newTags[APPSEC_PROPAGATION_KEY] = 1
   } else if (limiter.isAllowed()) {
@@ -209,11 +208,6 @@ function setRateLimit (rateLimit) {
   limiter = new Limiter(rateLimit)
 }
 
-function configure (config) {
-  setRateLimit(config.rateLimit)
-  standaloneEnabled = !!config.standalone?.enabled
-}
-
 module.exports = {
   metricsQueue,
   filterHeaders,
@@ -225,6 +219,5 @@ module.exports = {
   reportSchemas,
   finishRequest,
   setRateLimit,
-  mapHeaderAndTags,
-  configure
+  mapHeaderAndTags
 }

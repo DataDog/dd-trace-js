@@ -15,6 +15,7 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSITelemetry } = require('./profiling/ssi-telemetry')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
+const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
   constructor (provider) {
@@ -139,6 +140,8 @@ class Tracer extends NoopProxy {
   }
 
   _enableOrDisableTracing (config) {
+    appsecStandalone.configure(config)
+
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)

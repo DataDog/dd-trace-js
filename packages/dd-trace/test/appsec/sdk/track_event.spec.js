@@ -14,6 +14,7 @@ describe('track_event', () => {
     let getRootSpan
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
+    let isStandaloneEnabled
 
     beforeEach(() => {
       log = {
@@ -28,6 +29,8 @@ describe('track_event', () => {
 
       setUserTags = sinon.stub()
 
+      isStandaloneEnabled = sinon.stub().returns(false)
+
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
         './utils': {
@@ -35,6 +38,9 @@ describe('track_event', () => {
         },
         './set_user': {
           setUserTags
+        },
+        '../standalone': {
+          isStandaloneEnabled
         }
       })
 
@@ -251,7 +257,9 @@ describe('track_event', () => {
       })
 
       it('should add _dd.p.appsec tag if standaloneEnabled', () => {
-        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined, true)
+        isStandaloneEnabled.returns(true)
+
+        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true',
