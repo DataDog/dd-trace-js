@@ -250,12 +250,17 @@ describe('TracerProxy', () => {
       })
 
       it('should support applying remote config', () => {
+        const standalone = {
+          configure: sinon.stub()
+        }
+
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
           './appsec/remote_config': remoteConfig,
-          './appsec/sdk': AppsecSdk
+          './appsec/sdk': AppsecSdk,
+          './appsec/standalone': standalone
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -264,11 +269,13 @@ describe('TracerProxy', () => {
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
+        expect(standalone.configure).to.have.been.calledOnce
 
         let conf = { tracing_enabled: false }
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
         expect(appsec.disable).to.not.have.been.called
         expect(iast.disable).to.not.have.been.called
+        expect(standalone.configure).to.have.been.calledTwice
 
         conf = { tracing_enabled: true }
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
