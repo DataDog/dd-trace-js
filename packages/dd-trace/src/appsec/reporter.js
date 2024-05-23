@@ -122,11 +122,12 @@ function reportAttack (attackData) {
 
   newTags['appsec.event'] = 'true'
 
-  if (isStandaloneEnabled()) {
-    newTags[MANUAL_KEEP] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
-    newTags[APPSEC_PROPAGATION_KEY] = 1
-  } else if (limiter.isAllowed()) {
+  if (limiter.isAllowed()) {
     newTags[MANUAL_KEEP] = 'true'
+
+    if (isStandaloneEnabled()) {
+      newTags[APPSEC_PROPAGATION_KEY] = 1
+    }
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
