@@ -91,7 +91,7 @@ testFrameworks.forEach(({
   runTestsWithCoverageCommand,
   type
 }) => {
-  describe.only(`${name} ${type}`, () => {
+  describe(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
