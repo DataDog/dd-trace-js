@@ -126,6 +126,11 @@ describe('reporter', () => {
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
     })
 
+    it('should not add _dd.p.appsec entrie if standalone ASM disabled', () => {
+      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
+      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.undefined
+    })
+
     it('should add _dd.p.appsec entrie if standalone ASM enabled', () => {
       isStandaloneEnabled.returns(true)
 
