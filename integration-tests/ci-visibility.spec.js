@@ -31,7 +31,11 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
   JEST_DISPLAY_NAME,
-  TEST_EARLY_FLAKE_ABORT_REASON
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_COMMAND,
+  TEST_MODULE,
+  MOCHA_IS_PARALLEL,
+  TEST_SOURCE_START
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
@@ -58,7 +62,7 @@ const testFrameworks = [
   {
     ...mochaCommonOptions,
     testFile: 'ci-visibility/run-mocha.js',
-    dependencies: ['mocha', 'chai@v4', 'nyc', 'mocha-each'],
+    dependencies: ['mocha', 'chai@v4', 'nyc', 'mocha-each', 'workerpool'],
     expectedCoverageFiles: [
       'ci-visibility/run-mocha.js',
       'ci-visibility/test/sum.js',
@@ -152,11 +156,49 @@ testFrameworks.forEach(({
         })
       }).timeout(50000)
 
-      it('does not init CI Visibility when running in parallel mode', (done) => {
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('it should not report tests')
-          done(error)
-        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
+      it('works with parallel mode', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+            const moduleEventContent = events.find(event => event.type === 'test_module_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.equal(sessionEventContent.meta[MOCHA_IS_PARALLEL], 'true')
+            assert.equal(
+              sessionEventContent.test_session_id.toString(10),
+              moduleEventContent.test_session_id.toString(10)
+            )
+            suites.forEach(({
+              meta,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId
+            }) => {
+              assert.exists(meta[TEST_COMMAND])
+              assert.exists(meta[TEST_MODULE])
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
+            })
+
+            tests.forEach(({
+              meta,
+              metrics,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId
+            }) => {
+              assert.exists(meta[TEST_COMMAND])
+              assert.exists(meta[TEST_MODULE])
+              assert.exists(testSuiteId)
+              assert.equal(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
+              assert.equal(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
+              assert.propertyVal(meta, MOCHA_IS_PARALLEL, 'true')
+              assert.exists(metrics[TEST_SOURCE_START])
+            })
+          })
 
         childProcess = fork(testFile, {
           cwd,
@@ -175,7 +217,65 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('message', () => {
-          assert.include(testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.')
+          eventsPromise.then(() => {
+            assert.notInclude(testOutput, 'TypeError')
+            assert.notInclude(
+              testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
+            )
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('works with parallel mode when run with the cli', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.equal(sessionEventContent.meta[MOCHA_IS_PARALLEL], 'true')
+            assert.equal(suites.length, 2)
+            assert.equal(tests.length, 2)
+          })
+        childProcess = exec('mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            assert.notInclude(testOutput, 'TypeError')
+            assert.notInclude(
+              testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
+            )
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('does not blow up when workerpool is used outside of a test', (done) => {
+        childProcess = exec('node ./ci-visibility/run-workerpool.js', {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'pipe'
+        })
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.on('exit', (code) => {
+          assert.include(testOutput, 'result 7')
+          assert.equal(code, 0)
           done()
         })
       })
@@ -1574,6 +1674,7 @@ testFrameworks.forEach(({
 
         testSpans.forEach(testSpan => {
           assert.equal(testSpan.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testSpan.metrics[TEST_SOURCE_START])
         })
 
         done()
@@ -1686,6 +1787,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('does not init if DD_API_KEY is not set', (done) => {
         receiver.assertMessageReceived(() => {
           done(new Error('Should not create spans'))
@@ -1714,6 +1816,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('can report git metadata', (done) => {
         const searchCommitsRequestPromise = receiver.payloadReceived(
           ({ url }) => url === '/api/v2/git/repository/search_commits'
@@ -1745,6 +1848,7 @@ testFrameworks.forEach(({
           stdio: 'pipe'
         })
       })
+
       it('can report code coverage', (done) => {
         let testOutput
         const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -1808,6 +1912,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: false,
@@ -1844,6 +1949,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1905,6 +2011,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('marks the test session as skipped if every suite is skipped', (done) => {
         receiver.setSuitesToSkip(
           [
@@ -1943,6 +2050,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -1986,6 +2094,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: true,
@@ -2025,6 +2134,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip suites if suite is marked as unskippable', (done) => {
         receiver.setSuitesToSkip([
           {
@@ -2105,6 +2215,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
         receiver.setSuitesToSkip([
           {
@@ -2179,6 +2290,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -2213,6 +2325,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('reports itr_correlation_id in test suites', (done) => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)
@@ -2281,6 +2394,7 @@ testFrameworks.forEach(({
           })
         })
       })
+
       it('reports errors in test sessions', (done) => {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2315,6 +2429,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('can report git metadata', (done) => {
         const infoRequestPromise = receiver.payloadReceived(({ url }) => url === '/info')
         const searchCommitsRequestPromise = receiver.payloadReceived(
@@ -2354,6 +2469,7 @@ testFrameworks.forEach(({
           stdio: 'pipe'
         })
       })
+
       it('can report code coverage', (done) => {
         let testOutput
         const libraryConfigRequestPromise = receiver.payloadReceived(
@@ -2418,6 +2534,7 @@ testFrameworks.forEach(({
           done()
         })
       })
+
       it('does not report code coverage if disabled by the API', (done) => {
         receiver.setSettings({
           itr_enabled: false,
@@ -2448,6 +2565,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('can skip suites received by the intelligent test runner API and still reports code coverage', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -2503,6 +2621,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('marks the test session as skipped if every suite is skipped', (done) => {
         receiver.setSuitesToSkip(
           [
@@ -2541,44 +2660,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
-      it('marks the test session as skipped if every suite is skipped', (done) => {
-        receiver.setSuitesToSkip(
-          [
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test.js'
-              }
-            },
-            {
-              type: 'suite',
-              attributes: {
-                suite: 'ci-visibility/test/ci-visibility-test-2.js'
-              }
-            }
-          ]
-        )
 
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.propertyVal(testSession.meta, TEST_STATUS, 'skip')
-          })
-        childProcess = exec(
-          runTestsWithCoverageCommand,
-          {
-            cwd,
-            env: getCiVisEvpProxyConfig(receiver.port),
-            stdio: 'inherit'
-          }
-        )
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            done()
-          }).catch(done)
-        })
-      })
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
@@ -2615,6 +2697,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('does not skip tests if test skipping is disabled by the API', (done) => {
         receiver.assertPayloadReceived(() => {
           const error = new Error('should not request skippable')
@@ -2655,6 +2738,7 @@ testFrameworks.forEach(({
           }
         )
       })
+
       it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -2689,6 +2773,7 @@ testFrameworks.forEach(({
           }).catch(done)
         })
       })
+
       it('reports itr_correlation_id in test suites', (done) => {
         const itrCorrelationId = '4321'
         receiver.setItrCorrelationId(itrCorrelationId)
