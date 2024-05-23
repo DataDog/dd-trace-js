@@ -71,6 +71,7 @@ module.exports = {
   'microgateway-core': () => require('../microgateway-core'),
   mocha: () => require('../mocha'),
   'mocha-each': () => require('../mocha'),
+  workerpool: () => require('../mocha'),
   moleculer: () => require('../moleculer'),
   mongodb: () => require('../mongodb'),
   'mongodb-core': () => require('../mongodb-core'),
