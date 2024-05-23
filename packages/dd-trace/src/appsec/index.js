@@ -37,7 +37,10 @@ function enable (_config) {
   try {
     appsecTelemetry.enable(_config.telemetry)
     graphql.enable()
-    rasp.enable()
+
+    if (_config.appsec.rasp.enabled) {
+      rasp.enable()
+    }
 
     setTemplates(_config)
 

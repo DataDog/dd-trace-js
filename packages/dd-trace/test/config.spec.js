@@ -206,6 +206,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
+    expect(config).to.have.nested.property('appsec.rasp.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
@@ -248,6 +249,7 @@ describe('Config', () => {
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
+      { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
@@ -410,6 +412,7 @@ describe('Config', () => {
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APPSEC_ENABLED = 'true'
+    process.env.DD_APPSEC_RASP_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
@@ -494,6 +497,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -532,6 +536,7 @@ describe('Config', () => {
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
+      { name: 'appsec.rasp.enabled', value: false, origin: 'env_var' },
       { name: 'appsec.rateLimit', value: 42, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
@@ -981,6 +986,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
+    process.env.DD_APPSEC_RASP_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
@@ -1060,6 +1066,9 @@ describe('Config', () => {
         apiSecurity: {
           enabled: true,
           requestSampling: 1.0
+        },
+        rasp: {
+          enabled: false
         }
       },
       remoteConfig: {
@@ -1099,6 +1108,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
+    expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
@@ -1184,6 +1194,9 @@ describe('Config', () => {
       },
       sca: {
         enabled: null
+      },
+      rasp: {
+        enabled: true
       }
     })
   })

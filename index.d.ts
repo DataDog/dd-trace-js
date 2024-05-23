@@ -683,6 +683,12 @@ declare namespace tracer {
          * @default 0.1
          */
         requestSampling?: number
+      },
+      /**
+       * Configuration for RASP
+       */
+      rasp?: {
+        enabled?: boolean
       }
     };
 

@@ -1,4 +1,13 @@
 'use strict'
+// TODO list
+//  - [ ] This should work only in express requests
+//  - [ ] DD_APPSEC_STACK_TRACE_ENABLED to enable/disable stack trace, default is true
+//  - [ ] DD_APPSEC_MAX_STACK_TRACE_DEPTH defines the maximum depth of a stack trace
+//        to be reported due to RASP events, default is 32
+//  - [ ] DD_APPSEC_MAX_STACK_TRACES maximum number of stack traces to be reported due to RASP events, default is 2
+//  - [ ] Add ASM_RASP_SSRF RC capability
+//  - [ ] Extract server.io.net.url address (probably it is already in dc channel data)
+//  - [ ] Add telemetry and metrics
 
 const { httpClientRequestStart, expressMiddlewareError } = require('../channels')
 const { storage } = require('../../../../datadog-core')
@@ -25,6 +34,7 @@ function enable () {
   httpClientRequestStart.subscribe(analyzeSsrf)
   expressMiddlewareError.subscribe(handleAbortError)
 
+  // TODO Subscribe and unsubscribe to the uncaughtException event when it is thrown
   process.on('uncaughtException', handleUncaughtException)
 }
 
