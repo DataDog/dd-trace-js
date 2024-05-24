@@ -318,11 +318,15 @@ describe('Plugin', () => {
         })
       })
 
-      describe('create embedding', () => {
-        let scope
+      describe('create embedding with stream:true', () => {
+        // Testing that adding stream:true to the params doesn't break the instrumentation
 
-        before(() => {
-          scope = nock('https://api.openai.com:443')
+        after(() => {
+          nock.cleanAll()
+        })
+
+        it('makes a successful call', async () => {
+          nock('https://api.openai.com:443')
             .post('/v1/embeddings')
             .reply(200, {
               object: 'list',
@@ -345,14 +349,80 @@ describe('Plugin', () => {
               'openai-processing-ms', '344',
               'openai-version', '2020-10-01'
             ])
+
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('name', 'openai.request')
+              expect(traces[0][0]).to.have.property('type', 'openai')
+              if (semver.satisfies(realVersion, '>=4.0.0')) {
+                expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
+              } else {
+                expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
+              }
+              expect(traces[0][0]).to.have.property('error', 0)
+              expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/embeddings')
+              expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
+
+              expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
+              expect(traces[0][0].meta).to.have.property('openai.request.input', 'Cat?')
+              expect(traces[0][0].meta).to.have.property('openai.request.model', 'text-embedding-ada-002')
+              expect(traces[0][0].meta).to.have.property('openai.request.user', 'hunter2')
+              expect(traces[0][0].meta).to.have.property('openai.response.model', 'text-embedding-ada-002-v2')
+              expect(traces[0][0].metrics).to.have.property('openai.response.embeddings_count', 1)
+              expect(traces[0][0].metrics).to.have.property('openai.response.embedding.0.embedding_length', 2)
+              expect(traces[0][0].metrics).to.have.property('openai.response.usage.prompt_tokens', 2)
+              expect(traces[0][0].metrics).to.have.property('openai.response.usage.total_tokens', 2)
+            })
+
+          const params = {
+            model: 'text-embedding-ada-002',
+            input: 'Cat?',
+            user: 'hunter2',
+            stream: true
+          }
+
+          if (semver.satisfies(realVersion, '>=4.0.0')) {
+            const result = await openai.embeddings.create(params)
+            expect(result.model).to.eql('text-embedding-ada-002-v2')
+          } else {
+            const result = await openai.createEmbedding(params)
+            expect(result.data.model).to.eql('text-embedding-ada-002-v2')
+          }
+
+          await checkTraces
+
+          expect(externalLoggerStub).to.have.been.calledWith({
+            status: 'info',
+            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            input: 'Cat?'
+          })
         })
 
-        after(() => {
-          nock.removeInterceptor(scope)
-          scope.done()
-        })
+        it('makes a successful call 2', async () => {
+          nock('https://api.openai.com:443')
+            .post('/v1/embeddings')
+            .reply(200, {
+              object: 'list',
+              data: [{
+                object: 'embedding',
+                index: 0,
+                embedding: [-0.0034387498, -0.026400521]
+              }],
+              model: 'text-embedding-ada-002-v2',
+              usage: {
+                prompt_tokens: 2,
+                total_tokens: 2
+              }
+            }, [
+              'Date', 'Mon, 15 May 2023 20:49:06 GMT',
+              'Content-Type', 'application/json',
+              'Content-Length', '75',
+              'access-control-allow-origin', '*',
+              'openai-organization', 'kill-9',
+              'openai-processing-ms', '344',
+              'openai-version', '2020-10-01'
+            ])
 
-        it('makes a successful call', async () => {
           const checkTraces = agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
@@ -631,7 +701,7 @@ describe('Plugin', () => {
         })
 
         if (semver.satisfies(realVersion, '<4.0.0')) {
-         // `edits.create` was deprecated and removed after 4.0.0
+        // `edits.create` was deprecated and removed after 4.0.0
           it('makes a successful call', async () => {
             const checkTraces = agent
               .use(traces => {
