@@ -120,7 +120,7 @@ class AgentEncoder {
       this._encodeMap(bytes, span.metrics)
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
-        this._encodeObject(bytes, span.meta_struct)
+        this._encodeMetaStruct(bytes, span.meta_struct)
       }
     }
   }
@@ -271,12 +271,45 @@ class AgentEncoder {
     }
   }
 
+  _encodeMetaStruct (bytes, value) {
+    const keys = Array.isArray(value) ? [] : Object.keys(value)
+    const validKeys = keys.filter(key =>
+      typeof value[key] === 'string' ||
+      typeof value[key] === 'number' ||
+      (value[key] !== null && typeof value[key] === 'object'))
+
+    this._encodeMapPrefix(bytes, validKeys.length)
+
+    for (const key of validKeys) {
+      this._encodeString(bytes, key)
+      this._encodeObjectAsByteArray(bytes, value[key])
+    }
+  }
+
+  _encodeObjectAsByteArray (bytes, value) {
+    const prefixLength = 5
+    const offset = bytes.length
+
+    bytes.reserve(prefixLength)
+    bytes.length += prefixLength
+
+    this._encodeObject(bytes, value)
+
+    // we should do it after encoding the object to know the real length
+    const length = bytes.length - offset - prefixLength
+    bytes.buffer[offset] = 0xc6
+    bytes.buffer[offset + 1] = length >> 24
+    bytes.buffer[offset + 2] = length >> 16
+    bytes.buffer[offset + 3] = length >> 8
+    bytes.buffer[offset + 4] = length
+  }
+
   _encodeObject (bytes, value, circularReferencesDetector = new Set()) {
     circularReferencesDetector.add(value)
     if (Array.isArray(value)) {
-      return this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
+      this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
-      return this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
+      this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
     } else if (typeof value === 'string' || typeof value === 'number') {
       this._encodeValue(bytes, value)
     }
