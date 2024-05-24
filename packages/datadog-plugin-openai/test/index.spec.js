@@ -229,7 +229,7 @@ describe('Plugin', () => {
           })
         })
 
-        if (semver.satisfies(realVersion, '>=4.0.0')) {
+        if (semver.intersects('>4.0.0', version)) {
           it.only('makes a successful call with streaming', async () => {
             nock('https://api.openai.com:443')
               .post('/v1/completions')
@@ -273,7 +273,7 @@ describe('Plugin', () => {
 
             for await (const part of stream) {
               expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('tssssssext')
+              expect(part.choices[0]).to.have.property('text')
             }
 
             await checkTraces
