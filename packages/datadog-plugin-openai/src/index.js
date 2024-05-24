@@ -112,6 +112,10 @@ class OpenApiPlugin extends TracingPlugin {
       }
     }
 
+    if (payload.stream) {
+      tags['openai.request.stream'] = payload.stream
+    }
+
     switch (methodName) {
       case 'createFineTune':
       case 'fine_tuning.jobs.create':
@@ -298,7 +302,8 @@ function retrieveModelRequestExtraction (tags, payload) {
 }
 
 function createChatCompletionRequestExtraction (tags, payload, store) {
-  if (!defensiveArrayLength(payload.messages)) return
+  const messages = payload.messages
+  if (!defensiveArrayLength(messages)) return
 
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
@@ -600,18 +605,20 @@ function commonCreateResponseExtraction (tags, body, store) {
     tags[`openai.response.choices.${choiceIdx}.text`] = truncateText(choice.text)
 
     // createChatCompletion only
-    if (choice.message) {
-      const message = choice.message
+    const message = choice.message || choice.delta // delta for streamed responses
+    if (message) {
       tags[`openai.response.choices.${choiceIdx}.message.role`] = message.role
       tags[`openai.response.choices.${choiceIdx}.message.content`] = truncateText(message.content)
       tags[`openai.response.choices.${choiceIdx}.message.name`] = truncateText(message.name)
       if (message.tool_calls) {
         const toolCalls = message.tool_calls
         for (let toolIdx = 0; toolIdx < toolCalls.length; toolIdx++) {
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.name`] =
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.name`] =
             toolCalls[toolIdx].function.name
-          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.arguments`] =
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.function.arguments`] =
             toolCalls[toolIdx].function.arguments
+          tags[`openai.response.choices.${choiceIdx}.message.tool_calls.${toolIdx}.id`] =
+            toolCalls[toolIdx].id
         }
       }
     }
