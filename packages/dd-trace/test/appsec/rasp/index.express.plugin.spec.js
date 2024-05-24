@@ -76,7 +76,7 @@ withVersions('express', 'express', expressVersion => {
               res.writeHead(500).end(e.message)
               return
             }
-            res.writeHead(500).end('blocked')
+            res.writeHead(403).end('blocked')
           })
         }
 
@@ -84,7 +84,38 @@ withVersions('express', 'express', expressVersion => {
           .catch(err => {
             try {
               const res = err.response
-              expect(res.status).to.equal(500)
+              expect(res.status).to.equal(403)
+              expect(res.data).to.equal('blocked')
+              done()
+            } catch (e) {
+              done(e)
+            }
+          })
+      })
+
+      it('POST operation should be blocked and catched', (done) => {
+        app = (req, res) => {
+          const clientRequest = require('http')
+            .request('http://www.datadoghq.com/rasp-block', { method: 'POST' }, () => {
+              res.end('not-blocked')
+            })
+          clientRequest.on('error', (e) => {
+            if (e.name !== 'AbortError') {
+              res.writeHead(500).end(e.message)
+              return
+            }
+            res.writeHead(403).end('blocked')
+          })
+          clientRequest.flushHeaders()
+          clientRequest.write('dummy_post_data')
+          clientRequest.end()
+        }
+
+        axios.get(`http://localhost:${port}/`)
+          .catch(err => {
+            try {
+              const res = err.response
+              expect(res.status).to.equal(403)
               expect(res.data).to.equal('blocked')
               done()
             } catch (e) {

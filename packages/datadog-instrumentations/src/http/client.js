@@ -4,7 +4,6 @@
 
 const url = require('url')
 
-const { AbortController } = require('node-abort-controller')
 const { EventEmitter } = require('events')
 
 const { channel, addHook } = require('../helpers/instrument')

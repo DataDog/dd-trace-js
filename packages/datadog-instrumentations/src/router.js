@@ -4,7 +4,6 @@ const METHODS = require('http').METHODS.map(v => v.toLowerCase()).concat('all')
 const pathToRegExp = require('path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const { AbortController } = require('node-abort-controller')
 
 function createWrapRouterMethod (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)

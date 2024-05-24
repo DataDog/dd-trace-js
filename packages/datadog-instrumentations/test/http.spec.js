@@ -1,7 +1,6 @@
 'use strict'
 
 const { assert } = require('chai')
-const { AbortController } = require('node-abort-controller')
 const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')

@@ -1,4 +1,5 @@
 'use strict'
+// TODO revert changes in this file, there is another PR with these changes
 
 require('../setup/tap')
 
@@ -249,10 +250,12 @@ describe('encode', () => {
 
       const decoded = msgpack.decode(buffer, { codec })
       const trace = decoded[0]
-      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
+
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.be.equal(metaStruct.foo)
+      expect(msgpack.decode(trace[0].meta_struct.baz)).to.be.equal(metaStruct.baz)
     })
 
-    it('should encode meta_struct with simple array of simple values', () => {
+    it('should ignore array in meta_struct', () => {
       const metaStruct = ['one', 2, 'three', 4, 5, 'six']
       data[0].meta_struct = metaStruct
       encoder.encode(data)
@@ -261,19 +264,7 @@ describe('encode', () => {
 
       const decoded = msgpack.decode(buffer, { codec })
       const trace = decoded[0]
-      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
-    })
-
-    it('should encode meta_struct with array of objects', () => {
-      const metaStruct = [{ foo: 'bar' }, { baz: 123 }]
-      data[0].meta_struct = metaStruct
-      encoder.encode(data)
-
-      const buffer = encoder.makePayload()
-
-      const decoded = msgpack.decode(buffer, { codec })
-      const trace = decoded[0]
-      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
+      expect(trace[0].meta_struct).to.deep.equal({})
     })
 
     it('should encode meta_struct with empty object and array', () => {
@@ -288,7 +279,8 @@ describe('encode', () => {
 
       const decoded = msgpack.decode(buffer, { codec })
       const trace = decoded[0]
-      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(metaStruct.foo)
+      expect(msgpack.decode(trace[0].meta_struct.bar)).to.deep.equal(metaStruct.bar)
     })
 
     it('should encode meta_struct with possible real use case', () => {
@@ -342,7 +334,7 @@ describe('encode', () => {
 
       const decoded = msgpack.decode(buffer, { codec })
       const trace = decoded[0]
-      expect(trace[0].meta_struct).to.deep.equal(metaStruct)
+      expect(msgpack.decode(trace[0].meta_struct['_dd.stack'])).to.deep.equal(metaStruct['_dd.stack'])
     })
 
     it('should encode meta_struct ignoring circular references in objects', () => {
@@ -373,7 +365,7 @@ describe('encode', () => {
           }
         }
       }
-      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
     })
 
     it('should encode meta_struct ignoring circular references in arrays', () => {
@@ -398,7 +390,7 @@ describe('encode', () => {
           bar: 'baz'
         }]
       }
-      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
     })
 
     it('should encode meta_struct ignoring undefined properties', () => {
@@ -418,7 +410,8 @@ describe('encode', () => {
       const expectedMetaStruct = {
         foo: 'bar'
       }
-      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+      expect(trace[0].meta_struct.undefinedProperty).to.be.undefined
     })
 
     it('should encode meta_struct ignoring null properties', () => {
@@ -438,7 +431,8 @@ describe('encode', () => {
       const expectedMetaStruct = {
         foo: 'bar'
       }
-      expect(trace[0].meta_struct).to.deep.equal(expectedMetaStruct)
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+      expect(trace[0].meta_struct.nullProperty).to.be.undefined
     })
 
     it('should not encode null meta_struct', () => {
