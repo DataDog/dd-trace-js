@@ -104,14 +104,13 @@ function getBlockingData (req, specificType, rootSpan, actionParameters) {
   }
 }
 
-// Is anybody using type argument?
-function block (req, res, rootSpan, abortController, type, actionParameters) {
+function block (req, res, rootSpan, abortController, actionParameters) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
     return
   }
 
-  const { body, headers, statusCode } = getBlockingData(req, type, rootSpan, actionParameters)
+  const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
 
   res.writeHead(statusCode, headers).end(body)
 

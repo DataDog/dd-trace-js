@@ -156,7 +156,7 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
@@ -171,7 +171,7 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
@@ -186,7 +186,7 @@ describe('blocking', () => {
       req.headers.accept = 'text/html'
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
@@ -199,7 +199,7 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
@@ -213,7 +213,7 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.json)
@@ -227,7 +227,7 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWith(401)
       expect(res.end).to.have.been.calledOnceWithExactly(defaultBlockedTemplate.html)
@@ -240,7 +240,7 @@ describe('blocking', () => {
       }
       setTemplates(config)
 
-      block(req, res, rootSpan, null, null, actionParameters)
+      block(req, res, rootSpan, null, actionParameters)
 
       expect(res.writeHead).to.have.been.calledOnceWithExactly(301, {
         Location: '/you-have-been-blocked'

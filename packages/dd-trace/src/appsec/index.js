@@ -224,11 +224,11 @@ function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
   if (actions.block_request) {
-    block(req, res, rootSpan, abortController, null, actions.block_request)
+    block(req, res, rootSpan, abortController, actions.block_request)
   }
 
   if (actions.redirect_request) {
-    block(req, res, rootSpan, abortController, null, actions.redirect_request)
+    block(req, res, rootSpan, abortController, actions.redirect_request)
   }
 }
 
