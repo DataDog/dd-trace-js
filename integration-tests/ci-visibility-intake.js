@@ -1,6 +1,6 @@
 const express = require('express')
 const bodyParser = require('body-parser')
-const msgpack = require('msgpack-lite')
+const msgpack = require('msgpack-long-lite')
 const codec = msgpack.createCodec({ int64: true })
 const http = require('http')
 const multer = require('multer')
