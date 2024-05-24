@@ -80,6 +80,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
     // this will disable resolve subscribers if `config.depth` is set to 0
     super.configure(config.depth === 0 ? false : config)
   }
+
+  finish (finishTime) {
+    this.activeSpan.finish(finishTime)
+  }
 }
 
 // helpers
