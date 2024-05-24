@@ -230,7 +230,7 @@ describe('Plugin', () => {
         })
 
         if (semver.intersects('>4.0.0', version)) {
-          it.only('makes a successful call with streaming', async () => {
+          it('makes a successful call with streaming', async () => {
             nock('https://api.openai.com:443')
               .post('/v1/completions')
               .reply(200, function () {
@@ -244,23 +244,17 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
 
-                function assertProperty (obj, property, expectedValue) {
-                  const actualValue = obj[property]
-                  expect(actualValue).to.equal(expectedValue)
-                }
-
-                // Assertions with error handling
-                assertProperty(span, 'name', 'openai.request')
-                assertProperty(span, 'type', 'openai')
-                assertProperty(span, 'error', 0)
-                assertProperty(span.meta, 'openai.organization.name', 'kill-9')
-                assertProperty(span.meta, 'openai.request.method', 'POST')
-                assertProperty(span.meta, 'openai.request.endpoint', '/v1/completions')
-                assertProperty(span.meta, 'openai.request.model', 'gpt-4o')
-                assertProperty(span.meta, 'openai.request.prompt', 'Hello, OpenAI!')
-                assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'stop')
-                assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned')
-                assertProperty(span.meta, 'openai.response.choices.0.text', ' this is a test.')
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-4o')
+                expect(span.meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
+                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.0.text', ' this is a test.')
               })
 
             const params = {
@@ -3036,28 +3030,19 @@ describe('Plugin', () => {
                 'openai-organization': 'kill-9'
               })
 
-            function assertProperty (obj, property, expectedValue) {
-              try {
-                expect(obj).to.have.property(property, expectedValue)
-              } catch (error) {
-                console.error(`Assertion failed for property ${property} with expected value ${expectedValue}:`, error.message)
-                throw error
-              }
-            }
-
             const checkTraces = agent
               .use(traces => {
                 const span = traces[0][0]
-                assertProperty(span, 'name', 'openai.request')
-                assertProperty(span, 'type', 'openai')
-                assertProperty(span, 'error', 0)
-                assertProperty(span.meta, 'openai.organization.name', 'kill-9')
-                assertProperty(span.meta, 'openai.request.method', 'POST')
-                assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions')
-                assertProperty(span.meta, 'openai.request.model', 'gpt-4o')
-                assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!')
-                assertProperty(span.meta, 'openai.request.messages.0.role', 'user')
-                assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2')
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-4o')
+                expect(span.meta).to.have.property('openai.request.messages.0.content', 'Hello, OpenAI!')
+                expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
               })
 
             const stream = await openai.chat.completions.create({
@@ -3089,29 +3074,20 @@ describe('Plugin', () => {
                 .use(traces => {
                   const span = traces[0][0]
 
-                  function assertProperty (obj, property, expectedValue) {
-                    try {
-                      expect(obj).to.have.property(property, expectedValue)
-                    } catch (error) {
-                      throw error
-                    }
-                  }
-
-                  // Assertions with error handling
-                  assertProperty(span, 'name', 'openai.request')
-                  assertProperty(span, 'type', 'openai')
-                  assertProperty(span, 'error', 0)
-                  assertProperty(span.meta, 'openai.organization.name', 'kill-9')
-                  assertProperty(span.meta, 'openai.request.method', 'POST')
-                  assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions')
-                  assertProperty(span.meta, 'openai.request.model', 'gpt-4')
-                  assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!')
-                  assertProperty(span.meta, 'openai.request.messages.0.role', 'user')
-                  assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2')
-                  assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'tool_calls')
-                  assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned')
-                  assertProperty(span.meta, 'openai.response.choices.0.message.role', 'assistant')
-                  assertProperty(span.meta, 'openai.response.choices.0.message.tool_calls.0.function.name',
+                  expect(span).to.have.property('name', 'openai.request')
+                  expect(span).to.have.property('type', 'openai')
+                  expect(span).to.have.property('error', 0)
+                  expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                  expect(span.meta).to.have.property('openai.request.method', 'POST')
+                  expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                  expect(span.meta).to.have.property('openai.request.model', 'gpt-4')
+                  expect(span.meta).to.have.property('openai.request.messages.0.content', 'Hello, OpenAI!')
+                  expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                  expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+                  expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+                  expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
                     'get_current_weather')
                 })
 
