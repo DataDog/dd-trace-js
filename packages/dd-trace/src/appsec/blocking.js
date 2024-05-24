@@ -50,7 +50,6 @@ function getSpecificBlockingData (type) {
 function getBlockWithContentData (req, specificType, rootSpan, actionParameters) {
   let type
   let body
-  let statusCode
 
   const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
   if (specificBlockingType) {
@@ -82,7 +81,7 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
     }
   }
 
-  statusCode = actionParameters?.status_code || 403
+  const statusCode = actionParameters?.status_code || 403
 
   const headers = {
     'Content-Type': type,

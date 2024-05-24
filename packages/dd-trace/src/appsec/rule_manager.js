@@ -3,7 +3,6 @@
 const fs = require('fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
-const blocking = require('./blocking')
 
 let defaultRules
 

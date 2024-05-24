@@ -16,7 +16,7 @@ describe('blocking', () => {
   }
 
   let log
-  let block, setTemplates, updateBlockingConfiguration
+  let block, setTemplates
   let req, res, rootSpan
 
   beforeEach(() => {
@@ -31,7 +31,6 @@ describe('blocking', () => {
 
     block = blocking.block
     setTemplates = blocking.setTemplates
-    updateBlockingConfiguration = blocking.updateBlockingConfiguration
 
     req = {
       headers: {}
