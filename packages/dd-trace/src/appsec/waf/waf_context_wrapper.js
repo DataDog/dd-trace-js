@@ -3,6 +3,7 @@
 const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
+const { isBlockingAction } = require('../blocking')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -61,8 +62,7 @@ class WAFContextWrapper {
 
       const ruleTriggered = !!result.events?.length
 
-      const blockTriggered = result.actions && (Object.keys(result.actions).includes('block_request') ||
-        Object.keys(result.actions).includes('redirect_request'))
+      const blockTriggered = isBlockingAction(result.actions)
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,

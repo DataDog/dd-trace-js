@@ -116,6 +116,10 @@ function block (req, res, rootSpan, abortController, actionParameters) {
   abortController?.abort()
 }
 
+function isBlockingAction (actions) {
+  return !!(actions?.block_request || actions?.redirect_request)
+}
+
 function setTemplates (config) {
   if (config.appsec.blockedTemplateHtml) {
     templateHtml = config.appsec.blockedTemplateHtml
@@ -141,5 +145,6 @@ module.exports = {
   block,
   specificBlockingTypes,
   getBlockingData,
+  isBlockingAction,
   setTemplates
 }

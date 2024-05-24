@@ -248,3 +248,33 @@ describe('blocking', () => {
     })
   })
 })
+
+describe('waf actions', () => {
+  const blocking = require('../../src/appsec/blocking')
+
+  it('identifies a block_request as blocking action', () => {
+    const actions = {
+      block_request: {}
+    }
+    expect(blocking.isBlockingAction(actions), true)
+  })
+
+  it('identifies a redirect_request as blocking action', () => {
+    const actions = {
+      redirect_request: {}
+    }
+    expect(blocking.isBlockingAction(actions), true)
+  })
+
+  it('identifies undefined as non blocking action', () => {
+    const actions = undefined
+    expect(blocking.isBlockingAction(actions), false)
+  })
+
+  it('identifies generate_stack as non blocking action', () => {
+    const actions = {
+      generate_stack: {}
+    }
+    expect(blocking.isBlockingAction(actions), false)
+  })
+})

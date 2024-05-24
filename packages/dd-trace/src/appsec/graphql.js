@@ -1,7 +1,12 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { addSpecificEndpoint, specificBlockingTypes, getBlockingData } = require('./blocking')
+const {
+  addSpecificEndpoint,
+  specificBlockingTypes,
+  getBlockingData,
+  isBlockingAction
+} = require('./blocking')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const web = require('../plugins/util/web')
@@ -32,10 +37,7 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  if (
-    actions &&
-    (Object.keys(actions).includes('block_request') || Object.keys(actions).includes('redirect_request'))
-  ) {
+  if (isBlockingAction(actions)) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
