@@ -86,7 +86,6 @@ describe('Plugin', () => {
       })
 
       describe('create completion', () => {
-
         afterEach(() => {
           nock.cleanAll()
         })
@@ -231,9 +230,7 @@ describe('Plugin', () => {
         })
 
         if (semver.satisfies(realVersion, '>=4.0.0')) {
-
           it.only('makes a successful call with streaming', async () => {
-
             nock('https://api.openai.com:443')
               .post('/v1/completions')
               .reply(200, function () {
@@ -247,27 +244,23 @@ describe('Plugin', () => {
               .use(traces => {
                 const span = traces[0][0]
 
-                function assertProperty(obj, property, expectedValue) {
-                  const actualValue = obj[property];
-                  if (actualValue !== expectedValue) {
-                    console.error(`Assertion failed for property ${property}. Expected: "${expectedValue}", but got: "${actualValue}"`);
-                  }
-                  expect(actualValue).to.equal(expectedValue);
+                function assertProperty (obj, property, expectedValue) {
+                  const actualValue = obj[property]
+                  expect(actualValue).to.equal(expectedValue)
                 }
 
-
                 // Assertions with error handling
-                assertProperty(span, 'name', 'openai.request');
-                assertProperty(span, 'type', 'openai');
-                assertProperty(span, 'error', 0);
-                assertProperty(span.meta, 'openai.organization.name', 'kill-9');
-                assertProperty(span.meta, 'openai.request.method', 'POST');
-                assertProperty(span.meta, 'openai.request.endpoint', '/v1/completions');
-                assertProperty(span.meta, 'openai.request.model', 'gpt-4o');
-                assertProperty(span.meta, 'openai.request.prompt', 'Hello, OpenAI!');
-                assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'stop');
-                assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned');
-                assertProperty(span.meta, 'openai.response.choices.0.text', ' this is a test.');
+                assertProperty(span, 'name', 'openai.request')
+                assertProperty(span, 'type', 'openai')
+                assertProperty(span, 'error', 0)
+                assertProperty(span.meta, 'openai.organization.name', 'kill-9')
+                assertProperty(span.meta, 'openai.request.method', 'POST')
+                assertProperty(span.meta, 'openai.request.endpoint', '/v1/completions')
+                assertProperty(span.meta, 'openai.request.model', 'gpt-4o')
+                assertProperty(span.meta, 'openai.request.prompt', 'Hello, OpenAI!')
+                assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'stop')
+                assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned')
+                assertProperty(span.meta, 'openai.response.choices.0.text', ' this is a test.')
               })
 
             const params = {
@@ -278,12 +271,9 @@ describe('Plugin', () => {
             }
             const stream = await openai.completions.create(params)
 
-
-
             for await (const part of stream) {
-              console.log(part)
-              // expect(part).to.have.property('choices')
-              // expect(part.choices[0]).to.have.property('delta')
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('tssssssext')
             }
 
             await checkTraces
@@ -2986,14 +2976,11 @@ describe('Plugin', () => {
 
       if (semver.intersects('>4.1.0', version)) {
         describe('streamed responses', () => {
-          let scope
-
           afterEach(() => {
             nock.cleanAll()
           })
 
           it('makes a successful chat completion call', async () => {
-
             nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
               .reply(200, function () {
@@ -3040,39 +3027,37 @@ describe('Plugin', () => {
           })
 
           it('makes a successful chat completion call with empty stream', async () => {
-
             nock('https://api.openai.com:443')
               .post('/v1/chat/completions')
               .reply(200, function () {
                 return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.empty.txt'))
-
               }, {
                 'Content-Type': 'text/plain',
                 'openai-organization': 'kill-9'
               })
 
-            function assertProperty(obj, property, expectedValue) {
+            function assertProperty (obj, property, expectedValue) {
               try {
-                expect(obj).to.have.property(property, expectedValue);
+                expect(obj).to.have.property(property, expectedValue)
               } catch (error) {
-                console.error(`Assertion failed for property ${property} with expected value ${expectedValue}:`, error.message);
-                throw error;
+                console.error(`Assertion failed for property ${property} with expected value ${expectedValue}:`, error.message)
+                throw error
               }
             }
 
             const checkTraces = agent
               .use(traces => {
                 const span = traces[0][0]
-                assertProperty(span, 'name', 'openai.request');
-                assertProperty(span, 'type', 'openai');
-                assertProperty(span, 'error', 0);
-                assertProperty(span.meta, 'openai.organization.name', 'kill-9');
-                assertProperty(span.meta, 'openai.request.method', 'POST');
-                assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions');
-                assertProperty(span.meta, 'openai.request.model', 'gpt-4o');
-                assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!');
-                assertProperty(span.meta, 'openai.request.messages.0.role', 'user');
-                assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2');
+                assertProperty(span, 'name', 'openai.request')
+                assertProperty(span, 'type', 'openai')
+                assertProperty(span, 'error', 0)
+                assertProperty(span.meta, 'openai.organization.name', 'kill-9')
+                assertProperty(span.meta, 'openai.request.method', 'POST')
+                assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions')
+                assertProperty(span.meta, 'openai.request.model', 'gpt-4o')
+                assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!')
+                assertProperty(span.meta, 'openai.request.messages.0.role', 'user')
+                assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2')
               })
 
             const stream = await openai.chat.completions.create({
@@ -3081,7 +3066,6 @@ describe('Plugin', () => {
               temperature: 0.5,
               stream: true
             })
-
 
             for await (const part of stream) {
               expect(part).to.have.property('choices')
@@ -3092,7 +3076,6 @@ describe('Plugin', () => {
 
           if (semver.intersects('>4.16.0', version)) {
             it('makes a successful chat completion call with tools', async () => {
-
               nock('https://api.openai.com:443')
                 .post('/v1/chat/completions')
                 .reply(200, function () {
@@ -3104,60 +3087,60 @@ describe('Plugin', () => {
 
               const checkTraces = agent
                 .use(traces => {
-                  const span = traces[0][0];
+                  const span = traces[0][0]
 
-                  function assertProperty(obj, property, expectedValue) {
+                  function assertProperty (obj, property, expectedValue) {
                     try {
-                      expect(obj).to.have.property(property, expectedValue);
+                      expect(obj).to.have.property(property, expectedValue)
                     } catch (error) {
-                      console.error(`Assertion failed for property ${property} with expected value ${expectedValue}:`, error.message);
-                      throw error;
+                      throw error
                     }
                   }
 
                   // Assertions with error handling
-                  assertProperty(span, 'name', 'openai.request');
-                  assertProperty(span, 'type', 'openai');
-                  assertProperty(span, 'error', 0);
-                  assertProperty(span.meta, 'openai.organization.name', 'kill-9');
-                  assertProperty(span.meta, 'openai.request.method', 'POST');
-                  assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions');
-                  assertProperty(span.meta, 'openai.request.model', 'gpt-4');
-                  assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!');
-                  assertProperty(span.meta, 'openai.request.messages.0.role', 'user');
-                  assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2');
-                  assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'tool_calls');
-                  assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned');
-                  assertProperty(span.meta, 'openai.response.choices.0.message.role', 'assistant');
-                  assertProperty(span.meta, 'openai.response.choices.0.message.tool_calls.0.function.name', 'get_current_weather');
-                });
+                  assertProperty(span, 'name', 'openai.request')
+                  assertProperty(span, 'type', 'openai')
+                  assertProperty(span, 'error', 0)
+                  assertProperty(span.meta, 'openai.organization.name', 'kill-9')
+                  assertProperty(span.meta, 'openai.request.method', 'POST')
+                  assertProperty(span.meta, 'openai.request.endpoint', '/v1/chat/completions')
+                  assertProperty(span.meta, 'openai.request.model', 'gpt-4')
+                  assertProperty(span.meta, 'openai.request.messages.0.content', 'Hello, OpenAI!')
+                  assertProperty(span.meta, 'openai.request.messages.0.role', 'user')
+                  assertProperty(span.meta, 'openai.request.messages.0.name', 'hunter2')
+                  assertProperty(span.meta, 'openai.response.choices.0.finish_reason', 'tool_calls')
+                  assertProperty(span.meta, 'openai.response.choices.0.logprobs', 'returned')
+                  assertProperty(span.meta, 'openai.response.choices.0.message.role', 'assistant')
+                  assertProperty(span.meta, 'openai.response.choices.0.message.tool_calls.0.function.name',
+                    'get_current_weather')
+                })
 
               const tools = [
                 {
-                  type: "function",
+                  type: 'function',
                   function: {
-                    name: "get_current_weather",
-                    description: "Get the current weather in a given location",
+                    name: 'get_current_weather',
+                    description: 'Get the current weather in a given location',
                     parameters: {
-                      type: "object",
+                      type: 'object',
                       properties: {
                         location: {
-                          type: "string",
-                          description: "The city and state, e.g. San Francisco, CA",
+                          type: 'string',
+                          description: 'The city and state, e.g. San Francisco, CA'
                         },
-                        unit: { type: "string", enum: ["celsius", "fahrenheit"] },
+                        unit: { type: 'string', enum: ['celsius', 'fahrenheit'] }
                       },
-                      required: ["location"],
-                    },
-                  },
-                },
-              ];
+                      required: ['location']
+                    }
+                  }
+                }
+              ]
 
               const stream = await openai.chat.completions.create({
                 model: 'gpt-4',
                 messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
                 temperature: 0.5,
-                tools: tools,
+                tools,
                 tool_choice: 'auto',
                 stream: true
               })
