@@ -14,6 +14,7 @@ const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSITelemetry } = require('./profiling/ssi-telemetry')
+const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 
 class LazyModule {
   constructor (provider) {
@@ -91,7 +92,7 @@ class Tracer extends NoopProxy {
         })
       }
 
-      if (config.isGCPFunction || config.isAzureFunctionConsumptionPlan) {
+      if (config.isGCPFunction || config.isAzureFunction) {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
@@ -104,6 +105,11 @@ class Tracer extends NoopProxy {
           this._profilerStarted = profiler.start(config)
         } catch (e) {
           log.error(e)
+          telemetryLog.publish({
+            message: e.message,
+            level: 'ERROR',
+            stack_trace: e.stack
+          })
         }
       } else if (ssiTelemetry.enabled()) {
         require('./profiling/ssi-telemetry-mock-profiler').start(config)

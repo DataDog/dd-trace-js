@@ -144,6 +144,7 @@ interface Plugins {
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
+  "child_process": tracer.plugins.child_process;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -1212,6 +1213,12 @@ declare namespace tracer {
      * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
      */
     interface cassandra_driver extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [child_process](https://nodejs.org/api/child_process.html) module.
+     */
+    interface child_process extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
