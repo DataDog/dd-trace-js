@@ -1,7 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller')
-
 describe('blocking', () => {
   const defaultBlockedTemplate = {
     html: 'block test',
