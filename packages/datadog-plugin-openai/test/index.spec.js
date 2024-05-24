@@ -631,7 +631,7 @@ describe('Plugin', () => {
         })
 
         if (semver.satisfies(realVersion, '<4.0.0')) {
-          // `edits.create` was deprecated and removed after 4.0.0
+         // `edits.create` was deprecated and removed after 4.0.0
           it('makes a successful call', async () => {
             const checkTraces = agent
               .use(traces => {
