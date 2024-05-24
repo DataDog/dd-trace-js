@@ -32,10 +32,14 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  if (actions?.includes('block')) {
+  if (
+    actions &&
+    (Object.keys(actions).includes('block_request') || Object.keys(actions).includes('redirect_request'))
+  ) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
+      requestData.wafAction = actions.block_request || actions.redirect_request
       context?.abortController?.abort()
     }
   }
@@ -87,7 +91,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
 
-    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, rootSpan)
+    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, rootSpan, requestData.wafAction)
     abortData.statusCode = blockingData.statusCode
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body
