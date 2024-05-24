@@ -319,8 +319,6 @@ describe('Plugin', () => {
       })
 
       describe('create embedding with stream:true', () => {
-        // Testing that adding stream:true to the params doesn't break the instrumentation
-
         after(() => {
           nock.cleanAll()
         })
@@ -377,8 +375,7 @@ describe('Plugin', () => {
           const params = {
             model: 'text-embedding-ada-002',
             input: 'Cat?',
-            user: 'hunter2',
-            stream: true
+            user: 'hunter2'
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
@@ -398,7 +395,8 @@ describe('Plugin', () => {
           })
         })
 
-        it('makes a successful call 2', async () => {
+        it('makes a successful call with stream true', async () => {
+          // Testing that adding stream:true to the params doesn't break the instrumentation
           nock('https://api.openai.com:443')
             .post('/v1/embeddings')
             .reply(200, {
@@ -450,7 +448,8 @@ describe('Plugin', () => {
           const params = {
             model: 'text-embedding-ada-002',
             input: 'Cat?',
-            user: 'hunter2'
+            user: 'hunter2',
+            stream: true
           }
 
           if (semver.satisfies(realVersion, '>=4.0.0')) {
