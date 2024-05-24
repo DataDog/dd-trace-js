@@ -1,7 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller')
-
 const {
   addHook,
   channel,
