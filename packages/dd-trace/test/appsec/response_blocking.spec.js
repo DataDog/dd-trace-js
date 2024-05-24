@@ -156,13 +156,19 @@ describe('HTTP Response Blocking', () => {
 
 function assertBlocked (res) {
   assert.equal(res.status, 403)
-  assert.hasAllKeys(res.headers, [
+
+  // clone the headers accessor to a flat object
+  // and delete the keep-alive header as it's not always present
+  const headers = Object.fromEntries(Object.entries(res.headers))
+  delete headers['keep-alive']
+
+  assert.hasAllKeys(headers, [
     'content-type',
     'content-length',
     'date',
-    'connection',
-    'keep-alive'
+    'connection'
   ])
+
   assert.deepEqual(res.data, blockingResponse)
 }
 
