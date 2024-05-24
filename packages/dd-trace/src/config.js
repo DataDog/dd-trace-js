@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 const os = require('os')
-const uuid = require('crypto-randomuuid')
+const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const URL = require('url').URL
 const log = require('./log')
 const pkg = require('./pkg')
