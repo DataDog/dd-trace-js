@@ -20,10 +20,6 @@ function loadRules (config) {
     : require('./recommended.json')
 
   waf.init(defaultRules, config)
-
-  if (defaultRules.actions) {
-    blocking.updateBlockingConfiguration(defaultRules.actions.find(action => action.id === 'block'))
-  }
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
@@ -95,6 +91,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
 
       if (file && file.actions && file.actions.length) {
+        batchConfiguration = true
         newActions.set(id, file.actions)
       }
 
@@ -112,7 +109,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     newRuleset ||
     newRulesOverride.modified ||
     newExclusions.modified ||
-    newCustomRules.modified) {
+    newCustomRules.modified ||
+    newActions.modified
+  ) {
     const payload = newRuleset || {}
 
     if (newRulesData.modified) {
@@ -126,6 +125,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
     }
     if (newCustomRules.modified) {
       payload.custom_rules = concatArrays(newCustomRules)
+    }
+    if (newActions.modified) {
+      payload.actions = concatArrays(newActions)
     }
 
     try {
@@ -146,6 +148,9 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       if (newCustomRules.modified) {
         appliedCustomRules = newCustomRules
       }
+      if (newActions.modified) {
+        appliedActions = newActions
+      }
     } catch (err) {
       newApplyState = ERROR
       newApplyError = err.toString()
@@ -155,11 +160,6 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
   for (const config of batch) {
     config.apply_state = newApplyState
     if (newApplyError) config.apply_error = newApplyError
-  }
-
-  if (newActions.modified) {
-    blocking.updateBlockingConfiguration(concatArrays(newActions).find(action => action.id === 'block'))
-    appliedActions = newActions
   }
 }
 
@@ -242,7 +242,6 @@ function copyRulesData (rulesData) {
 
 function clearAllRules () {
   waf.destroy()
-  blocking.updateBlockingConfiguration(undefined)
 
   defaultRules = undefined
 

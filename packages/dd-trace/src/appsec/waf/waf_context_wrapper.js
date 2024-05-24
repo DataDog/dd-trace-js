@@ -60,7 +60,9 @@ class WAFContextWrapper {
       this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
-      const blockTriggered = result.actions?.includes('block')
+
+      const blockTriggered = result.actions && (Object.keys(result.actions).includes('block_request') ||
+        Object.keys(result.actions).includes('redirect_request'))
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,

@@ -13,7 +13,7 @@ function isUserBlocked (user) {
 
   if (!actions) return false
 
-  return actions.includes('block')
+  return Object.keys(actions).includes('block_request') || Object.keys(actions).includes('redirect_request')
 }
 
 function checkUserAndSetUser (tracer, user) {

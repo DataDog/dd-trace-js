@@ -223,8 +223,12 @@ function onPassportVerify ({ credentials, user }) {
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
-  if (actions.includes('block')) {
-    block(req, res, rootSpan, abortController)
+  if (actions.block_request) {
+    block(req, res, rootSpan, abortController, null, actions.block_request)
+  }
+
+  if (actions.redirect_request) {
+    block(req, res, rootSpan, abortController, null, actions.redirect_request)
   }
 }
 

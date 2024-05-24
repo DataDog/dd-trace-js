@@ -20,8 +20,6 @@ describe('AppSec Rule Manager', () => {
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(waf, 'destroy').callThrough()
     sinon.stub(waf, 'update').callThrough()
-
-    sinon.stub(blocking, 'updateBlockingConfiguration').callThrough()
   })
 
   afterEach(() => {
@@ -34,22 +32,6 @@ describe('AppSec Rule Manager', () => {
       loadRules(config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
-      expect(blocking.updateBlockingConfiguration).not.to.have.been.called
-    })
-
-    it('should call updateBlockingConfiguration with proper params', () => {
-      const rulesPath = path.join(__dirname, './blocking-actions-rules.json')
-      const testRules = JSON.parse(fs.readFileSync(rulesPath))
-
-      config.appsec.rules = rulesPath
-
-      loadRules(config.appsec)
-
-      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly({
-        id: 'block',
-        otherParam: 'other'
-      })
     })
 
     it('should throw if null/undefined are passed', () => {
@@ -69,7 +51,6 @@ describe('AppSec Rule Manager', () => {
 
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
-      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
     })
   })
 
@@ -527,13 +508,7 @@ describe('AppSec Rule Manager', () => {
         ]
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-
-        expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(
-          {
-            id: 'block',
-            otherParam: 'other'
-          })
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
       })
 
       it('should unapply blocking actions', () => {
@@ -557,8 +532,6 @@ describe('AppSec Rule Manager', () => {
           }
         ]
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        // reset counters
-        blocking.updateBlockingConfiguration.reset()
 
         const toUnapply = [
           {
@@ -569,8 +542,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
 
-        expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
       })
 
       it('should ignore other properties', () => {
