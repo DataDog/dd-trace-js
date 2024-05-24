@@ -30,7 +30,6 @@ loadChannel.subscribe(({ name }) => {
 
 // Globals
 maybeEnable(require('../../datadog-plugin-fetch/src'))
-maybeEnable(require('../../datadog-plugin-undici/src'))
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
