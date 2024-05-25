@@ -307,7 +307,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
                   )
                 }
               } else {
-                finishCh.publish({
+                finish({
                   headers: response.headers,
                   body,
                   path: response.url,
