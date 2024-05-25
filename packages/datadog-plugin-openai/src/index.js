@@ -208,22 +208,24 @@ class OpenApiPlugin extends TracingPlugin {
     }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
-    const tags = !error ? {
-      'openai.request.endpoint': endpoint,
-      'openai.request.method': method.toUpperCase(),
+    const tags = error
+      ? {}
+      : {
+          'openai.request.endpoint': endpoint,
+          'openai.request.method': method.toUpperCase(),
 
-      'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
-      'openai.organization.name': headers['openai-organization'],
+          'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
+          'openai.organization.name': headers['openai-organization'],
 
-      'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
-      'openai.response.id': body.id, // common creation value, numeric epoch
-      'openai.response.deleted': body.deleted, // common boolean field in delete responses
+          'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
+          'openai.response.id': body.id, // common creation value, numeric epoch
+          'openai.response.deleted': body.deleted, // common boolean field in delete responses
 
-      // The OpenAI API appears to use both created and created_at in different places
-      // Here we're conciously choosing to surface this inconsistency instead of normalizing
-      'openai.response.created': body.created,
-      'openai.response.created_at': body.created_at
-    } : {}
+          // The OpenAI API appears to use both created and created_at in different places
+          // Here we're conciously choosing to surface this inconsistency instead of normalizing
+          'openai.response.created': body.created,
+          'openai.response.created_at': body.created_at
+        }
 
     responseDataExtractionByMethod(methodName, tags, body, store)
     span.addTags(tags)
@@ -234,7 +236,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendMetrics (headers, body, endpoint, duration, error) {
-    const tags = [`error:${error ? 1 : 0}`]
+    const tags = [`error:${Number(!!error)}`]
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
     } else {
