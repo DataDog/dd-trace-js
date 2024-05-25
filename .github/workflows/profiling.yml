@@ -34,7 +34,7 @@ jobs:
       - uses: ./.github/actions/node/20
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: ./.github/actions/node/21
+      - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
       - uses: codecov/codecov-action@v3

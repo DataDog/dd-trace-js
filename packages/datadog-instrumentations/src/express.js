@@ -3,7 +3,6 @@
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const { AbortController } = require('node-abort-controller')
 
 const handleChannel = channel('apm:express:request:handle')
 

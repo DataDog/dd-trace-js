@@ -48,6 +48,7 @@ class HardcodedBaseAnalyzer extends Analyzer {
           file,
           line: match.location.line,
           column: match.location.column,
+          ident: match.location.ident,
           data: match.ruleId
         }))
     }

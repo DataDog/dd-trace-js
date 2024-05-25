@@ -1,12 +1,19 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastTelemetry = require('../telemetry')
 const { REQUEST_TAINTED } = require('../telemetry/iast-metric')
 const { isInfoAllowed } = require('../telemetry/verbosity')
-const { getTaintTrackingImpl, getTaintTrackingNoop } = require('./taint-tracking-impl')
+const {
+  getTaintTrackingImpl,
+  getTaintTrackingNoop,
+  lodashTaintTrackingHandler
+} = require('./taint-tracking-impl')
 const { taintObject } = require('./operations-taint-object')
+
+const lodashOperationCh = dc.channel('datadog:lodash:operation')
 
 function createTransaction (id, iastContext) {
   if (id && iastContext) {
@@ -92,10 +99,12 @@ function enableTaintOperations (telemetryVerbosity) {
   }
 
   global._ddiast = getTaintTrackingImpl(telemetryVerbosity)
+  lodashOperationCh.subscribe(lodashTaintTrackingHandler)
 }
 
 function disableTaintOperations () {
   global._ddiast = getTaintTrackingNoop()
+  lodashOperationCh.unsubscribe(lodashTaintTrackingHandler)
 }
 
 function setMaxTransactions (transactions) {

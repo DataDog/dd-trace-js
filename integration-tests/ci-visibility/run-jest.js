@@ -20,6 +20,14 @@ if (process.env.OLD_RUNNER) {
   options.testRunner = 'jest-jasmine2'
 }
 
+if (process.env.ENABLE_JSDOM) {
+  options.testEnvironment = 'jsdom'
+}
+
+if (process.env.COLLECT_COVERAGE_FROM) {
+  options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
+}
+
 jest.runCLI(
   options,
   options.projects
