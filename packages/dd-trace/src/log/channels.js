@@ -46,10 +46,18 @@ class LogChannel {
   }
 
   unsubscribe (logger) {
-    debugChannel.unsubscribe?.(logger.debug)
-    infoChannel.unsubscribe?.(logger.info)
-    warnChannel.unsubscribe?.(logger.warn)
-    errorChannel.unsubscribe?.(logger.error)
+    if (debugChannel.hasSubscribers) {
+      debugChannel.unsubscribe(logger.debug)
+    }
+    if (infoChannel.hasSubscribers) {
+      infoChannel.unsubscribe(logger.info)
+    }
+    if (warnChannel.hasSubscribers) {
+      warnChannel.unsubscribe(logger.warn)
+    }
+    if (errorChannel.hasSubscribers) {
+      errorChannel.unsubscribe(logger.error)
+    }
   }
 }
 
