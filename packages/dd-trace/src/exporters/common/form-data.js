@@ -3,6 +3,8 @@
 const { Readable } = require('stream')
 const id = require('../../id')
 
+const TRAILER_SIZE = 22
+
 class FormData extends Readable {
   constructor () {
     super()
@@ -22,7 +24,7 @@ class FormData extends Readable {
   }
 
   size () {
-    return this._data.reduce((size, chunk) => size + chunk.length, 0)
+    return this._data.reduce((size, chunk) => size + Buffer.byteLength(chunk), TRAILER_SIZE)
   }
 
   getHeaders () {
