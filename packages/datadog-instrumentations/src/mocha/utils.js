@@ -21,6 +21,7 @@ const testToAr = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
+const wrappedFunctions = new WeakSet()
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -87,7 +88,7 @@ function getTestAsyncResource (test) {
   if (!test.fn) {
     return testToAr.get(test)
   }
-  if (!test.fn.asyncResource) {
+  if (!wrappedFunctions.has(test.fn)) {
     return testToAr.get(test.fn)
   }
   const originalFn = originalFns.get(test.fn)
@@ -105,9 +106,10 @@ function runnableWrapper (RunnablePackage) {
     const isTestHook = isBeforeEach || isAfterEach
 
     // we restore the original user defined function
-    if (this.fn.asyncResource) {
+    if (wrappedFunctions.has(this.fn)) {
       const originalFn = originalFns.get(this.fn)
       this.fn = originalFn
+      wrappedFunctions.delete(this.fn)
     }
 
     if (isTestHook || this.type === 'test') {
@@ -122,11 +124,7 @@ function runnableWrapper (RunnablePackage) {
         originalFns.set(newFn, this.fn)
         this.fn = newFn
 
-        // Temporarily keep functionality when .asyncResource is removed from node
-        // in https://github.com/nodejs/node/pull/46432
-        if (!this.fn.asyncResource) {
-          this.fn.asyncResource = asyncResource
-        }
+        wrappedFunctions.add(this.fn)
       }
     }
 
@@ -303,5 +301,6 @@ module.exports = {
   getOnTestEndHandler,
   getOnHookEndHandler,
   getOnFailHandler,
-  getOnPendingHandler
+  getOnPendingHandler,
+  testFileToSuiteAr
 }
