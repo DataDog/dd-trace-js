@@ -63,7 +63,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         item.apply_state = ERROR
         item.apply_error = 'Multiple ruleset received in ASM_DD'
       } else {
-        if (file && file.rules && file.rules.length) {
+        if (file?.rules?.length) {
           const { version, metadata, rules, processors, scanners } = file
 
           newRuleset = { version, metadata, rules, processors, scanners }
@@ -73,19 +73,19 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         batch.add(item)
       }
     } else if (product === 'ASM') {
-      if (file && file.rules_override && file.rules_override.length) {
+      if (file?.rules_override?.length) {
         newRulesOverride.set(id, file.rules_override)
       }
 
-      if (file && file.exclusions && file.exclusions.length) {
+      if (file?.exclusions?.length) {
         newExclusions.set(id, file.exclusions)
       }
 
-      if (file && file.custom_rules && file.custom_rules.length) {
+      if (file?.custom_rules?.length) {
         newCustomRules.set(id, file.custom_rules)
       }
 
-      if (file && file.actions && file.actions.length) {
+      if (file?.actions?.length) {
         newActions.set(id, file.actions)
       }
 
