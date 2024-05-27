@@ -23,7 +23,8 @@ const {
   getOnTestEndHandler,
   getOnHookEndHandler,
   getOnFailHandler,
-  getOnPendingHandler
+  getOnPendingHandler,
+  testFileToSuiteAr
 } = require('./utils')
 require('./common')
 
@@ -39,7 +40,6 @@ let isSuitesSkippingEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
 let itrCorrelationId = ''
-const testFileToSuiteAr = new Map()
 let isForcedToRun = false
 
 // We'll preserve the original coverage here
@@ -469,7 +469,7 @@ addHook({
 // Used to start and finish test session and test module
 addHook({
   name: 'mocha',
-  versions: ['>=8.0.0'],
+  versions: ['>=5.2.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js'
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function () {
