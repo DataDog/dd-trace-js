@@ -73,31 +73,23 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         batch.add(item)
       }
     } else if (product === 'ASM') {
-      let batchConfiguration = false
       if (file && file.rules_override && file.rules_override.length) {
-        batchConfiguration = true
         newRulesOverride.set(id, file.rules_override)
       }
 
       if (file && file.exclusions && file.exclusions.length) {
-        batchConfiguration = true
         newExclusions.set(id, file.exclusions)
       }
 
       if (file && file.custom_rules && file.custom_rules.length) {
-        batchConfiguration = true
         newCustomRules.set(id, file.custom_rules)
       }
 
       if (file && file.actions && file.actions.length) {
-        batchConfiguration = true
         newActions.set(id, file.actions)
       }
 
-      // "actions" data is managed by tracer and not by waf
-      if (batchConfiguration) {
-        batch.add(item)
-      }
+      batch.add(item)
     }
   }
 
