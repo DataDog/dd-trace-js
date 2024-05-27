@@ -5,7 +5,6 @@ const agent = require('../../plugins/agent')
 const getPort = require('get-port')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
-const { storage } = require('../../../../datadog-core')
 
 withVersions('express', 'express', expressVersion => {
   // unhandled error tests are defined as integration test because testing unhandled errors

@@ -10,7 +10,7 @@
 //  - [ ] Handle waf results
 //  - [ ] Handle generate_stack action type
 
-const crypto = require("crypto");
+const crypto = require('crypto')
 
 const { httpClientRequestStart, expressMiddlewareError } = require('../channels')
 const { storage } = require('../../../../datadog-core')
