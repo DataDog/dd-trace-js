@@ -5,7 +5,7 @@ function getCallSiteInfo () {
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
   let callsiteList
-  Error.stackTraceLimit = 32 // TODO load from config
+  Error.stackTraceLimit = 100
   try {
     Error.prepareStackTrace = function (_, callsites) {
       callsiteList = callsites
@@ -19,9 +19,13 @@ function getCallSiteInfo () {
   return callsiteList
 }
 
-function generateStackTraceForMetaStruct () {
-  const callSites = getCallSiteInfo()
+function generateStackTraceForMetaStruct (maxCallSite = 32) {
+  let callSites = getCallSiteInfo()
   let i = 0
+  if (callSites.length > maxCallSite) {
+    const half = Math.round(maxCallSite / 2)
+    callSites = callSites.slice(0, half).concat(callSites.slice(-half))
+  }
   return callSites.map(callSite => {
     return {
       id: i++,

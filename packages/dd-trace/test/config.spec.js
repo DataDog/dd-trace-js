@@ -1,6 +1,6 @@
 'use strict'
 
-require('./setup/tap')
+// require('./setup/tap')
 
 const { expect } = require('chai')
 const { readFileSync } = require('fs')
@@ -221,6 +221,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', true)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -254,6 +256,8 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
+      { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
+      { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
@@ -424,6 +428,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_APPSEC_STACK_TRACE_ENABLED = false
+    process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '50'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -514,6 +520,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 50)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -543,6 +551,8 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 42, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.stackTrace.enabled', value: false, origin: 'env_var' },
+      { name: 'appsec.stackTrace.maxDepth', value: 50, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: 42, origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
@@ -1000,6 +1010,8 @@ describe('Config', () => {
     process.env.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_HTML_PATH // json and html here
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_JSON_PATH // json and html here
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'disabled'
+    process.env.DD_APPSEC_STACK_TRACE_ENABLED = false
+    process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = 50
     process.env.DD_API_SECURITY_ENABLED = 'false'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 0.5
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = 11
@@ -1073,6 +1085,10 @@ describe('Config', () => {
         },
         rasp: {
           enabled: false
+        },
+        stackTrace: {
+          enabled: true,
+          maxDepth: 70
         }
       },
       remoteConfig: {
@@ -1125,6 +1141,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.eventTracking.mode', 'safe')
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1.0)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', true)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 70)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 30)
@@ -1198,6 +1216,10 @@ describe('Config', () => {
       },
       sca: {
         enabled: null
+      },
+      stackTrace: {
+        enabled: true,
+        maxDepth: 32
       },
       rasp: {
         enabled: true

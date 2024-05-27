@@ -1,9 +1,9 @@
 'use strict'
 // TODO list
 //  - [ ] This should work only in express requests
-//  - [ ] DD_APPSEC_STACK_TRACE_ENABLED to enable/disable stack trace, default is true
+//  - [x] DD_APPSEC_STACK_TRACE_ENABLED to enable/disable stack trace, default is true
 //  - [ ] DD_APPSEC_MAX_STACK_TRACES maximum number of stack traces to be reported due to RASP events, default is 2
-//  - [ ] DD_APPSEC_MAX_STACK_TRACE_DEPTH defines the maximum depth of a stack trace
+//  - [x] DD_APPSEC_MAX_STACK_TRACE_DEPTH defines the maximum depth of a stack trace
 //        to be reported due to RASP events, default is 32
 //  - [ ] Extract server.io.net.url address (probably it is already in dc channel data)
 //  - [ ] Add telemetry and metrics
@@ -18,6 +18,7 @@ const log = require('../../log')
 const { generateStackTraceForMetaStruct } = require('./stack_trace')
 const web = require('../../plugins/util/web')
 
+let config
 class AbortError extends Error {
   constructor (req, res) {
     super('AbortError')
@@ -35,7 +36,9 @@ function handleUncaughtException (err) {
   }
 }
 
-function enable () {
+function enable (_config) {
+  config = _config
+
   httpClientRequestStart.subscribe(analyzeSsrf)
   expressMiddlewareError.subscribe(handleAbortError)
 
@@ -64,29 +67,32 @@ function analyzeSsrf (ctx) {
     if (req) {
       ctx.abortData.abortController.abort()
       ctx.abortData.error = new AbortError(req, res)
-      const frames = generateStackTraceForMetaStruct()
-      const rootSpan = web.root(req)
-      if (rootSpan) {
-        let metaStruct = rootSpan.meta_struct
-        if (!metaStruct) {
-          metaStruct = {}
-          rootSpan.meta_struct = metaStruct
-        }
-        let ddStack = metaStruct['_dd.stack']
-        if (!ddStack) {
-          metaStruct['_dd.stack'] = ddStack = {}
-        }
-        let exploitStacks = ddStack.exploit
-        if (!exploitStacks) {
-          exploitStacks = []
-          ddStack.exploit = exploitStacks
-        }
-        if (exploitStacks.length < 2) { // TODO Check from config
-          exploitStacks.push({
-            id: crypto.randomBytes(8).toString('hex'),
-            language: 'javascript', // maybe delete this?
-            frames
-          })
+
+      if (config.appsec.stackTrace.enabled) {
+        const frames = generateStackTraceForMetaStruct(config.appsec.stackTrace.maxDepth)
+        const rootSpan = web.root(req)
+        if (rootSpan) {
+          let metaStruct = rootSpan.meta_struct
+          if (!metaStruct) {
+            metaStruct = {}
+            rootSpan.meta_struct = metaStruct
+          }
+          let ddStack = metaStruct['_dd.stack']
+          if (!ddStack) {
+            metaStruct['_dd.stack'] = ddStack = {}
+          }
+          let exploitStacks = ddStack.exploit
+          if (!exploitStacks) {
+            exploitStacks = []
+            ddStack.exploit = exploitStacks
+          }
+          if (exploitStacks.length < 2) { // TODO Check from config
+            exploitStacks.push({
+              id: crypto.randomBytes(8).toString('hex'), // TODO temporary id
+              language: 'javascript', // maybe delete this?
+              frames
+            })
+          }
         }
       }
     }
