@@ -272,17 +272,17 @@ class AgentEncoder {
   }
 
   _encodeMetaStruct (bytes, value) {
-    const keys = Array.isArray(value) ? [] : Object.keys(value)
-    const validKeys = keys.filter(key =>
-      typeof value[key] === 'string' ||
-      typeof value[key] === 'number' ||
-      (value[key] !== null && typeof value[key] === 'object'))
+    const entries = Array.isArray(value) ? [] : Object.entries(value)
+    const validEntries = entries.filter(([_, v]) =>
+      typeof v === 'string' ||
+      typeof v === 'number' ||
+      (v !== null && typeof v === 'object'))
 
-    this._encodeMapPrefix(bytes, validKeys.length)
+    this._encodeMapPrefix(bytes, validEntries.length)
 
-    for (const key of validKeys) {
-      this._encodeString(bytes, key)
-      this._encodeObjectAsByteArray(bytes, value[key])
+    for (const [k, v] of validEntries) {
+      this._encodeString(bytes, k)
+      this._encodeObjectAsByteArray(bytes, v)
     }
   }
 
@@ -316,17 +316,17 @@ class AgentEncoder {
   }
 
   _encodeObjectAsMap (bytes, value, circularReferencesDetector) {
-    const keys = Object.keys(value)
-    const validKeys = keys.filter(key =>
-      typeof value[key] === 'string' ||
-      typeof value[key] === 'number' ||
-      (value[key] !== null && typeof value[key] === 'object' && !circularReferencesDetector.has(value[key])))
+    const entries = Object.entries(value)
+    const validEntries = entries.filter(([_, v]) =>
+      typeof v === 'string' ||
+      typeof v === 'number' ||
+      (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v)))
 
-    this._encodeMapPrefix(bytes, validKeys.length)
+    this._encodeMapPrefix(bytes, validEntries.length)
 
-    for (const key of validKeys) {
-      this._encodeString(bytes, key)
-      this._encodeObject(bytes, value[key], circularReferencesDetector)
+    for (const [k, v] of validEntries) {
+      this._encodeString(bytes, k)
+      this._encodeObject(bytes, v, circularReferencesDetector)
     }
   }
 
