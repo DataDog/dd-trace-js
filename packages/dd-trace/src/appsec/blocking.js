@@ -116,8 +116,8 @@ function block (req, res, rootSpan, abortController, actionParameters) {
   abortController?.abort()
 }
 
-function isBlockingAction (actions) {
-  return !!(actions?.block_request || actions?.redirect_request)
+function getBlockingAction (actions) {
+  return actions?.block_request || actions?.redirect_request
 }
 
 function setTemplates (config) {
@@ -145,6 +145,6 @@ module.exports = {
   block,
   specificBlockingTypes,
   getBlockingData,
-  isBlockingAction,
+  getBlockingAction,
   setTemplates
 }

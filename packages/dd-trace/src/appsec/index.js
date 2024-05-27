@@ -22,7 +22,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, setTemplates, isBlockingAction } = require('./blocking')
+const { block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -223,8 +223,9 @@ function onPassportVerify ({ credentials, user }) {
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
-  if (isBlockingAction(actions)) {
-    block(req, res, rootSpan, abortController, (actions.block_request || actions.redirect_request))
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    block(req, res, rootSpan, abortController, blockingAction)
   }
 }
 

@@ -5,7 +5,7 @@ const {
   addSpecificEndpoint,
   specificBlockingTypes,
   getBlockingData,
-  isBlockingAction
+  getBlockingAction
 } = require('./blocking')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -37,11 +37,12 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  if (isBlockingAction(actions)) {
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
-      requestData.wafAction = actions.block_request || actions.redirect_request
+      requestData.wafAction = blockingAction
       context?.abortController?.abort()
     }
   }

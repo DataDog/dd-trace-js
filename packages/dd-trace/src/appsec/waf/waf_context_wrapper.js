@@ -3,7 +3,7 @@
 const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
-const { isBlockingAction } = require('../blocking')
+const { getBlockingAction } = require('../blocking')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -62,7 +62,7 @@ class WAFContextWrapper {
 
       const ruleTriggered = !!result.events?.length
 
-      const blockTriggered = isBlockingAction(result.actions)
+      const blockTriggered = !!getBlockingAction(result.actions)
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,

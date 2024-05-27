@@ -252,29 +252,37 @@ describe('blocking', () => {
 describe('waf actions', () => {
   const blocking = require('../../src/appsec/blocking')
 
-  it('identifies a block_request as blocking action', () => {
-    const actions = {
-      block_request: {}
+  it('get block_request as blocking action', () => {
+    const blockRequestActionParameters = {
+      status_code: 401,
+      type: 'html'
     }
-    expect(blocking.isBlockingAction(actions), true)
+    const actions = {
+      block_request: blockRequestActionParameters
+    }
+    expect(blocking.getBlockingAction(actions), blockRequestActionParameters)
   })
 
-  it('identifies a redirect_request as blocking action', () => {
-    const actions = {
-      redirect_request: {}
+  it('get redirect_request as blocking action', () => {
+    const redirectRequestActionParameters = {
+      status_code: 301
     }
-    expect(blocking.isBlockingAction(actions), true)
+
+    const actions = {
+      redirect_request: redirectRequestActionParameters
+    }
+    expect(blocking.getBlockingAction(actions), redirectRequestActionParameters)
   })
 
-  it('identifies undefined as non blocking action', () => {
+  it('get undefined as when no actions', () => {
     const actions = undefined
-    expect(blocking.isBlockingAction(actions), false)
+    expect(blocking.getBlockingAction(actions), undefined)
   })
 
-  it('identifies generate_stack as non blocking action', () => {
+  it('get undefined when generate_stack action', () => {
     const actions = {
       generate_stack: {}
     }
-    expect(blocking.isBlockingAction(actions), false)
+    expect(blocking.getBlockingAction(actions), undefined)
   })
 })
