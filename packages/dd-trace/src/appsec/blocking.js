@@ -8,7 +8,6 @@ const detectedSpecificEndpoints = {}
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
-let blockingConfiguration
 
 const specificBlockingTypes = {
   GRAPHQL: 'graphql'
@@ -22,13 +21,13 @@ function addSpecificEndpoint (method, url, type) {
   detectedSpecificEndpoints[getSpecificKey(method, url)] = type
 }
 
-function getBlockWithRedirectData (rootSpan) {
-  let statusCode = blockingConfiguration.parameters.status_code
+function getBlockWithRedirectData (rootSpan, actionParameters) {
+  let statusCode = actionParameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
   }
   const headers = {
-    Location: blockingConfiguration.parameters.location
+    Location: actionParameters.location
   }
 
   rootSpan.addTags({
@@ -48,10 +47,9 @@ function getSpecificBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, specificType, rootSpan) {
+function getBlockWithContentData (req, specificType, rootSpan, actionParameters) {
   let type
   let body
-  let statusCode
 
   const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
   if (specificBlockingType) {
@@ -64,7 +62,7 @@ function getBlockWithContentData (req, specificType, rootSpan) {
     // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
     const accept = req.headers.accept?.split(',').map((str) => str.split(';', 1)[0].trim())
 
-    if (!blockingConfiguration || blockingConfiguration.parameters.type === 'auto') {
+    if (!actionParameters || actionParameters.type === 'auto') {
       if (accept?.includes('text/html') && !accept.includes('application/json')) {
         type = 'text/html; charset=utf-8'
         body = templateHtml
@@ -73,7 +71,7 @@ function getBlockWithContentData (req, specificType, rootSpan) {
         body = templateJson
       }
     } else {
-      if (blockingConfiguration.parameters.type === 'html') {
+      if (actionParameters.type === 'html') {
         type = 'text/html; charset=utf-8'
         body = templateHtml
       } else {
@@ -83,11 +81,7 @@ function getBlockWithContentData (req, specificType, rootSpan) {
     }
   }
 
-  if (blockingConfiguration?.type === 'block_request' && blockingConfiguration.parameters.status_code) {
-    statusCode = blockingConfiguration.parameters.status_code
-  } else {
-    statusCode = 403
-  }
+  const statusCode = actionParameters?.status_code || 403
 
   const headers = {
     'Content-Type': type,
@@ -101,25 +95,29 @@ function getBlockWithContentData (req, specificType, rootSpan) {
   return { body, statusCode, headers }
 }
 
-function getBlockingData (req, specificType, rootSpan) {
-  if (blockingConfiguration?.type === 'redirect_request' && blockingConfiguration.parameters.location) {
-    return getBlockWithRedirectData(rootSpan)
+function getBlockingData (req, specificType, rootSpan, actionParameters) {
+  if (actionParameters?.location) {
+    return getBlockWithRedirectData(rootSpan, actionParameters)
   } else {
-    return getBlockWithContentData(req, specificType, rootSpan)
+    return getBlockWithContentData(req, specificType, rootSpan, actionParameters)
   }
 }
 
-function block (req, res, rootSpan, abortController, type) {
+function block (req, res, rootSpan, abortController, actionParameters) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
     return
   }
 
-  const { body, headers, statusCode } = getBlockingData(req, type, rootSpan)
+  const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
 
   res.writeHead(statusCode, headers).end(body)
 
   abortController?.abort()
+}
+
+function getBlockingAction (actions) {
+  return actions?.block_request || actions?.redirect_request
 }
 
 function setTemplates (config) {
@@ -142,15 +140,11 @@ function setTemplates (config) {
   }
 }
 
-function updateBlockingConfiguration (newBlockingConfiguration) {
-  blockingConfiguration = newBlockingConfiguration
-}
-
 module.exports = {
   addSpecificEndpoint,
   block,
   specificBlockingTypes,
   getBlockingData,
-  setTemplates,
-  updateBlockingConfiguration
+  getBlockingAction,
+  setTemplates
 }
