@@ -82,6 +82,34 @@ Node.js >= v20.6
 node --import dd-trace/register.js entrypoint.js
 ```
 
+Note that if you're using a framework that manages the entrypoint for your application, such as Next.js or Nest.js, then you'll need to modify the command that you use to launch your application. For example, if you launch your application by running `npm run start`, and your package.json contains a line like this, you'll need to modify the command:
+
+```json
+    // existing line
+    "start": "nest start",
+
+    // try one of the following
+    "start": "node --import dd-trace/register.js ./node_modules/nest start",
+    "start": "NODE_OPTIONS='--import dd-trace/register.js' ./node_modules/nest start",
+```
+
+
+## Initialization Concerns
+
+Normally you'll want to load dd-trace immediately in your application before any other module, such as `require('dd-trace').init()`. But, if you're using a framework that manages the entrypoint for your application, such as Next.js or Nest.js, then you'll need to modify the command that you use to launch your application. For example, if you launch your application by running `npm run start`, and your package.json contains a line like this, you'll need to modify the command:
+
+```json
+    // existing line
+    "start": "nest start",
+
+    // try one of the following
+    "start": "node --require dd-trace/init ./node_modules/nest start",
+    "start": "NODE_OPTIONS='-r dd-trace/init' ./node_modules/nest start",
+```
+
+This is needed because by the time your application file runs, the one which initializes the tracer, it's likely that the framework has already required a bunch of modules and they won't be properly instrumented.
+
+
 ## Serverless / Lambda
 
 Note that there is a separate Lambda project, [datadog-lambda-js](https://github.com/DataDog/datadog-lambda-js), that is responsible for enabling metrics and distributed tracing when your application runs on Lambda.
