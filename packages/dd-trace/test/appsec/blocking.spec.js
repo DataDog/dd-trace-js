@@ -260,7 +260,7 @@ describe('waf actions', () => {
     const actions = {
       block_request: blockRequestActionParameters
     }
-    expect(blocking.getBlockingAction(actions), blockRequestActionParameters)
+    expect(blocking.getBlockingAction(actions)).to.be.deep.equal(blockRequestActionParameters)
   })
 
   it('get redirect_request as blocking action', () => {
@@ -271,18 +271,18 @@ describe('waf actions', () => {
     const actions = {
       redirect_request: redirectRequestActionParameters
     }
-    expect(blocking.getBlockingAction(actions), redirectRequestActionParameters)
+    expect(blocking.getBlockingAction(actions)).to.be.deep.equal(redirectRequestActionParameters)
   })
 
   it('get undefined when no actions', () => {
     const actions = undefined
-    expect(blocking.getBlockingAction(actions), undefined)
+    expect(blocking.getBlockingAction(actions)).to.be.undefined
   })
 
   it('get undefined when generate_stack action', () => {
     const actions = {
       generate_stack: {}
     }
-    expect(blocking.getBlockingAction(actions), undefined)
+    expect(blocking.getBlockingAction(actions)).to.be.undefined
   })
 })
