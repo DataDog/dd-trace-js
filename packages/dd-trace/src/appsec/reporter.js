@@ -179,6 +179,13 @@ function finishRequest (req, res) {
   if (metrics?.durationExt) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
   }
+  if (metrics?.raspDuration) {
+    rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
+  }
+
+  if (metrics?.raspDurationExt) {
+    rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
 
   incrementWafRequestsMetric(req)
 

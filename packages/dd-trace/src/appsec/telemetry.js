@@ -136,9 +136,11 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
-function addRequestMetrics (store, { duration, durationExt }) {
+function addRequestMetrics (store, { duration, durationExt, raspDuration, raspDurationExt }) {
   store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += raspDuration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += raspDurationExt || 0
 }
 
 function getRequestMetrics (req) {

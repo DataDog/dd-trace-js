@@ -1,11 +1,11 @@
 'use strict'
 
 // TODO Copied from packages/dd-trace/src/appsec/iast/path-line.js, extract to a common file
-function getCallSiteInfo () {
+function getCallSiteInfo (stackTraceLimit = 100) {
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
   let callsiteList
-  Error.stackTraceLimit = 100
+  Error.stackTraceLimit = stackTraceLimit
   try {
     Error.prepareStackTrace = function (_, callsites) {
       callsiteList = callsites
@@ -20,7 +20,7 @@ function getCallSiteInfo () {
 }
 
 function generateStackTraceForMetaStruct (maxCallSite = 32) {
-  let callSites = getCallSiteInfo()
+  let callSites = getCallSiteInfo(maxCallSite > 100 ? maxCallSite : 100)
   let i = 0
   if (callSites.length > maxCallSite) {
     const half = Math.round(maxCallSite / 2)
