@@ -113,9 +113,15 @@ interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
 
   /**
-   * Create and return a string that can be included in the <head> of a
-   * document to enable RUM tracing to include it. The resulting string
-   * should not be cached.
+   * Returns an HTML string containing <meta> tags that should be included in
+   * the <head> of a document to enable correlating the current trace with the
+   * RUM view. Otherwise, it is not possible to associate the trace used to
+   * generate the initial HTML document with a given RUM view. The resulting
+   * HTML document should not be cached as the meta tags are time-sensitive
+   * and are associated with a specific user.
+   *
+   * Note that this feature is currently not supported by the backend and
+   * using it will have no effect.
    */
   getRumData (): string;
 
