@@ -107,9 +107,8 @@ withVersions('express', 'express', version => {
         appsec.disable()
       })
 
-      describe('with requestSampling 1.0', () => {
+      describe('with no cached request', () => {
         beforeEach(() => {
-          config.appsec.apiSecurity.requestSampling = 1.0
           appsec.enable(config)
         })
 
@@ -172,11 +171,12 @@ withVersions('express', 'express', version => {
         })
       })
 
-      it('should not get the schema', async () => {
-        config.appsec.apiSecurity.requestSampling = 0
+      it('should not get the schema of requests previouly cached', async () => {
         appsec.enable(config)
 
-        const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+        await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+        const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
 
         await agent.use((traces) => {
           const span = traces[0][0]
@@ -185,7 +185,27 @@ withVersions('express', 'express', version => {
         })
 
         expect(res.status).to.be.equal(200)
-        expect(res.data).to.be.equal('DONE')
+        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
+      })
+
+      it('should get the schema of requests previouly cached after sampleDelay interval', async () => {
+        config.appsec.apiSecurity.sampleDelay = 0.1
+        appsec.enable(config)
+
+        await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+        await new Promise(resolve => setTimeout(resolve, 200))
+
+        const res = await axios.post(`http://localhost:${port}/jsonp`, { key: 'value' })
+
+        await agent.use((traces) => {
+          const span = traces[0][0]
+          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.req.body')
+          expect(span.meta).to.haveOwnProperty('_dd.appsec.s.res.body')
+        })
+
+        expect(res.status).to.be.equal(200)
+        expect(res.data).to.be.deep.equal({ jsonpResKey: 'jsonpResValue' })
       })
     })
   })

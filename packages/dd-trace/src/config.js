@@ -262,10 +262,10 @@ class Config {
       process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
       true
     )
-    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
-      options.appsec?.apiSecurity?.requestSampling,
-      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
-      0.1
+    const DD_API_SECURITY_SAMPLE_DELAY = coalesce(
+      maybeFloat(options.appsec?.apiSecurity?.sampleDelay),
+      maybeFloat(process.env.DD_API_SECURITY_SAMPLE_DELAY),
+      30.0
     )
 
     // 0: disabled, 1: logging, 2: garbage collection + logging
@@ -332,8 +332,7 @@ class Config {
       },
       apiSecurity: {
         enabled: DD_API_SECURITY_ENABLED,
-        // Coerce value between 0 and 1
-        requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
+        sampleDelay: DD_API_SECURITY_SAMPLE_DELAY
       }
     }
 

@@ -53,8 +53,7 @@ describe('AppSec Index', () => {
           mode: 'safe'
         },
         apiSecurity: {
-          enabled: false,
-          requestSampling: 0
+          enabled: false
         }
       }
     }
@@ -89,7 +88,6 @@ describe('AppSec Index', () => {
 
     apiSecuritySampler = require('../../src/appsec/api_security_sampler')
     sinon.spy(apiSecuritySampler, 'sampleRequest')
-    sinon.spy(apiSecuritySampler, 'isSampled')
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
@@ -282,7 +280,8 @@ describe('AppSec Index', () => {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        setTag: sinon.stub()
       }
 
       web.root.returns(rootSpan)
@@ -424,6 +423,57 @@ describe('AppSec Index', () => {
       }, req)
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
+
+    it('should not trigger schema extraction if sampling not enabled', () => {
+      const req = {
+        url: '/path',
+        method: 'GET'
+      }
+      const res = {
+        getHeaders: () => {},
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': {}
+        }
+      }, req)
+    })
+
+    it('should trigger schema extraction if sampling enabled', () => {
+      const req = {
+        url: '/path',
+        method: 'GET'
+      }
+      const res = {
+        getHeaders: () => {},
+        statusCode: 201
+      }
+
+      web.patch(req)
+
+      apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      expect(waf.run).to.have.been.calledOnceWithExactly({
+        persistent: {
+          'server.response.status': '201',
+          'server.response.headers.no_cookies': {},
+          'waf.context.processor': { 'extract-schema': true }
+        }
+      }, req)
+    })
   })
 
   describe('Api Security', () => {
@@ -431,16 +481,16 @@ describe('AppSec Index', () => {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        setTag: sinon.stub()
       }
 
       web.root.returns(rootSpan)
     })
 
-    it('should not trigger schema extraction with sampling disabled', () => {
+    it('should not trigger schema extraction with appsec enabled', () => {
       config.appsec.apiSecurity = {
-        enabled: true,
-        requestSampling: 0
+        enabled: true
       }
 
       AppSec.enable(config)
@@ -472,10 +522,9 @@ describe('AppSec Index', () => {
       }, req)
     })
 
-    it('should not trigger schema extraction with feature disabled', () => {
+    it('should not trigger schema extraction with appsec disabled', () => {
       config.appsec.apiSecurity = {
-        enabled: false,
-        requestSampling: 1
+        enabled: false
       }
 
       AppSec.enable(config)
@@ -503,42 +552,6 @@ describe('AppSec Index', () => {
           'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
           'server.request.method': 'POST',
           'http.client_ip': '127.0.0.1'
-        }
-      }, req)
-    })
-
-    it('should trigger schema extraction with sampling enabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        requestSampling: 1
-      }
-
-      AppSec.enable(config)
-
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
-      }
-      const res = {}
-
-      AppSec.incomingHttpStartTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.request.uri.raw': '/path',
-          'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
-          'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1',
-          'waf.context.processor': { 'extract-schema': true }
         }
       }, req)
     })
@@ -546,8 +559,7 @@ describe('AppSec Index', () => {
     describe('onResponseBody', () => {
       beforeEach(() => {
         config.appsec.apiSecurity = {
-          enabled: true,
-          requestSampling: 1
+          enabled: true
         }
         AppSec.enable(config)
       })
@@ -557,33 +569,36 @@ describe('AppSec Index', () => {
       })
 
       it('should not do anything if body is not an object', () => {
-        responseBody.publish({ req: {}, body: 'string' })
-        responseBody.publish({ req: {}, body: null })
+        responseBody.publish({ req: {}, res: {}, body: 'string' })
+        responseBody.publish({ req: {}, res: {}, body: null })
 
-        expect(apiSecuritySampler.isSampled).to.not.been.called
+        expect(apiSecuritySampler.sampleRequest).to.not.been.called
         expect(waf.run).to.not.been.called
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => false)
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => false)
         const req = {}
+        const res = {}
 
-        responseBody.publish({ req, body: {} })
+        responseBody.publish({ req, res, body: {} })
 
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.not.been.called
       })
 
       it('should call to the waf if it is a sampled request', () => {
-        apiSecuritySampler.isSampled = apiSecuritySampler.isSampled.instantiateFake(() => true)
+        apiSecuritySampler.sampleRequest = apiSecuritySampler.sampleRequest.instantiateFake(() => true)
         const req = {}
+        const res = {}
         const body = {}
 
-        responseBody.publish({ req, body })
+        responseBody.publish({ req, res, body })
 
-        expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
+        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
+            [addresses.WAF_CONTEXT_PROCESSOR]: { 'extract-schema': true },
             [addresses.HTTP_OUTGOING_BODY]: body
           }
         }, req)

@@ -679,11 +679,10 @@ declare namespace tracer {
          */
         enabled?: boolean,
 
-        /** Controls the request sampling rate (between 0 and 1) in which Api Security is triggered.
-         * The value will be coerced back if it's outside of the 0-1 range.
-         * @default 0.1
+        /** Specifies the Api Security samples collection interval in seconds.
+         * @default 30.0
          */
-        requestSampling?: number
+        sampleDelay?: number
       }
     };
 
