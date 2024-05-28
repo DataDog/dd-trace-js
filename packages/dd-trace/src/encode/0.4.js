@@ -1,5 +1,5 @@
 'use strict'
-// TODO revert changes in this file, there is another PR with these changes
+
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 const Chunk = require('./chunk')
 const log = require('../log')
@@ -120,7 +120,7 @@ class AgentEncoder {
       this._encodeMap(bytes, span.metrics)
       if (span.meta_struct) {
         this._encodeString(bytes, 'meta_struct')
-        this._encodeMetaStruct(bytes, span.meta_struct)
+        this._encodeObject(bytes, span.meta_struct)
       }
     }
   }
@@ -271,38 +271,12 @@ class AgentEncoder {
     }
   }
 
-  _encodeMetaStruct (bytes, value) {
-    if (value !== null && typeof value === 'object') {
-      const keys = Array.isArray(value) ? [] : Object.keys(value)
-      const validKeys = keys.filter(key =>
-        typeof value[key] === 'string' ||
-        typeof value[key] === 'number' ||
-        (value[key] !== null && typeof value[key] === 'object'))
-
-      this._encodeMapPrefix(bytes, validKeys.length)
-
-      for (const key of validKeys) {
-        this._encodeString(bytes, key)
-        const offset = bytes.length
-        bytes.reserve(5)
-        bytes.length += 5
-        this._encodeObject(bytes, value[key])
-        const length = bytes.length - offset - 5
-        bytes.buffer[offset] = 0xc6
-        bytes.buffer[offset + 1] = length >> 24
-        bytes.buffer[offset + 2] = length >> 16
-        bytes.buffer[offset + 3] = length >> 8
-        bytes.buffer[offset + 4] = length
-      }
-    }
-  }
-
   _encodeObject (bytes, value, circularReferencesDetector = new Set()) {
     circularReferencesDetector.add(value)
     if (Array.isArray(value)) {
-      this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
+      return this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
-      this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
+      return this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
     } else if (typeof value === 'string' || typeof value === 'number') {
       this._encodeValue(bytes, value)
     }
