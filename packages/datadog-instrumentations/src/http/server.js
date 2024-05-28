@@ -92,11 +92,11 @@ function wrapSetHeader (res) {
 }
 
 function wrapWriteHead (writeHead) {
-  return function (statusCode, reason, obj) {
+  return function wrappedWriteHead (statusCode, reason, obj) {
     const abortController = new AbortController()
 
     if (typeof reason !== 'string') {
-      obj = obj ?? reason
+      obj ??= reason
     }
 
     if (Array.isArray(obj)) {
