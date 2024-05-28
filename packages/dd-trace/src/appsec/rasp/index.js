@@ -17,7 +17,9 @@ const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { generateStackTraceForMetaStruct } = require('./stack_trace')
 const web = require('../../plugins/util/web')
+const telemetry = require('./telemetry')
 
+let DDWAF
 let config
 class AbortError extends Error {
   constructor (req, res) {
@@ -38,6 +40,8 @@ function handleUncaughtException (err) {
 
 function enable (_config) {
   config = _config
+  DDWAF = require('@datadog/native-appsec').DDWAF
+  telemetry.init(DDWAF.version())
 
   httpClientRequestStart.subscribe(analyzeSsrf)
   expressMiddlewareError.subscribe(handleAbortError)
@@ -56,14 +60,18 @@ function disable () {
 function analyzeSsrf (ctx) {
   // TODO - analyze SSRF
   //  currently just for testing purpose, blocking 50% of the requests that are not calling to the agent
+  const store = storage.getStore()
+  const req = store?.req
+  const res = store?.res
+  if (req) {
+    telemetry.countRuleEval('ssrf')
+    // TODO if timeout: telemetry.countTimeout('ssrf')
+  }
+
   if (
     ctx.args.uri.includes('rasp-block') &&
     ctx.abortData
   ) {
-    const store = storage.getStore()
-    const req = store?.req
-    const res = store?.res
-
     if (req) {
       ctx.abortData.abortController.abort()
       ctx.abortData.error = new AbortError(req, res)
