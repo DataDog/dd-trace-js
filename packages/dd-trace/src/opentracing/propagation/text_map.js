@@ -216,23 +216,37 @@ class TextMapPropagator {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
 
-  _resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
-    if (w3cSpanContext !== null && firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
-    firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()) {
-      if (ddParentIdTagKey in w3cSpanContext._trace.tags && w3cSpanContext._trace.tags[ddParentIdTagKey] !==
-          zeroHex) {
-        // tracecontext headers contain a p value, ensure this value is sent to backend
-        firstSpanContext._trace.tags[ddParentIdTagKey] = w3cSpanContext._trace.tags[ddParentIdTagKey]
-      } else {
-        // if p value is not present in tracestate, use the parent id from the datadog headers
-        const ddCtx = this._extractDatadogContext(carrier)
-        if (ddCtx !== null) {
-          firstSpanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
-        }
-      }
-      // the span_id in tracecontext takes precedence over the first extracted propagation style
-      firstSpanContext._spanId = w3cSpanContext._spanId
+  _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
+    return w3cSpanContext !== null &&
+           firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
+           firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
+  }
+
+  _hasParentIdInTags (spanContext) {
+    return ddParentIdTagKey in spanContext._trace.tags &&
+      spanContext._trace.tags[ddParentIdTagKey] !== zeroHex
+  }
+
+  _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
+    const ddCtx = this._extractDatadogContext(carrier)
+    if (ddCtx !== null) {
+      firstSpanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
     }
+  }
+
+  _resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
+    if (!this._hasTraceIdConflict(w3cSpanContext, firstSpanContext)) {
+      return firstSpanContext
+    }
+    if (this._hasParentIdInTags(w3cSpanContext)) {
+      // tracecontext headers contain a p value, ensure this value is sent to backend
+      firstSpanContext._trace.tags[ddParentIdTagKey] = w3cSpanContext._trace.tags[ddParentIdTagKey]
+    } else {
+      // if p value is not present in tracestate, use the parent id from the datadog headers
+      this._updateParentIdFromDdHeaders(carrier, firstSpanContext)
+    }
+    // the span_id in tracecontext takes precedence over the first extracted propagation style
+    firstSpanContext._spanId = w3cSpanContext._spanId
     // the first extracted context will be used to propagate the distributed trace
     return firstSpanContext
   }
