@@ -64,7 +64,7 @@ function analyzeSsrf (ctx) {
   const req = store?.req
   const res = store?.res
   if (req) {
-    telemetry.countRuleEval('ssrf')
+    telemetry.countRuleEval(telemetry.RULE_TYPES.SSRF)
     // TODO if timeout: telemetry.countTimeout('ssrf')
   }
 
