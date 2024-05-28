@@ -70,7 +70,6 @@ function wrapEnd (end) {
 
     const abortController = new AbortController()
 
-    // TODO: this doesn't support headers sent with res.writeHead()
     const responseHeaders = this.getHeaders()
 
     endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
@@ -91,7 +90,7 @@ function wrapWriteHead (writeHead) {
       return writeHead.apply(this, arguments)
     }
 
-    requestEndedSet.add(this)
+    //requestEndedSet.add(this)
 
     const abortController = new AbortController()
 
@@ -99,7 +98,17 @@ function wrapWriteHead (writeHead) {
       obj = obj ?? reason
     }
 
-    const responseHeaders = Object.assign(this.getHeaders(), obj)
+    if (Array.isArray(obj)) {
+      const headers = {}
+
+      for (let i = 0; i < obj.length; i += 2) {
+        headers[obj[i]] = obj[i + 1]
+      }
+
+      obj = headers
+    }
+
+    const responseHeaders = Object.assign(this.getHeaders(), obj) // this doesn't support duplicate headers lol
 
     endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
 
