@@ -13,7 +13,6 @@ const finishServerCh = channel('apm:http:server:request:finish')
 const endResponseCh = channel('apm:http:server:response:end:start') // TODO: fix the name
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
-const requestEndedSet = new WeakSet()
 const requestFinishedSet = new WeakSet()
 
 const httpNames = ['http', 'node:http']
@@ -22,9 +21,9 @@ const httpsNames = ['https', 'node:https']
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
-  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
+  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapWrite)
   return http
 })
 
@@ -92,64 +91,8 @@ function wrapSetHeader (res) {
   })
 }
 
-function wrapWrite (write) {
-  return function wrappedWrite () {
-    if (this.finished || requestEndedSet.has(this)) {
-      return this
-    }
-
-    const abortController = new AbortController()
-
-    const responseHeaders = this.getHeaders()
-
-
-    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
-
-    if (abortController.signal.aborted) {
-      requestEndedSet.add(this)
-      return
-    }
-
-    // if (!this.headersSent) this._implicitHeader()
-
-    return write.apply(this, arguments)
-  }
-}
-
-function wrapEnd (end) {
-  return function () {
-    if (this.finished) return this
-
-    if (requestEndedSet.has(this)) {
-      return end.apply(this, arguments)
-    }
-
-    requestEndedSet.add(this)
-
-    const abortController = new AbortController()
-
-    const responseHeaders = this.getHeaders()
-
-    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
-
-    if (abortController.signal.aborted) {
-      return
-    }
-
-    return end.apply(this, arguments)
-  }
-}
-
 function wrapWriteHead (writeHead) {
   return function (statusCode, reason, obj) {
-    if (this.finished) return this
-
-    if (requestEndedSet.has(this)) {
-      return writeHead.apply(this, arguments)
-    }
-
-    //requestEndedSet.add(this)
-
     const abortController = new AbortController()
 
     if (typeof reason !== 'string') {
@@ -171,9 +114,25 @@ function wrapWriteHead (writeHead) {
     endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
 
     if (abortController.signal.aborted) {
-      return
+      return this
     }
 
     return writeHead.apply(this, arguments)
+  }
+}
+
+function wrapWrite (write) {
+  return function wrappedWrite () {
+    const abortController = new AbortController()
+
+    const responseHeaders = this.getHeaders()
+
+    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
+
+    if (abortController.signal.aborted) {
+      return this
+    }
+
+    return write.apply(this, arguments)
   }
 }
