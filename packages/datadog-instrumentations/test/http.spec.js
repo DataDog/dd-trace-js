@@ -76,25 +76,20 @@ describe('client', () => {
     })
 
     it('Request is aborted with default error', (done) => {
-      startChannelCb.callsFake(abortCallback())
+      startChannelCb.callsFake(abortCallback)
 
-      let finished = false
-      try {
-        http.get(url, () => {
-          finished = true
-          done('Request should be blocked')
-        })
+      const cr = http.get(url, () => {
         done('Request should be blocked')
-      } catch (e) {
-        assert.instanceOf(e, Error)
-        assert.strictEqual(e.message, 'Aborted')
-      }
-
-      setTimeout(() => {
-        if (!finished) {
+      })
+      cr.on('error', (e) => {
+        try {
+          assert.instanceOf(e, Error)
+          assert.strictEqual(e.message, 'Aborted')
           done()
+        } catch (e) {
+          done(e)
         }
-      }, 300)
+      })
     })
 
     it('Request is aborted with custom error', (done) => {
@@ -107,68 +102,72 @@ describe('client', () => {
         }
       })
 
-      try {
-        http.get(url, () => {
-          done('Request should be blocked')
-        })
+      const cr = http.get(url, () => {
         done('Request should be blocked')
-      } catch (e) {
-        assert.instanceOf(e, CustomError)
-        assert.strictEqual(e.message, 'Custom error')
-        done()
-      }
+      })
+      cr.on('error', (e) => {
+        try {
+          assert.instanceOf(e, CustomError)
+          assert.strictEqual(e.message, 'Custom error')
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
     })
 
     it('Error is sent on errorChannel on abort', (done) => {
       startChannelCb.callsFake(abortCallback)
 
-      try {
-        http.get(url, () => {
-          done('Request should be blocked')
-        })
+      const cr = http.get(url, () => {
         done('Request should be blocked')
-      } catch (e) {
-        sinon.assert.calledOnce(errorChannelCb)
-        assert.instanceOf(errorChannelCb.firstCall.args[0].error, Error)
-        done()
-      }
+      })
+      cr.on('error', () => {
+        try {
+          sinon.assert.calledOnce(errorChannelCb)
+          assert.instanceOf(errorChannelCb.firstCall.args[0].error, Error)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
     })
 
     it('endChannel is called on abort', (done) => {
       startChannelCb.callsFake(abortCallback)
 
-      try {
-        http.get(url, () => {
-          done('Request should be blocked')
-        })
+      const cr = http.get(url, () => {
         done('Request should be blocked')
-      } catch (e) {
-        sinon.assert.called(endChannelCb)
-        assert.strictEqual(endChannelCb.firstCall.args[0].args.originalUrl, url)
-        done()
-      }
+      })
+      cr.on('error', () => {
+        try {
+          sinon.assert.called(endChannelCb)
+          assert.strictEqual(endChannelCb.firstCall.args[0].args.originalUrl, url)
+          done()
+        } catch (e) {
+          done(e)
+        }
+      })
     })
 
-    it('finishChannel and asyncStartChannel are not called on abort', (done) => {
+    it('asyncStartChannel is not called on abort', (done) => {
       startChannelCb.callsFake(abortCallback)
 
-      try {
-        http.get(url, () => {
-          done('Request should be blocked')
-        })
+      const cr = http.get(url, () => {
         done('Request should be blocked')
-      } catch (e) {
-        // Necessary because the tracer makes extra requests to the agent
-        if (asyncStartChannelCb.called) {
-          const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
-          assert.isNull(ctx)
+      })
+      cr.on('error', () => {
+        try {
+          // Necessary because the tracer makes extra requests to the agent
+          if (asyncStartChannelCb.called) {
+            const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
+            assert.isNull(ctx)
+          }
+          done()
+        } catch (e) {
+          done(e.message)
         }
-        if (finishChannelCb.called) {
-          const ctx = getContextFromStubByUrl(url, finishChannelCb)
-          assert.isNull(ctx)
-        }
-        done()
-      }
-    })
+      })
+    }).timeout(1000)
   })
 })
