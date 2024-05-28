@@ -181,7 +181,7 @@ describe('HTTP Response Blocking', () => {
       res.writeHead(200, 'OK', { d: 'good', e: 'bad3' })
       res.flushHeaders()
       res.write('write')
-      res.addTrailers({ 'k': 'v' })
+      res.addTrailers({ k: 'v' })
       streamFile(res)
     }
 
@@ -198,7 +198,7 @@ describe('HTTP Response Blocking', () => {
       res.writeHead(201, 'OK', { d: 'good', e: 'good' })
       res.flushHeaders()
       res.write('write')
-      res.addTrailers({ 'k': 'v' })
+      res.addTrailers({ k: 'v' })
       streamFile(res)
     }
 
