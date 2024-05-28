@@ -34,12 +34,25 @@ addHook({ name: httpsNames }, http => {
   return http
 })
 
-// just a safety net to avoid calling write when request is finished
 function wrapWrite (write) {
   return function wrappedWrite () {
     if (this.finished || requestEndedSet.has(this)) {
       return this
     }
+
+    const abortController = new AbortController()
+
+    const responseHeaders = this.getHeaders()
+
+
+    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
+
+    if (abortController.signal.aborted) {
+      requestEndedSet.add(this)
+      return
+    }
+
+    // if (!this.headersSent) this._implicitHeader()
 
     return write.apply(this, arguments)
   }
