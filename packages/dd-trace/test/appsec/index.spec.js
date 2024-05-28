@@ -296,7 +296,7 @@ describe('AppSec Index', () => {
       web.root.returns(rootSpan)
     })
 
-    it('should propagate incoming http end data', () => {
+    it('should not propagate incoming http end data without express', () => {
       const req = {
         url: '/path',
         headers: {
@@ -324,12 +324,7 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.response.status': '201',
-          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
-        }
-      }, req)
+      expect(waf.run).to.have.not.been.called
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -367,12 +362,7 @@ describe('AppSec Index', () => {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.response.status': '201',
-          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 }
-        }
-      }, req)
+      expect(waf.run).to.have.not.been.called
 
       expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res)
     })
@@ -422,8 +412,6 @@ describe('AppSec Index', () => {
 
       expect(waf.run).to.have.been.calledOnceWithExactly({
         persistent: {
-          'server.response.status': '201',
-          'server.response.headers.no_cookies': { 'content-type': 'application/json', 'content-lenght': 42 },
           'server.request.body': { a: '1' },
           'server.request.path_params': { c: '3' },
           'server.request.cookies': { d: '4', e: '5' },

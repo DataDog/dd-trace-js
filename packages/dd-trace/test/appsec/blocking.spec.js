@@ -37,7 +37,8 @@ describe('blocking', () => {
     res = {
       setHeader: sinon.stub(),
       writeHead: sinon.stub(),
-      end: sinon.stub()
+      end: sinon.stub(),
+      getHeaderNames: sinon.stub().returns([])
     }
     res.writeHead.returns(res)
 
