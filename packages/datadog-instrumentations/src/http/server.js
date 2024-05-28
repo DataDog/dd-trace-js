@@ -23,7 +23,7 @@ addHook({ name: httpNames }, http => {
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
-  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapWrite)
+  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   return http
 })
 
