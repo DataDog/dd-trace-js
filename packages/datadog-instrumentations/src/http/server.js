@@ -10,7 +10,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
-const endResponseCh = channel('apm:http:server:response:end:start') // TODO: fix the name
+const startWriteHeadCh = channel('apm:http:server:response:writeHead:start') // TODO: fix the name
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
 const requestFinishedSet = new WeakSet()
@@ -109,9 +109,16 @@ function wrapWriteHead (writeHead) {
       obj = headers
     }
 
-    const responseHeaders = Object.assign(this.getHeaders(), obj) // this doesn't support duplicate headers lol
+    // this doesn't support duplicate headers, but pffff, edge case
+    const responseHeaders = Object.assign(this.getHeaders(), obj)
 
-    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode, responseHeaders })
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode,
+      responseHeaders
+    })
 
     if (abortController.signal.aborted) {
       return this
@@ -127,12 +134,40 @@ function wrapWrite (write) {
 
     const responseHeaders = this.getHeaders()
 
-    endResponseCh.publish({ req: this.req, res: this, abortController, statusCode: this.statusCode, responseHeaders })
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders
+    })
+
+    if (abortController.signal.aborted) {
+      return true
+    }
+
+    return write.apply(this, arguments)
+  }
+}
+
+function wrapEnd (end) {
+  return function wrappedEnd () {
+    const abortController = new AbortController()
+
+    const responseHeaders = this.getHeaders()
+
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders
+    })
 
     if (abortController.signal.aborted) {
       return this
     }
 
-    return write.apply(this, arguments)
+    return end.apply(this, arguments)
   }
 }
