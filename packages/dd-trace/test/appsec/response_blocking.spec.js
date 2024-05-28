@@ -7,9 +7,9 @@ const Axios = require('axios')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const path = require('path')
+const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
 const fs = require('fs')
-const blocking = require('../../src/appsec/blocking')
 
 describe('HTTP Response Blocking', () => {
   let server
@@ -51,7 +51,12 @@ describe('HTTP Response Blocking', () => {
     }))
   })
 
+  beforeEach(() => {
+    sinon.spy(WafContext.prototype, 'run')
+  })
+
   afterEach(() => {
+    sinon.restore()
     responseHandler = null
   })
 
@@ -229,18 +234,6 @@ describe('HTTP Response Blocking', () => {
 
     assertBlocked(res)
   })
-
-  // TODO: finish the test
-  it.skip('should not try to block twice', () => {
-    blocking.updateBlockingConfiguration({
-      id: 'infiniteloop',
-      type: 'redirect_request',
-      parameters: {
-        status_code: 301,
-        location: '/loop'
-      }
-    })
-  })
 })
 
 function cloneHeaders (headers) {
@@ -253,17 +246,15 @@ function cloneHeaders (headers) {
 }
 
 function assertBlocked (res) {
+  sinon.assert.callCount(WafContext.prototype.run, 2)
+
   assert.equal(res.status, 403)
-
-  const headers = cloneHeaders(res.headers)
-
-  assert.hasAllKeys(headers, [
+  assert.hasAllKeys(cloneHeaders(res.headers), [
     'content-type',
     'content-length',
     'date',
     'connection'
   ])
-
   assert.deepEqual(res.data, blockingResponse)
 }
 
