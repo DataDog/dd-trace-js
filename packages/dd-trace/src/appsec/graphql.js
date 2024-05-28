@@ -1,7 +1,12 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { addSpecificEndpoint, specificBlockingTypes, getBlockingData } = require('./blocking')
+const {
+  addSpecificEndpoint,
+  specificBlockingTypes,
+  getBlockingData,
+  getBlockingAction
+} = require('./blocking')
 const waf = require('./waf')
 const addresses = require('./addresses')
 const web = require('../plugins/util/web')
@@ -32,10 +37,12 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
   if (!resolverInfo || typeof resolverInfo !== 'object') return
 
   const actions = waf.run({ ephemeral: { [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo } }, req)
-  if (actions?.includes('block')) {
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
     const requestData = graphqlRequestData.get(req)
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
+      requestData.wafAction = blockingAction
       context?.abortController?.abort()
     }
   }
@@ -87,7 +94,7 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
 
-    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, rootSpan)
+    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, rootSpan, requestData.wafAction)
     abortData.statusCode = blockingData.statusCode
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body
