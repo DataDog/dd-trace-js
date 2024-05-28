@@ -129,7 +129,9 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  waf.run({ persistent }, req)
+  if (Object.keys(persistent).length) {
+    waf.run({ persistent }, req)
+  }
 
   waf.disposeContext(req)
 
