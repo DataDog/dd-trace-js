@@ -616,7 +616,8 @@ describe('AppSec Index', () => {
           'content-lenght': 42
         }),
         writeHead: sinon.stub(),
-        end: sinon.stub()
+        end: sinon.stub(),
+        getHeaderNames: sinon.stub().returns([])
       }
       res.writeHead.returns(res)
 
