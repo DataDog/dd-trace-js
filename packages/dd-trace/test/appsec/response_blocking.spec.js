@@ -223,6 +223,7 @@ describe('HTTP Response Blocking', () => {
       res.statusCode = 404
       res.setHeader('k', '404')
       res.flushHeaders()
+      res.writeHead(200, { k: '200' })
       res.write('write1')
       setTimeout(() => {
         res.write('write2')
@@ -246,8 +247,6 @@ function cloneHeaders (headers) {
 }
 
 function assertBlocked (res) {
-  sinon.assert.callCount(WafContext.prototype.run, 2)
-
   assert.equal(res.status, 403)
   assert.hasAllKeys(cloneHeaders(res.headers), [
     'content-type',
@@ -256,6 +255,8 @@ function assertBlocked (res) {
     'connection'
   ])
   assert.deepEqual(res.data, blockingResponse)
+
+  sinon.assert.callCount(WafContext.prototype.run, 2)
 }
 
 function streamFile (res) {
