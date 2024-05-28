@@ -7,7 +7,7 @@ function countRuleEval (ruleType) {
 }
 
 function countTimeout (ruleType) {
-  raspNamespace.count('appsec.rasp.timeout', { rule_type: ruleType, waf_version: wafVersion })
+  raspNamespace.count('appsec.rasp.timeout', { rule_type: ruleType, waf_version: wafVersion }).inc(1)
 }
 
 function init (_wafVersion) {
