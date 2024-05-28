@@ -217,7 +217,21 @@ function onPassportVerify ({ credentials, user }) {
   passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
+const responseAnalyzedSet = new WeakSet()
+const responseBlockedSet = new WeakSet()
+
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  // avoid "write after end" error
+  if (responseBlockedSet.has(res)) {
+    abortController?.abort()
+    return
+  }
+
+  // avoid double waf call
+  if (responseAnalyzedSet.has(res)) {
+    return
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -231,6 +245,8 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
     }
   }, req)
 
+  responseAnalyzedSet.add(res)
+
   handleResults(results, req, res, rootSpan, abortController)
 }
 
@@ -240,6 +256,7 @@ function handleResults (actions, req, res, rootSpan, abortController) {
   const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
     block(req, res, rootSpan, abortController, blockingAction)
+    responseBlockedSet.add(res)
   }
 }
 
