@@ -274,7 +274,7 @@ describe('waf actions', () => {
     expect(blocking.getBlockingAction(actions), redirectRequestActionParameters)
   })
 
-  it('get undefined as when no actions', () => {
+  it('get undefined when no actions', () => {
     const actions = undefined
     expect(blocking.getBlockingAction(actions), undefined)
   })
