@@ -275,7 +275,7 @@ describe('waf actions', () => {
   })
 
   it('get undefined when no actions', () => {
-    const actions = undefined
+    const actions = {}
     expect(blocking.getBlockingAction(actions)).to.be.undefined
   })
 
