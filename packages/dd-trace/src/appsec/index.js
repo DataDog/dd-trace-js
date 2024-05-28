@@ -13,7 +13,7 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   responseBody,
-  responseEnd
+  responseWriteHead
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -56,7 +56,7 @@ function enable (_config) {
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     responseBody.subscribe(onResponseBody)
-    responseEnd.subscribe(onResponseEnd)
+    responseWriteHead.subscribe(onResponseWriteHead)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -215,7 +215,7 @@ function onPassportVerify ({ credentials, user }) {
   passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
-function onResponseEnd ({ req, res, abortController, statusCode, responseHeaders }) {
+function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -262,7 +262,7 @@ function disable () {
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
-  if (responseEnd.hasSubscribers) responseEnd.unsubscribe(onResponseEnd)
+  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
 }
 
 module.exports = {
