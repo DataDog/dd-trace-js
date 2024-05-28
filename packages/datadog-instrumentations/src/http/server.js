@@ -34,6 +34,64 @@ addHook({ name: httpsNames }, http => {
   return http
 })
 
+function wrapResponseEmit (emit) {
+  return function (eventName, event) {
+    if (!finishServerCh.hasSubscribers) {
+      return emit.apply(this, arguments)
+    }
+
+    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
+      finishServerCh.publish({ req: this.req })
+      requestFinishedSet.add(this)
+    }
+
+    return emit.apply(this, arguments)
+  }
+}
+function wrapEmit (emit) {
+  return function (eventName, req, res) {
+    if (!startServerCh.hasSubscribers) {
+      return emit.apply(this, arguments)
+    }
+
+    if (eventName === 'request') {
+      res.req = req
+
+      const abortController = new AbortController()
+
+      startServerCh.publish({ req, res, abortController })
+
+      try {
+        if (abortController.signal.aborted) {
+          // TODO: should this always return true ?
+          return this.listenerCount(eventName) > 0
+        }
+        if (finishSetHeaderCh.hasSubscribers) {
+          wrapSetHeader(res)
+        }
+        return emit.apply(this, arguments)
+      } catch (err) {
+        errorServerCh.publish(err)
+
+        throw err
+      } finally {
+        exitServerCh.publish({ req })
+      }
+    }
+    return emit.apply(this, arguments)
+  }
+}
+
+function wrapSetHeader (res) {
+  shimmer.wrap(res, 'setHeader', setHeader => {
+    return function (name, value) {
+      const setHeaderResult = setHeader.apply(this, arguments)
+      finishSetHeaderCh.publish({ name, value, res })
+      return setHeaderResult
+    }
+  })
+}
+
 function wrapWrite (write) {
   return function wrappedWrite () {
     if (this.finished || requestEndedSet.has(this)) {
@@ -118,62 +176,4 @@ function wrapWriteHead (writeHead) {
 
     return writeHead.apply(this, arguments)
   }
-}
-
-function wrapResponseEmit (emit) {
-  return function (eventName, event) {
-    if (!finishServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
-    }
-
-    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
-      finishServerCh.publish({ req: this.req })
-      requestFinishedSet.add(this)
-    }
-
-    return emit.apply(this, arguments)
-  }
-}
-function wrapEmit (emit) {
-  return function (eventName, req, res) {
-    if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
-    }
-
-    if (eventName === 'request') {
-      res.req = req
-
-      const abortController = new AbortController()
-
-      startServerCh.publish({ req, res, abortController })
-
-      try {
-        if (abortController.signal.aborted) {
-          // TODO: should this always return true ?
-          return this.listenerCount(eventName) > 0
-        }
-        if (finishSetHeaderCh.hasSubscribers) {
-          wrapSetHeader(res)
-        }
-        return emit.apply(this, arguments)
-      } catch (err) {
-        errorServerCh.publish(err)
-
-        throw err
-      } finally {
-        exitServerCh.publish({ req })
-      }
-    }
-    return emit.apply(this, arguments)
-  }
-}
-
-function wrapSetHeader (res) {
-  shimmer.wrap(res, 'setHeader', setHeader => {
-    return function (name, value) {
-      const setHeaderResult = setHeader.apply(this, arguments)
-      finishSetHeaderCh.publish({ name, value, res })
-      return setHeaderResult
-    }
-  })
 }
