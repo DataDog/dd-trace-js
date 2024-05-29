@@ -243,7 +243,7 @@ function wrapStreamIterator (response, options) {
                 })
               }
 
-              finishCh.publish({
+              finish({
                 headers: response.headers,
                 body: content,
                 path: response.url,
