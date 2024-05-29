@@ -10,7 +10,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
-const startWriteHeadCh = channel('apm:http:server:response:writeHead:start') // TODO: fix the name
+const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
 const requestFinishedSet = new WeakSet()
@@ -99,6 +99,7 @@ function wrapWriteHead (writeHead) {
       obj ??= reason
     }
 
+    // support writeHead(200, ['key1', 'val1', 'key2', 'val2'])
     if (Array.isArray(obj)) {
       const headers = {}
 
@@ -109,7 +110,7 @@ function wrapWriteHead (writeHead) {
       obj = headers
     }
 
-    // this doesn't support duplicate headers, but pffff, edge case
+    // this doesn't support explicit duplicate headers, but pffff, edge case
     const responseHeaders = Object.assign(this.getHeaders(), obj)
 
     startWriteHeadCh.publish({
