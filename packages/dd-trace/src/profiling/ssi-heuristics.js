@@ -35,7 +35,7 @@ function enablementChoiceToTagValue (enablementChoice) {
       return 'ssi_enabled'
     case EnablementChoice.SSI_NOT_ENABLED:
       return 'not_enabled'
-    case EnablementChoice.MANUALLY_DISABLED:
+    case EnablementChoice.DISABLED:
       // Can't emit this one as a tag
       throw new Error('Invalid enablement choice')
   }
