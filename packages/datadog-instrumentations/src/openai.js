@@ -144,56 +144,57 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 function addStreamedChunk (content, chunk) {
-  return content.choices.map((oldChoice, choiceIdx) => {
-    const newChoice = oldChoice
-    const chunkChoice = chunk.choices[choiceIdx]
-    if (!oldChoice.finish_reason) {
-      newChoice.finish_reason = chunkChoice.finish_reason
-    }
-
-    // delta exists on chat completions
-    const delta = chunkChoice.delta
-
-    if (delta) {
-      const content = delta.content
-      if (content) {
-        if (newChoice.delta.content) { // we don't want to append to undefined
-          newChoice.delta.content += content
-        } else {
-          newChoice.delta.content = content
-        }
-      }
+  for (const choice of chunk.choices) {
+    const choiceIdx = choice.index
+    if (!content.choices.some(choice => choice.index === choiceIdx)) {
+      content.choices.push(choice)
     } else {
-      const text = chunkChoice.text
-      if (text) {
-        if (newChoice.text) {
-          newChoice.text += text
-        } else {
-          newChoice.text = text
+      const oldChoice = content.choices[choiceIdx]
+      if (!oldChoice.finish_reason) {
+        oldChoice.finish_reason = choice.finish_reason
+      }
+
+      const delta = choice.delta
+
+      if (delta) {
+        const content = delta.content
+        if (content) {
+          if (oldChoice.delta.content) { // we don't want to append to undefined
+            oldChoice.delta.content += content
+          } else {
+            oldChoice.delta.content = content
+          }
+        }
+      } else {
+        const text = choice.text
+        if (text) {
+          if (oldChoice.text) {
+            oldChoice.text += text
+          } else {
+            oldChoice.text = text
+          }
         }
       }
+
+      // tools only exist on chat completions
+      const tools = delta && choice.delta.tool_calls
+
+      if (tools) {
+        oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
+          const oldTool = oldChoice.delta.tool_calls[toolIdx]
+
+          if (oldTool) {
+            oldTool.function.arguments += newTool.function.arguments
+          }
+
+          return oldTool
+        })
+      }
     }
-
-    // tools only exist on chat completions
-    const tools = delta && chunkChoice.delta.tool_calls
-
-    if (tools) {
-      newChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-        const oldTool = oldChoice.delta.tool_calls[toolIdx]
-
-        if (oldTool) {
-          oldTool.function.arguments += newTool.function.arguments
-        }
-
-        return oldTool
-      })
-    }
-
-    return newChoice
-  })
+  }
 }
 
-function buffersToJSON (chunks = []) {
+function convertBufferstoObjects (chunks = []) {
   return Buffer
     .concat(chunks) // combine the buffers
     .toString() // stringify
@@ -211,7 +212,7 @@ function buffersToJSON (chunks = []) {
  */
 function wrapStreamIterator (response, options) {
   let processChunksAsBuffers = false
-  const chunks = []
+  let chunks = []
   return function (itr) {
     return function () {
       const iterator = itr.apply(this, arguments)
@@ -230,22 +231,23 @@ function wrapStreamIterator (response, options) {
             }
 
             if (done) {
-              let content = chunks.filter(chunk => chunk != null) // filter null or undefined values
+              let body = {}
+              chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
 
               if (chunks) {
                 if (processChunksAsBuffers) {
-                  content = buffersToJSON(content)
+                  chunks = convertBufferstoObjects(chunks)
                 }
 
-                content = content.reduce((content, chunk) => {
-                  content.choices = addStreamedChunk(content, chunk)
+                body = chunks.reduce((content, chunk) => {
+                  addStreamedChunk(content, chunk)
                   return content
                 })
               }
 
               finishCh.publish({
                 headers: response.headers,
-                body: content,
+                body,
                 path: response.url,
                 method: options.method
               })
