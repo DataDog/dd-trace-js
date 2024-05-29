@@ -1,6 +1,8 @@
 'use strict'
 
-/* eslint-disable no-console */
+// This code runs before the tracer is configured and before a logger is ready
+// For that reason we queue up the messages now and decide what to do with them later
+const warnings = []
 
 /**
  * Here we maintain a list of packages that an application
@@ -53,13 +55,13 @@ module.exports.checkForRequiredModules = function () {
     if (naughties.has(pkg)) continue
     if (!(pkg in packages)) continue
 
-    console.warn(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
+    warnings.push(`Warning: Package '${pkg}' was loaded before dd-trace! This may break instrumentation.`)
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) console.warn('Warning: Please ensure dd-trace is loaded before other modules.')
+  if (didWarn) warnings.push('Warning: Please ensure dd-trace is loaded before other modules.')
 }
 
 /**
@@ -85,11 +87,17 @@ module.exports.checkForPotentialConflicts = function () {
     if (naughties.has(pkg)) continue
     if (!potentialConflicts.has(pkg)) continue
 
-    console.warn(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
+    warnings.push(`Warning: Package '${pkg}' may cause conflicts with dd-trace.`)
 
     naughties.add(pkg)
     didWarn = true
   }
 
-  if (didWarn) console.warn('Warning: Packages were loaded that may conflict with dd-trace.')
+  if (didWarn) warnings.push('Warning: Packages were loaded that may conflict with dd-trace.')
+}
+
+module.exports.flushStartupLogs = function (log) {
+  while (warnings.length) {
+    log.warn(warnings.shift())
+  }
 }
