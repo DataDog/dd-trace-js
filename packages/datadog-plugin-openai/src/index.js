@@ -15,6 +15,21 @@ const RE_TAB = /\t/g
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
+let encodingForModel
+try {
+  // eslint-disable-next-line import/no-extraneous-dependencies
+  const tiktoken = require('tiktoken')
+  encodingForModel = tiktoken.encoding_for_model
+} catch {
+  // estimate tokens based on length
+  encodingForModel = function () {
+    return {
+      encode: (text) => text.length,
+      free: () => {}
+    }
+  }
+}
+
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
   static get operation () { return 'request' }
@@ -247,13 +262,37 @@ class OpenApiPlugin extends TracingPlugin {
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
+    let promptTokens = 0
+    let completionTokens = 0
+
     if (body && body.usage) {
-      const promptTokens = body.usage.prompt_tokens
-      const completionTokens = body.usage.completion_tokens
-      this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
-      this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
-      this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+      promptTokens = body.usage.prompt_tokens
+      completionTokens = body.usage.completion_tokens
+    } else {
+      const encoder = encodingForModel(headers['openai-model'] || body.model)
+
+      // prompt tokens
+
+      // completion tokens
+      for (const choice of body.choices) {
+        const message = choice.message || choice.delta
+        const text = choice.text
+
+        const content = text || message.content
+        if (message) {
+          completionTokens += encoder.encode(content).length
+        }
+      }
+
+      encoder.free()
     }
+
+    console.log('calculated prompt tokens', promptTokens)
+    console.log('calculated completion tokens', completionTokens)
+    console.log('calculated total tokens', promptTokens + completionTokens)
+    this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
+    this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+    this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
 
     if (headers) {
       if (headers['x-ratelimit-limit-requests']) {
