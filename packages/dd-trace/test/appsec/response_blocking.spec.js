@@ -24,6 +24,11 @@ describe('HTTP Response Blocking', () => {
     const http = require('http')
 
     server = new http.Server((req, res) => {
+      // little polyfill, older versions of node don't have setHeaders()
+      if (typeof res.setHeaders !== 'function') {
+        res.setHeaders = headers => headers.forEach((v, k) => res.setHeader(k, v))
+      }
+
       if (responseHandler) {
         responseHandler(req, res)
       } else {
