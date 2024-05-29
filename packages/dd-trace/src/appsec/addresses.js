@@ -20,5 +20,7 @@ module.exports = {
   HTTP_CLIENT_IP: 'http.client_ip',
 
   USER_ID: 'usr.id',
-  WAF_CONTEXT_PROCESSOR: 'waf.context.processor'
+  WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
+
+  RASP_IO_URL: 'server.io.net.url'
 }

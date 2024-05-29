@@ -18,21 +18,26 @@ const log = require('../../log')
 const { generateStackTraceForMetaStruct } = require('./stack_trace')
 const web = require('../../plugins/util/web')
 const telemetry = require('./telemetry')
+const waf = require('../waf')
+const addresses = require('../addresses')
+const { getBlockingAction, block } = require('../blocking')
 
 let DDWAF
 let config
 class AbortError extends Error {
-  constructor (req, res) {
+  constructor (req, res, blockingAction) {
     super('AbortError')
     this.name = 'AbortError'
     this.req = req
     this.res = res
+    this.blockingAction = blockingAction
   }
 }
 
 function handleUncaughtException (err) {
   if (err instanceof AbortError) {
-    blockError(err)
+    const { req, res, blockingAction } = err
+    block(req, res, web.root(req), null, blockingAction)
   } else {
     throw err
   }
@@ -57,6 +62,27 @@ function disable () {
   process.off('uncaughtException', handleUncaughtException)
 }
 
+function getOutgoingUrl (args) {
+  if (args) {
+    if (args.uri) {
+      return args.uri
+    }
+    if (args.options) {
+      if (args.options.href) {
+        return args.options.href
+      }
+      if (args.options.protocol && args.options.hostname) {
+        let url = `${args.options.protocol}//${args.options.hostname}`
+        if (args.options.port) {
+          url += `:${args.options.port}`
+        }
+        url += args.options.path || ''
+        return url
+      }
+    }
+  }
+}
+
 function analyzeSsrf (ctx) {
   // TODO - analyze SSRF
   //  currently just for testing purpose, blocking 50% of the requests that are not calling to the agent
@@ -64,19 +90,21 @@ function analyzeSsrf (ctx) {
   const req = store?.req
   const res = store?.res
   if (req) {
-    telemetry.countRuleEval(telemetry.RULE_TYPES.SSRF)
-    // TODO if timeout: telemetry.countTimeout('ssrf')
-  }
+    const url = getOutgoingUrl(ctx.args)
+    if (url) {
+      telemetry.countRuleEval(telemetry.RULE_TYPES.SSRF)
+      const persistent = {
+        [addresses.RASP_IO_URL]: url
+      }
+      const actions = waf.run({ persistent }, req)
+      const blockingAction = getBlockingAction(actions)
+      if (blockingAction && ctx.abortData) {
+        ctx.abortData.abortController.abort()
+        ctx.abortData.error = new AbortError(req, res, blockingAction)
+      }
 
-  if (
-    ctx.args.uri.includes('rasp-block') &&
-    ctx.abortData
-  ) {
-    if (req) {
-      ctx.abortData.abortController.abort()
-      ctx.abortData.error = new AbortError(req, res)
-
-      if (config.appsec.stackTrace.enabled) {
+      // TODO cc @CarlesDD
+      if (config.appsec.stackTrace.enabled && actions.generate_stack) {
         const frames = generateStackTraceForMetaStruct(config.appsec.stackTrace.maxDepth)
         const rootSpan = web.root(req)
         if (rootSpan) {
