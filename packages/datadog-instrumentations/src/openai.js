@@ -123,7 +123,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
       return fn.apply(this, arguments)
         .then((response) => {
-          finishCh.publish({
+          finish({
             headers: response.headers,
             body: response.data,
             path: response.request.path,
@@ -132,10 +132,10 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
           return response
         })
-        .catch((err) => {
-          errorCh.publish({ err })
+        .catch(error => {
+          finish(undefined, error)
 
-          throw err
+          throw error
         })
     })
   }
@@ -246,7 +246,7 @@ function wrapStreamIterator (response, options) {
                 })
               }
 
-              finishCh.publish({
+              finish({
                 headers: response.headers,
                 body: content,
                 path: response.url,
@@ -257,7 +257,7 @@ function wrapStreamIterator (response, options) {
             return res
           })
           .catch(err => {
-            errorCh.publish({ err })
+            finish(undefined, err)
 
             throw err
           })
@@ -310,7 +310,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
                   )
                 }
               } else {
-                finishCh.publish({
+                finish({
                   headers: response.headers,
                   body,
                   path: response.url,
@@ -320,10 +320,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
               return body
             })
-            .catch(err => {
-              errorCh.publish({ err })
+            .catch(error => {
+              finish(undefined, error)
 
-              throw err
+              throw error
             })
             .finally(() => {
               // maybe we don't want to unwrap here in case the promise is re-used?
@@ -337,4 +337,12 @@ for (const shim of V4_PACKAGE_SHIMS) {
     }
     return exports
   })
+}
+
+function finish (response, error) {
+  if (error) {
+    errorCh.publish({ error })
+  }
+
+  finishCh.publish(response)
 }
