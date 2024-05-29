@@ -254,7 +254,7 @@ function wrapStreamIterator (response, options) {
             return res
           })
           .catch(err => {
-            errorCh.publish({ err })
+            finish(undefined, err)
 
             throw err
           })
