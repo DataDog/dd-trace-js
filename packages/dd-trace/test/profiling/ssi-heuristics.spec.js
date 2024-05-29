@@ -100,7 +100,7 @@ function executeTelemetryEnabledScenario (
   const { stubs, SSIHeuristics } = setupHarness()
   const config = new Config()
   if (longLived) {
-    config.profiling.shortLivedThreshold = 2
+    config.profiling.longLivedThreshold = 2
   }
   const heuristics = new SSIHeuristics(config.profiling)
   heuristics.start()

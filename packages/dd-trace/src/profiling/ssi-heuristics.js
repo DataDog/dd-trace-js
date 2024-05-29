@@ -4,8 +4,8 @@ const telemetryMetrics = require('../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 const dc = require('dc-polyfill')
 
-// If the process lived for less than 30 seconds, it's considered short-lived
-const DEFAULT_SHORT_LIVED_THRESHOLD = 30000
+// If the process lives for at least 30 seconds, it's considered long-lived
+const DEFAULT_LONG_LIVED_THRESHOLD = 30000
 
 const EnablementChoice = {
   MANUALLY_ENABLED: Symbol('SSITelemetry.EnablementChoice.MANUALLY_ENABLED'),
@@ -58,11 +58,11 @@ class SSIHeuristics {
   constructor (config) {
     this.enablementChoice = getEnablementChoiceFromConfig(config)
 
-    const shortLivedThreshold = config.shortLivedThreshold || DEFAULT_SHORT_LIVED_THRESHOLD
-    if (typeof shortLivedThreshold !== 'number' || shortLivedThreshold <= 0) {
-      throw new Error('Short-lived threshold must be a positive number')
+    const longLivedThreshold = config.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
+    if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
+      throw new Error('Long-lived threshold must be a positive number')
     }
-    this.shortLivedThreshold = shortLivedThreshold
+    this.longLivedThreshold = longLivedThreshold
 
     this.hasSentProfiles = false
     this.noSpan = true
@@ -82,7 +82,7 @@ class SSIHeuristics {
       setTimeout(() => {
         this.shortLived = false
         this._maybeTriggered()
-      }, this.shortLivedThreshold).unref()
+      }, this.longLivedThreshold).unref()
 
       this._onSpanCreated = this._onSpanCreated.bind(this)
       this._onProfileSubmitted = this._onProfileSubmitted.bind(this)

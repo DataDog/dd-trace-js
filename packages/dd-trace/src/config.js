@@ -490,7 +490,7 @@ class Config {
     this._setValue(defaults, 'profiling.sourceMap', true)
     this._setValue(defaults, 'profiling.ssi', false)
     this._setValue(defaults, 'profiling.heuristicsEnabled', false)
-    this._setValue(defaults, 'profiling.shortLivedThreshold', undefined)
+    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
@@ -674,7 +674,7 @@ class Config {
       }
       if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
         // This is only used in testing to not have to wait 30s
-        this._setValue(env, 'profiling.shortLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
+        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
       }
     }
 
