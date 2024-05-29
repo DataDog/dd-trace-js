@@ -24,6 +24,14 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 
+const resultActions = {
+  block_request: {
+    status_code: '401',
+    type: 'auto',
+    grpc_status_code: '10'
+  }
+}
+
 describe('AppSec Index', () => {
   let config
   let AppSec
@@ -679,7 +687,7 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         const body = { key: 'value' }
         req.body = body
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
@@ -721,7 +729,7 @@ describe('AppSec Index', () => {
 
       it('Should block when it is detected as attack', () => {
         const cookies = { key: 'value' }
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         cookieParser.publish({ req, res, abortController, cookies })
 
@@ -765,7 +773,7 @@ describe('AppSec Index', () => {
       it('Should block when it is detected as attack', () => {
         const query = { key: 'value' }
         req.query = query
-        sinon.stub(waf, 'run').returns(['block'])
+        sinon.stub(waf, 'run').returns(resultActions)
 
         queryParser.publish({ req, res, query, abortController })
 

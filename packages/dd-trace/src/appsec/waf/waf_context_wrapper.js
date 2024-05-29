@@ -3,6 +3,7 @@
 const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
+const { getBlockingAction } = require('../blocking')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -60,9 +61,12 @@ class WAFContextWrapper {
       this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
-      const blockTriggered = result.actions?.includes('block')
+
+      const blockTriggered = !!getBlockingAction(result.actions)
+
       const durationKey = isRasp ? 'raspDuration' : 'duration'
       const durationExtKey = isRasp ? 'raspDurationExt' : 'durationExt'
+
       Reporter.reportMetrics({
         [durationKey]: result.totalRuntime / 1e3,
         [durationExtKey]: parseInt(end - start) / 1e3,
