@@ -144,9 +144,12 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 function addStreamedChunk (content, chunk) {
+  content.usage = chunk.usage
   return content.choices.map((oldChoice, choiceIdx) => {
     const newChoice = oldChoice
     const chunkChoice = chunk.choices[choiceIdx]
+    if (!chunkChoice) return newChoice
+
     if (!oldChoice.finish_reason) {
       newChoice.finish_reason = chunkChoice.finish_reason
     }
