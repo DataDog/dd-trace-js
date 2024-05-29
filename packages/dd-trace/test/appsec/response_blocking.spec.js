@@ -215,7 +215,7 @@ describe('HTTP Response Blocking', () => {
       'connection',
       'transfer-encoding'
     ])
-    assert.deepEqual(res.data, 'writefile\nend')
+    assert.deepEqual(res.data, 'writefileend')
   })
 
   it('should ignore subsequent response writes after blocking', async () => {
