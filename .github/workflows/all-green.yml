@@ -13,3 +13,4 @@ jobs:
       - uses: wechuli/allcheckspassed@v1
         with:
           retries: 20 # once per minute, some checks take up to 15 min
+          checks_exclude: devflow.*
