@@ -11,6 +11,8 @@ const { DataStreamsProcessor } = require('./datastreams/processor')
 const { DsmPathwayCodec } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
 const DataStreamsContext = require('./data_streams_context')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -23,6 +25,7 @@ class DatadogTracer extends Tracer {
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._scope = new Scope()
     setStartupLogConfig(config)
+    flushStartupLogs(log)
   }
 
   configure ({ env, sampler }) {
