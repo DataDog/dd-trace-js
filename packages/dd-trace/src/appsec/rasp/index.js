@@ -12,9 +12,8 @@
 
 const crypto = require('crypto')
 
-const { httpClientRequestStart, expressMiddlewareError } = require('../channels')
+const { httpClientRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
-const log = require('../../log')
 const { generateStackTraceForMetaStruct } = require('./stack_trace')
 const web = require('../../plugins/util/web')
 const telemetry = require('./telemetry')
@@ -49,7 +48,6 @@ function enable (_config) {
   telemetry.init(DDWAF.version())
 
   httpClientRequestStart.subscribe(analyzeSsrf)
-  expressMiddlewareError.subscribe(handleAbortError)
 
   // TODO Subscribe and unsubscribe to the uncaughtException event when it is thrown
   process.on('uncaughtException', handleUncaughtException)
@@ -57,7 +55,6 @@ function enable (_config) {
 
 function disable () {
   httpClientRequestStart.unsubscribe(analyzeSsrf)
-  expressMiddlewareError.subscribe(handleAbortError)
 
   process.off('uncaughtException', handleUncaughtException)
 }
@@ -84,73 +81,56 @@ function getOutgoingUrl (args) {
 }
 
 function analyzeSsrf (ctx) {
-  // TODO - analyze SSRF
-  //  currently just for testing purpose, blocking 50% of the requests that are not calling to the agent
   const store = storage.getStore()
   const req = store?.req
-  const res = store?.res
   if (req) {
     const url = getOutgoingUrl(ctx.args)
     if (url) {
-      telemetry.countRuleEval(telemetry.RULE_TYPES.SSRF)
       const persistent = {
         [addresses.RASP_IO_URL]: url
       }
       const actions = waf.run({ persistent }, req)
-      const blockingAction = getBlockingAction(actions)
-      if (blockingAction && ctx.abortData) {
-        ctx.abortData.abortController.abort()
-        ctx.abortData.error = new AbortError(req, res, blockingAction)
-      }
 
-      // TODO cc @CarlesDD
-      if (config.appsec.stackTrace.enabled && actions.generate_stack) {
-        const frames = generateStackTraceForMetaStruct(config.appsec.stackTrace.maxDepth)
-        const rootSpan = web.root(req)
-        if (rootSpan) {
-          let metaStruct = rootSpan.meta_struct
-          if (!metaStruct) {
-            metaStruct = {}
-            rootSpan.meta_struct = metaStruct
-          }
-          let ddStack = metaStruct['_dd.stack']
-          if (!ddStack) {
-            metaStruct['_dd.stack'] = ddStack = {}
-          }
-          let exploitStacks = ddStack.exploit
-          if (!exploitStacks) {
-            exploitStacks = []
-            ddStack.exploit = exploitStacks
-          }
-          if (exploitStacks.length < 2) { // TODO Check from config
-            exploitStacks.push({
-              id: crypto.randomBytes(8).toString('hex'), // TODO temporary id
-              language: 'javascript', // maybe delete this?
-              frames
-            })
-          }
-        }
-      }
+      const res = store?.res
+      handleWafResults(actions, ctx.abortData, req, res)
     }
   }
 }
 
-// Prevents the execution of the default exception handler and executes custom blocking logic
-function handleAbortError ({ req, error, abortController }) {
-  if (error instanceof AbortError) {
-    blockError(error)
-    abortController?.abort()
+function handleWafResults (actions, abortData, req, res) {
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction && abortData) {
+    abortData.abortController.abort()
+    abortData.error = new AbortError(req, res, blockingAction)
   }
-}
 
-function blockError (error) {
-  const res = error.res
-  // TODO Change this for the action returned by the waf, check headersSent etc.
-  if (res.headersSent) {
-    log.warn('Cannot send blocking response when headers have already been sent')
-    res.end()
-  } else {
-    res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Blocked by AppSec')
+  // TODO cc @CarlesDD
+  if (config.appsec.stackTrace.enabled && actions?.generate_stack) {
+    const frames = generateStackTraceForMetaStruct(config.appsec.stackTrace.maxDepth)
+    const rootSpan = web.root(req)
+    if (rootSpan) {
+      let metaStruct = rootSpan.meta_struct
+      if (!metaStruct) {
+        metaStruct = {}
+        rootSpan.meta_struct = metaStruct
+      }
+      let ddStack = metaStruct['_dd.stack']
+      if (!ddStack) {
+        metaStruct['_dd.stack'] = ddStack = {}
+      }
+      let exploitStacks = ddStack.exploit
+      if (!exploitStacks) {
+        exploitStacks = []
+        ddStack.exploit = exploitStacks
+      }
+      if (exploitStacks.length < 2) { // TODO Check from config
+        exploitStacks.push({
+          id: crypto.randomBytes(8).toString('hex'), // TODO temporary id
+          language: 'javascript', // maybe delete this?
+          frames
+        })
+      }
+    }
   }
 }
 

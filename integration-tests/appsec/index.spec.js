@@ -23,7 +23,8 @@ describe('RASP', () => {
       env: {
         AGENT_PORT: agent.port,
         APP_PORT: appPort,
-        DD_APPSEC_ENABLED: true
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json')
       }
     })
   })
@@ -39,10 +40,7 @@ describe('RASP', () => {
 
   describe('ssrf', () => {
     it('should block when error is unhandled', (done) => {
-      axios({
-        url: `http://localhost:${appPort}/ssrf/http/unhandled-error?url=https://www.datadoghq.com/rasp-block`,
-        method: 'get'
-      }).then(() => {
+      axios.get(`http://localhost:${appPort}/ssrf/http/unhandled-error?host=ifconfig.pro`).then(() => {
         done(new Error('Request should have failed'))
       }).catch(e => {
         assert.strictEqual(e.response.status, 403)

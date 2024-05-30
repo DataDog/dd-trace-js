@@ -5,6 +5,7 @@ const agent = require('../../plugins/agent')
 const getPort = require('get-port')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
+const path = require('path')
 
 withVersions('express', 'express', expressVersion => {
   // unhandled error tests are defined as integration test because testing unhandled errors
@@ -20,7 +21,7 @@ withVersions('express', 'express', expressVersion => {
       const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
-      expressApp.all('/', (req, res) => {
+      expressApp.get('/', (req, res) => {
         app(req, res)
       })
 
@@ -35,7 +36,8 @@ withVersions('express', 'express', expressVersion => {
     beforeEach(() => {
       appsec.enable(new Config({
         appsec: {
-          enabled: true
+          enabled: true,
+          rules: path.join(__dirname, 'rasp_rules.json')
         }
       }))
     })
@@ -51,76 +53,86 @@ withVersions('express', 'express', expressVersion => {
     })
 
     describe('ssrf', () => {
-      it('Not blocking', (done) => {
-        app = (req, res) => {
-          require('http').get('http://www.datadoghq.com/', () => {
-            res.end('not-blocked')
-          })
-        }
+      ['http', 'https'].forEach(protocol => {
+        describe(`Test using ${protocol}`, () => {
+          it('Not blocking', (done) => {
+            app = (req, res) => {
+              require(protocol).get(`${protocol}://${req.query.host}`, () => {
+                res.end('not-blocked')
+              })
+            }
 
-        axios.get(`http://localhost:${port}/`).then(res => {
-          expect(res.status).to.equal(200)
-          expect(res.data).to.equal('not-blocked')
-          done()
+            axios.get(`http://localhost:${port}/?host=www.datadoghq.com`).then(res => {
+              expect(res.status).to.equal(200)
+              expect(res.data).to.equal('not-blocked')
+              done()
+            }).catch(done)
+          })
+
+          it('Get operation should be blocked and catched', (done) => {
+            app = (req, res) => {
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`, () => {
+                res.end('not-blocked')
+              })
+              clientRequest.on('error', (e) => {
+                if (e.name !== 'AbortError') {
+                  res.writeHead(500).end(e.message)
+                  return
+                }
+                res.writeHead(403).end('blocked')
+              })
+            }
+
+            axios.get(`http://localhost:${port}/?host=ifconfig.pro`)
+              .then(() => {
+                done(new Error('should be blocked'))
+              })
+              .catch(err => {
+                try {
+                  const res = err.response
+                  expect(res.status).to.equal(403)
+                  expect(res.data).to.equal('blocked')
+                  done()
+                } catch (e) {
+                  done(e)
+                }
+              })
+          })
+
+          it('POST operation should be blocked and catched', (done) => {
+            app = (req, res) => {
+              const clientRequest = require(protocol)
+                .request(`${protocol}://${req.query.host}`, { method: 'POST' }, () => {
+                  res.end('not-blocked')
+                })
+              clientRequest.on('error', (e) => {
+                if (e.name !== 'AbortError') {
+                  res.writeHead(500).end(e.message)
+                  return
+                }
+                res.writeHead(403).end('blocked')
+              })
+              clientRequest.flushHeaders()
+              clientRequest.write('dummy_post_data')
+              clientRequest.end()
+            }
+
+            axios.get(`http://localhost:${port}/?host=ifconfig.pro`)
+              .then(() => {
+                done(new Error('should be blocked'))
+              })
+              .catch(err => {
+                try {
+                  const res = err.response
+                  expect(res.status).to.equal(403)
+                  expect(res.data).to.equal('blocked')
+                  done()
+                } catch (e) {
+                  done(e)
+                }
+              })
+          })
         })
-      })
-
-      it('Get operation should be blocked and catched', (done) => {
-        app = (req, res) => {
-          const clientRequest = require('http').get('http://www.datadoghq.com/rasp-block', () => {
-            res.end('not-blocked')
-          })
-          clientRequest.on('error', (e) => {
-            if (e.name !== 'AbortError') {
-              res.writeHead(500).end(e.message)
-              return
-            }
-            res.writeHead(403).end('blocked')
-          })
-        }
-
-        axios.get(`http://localhost:${port}/`)
-          .catch(err => {
-            try {
-              const res = err.response
-              expect(res.status).to.equal(403)
-              expect(res.data).to.equal('blocked')
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
-      })
-
-      it('POST operation should be blocked and catched', (done) => {
-        app = (req, res) => {
-          const clientRequest = require('http')
-            .request('http://www.datadoghq.com/rasp-block', { method: 'POST' }, () => {
-              res.end('not-blocked')
-            })
-          clientRequest.on('error', (e) => {
-            if (e.name !== 'AbortError') {
-              res.writeHead(500).end(e.message)
-              return
-            }
-            res.writeHead(403).end('blocked')
-          })
-          clientRequest.flushHeaders()
-          clientRequest.write('dummy_post_data')
-          clientRequest.end()
-        }
-
-        axios.get(`http://localhost:${port}/`)
-          .catch(err => {
-            try {
-              const res = err.response
-              expect(res.status).to.equal(403)
-              expect(res.data).to.equal('blocked')
-              done()
-            } catch (e) {
-              done(e)
-            }
-          })
       })
     })
   })

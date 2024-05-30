@@ -28,7 +28,6 @@ function hookFn (http) {
 }
 
 let ClientRequest
-
 function noop () {}
 
 function createAbortedClientRequest (http, args) {
@@ -44,6 +43,7 @@ function createAbortedClientRequest (http, args) {
   }
 
   return new ClientRequest({
+    _defaultAgent: http.globalAgent,
     ...args.options,
     agent: {
       addRequest: noop
