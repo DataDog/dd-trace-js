@@ -85,22 +85,25 @@ describe('Sns', function () {
     }
 
     describe('with payload tagging', () => {
-      before(() => {
-        parentId = '0'
-        spanId = '0'
-
-        return agent.load('aws-sdk', {}, {
+      before(async () => {
+        // There's some bug when running tests in CI where the agent needs to be loaded and closed first
+        // without it the first test run fails
+        await agent.load('aws-sdk')
+        await agent.close({ ritmReset: false, wipe: true })
+        await agent.load('aws-sdk', {}, {
           cloudPayloadTagging: {
-            request: ['$.MessageAttributes.foo', '$.MessageAttributes.redacted.StringValue.foo'],
-            response: ['$.MessageId', '$.Attributes.DisplayName']
+            // request: ['$.MessageAttributes.foo', '$.MessageAttributes.redacted.StringValue.foo'],
+            request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
+            // response: ['$.MessageId', '$.Attributes.DisplayName'],
+            response: '$.MessageId,$.Attributes.DisplayName',
+            maxDepth: 5
           }
         })
       })
 
-      before(done => {
-        tracer = require('../../dd-trace')
-        tracer.use('aws-sdk')
+      after(() => agent.close({ ritmReset: false, wipe: true }))
 
+      before(done => {
         createResources('TestQueue', 'TestTopic', done)
       })
 
@@ -112,10 +115,6 @@ describe('Sns', function () {
         sqs.deleteQueue({ QueueUrl }, done)
       })
 
-      after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
-      })
-
       it('adds request and response payloads as flattened tags', done => {
         agent.use(traces => {
           const span = traces[0][0]
@@ -123,9 +122,9 @@ describe('Sns', function () {
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
-            'topicname': 'TestTopic',
-            'aws_service': 'SNS',
-            'region': 'us-east-1',
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
             'aws.request.body.TopicArn': TopicArn,
             'aws.request.body.Message': 'message 1',
             'aws.request.body.MessageAttributes.baz.DataType': 'String',
@@ -146,7 +145,9 @@ describe('Sns', function () {
             keyOne: { DataType: 'String', StringValue: 'keyOne' },
             keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
           }
-        }, e => e && done(e))
+        }, (err, d) => {
+          if (err) return done(err)
+        })
       })
 
       it('expands and redacts keys identified as expandable', done => {
@@ -156,9 +157,9 @@ describe('Sns', function () {
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
-            'topicname': 'TestTopic',
-            'aws_service': 'SNS',
-            'region': 'us-east-1',
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
             'aws.request.body.TopicArn': TopicArn,
             'aws.request.body.Message': 'message 1',
             'aws.request.body.MessageAttributes.redacted.StringValue.foo': 'redacted',
@@ -186,9 +187,9 @@ describe('Sns', function () {
             expect(span.resource).to.equal(`publish ${TopicArn}`)
             expect(span.meta).to.include({
               'aws.sns.topic_arn': TopicArn,
-              'topicname': 'TestTopic',
-              'aws_service': 'SNS',
-              'region': 'us-east-1',
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
               'aws.request.body.Message': 'message 1',
               'aws.request.body.MessageAttributes.foo': 'redacted',
@@ -218,9 +219,9 @@ describe('Sns', function () {
             expect(span.resource).to.equal(`getTopicAttributes ${TopicArn}`)
             expect(span.meta).to.include({
               'aws.sns.topic_arn': TopicArn,
-              'topicname': 'TestTopic',
-              'aws_service': 'SNS',
-              'region': 'us-east-1',
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
               'aws.response.body.Attributes.DisplayName': 'redacted'
             })
@@ -260,10 +261,10 @@ describe('Sns', function () {
               agent.use(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal(`publish`)
+                expect(span.resource).to.equal('publish')
                 expect(span.meta).to.include({
-                  'aws_service': 'SNS',
-                  'region': 'us-east-1',
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
                   'aws.request.body.Message': 'message 1'
                 })
@@ -279,10 +280,10 @@ describe('Sns', function () {
               agent.use(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal(`publish`)
+                expect(span.resource).to.equal('publish')
                 expect(span.meta).to.include({
-                  'aws_service': 'SNS',
-                  'region': 'us-east-1',
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
                 })
               }).then(done, done)
@@ -301,12 +302,12 @@ describe('Sns', function () {
             agent.use(traces => {
               const span = traces[0][0]
 
-              expect(span.resource).to.equal(`publish`)
+              expect(span.resource).to.equal('publish')
               expect(span.meta).to.include({
-                'aws_service': 'SNS',
+                aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
-                'topicname': 'TestTopic',
-                'region': 'us-east-1',
+                topicname: 'TestTopic',
+                region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
                 'aws.request.body.TopicArn': 'TestTopic'
               })

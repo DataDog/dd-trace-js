@@ -5,7 +5,7 @@ const {
   PAYLOAD_TAG_RESPONSE_PREFIX
 } = require('../constants')
 
-const jsonpath = require('jsonpath')
+const jsonpath = require('jsonpath-plus').JSONPath
 
 const { tagsFromObject } = require('./tagging')
 
@@ -15,15 +15,16 @@ const { tagsFromObject } = require('./tagging')
  * @param {any} value
  * @returns {any} the parsed object if parsing was successful, the input if not
  */
-function expandValue (value) {
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value)
-    } catch (e) {
-      return value
-    }
+function maybeJSONParseValue (value) {
+  if (typeof value !== 'string' || value[0] !== '{') {
+    return value
   }
-  return value
+
+  try {
+    return JSON.parse(value)
+  } catch (e) {
+    return value
+  }
 }
 
 /**
@@ -34,7 +35,9 @@ function expandValue (value) {
  */
 function expand (object, expansionRules) {
   for (const rule of expansionRules) {
-    jsonpath.apply(object, rule, expandValue)
+    jsonpath(rule, object, (value, _type, desc) => {
+      desc.parent[desc.parentProperty] = maybeJSONParseValue(value)
+    })
   }
 }
 
@@ -46,7 +49,9 @@ function expand (object, expansionRules) {
  */
 function redact (object, redactionRules) {
   for (const rule of redactionRules) {
-    jsonpath.apply(object, rule, () => 'redacted')
+    jsonpath(rule, object, (_value, _type, desc) => {
+      desc.parent[desc.parentProperty] = 'redacted'
+    })
   }
 }
 

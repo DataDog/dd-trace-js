@@ -81,7 +81,7 @@ describe('Payload tagger', () => {
 
   describe('escaping', () => {
     it('should escape `.` characters in individual keys', () => {
-      const input = { 'foo.bar': { 'baz': 'quux' } }
+      const input = { 'foo.bar': { baz: 'quux' } }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
         'http.payload.foo\\.bar.baz': 'quux'
@@ -91,7 +91,7 @@ describe('Payload tagger', () => {
 
   describe('parsing', () => {
     it('should transform null values to "null" string', () => {
-      const input = { 'foo': 'bar', 'baz': null }
+      const input = { foo: 'bar', baz: null }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
         'http.payload.foo': 'bar',
@@ -100,7 +100,7 @@ describe('Payload tagger', () => {
     })
 
     it('should transform undefined values to "undefined" string', () => {
-      const input = { 'foo': 'bar', 'baz': undefined }
+      const input = { foo: 'bar', baz: undefined }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
         'http.payload.foo': 'bar',
@@ -109,7 +109,7 @@ describe('Payload tagger', () => {
     })
 
     it('should transform boolean values to strings', () => {
-      const input = { 'foo': true, 'bar': false }
+      const input = { foo: true, bar: false }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
         'http.payload.foo': 'true',
@@ -118,17 +118,17 @@ describe('Payload tagger', () => {
     })
 
     it('should decode buffers as UTF-8', () => {
-      const input = { 'foo': Buffer.from('bar') }
+      const input = { foo: Buffer.from('bar') }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({ 'http.payload.foo': 'bar' })
     })
 
     it('should provide tags from simple JSON objects, casting to strings where necessary', () => {
       const input = {
-        'foo': { 'bar': { 'baz': 1, 'quux': 2 } },
-        'asimplestring': 'isastring',
-        'anullvalue': null,
-        'anundefined': undefined
+        foo: { bar: { baz: 1, quux: 2 } },
+        asimplestring: 'isastring',
+        anullvalue: null,
+        anundefined: undefined
       }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
@@ -141,7 +141,7 @@ describe('Payload tagger', () => {
     })
 
     it('should index tags when encountering arrays', () => {
-      const input = { 'foo': { 'bar': { 'list': ['v0', 'v1', 'v2'] } } }
+      const input = { foo: { bar: { list: ['v0', 'v1', 'v2'] } } }
       const tags = tagsFromObject(input, defaultOpts)
       expect(tags).to.deep.equal({
         'http.payload.foo.bar.list.0': 'v0',
@@ -169,7 +169,7 @@ describe('Payload tagger', () => {
 })
 
 describe('Tagging orchestration', () => {
-  it(`should use the request config when given the request prefix`, () => {
+  it('should use the request config when given the request prefix', () => {
     const config = {
       request: ['$.request'],
       response: ['$.response'],
@@ -184,7 +184,7 @@ describe('Tagging orchestration', () => {
     expect(tags).to.have.property(`${PAYLOAD_TAG_REQUEST_PREFIX}.response`, 'bar')
   })
 
-  it(`should use the response config when given the response prefix`, () => {
+  it('should use the response config when given the response prefix', () => {
     const config = {
       request: ['$.request'],
       response: ['$.response'],

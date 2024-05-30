@@ -1,7 +1,6 @@
 'use strict'
 
 const fs = require('fs')
-const jp = require('jsonpath')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const URL = require('url').URL
@@ -176,23 +175,18 @@ function validateNamingVersion (versionString) {
 }
 
 /**
- * Given a string of comma-separated paths, return the array of paths if
- * all paths are valid JSON paths, or undefined if any path is invalid.
+ * Given a string of comma-separated paths, return the array of paths.
+ * If a blank path is provided a null is returned to signal that the feature is disabled.
+ * An empty array means the feature is enabled but that no rules need to be applied.
  *
  * @param {string} input
- * @returns {[string] | undefined}
+ * @returns {[string]|null}
  */
-function validJSONPathsOrUndef (input) {
+function splitJSONPathRules (input) {
+  if (!input) return null
+  if (Array.isArray(input)) return input
   if (input === 'all') return []
-  const rules = input.split(',')
-  for (const rule of rules) {
-    try {
-      jp.parse(rule)
-    } catch (e) {
-      return undefined
-    }
-  }
-  return rules
+  return input.split(',')
 }
 
 // Shallow clone with property name remapping
@@ -303,14 +297,14 @@ class Config {
       null
     )
 
-    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
-        options.cloudPayloadTagging?.request,
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, // string
+        options.cloudPayloadTagging?.request, // array
         ''
       ))
 
-    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
         process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
         options.cloudPayloadTagging?.response,
@@ -334,8 +328,8 @@ class Config {
     }
 
     this.cloudPayloadTagging = {
-      requestsEnabled: !!(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
-      responsesEnabled: !!(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING),
+      requestsEnabled: !!DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      responsesEnabled: !!DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
       maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
       rules: appendRules(
         DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
