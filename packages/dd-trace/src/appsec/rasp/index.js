@@ -9,7 +9,9 @@ function enable () {
   httpClientRequestStart.subscribe(analyzeSsrf)
 }
 
-function disable () {}
+function disable () {
+  httpClientRequestStart.unsubscribe(analyzeSsrf)
+}
 
 function getOutgoingUrl (args) {
   if (args) {
