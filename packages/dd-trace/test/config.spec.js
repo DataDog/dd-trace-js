@@ -292,9 +292,11 @@ describe('Config', () => {
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },
-      { name: 'profiling.enabled', value: false, origin: 'default' },
+      { name: 'profiling.enabled', value: undefined, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
+      { name: 'profiling.heuristicsEnabled', value: false, origin: 'default' },
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
+      { name: 'profiling.ssi', value: false, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
@@ -437,7 +439,8 @@ describe('Config', () => {
     process.env.DD_IAST_TELEMETRY_VERBOSITY = 'DEBUG'
     process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
     process.env.DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED = 'true'
-    process.env.DD_EXPERIMENTAL_PROFILING_ENABLED = 'true'
+    process.env.DD_PROFILING_ENABLED = 'true'
+    process.env.DD_INJECTION_ENABLED = 'profiler'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE = 1
     process.env.DD_INSTRUMENTATION_INSTALL_ID = '68e75c48-57ca-4a12-adfc-575c4b05fcbe'
@@ -567,6 +570,8 @@ describe('Config', () => {
       { name: 'peerServiceMapping', value: { c: 'cc', d: 'dd' }, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
       { name: 'profiling.enabled', value: true, origin: 'env_var' },
+      { name: 'profiling.heuristicsEnabled', value: true, origin: 'env_var' },
+      { name: 'profiling.ssi', value: true, origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },

@@ -37,6 +37,23 @@ function startupLog ({ agentError } = {}) {
     return
   }
 
+  const out = tracerInfo({ agentError })
+
+  if (agentError) {
+    out.agent_error = agentError.message
+  }
+
+  info('DATADOG TRACER CONFIGURATION - ' + out)
+  if (agentError) {
+    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+    errors.agentError = {
+      code: agentError.code ? agentError.code : '',
+      message: `Agent Error:${agentError.message}`
+    }
+  }
+}
+
+function tracerInfo () {
   const url = config.url || `http://${config.hostname || 'localhost'}:${config.port}`
 
   const out = {
@@ -59,9 +76,6 @@ function startupLog ({ agentError } = {}) {
   out.enabled = config.enabled
   out.service = config.service
   out.agent_url = url
-  if (agentError) {
-    out.agent_error = agentError.message
-  }
   out.debug = !!config.debug
   out.sample_rate = config.sampler.sampleRate
   out.sampling_rules = samplingRules
@@ -87,18 +101,7 @@ function startupLog ({ agentError } = {}) {
   // out.service_mapping
   // out.service_mapping_error
 
-  info('DATADOG TRACER CONFIGURATION - ' + out)
-  if (agentError) {
-    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
-    errors.agentError = {
-      code: agentError.code ? agentError.code : '',
-      message: `Agent Error:${agentError.message}`
-    }
-  }
-
-  config = undefined
-  pluginManager = undefined
-  samplingRules = undefined
+  return out
 }
 
 function setStartupLogConfig (aConfig) {
@@ -118,5 +121,6 @@ module.exports = {
   setStartupLogConfig,
   setStartupLogPluginManager,
   setSamplingRules,
+  tracerInfo,
   errors
 }
