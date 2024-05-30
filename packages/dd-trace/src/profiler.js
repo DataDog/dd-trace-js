@@ -9,7 +9,7 @@ process.once('beforeExit', () => { profiler.stop() })
 module.exports = {
   start: config => {
     const { service, version, env, url, hostname, port, tags, repositoryUrl, commitSHA } = config
-    const { enabled, sourceMap, exporters } = config.profiling
+    const { enabled, sourceMap, exporters, heuristicsEnabled } = config.profiling
     const logger = {
       debug: (message) => log.debug(message),
       info: (message) => log.info(message),
@@ -19,6 +19,7 @@ module.exports = {
 
     return profiler.start({
       enabled,
+      heuristicsEnabled,
       service,
       version,
       env,

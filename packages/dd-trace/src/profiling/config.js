@@ -65,6 +65,7 @@ class Config {
       DD_PROFILING_PPROF_PREFIX, '')
 
     this.enabled = enabled
+    this.heuristicsEnabled = options.heuristicsEnabled
     this.service = service
     this.env = env
     this.host = host
