@@ -40,6 +40,7 @@ class Tracer extends NoopProxy {
     this._pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
     this._tracingInitialized = false
+    this._flare = new LazyModule(() => require('./flare'))
 
     // these requires must work with esm bundler
     this._modules = {
@@ -89,6 +90,25 @@ class Tracer extends NoopProxy {
             config.configure(conf.lib_config, true)
           }
           this._enableOrDisableTracing(config)
+        })
+
+        rc.on('AGENT_CONFIG', (action, conf) => {
+          if (!conf?.name?.startsWith('flare-log-level.')) return
+
+          if (action === 'unapply') {
+            this._flare.disable()
+          } else if (conf.config?.log_level) {
+            this._flare.enable(config)
+            this._flare.module.prepare(conf.config.log_level)
+          }
+        })
+
+        rc.on('AGENT_TASK', (action, conf) => {
+          if (action === 'unapply' || !conf) return
+          if (conf.task_type !== 'tracer_flare' || !conf.args) return
+
+          this._flare.enable(config)
+          this._flare.module.send(conf.args)
         })
       }
 
