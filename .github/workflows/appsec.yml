@@ -202,17 +202,22 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   next:
+    strategy:
+      matrix:
+        version:
+          - 18
+          - latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
+        with:
+          cache: yarn
+          node-version: ${{ matrix.version }}
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:appsec:plugins:ci
-      - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs

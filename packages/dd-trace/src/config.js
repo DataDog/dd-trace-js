@@ -485,9 +485,12 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'profiling.enabled', false)
+    this._setValue(defaults, 'profiling.enabled', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
+    this._setValue(defaults, 'profiling.ssi', false)
+    this._setValue(defaults, 'profiling.heuristicsEnabled', false)
+    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
@@ -558,6 +561,7 @@ class Config {
       DD_PROFILING_ENABLED,
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
+      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
@@ -663,6 +667,17 @@ class Config {
     this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
+    if (DD_INJECTION_ENABLED) {
+      this._setBoolean(env, 'profiling.ssi', true)
+      if (DD_INJECTION_ENABLED.split(',').includes('profiler')) {
+        this._setBoolean(env, 'profiling.heuristicsEnabled', true)
+      }
+      if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
+        // This is only used in testing to not have to wait 30s
+        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
+      }
+    }
+
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(

@@ -3,44 +3,69 @@
 const { channel } = require('dc-polyfill')
 
 const Level = {
-  Debug: 'debug',
-  Info: 'info',
-  Warn: 'warn',
-  Error: 'error'
+  trace: 20,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  critical: 50,
+  off: 100
 }
 
-const defaultLevel = Level.Debug
+const debugChannel = channel('datadog:log:debug')
+const infoChannel = channel('datadog:log:info')
+const warnChannel = channel('datadog:log:warn')
+const errorChannel = channel('datadog:log:error')
 
-// based on: https://github.com/trentm/node-bunyan#levels
-const logChannels = {
-  [Level.Debug]: createLogChannel(Level.Debug, 20),
-  [Level.Info]: createLogChannel(Level.Info, 30),
-  [Level.Warn]: createLogChannel(Level.Warn, 40),
-  [Level.Error]: createLogChannel(Level.Error, 50)
-}
-
-function createLogChannel (name, logLevel) {
-  const logChannel = channel(`datadog:log:${name}`)
-  logChannel.logLevel = logLevel
-  return logChannel
-}
+const defaultLevel = Level.debug
 
 function getChannelLogLevel (level) {
-  let logChannel
-  if (level && typeof level === 'string') {
-    logChannel = logChannels[level.toLowerCase().trim()] || logChannels[defaultLevel]
-  } else {
-    logChannel = logChannels[defaultLevel]
+  return level && typeof level === 'string'
+    ? Level[level.toLowerCase().trim()] || defaultLevel
+    : defaultLevel
+}
+
+class LogChannel {
+  constructor (level) {
+    this._level = getChannelLogLevel(level)
   }
-  return logChannel.logLevel
+
+  subscribe (logger) {
+    if (Level.debug >= this._level) {
+      debugChannel.subscribe(logger.debug)
+    }
+    if (Level.info >= this._level) {
+      infoChannel.subscribe(logger.info)
+    }
+    if (Level.warn >= this._level) {
+      warnChannel.subscribe(logger.warn)
+    }
+    if (Level.error >= this._level) {
+      errorChannel.subscribe(logger.error)
+    }
+  }
+
+  unsubscribe (logger) {
+    if (debugChannel.hasSubscribers) {
+      debugChannel.unsubscribe(logger.debug)
+    }
+    if (infoChannel.hasSubscribers) {
+      infoChannel.unsubscribe(logger.info)
+    }
+    if (warnChannel.hasSubscribers) {
+      warnChannel.unsubscribe(logger.warn)
+    }
+    if (errorChannel.hasSubscribers) {
+      errorChannel.unsubscribe(logger.error)
+    }
+  }
 }
 
 module.exports = {
-  Level,
-  getChannelLogLevel,
+  LogChannel,
 
-  debugChannel: logChannels[Level.Debug],
-  infoChannel: logChannels[Level.Info],
-  warnChannel: logChannels[Level.Warn],
-  errorChannel: logChannels[Level.Error]
+  debugChannel,
+  infoChannel,
+  warnChannel,
+  errorChannel
 }
