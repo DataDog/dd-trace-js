@@ -1460,9 +1460,9 @@ describe('Config', () => {
     config.configure({
       trace_sample_rules: [
         {
-          'resource': '*',
-          'tags': [{ 'key': 'tag-a', 'value_glob': 'tag-a-val*' }],
-          'provenance': 'customer'
+          resource: '*',
+          tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],
+          provenance: 'customer'
         }
       ]
     }, true)
@@ -1470,7 +1470,7 @@ describe('Config', () => {
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
       rateLimit: undefined,
-      rules: [ { resource: '*', provenance: 'customer' } ],
+      rules: [{ resource: '*', provenance: 'customer' }],
       sampleRate: undefined
     })
   })

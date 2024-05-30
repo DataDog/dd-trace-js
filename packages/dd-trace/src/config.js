@@ -649,7 +649,7 @@ class Config {
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       this._setValue(env, 'peerServiceMapping', fromEntries(
-        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':')) // example
       ))
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
@@ -680,7 +680,7 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
-    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
+    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES)) // example
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
