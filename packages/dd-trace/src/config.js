@@ -737,7 +737,7 @@ class Config {
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
-    this._setValue(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._setString(opts, 'appsec.rules', options.appsec.rules)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))

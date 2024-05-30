@@ -695,6 +695,9 @@ declare namespace tracer {
        * Configuration for RASP
        */
       rasp?: {
+        /** Whether to enable RASP.
+         * @default false
+         */
         enabled?: boolean
       }
     };
