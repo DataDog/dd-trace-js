@@ -11,21 +11,31 @@ on:
     - cron:  '00 04 * * 2-6'
 
 jobs:
+  get-essential-scenarios:
+    runs-on: ubuntu-latest
+    outputs:
+      scenario: ${{ steps.parse-yml.outputs.scenario }}
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v4
+        with:
+          repository: 'DataDog/system-tests'
+      - name: Get Essential Scenarios
+        id: parse-yml
+        run: yq -o tsv .TRACER_ESSENTIAL_SCENARIOS ./scenario_groups.yml | xargs node -p "x=process.argv;x.shift();x.push('CROSSED_TRACING_LIBRARIES');'scenario='+JSON.stringify(x)" >> $GITHUB_OUTPUT
+
+
   system-tests:
     runs-on: ubuntu-latest
+    needs:
+      - get-essential-scenarios
     strategy:
       matrix:
         weblog-variant:
           - express4
           - express4-typescript
           - nextjs
-        scenario:
-          - DEFAULT
-          - APPSEC_BLOCKING
-          - APPSEC_API_SECURITY_RC
-          - REMOTE_CONFIG_MOCKED_BACKEND_ASM_FEATURES
-          - INTEGRATIONS
-          - CROSSED_TRACING_LIBRARIES
+        scenario: ${{fromJson(needs.get-essential-scenarios.outputs.scenario)}}
 
     env:
       TEST_LIBRARY: nodejs
