@@ -302,15 +302,6 @@ function formatMapForTelemetry (map) {
     : ''
 }
 
-// function formatSamplingRulesForTelemetry (samplingRules) {
-//   const rules = []
-//   for (const rule of samplingRules) {
-//     if (rule.tags) { rule.tags = '{' + formatMapForTelemetry(rule.tags) + '}' }
-//     rules.push('{' + formatMapForTelemetry(rule) + '}')
-//   }
-//   return JSON.stringify(rules)
-// }
-
 function updateConfig (changes, config) {
   if (!config.telemetry.enabled) return
   if (changes.length === 0) return

@@ -51,7 +51,7 @@ jobs:
       - name: Run Cross Tracer Propagation Tests
         # run if builds passed (allows these tests to still run in case the previous Run step failed)
         if: steps.build-agent.outcome == 'success'
-        run: ./run.sh CROSSED_TRACING_LIBRARIES 
+        run: ./run.sh CROSSED_TRACING_LIBRARIES
 
       - name: Compress artifact
         if: ${{ always() }}
@@ -83,7 +83,7 @@ jobs:
       - name: Build
         run: ./build.sh -i runner
       - name: Run
-        run: ./run.sh PARAMETRIC -F tests/parametric/test_dynamic_configuration.py::TestDynamicConfigSamplingRules
+        run: ./run.sh PARAMETRIC
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
