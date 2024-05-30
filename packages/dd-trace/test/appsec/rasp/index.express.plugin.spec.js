@@ -93,7 +93,7 @@ withVersions('express', 'express', expressVersion => {
               assert.property(span.meta, '_dd.appsec.json')
               assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
             })
-          }).timeout(3000)
+          })
 
           it('Should detect threat doing a POST request', async () => {
             app = (req, res) => {
