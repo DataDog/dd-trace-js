@@ -119,9 +119,9 @@ describe('Sns', () => {
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
-            'topicname': 'TestTopic',
-            'aws_service': 'SNS',
-            'region': 'us-east-1',
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
             'aws.request.body.TopicArn': TopicArn,
             'aws.request.body.Message': 'message 1',
             'aws.request.body.MessageAttributes.baz.DataType': 'String',
@@ -152,9 +152,9 @@ describe('Sns', () => {
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
             'aws.sns.topic_arn': TopicArn,
-            'topicname': 'TestTopic',
-            'aws_service': 'SNS',
-            'region': 'us-east-1',
+            topicname: 'TestTopic',
+            aws_service: 'SNS',
+            region: 'us-east-1',
             'aws.request.body.TopicArn': TopicArn,
             'aws.request.body.Message': 'message 1',
             'aws.request.body.MessageAttributes.redacted.StringValue.foo': 'redacted',
@@ -182,9 +182,9 @@ describe('Sns', () => {
             expect(span.resource).to.equal(`publish ${TopicArn}`)
             expect(span.meta).to.include({
               'aws.sns.topic_arn': TopicArn,
-              'topicname': 'TestTopic',
-              'aws_service': 'SNS',
-              'region': 'us-east-1',
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
               'aws.request.body.Message': 'message 1',
               'aws.request.body.MessageAttributes.foo': 'redacted',
@@ -214,9 +214,9 @@ describe('Sns', () => {
             expect(span.resource).to.equal(`getTopicAttributes ${TopicArn}`)
             expect(span.meta).to.include({
               'aws.sns.topic_arn': TopicArn,
-              'topicname': 'TestTopic',
-              'aws_service': 'SNS',
-              'region': 'us-east-1',
+              topicname: 'TestTopic',
+              aws_service: 'SNS',
+              region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
               'aws.response.body.Attributes.DisplayName': 'redacted'
             })
@@ -256,10 +256,10 @@ describe('Sns', () => {
               agent.use(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal(`publish`)
+                expect(span.resource).to.equal('publish')
                 expect(span.meta).to.include({
-                  'aws_service': 'SNS',
-                  'region': 'us-east-1',
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
                   'aws.request.body.Message': 'message 1'
                 })
@@ -275,10 +275,10 @@ describe('Sns', () => {
               agent.use(traces => {
                 const span = traces[0][0]
 
-                expect(span.resource).to.equal(`publish`)
+                expect(span.resource).to.equal('publish')
                 expect(span.meta).to.include({
-                  'aws_service': 'SNS',
-                  'region': 'us-east-1',
+                  aws_service: 'SNS',
+                  region: 'us-east-1',
                   'aws.response.body.PhoneNumber': 'redacted'
                 })
               }).then(done, done)
@@ -297,12 +297,12 @@ describe('Sns', () => {
             agent.use(traces => {
               const span = traces[0][0]
 
-              expect(span.resource).to.equal(`publish`)
+              expect(span.resource).to.equal('publish')
               expect(span.meta).to.include({
-                'aws_service': 'SNS',
+                aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
-                'topicname': 'TestTopic',
-                'region': 'us-east-1',
+                topicname: 'TestTopic',
+                region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
                 'aws.request.body.TopicArn': 'TestTopic'
               })
