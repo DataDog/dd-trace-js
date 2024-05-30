@@ -3188,6 +3188,72 @@ describe('Plugin', () => {
             await checkTraces
           })
 
+          it('makes a successful chat completion call with multiple choices', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.multiple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-4')
+                expect(span.meta).to.have.property('openai.request.messages.0.content', 'How are you?')
+                expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+
+                // message 0
+                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.content',
+                  'As an AI, I don\'t have feelings, but I\'m here to assist you. How can I help you today?'
+                )
+
+                // message 1
+                expect(span.meta).to.have.property('openai.response.choices.1.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.1.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.1.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.1.message.content',
+                  'I\'m just a computer program so I don\'t have feelings, ' +
+                  'but I\'m here and ready to help you with anything you need. How can I assis...'
+                )
+
+                // message 2
+                expect(span.meta).to.have.property('openai.response.choices.2.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.2.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.2.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.2.message.content',
+                  'I\'m just a computer program, so I don\'t have feelings like humans do. ' +
+                  'I\'m here and ready to assist you with any questions or tas...'
+                )
+              })
+
+            const stream = await openai.chat.completions.create({
+              model: 'gpt-4',
+              messages: [{ role: 'user', content: 'How are you?', name: 'hunter2' }],
+              stream: true,
+              n: 3
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('delta')
+            }
+
+            await checkTraces
+          })
+
           if (semver.intersects('>4.16.0', version)) {
             it('makes a successful chat completion call with tools', async () => {
               nock('https://api.openai.com:443')
