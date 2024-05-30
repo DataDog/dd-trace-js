@@ -40,7 +40,7 @@ describe('RASP', () => {
 
       httpClientRequestStart.publish(ctx)
 
-      const persistent = { [addresses.RASP_IO_URL]: 'http://example.com' }
+      const persistent = { [addresses.URL_ACCESS]: 'http://example.com' }
       sinon.assert.calledOnce(waf.run)
       sinon.assert.calledWith(waf.run, { persistent }, req)
     })

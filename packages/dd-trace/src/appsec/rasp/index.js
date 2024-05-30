@@ -20,7 +20,7 @@ function analyzeSsrf (ctx) {
     const url = ctx.args.uri
     if (url) {
       const persistent = {
-        [addresses.RASP_IO_URL]: url
+        [addresses.URL_ACCESS]: url
       }
       // TODO: Currently this is only monitoring, we should
       //     block the request if SSRF attempt and

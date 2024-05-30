@@ -22,5 +22,5 @@ module.exports = {
   USER_ID: 'usr.id',
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
-  RASP_IO_URL: 'server.io.net.url'
+  URL_ACCESS: 'server.io.net.url'
 }
