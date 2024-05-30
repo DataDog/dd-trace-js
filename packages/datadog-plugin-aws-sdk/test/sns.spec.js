@@ -115,6 +115,7 @@ describe('Sns', () => {
       it('adds request and response payloads as flattened tags', done => {
         agent.use(traces => {
           const span = traces[0][0]
+          console.log('SPAN', span)
 
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
