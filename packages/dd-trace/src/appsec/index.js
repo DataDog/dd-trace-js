@@ -26,6 +26,7 @@ const { block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
+const rasp = require('./rasp')
 
 let isEnabled = false
 let config
@@ -36,6 +37,10 @@ function enable (_config) {
   try {
     appsecTelemetry.enable(_config.telemetry)
     graphql.enable()
+
+    if (_config.appsec.rasp.enabled) {
+      rasp.enable()
+    }
 
     setTemplates(_config)
 
@@ -237,6 +242,7 @@ function disable () {
 
   appsecTelemetry.disable()
   graphql.disable()
+  rasp.disable()
 
   remoteConfig.disableWafUpdate()
 
