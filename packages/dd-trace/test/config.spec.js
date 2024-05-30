@@ -77,7 +77,7 @@ describe('Config', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
-    process.env.OTEL_LOG_LEVEL = 'debug'
+    process.env.OTEL_LOG_LEVEL = 'success'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
@@ -93,6 +93,7 @@ describe('Config', () => {
 
     const config = new Config()
 
+    expect(config).to.have.property('debug', false)
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('logLevel', 'error')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -109,7 +110,7 @@ describe('Config', () => {
 
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
     process.env.OTEL_SERVICE_NAME = 'otel_service'
-    process.env.OTEL_LOG_LEVEL = 'warn'
+    process.env.OTEL_LOG_LEVEL = 'debug'
     process.env.OTEL_TRACES_SAMPLER = 'traceidratio'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
     process.env.OTEL_TRACES_EXPORTER = 'none'
@@ -119,8 +120,9 @@ describe('Config', () => {
 
     const config = new Config()
 
+    expect(config).to.have.property('debug', true)
     expect(config).to.have.property('service', 'otel_service')
-    expect(config).to.have.property('logLevel', 'warn')
+    expect(config).to.have.property('logLevel', 'debug')
     expect(config).to.have.property('sampleRate', 0.1)
     expect(config).to.have.property('runtimeMetrics', false)
     expect(config.tags).to.include({ foo: 'bar1', baz: 'qux1' })
