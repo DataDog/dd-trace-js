@@ -26,6 +26,7 @@ describe('TracerProxy', () => {
   let iast
   let PluginManager
   let pluginManager
+  let flare
   let remoteConfig
   let rc
   let dogStatsD
@@ -156,6 +157,14 @@ describe('TracerProxy', () => {
       disable: sinon.spy()
     }
 
+    flare = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+      prepare: sinon.spy(),
+      send: sinon.spy(),
+      cleanup: sinon.spy()
+    }
+
     remoteConfig = {
       enable: sinon.stub()
     }
@@ -184,7 +193,8 @@ describe('TracerProxy', () => {
       './appsec/remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
-      './noop/dogstatsd': NoopDogStatsDClient
+      './noop/dogstatsd': NoopDogStatsDClient,
+      './flare': flare
     })
 
     proxy = new Proxy()
@@ -247,6 +257,57 @@ describe('TracerProxy', () => {
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
+      })
+
+      it('should support enabling debug logs for tracer flares', () => {
+        const logLevel = 'debug'
+
+        proxy.init()
+
+        rc.emit('AGENT_CONFIG', 'apply', {
+          config: {
+            log_level: logLevel
+          },
+          name: 'flare-log-level.debug'
+        })
+
+        expect(flare.enable).to.have.been.calledWith(config)
+        expect(flare.prepare).to.have.been.calledWith(logLevel)
+      })
+
+      it('should support sending tracer flares', () => {
+        const task = {
+          case_id: '111',
+          hostname: 'myhostname',
+          user_handle: 'user.name@datadoghq.com'
+        }
+
+        proxy.init()
+
+        rc.emit('AGENT_TASK', 'apply', {
+          args: task,
+          task_type: 'tracer_flare',
+          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
+        })
+
+        expect(flare.enable).to.have.been.calledWith(config)
+        expect(flare.send).to.have.been.calledWith(task)
+      })
+
+      it('should cleanup flares when the config is removed', () => {
+        const conf = {
+          config: {
+            log_level: 'debug'
+          },
+          name: 'flare-log-level.debug'
+        }
+
+        proxy.init()
+
+        rc.emit('AGENT_CONFIG', 'apply', conf)
+        rc.emit('AGENT_CONFIG', 'unapply', conf)
+
+        expect(flare.disable).to.have.been.called
       })
 
       it('should support applying remote config', () => {
