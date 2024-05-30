@@ -20,7 +20,11 @@ jobs:
           - express4-typescript
           - nextjs
         scenario:
-          - TRACER_ESSENTIAL_SCENARIOS
+          - DEFAULT
+          - APPSEC_BLOCKING
+          - APPSEC_API_SECURITY_RC
+          - REMOTE_CONFIG_MOCKED_BACKEND_ASM_FEATURES
+          - INTEGRATIONS
           - CROSSED_TRACING_LIBRARIES
 
     env:
