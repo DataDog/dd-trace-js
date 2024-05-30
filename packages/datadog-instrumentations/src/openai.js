@@ -143,13 +143,14 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-function addStreamedChunk (content, chunk) {
+function addStreamedChunkChoices (content, chunk) {
   for (const choice of chunk.choices) {
     const choiceIdx = choice.index
-    if (!content.choices.some(choice => choice.index === choiceIdx)) {
-      content.choices.push(choice)
+    const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
+    if (!oldChoice) {
+      // we don't know which choices arrive in which order
+      content.choices[choiceIdx] = choice
     } else {
-      const oldChoice = content.choices[choiceIdx]
       if (!oldChoice.finish_reason) {
         oldChoice.finish_reason = choice.finish_reason
       }
@@ -210,7 +211,7 @@ function convertBufferstoObjects (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options) {
+function wrapStreamIterator (response, options, n) {
   let processChunksAsBuffers = false
   let chunks = []
   return function (itr) {
@@ -239,10 +240,15 @@ function wrapStreamIterator (response, options) {
                   chunks = convertBufferstoObjects(chunks)
                 }
 
-                body = chunks.reduce((content, chunk) => {
-                  addStreamedChunk(content, chunk)
-                  return content
-                })
+                if (chunks.length) {
+                  // define the initial body having all the content outside of choices from the first chunk
+                  // this will include import data like created, id, model, etc.
+                  body = { ...chunks[0], choices: Array.from({ length: n }) }
+                  // start from the first chunk, and add its choices into the body
+                  for (let i = 0; i < chunks.length; i++) {
+                    addStreamedChunkChoices(body, chunks[i])
+                  }
+                }
               }
 
               finish({
@@ -280,7 +286,18 @@ for (const shim of V4_PACKAGE_SHIMS) {
         // The OpenAI library lets you set `stream: true` on the options arg to any method
         // However, we only want to handle streamed responses in specific cases
         // chat.completions and completions
-        const stream = streamedResponse && arguments[arguments.length - 1]?.stream
+        const stream = streamedResponse && getOption(arguments, 'stream', false)
+
+        // we need to compute how many prompts we are sending in streamed cases for completions
+        // not applicable for chat completiond
+        let n
+        if (stream) {
+          n = getOption(arguments, 'n', 1)
+          const prompt = getOption(arguments, 'prompt')
+          if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
+            n *= prompt.length
+          }
+        }
 
         const client = this._client || this.client
 
@@ -302,10 +319,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
             .then(([{ response, options }, body]) => {
               if (stream) {
                 if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options))
+                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
                 } else {
                   shimmer.wrap(
-                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options)
+                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
                   )
                 }
               } else {
@@ -344,4 +361,8 @@ function finish (response, error) {
   }
 
   finishCh.publish(response)
+}
+
+function getOption (args, option, defaultValue) {
+  return args[args.length - 1]?.[option] || defaultValue
 }
