@@ -11,7 +11,7 @@ on:
     - cron:  '00 04 * * 2-6'
 
 jobs:
-  system-tests:
+  system-tests-essential:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -48,6 +48,51 @@ jobs:
       - name: Run
         run: ./run.sh TRACER_ESSENTIAL_SCENARIOS
 
+      - name: Compress artifact
+        if: ${{ always() }}
+        run: tar -czvf artifact.tar.gz $(ls | grep logs)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        if: ${{ always() }}
+        with:
+          name: logs_express-poc
+          path: artifact.tar.gz
+
+  system-tests-propagation:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - weblog-variant: express4
+          - weblog-variant: express4-typescript
+          - weblog-variant: nextjs
+    env:
+      TEST_LIBRARY: nodejs
+      WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v4
+        with:
+          repository: 'DataDog/system-tests'
+
+      - name: Checkout dd-trace-js
+        uses: actions/checkout@v4
+        with:
+          path: 'binaries/dd-trace-js'
+
+      - name: Build weblog
+        run: ./build.sh -i weblog
+
+      - name: Build runner
+        uses: ./.github/actions/install_runner
+
+      - name: Build agent
+        id: build-agent
+        run: ./build.sh -i agent
+
       - name: Run Cross Tracer Propagation Tests
         # run if builds passed (allows these tests to still run in case the previous Run step failed)
         if: steps.build-agent.outcome == 'success'
@@ -61,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
-          name: logs_express-poc
+          name: logs_express-poc-propagation
           path: artifact.tar.gz
 
   parametric:
