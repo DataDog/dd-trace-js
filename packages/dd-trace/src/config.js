@@ -1,7 +1,7 @@
 'use strict'
 
 const fs = require('fs')
-const jp = require('jsonpath')
+const jp = require('jsonpath-plus')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const URL = require('url').URL
