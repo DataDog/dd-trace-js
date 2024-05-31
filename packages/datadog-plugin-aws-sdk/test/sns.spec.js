@@ -119,10 +119,31 @@ describe('Sns', () => {
 
           expect(span.resource).to.equal(`publish ${TopicArn}`)
           expect(span.meta).to.include({
-            'aws.sns.topic_arn': TopicArn,
-            topicname: 'TestTopic',
-            aws_service: 'SNS',
+            /*
+            '_dd.p.tid': '6658e20200000000',
+            '_dd.p.dm': '-1',
+            service: 'test',
+            env: 'tester',
+            version: '9.2.2',
+            'runtime-id': '8cee4d6f-56f3-48e9-be00-ee8cb6de657b',
+            'span.kind': 'client',
+            'aws.operation': 'publish',
+            'aws.region': 'us-east-1',
             region: 'us-east-1',
+            aws_service: 'SNS',
+            'aws.service': 'SNS',
+            component: 'aws-sdk',
+            'pathway.hash': '515580026984968434',
+            'aws.response.request_id': 'fad1a72a-39ff-4dd9-a9d0-36b6dbd06e0e',
+            'aws.sns.topic_arn': 'arn:aws:sns:us-east-1:00000000000000000000:TestTopic',
+            topicname: 'TestTopic',
+            '_dd.base_service': 'test',
+            language: 'javascript'
+            */
+            'aws.sns.topic_arn': TopicArn, // OK
+            topicname: 'TestTopic', // OK
+            aws_service: 'SNS', // OK
+            region: 'us-east-1', // OK
             'aws.request.body.TopicArn': TopicArn,
             'aws.request.body.Message': 'message 1',
             'aws.request.body.MessageAttributes.baz.DataType': 'String',
