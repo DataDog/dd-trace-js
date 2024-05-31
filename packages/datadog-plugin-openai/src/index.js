@@ -240,17 +240,17 @@ class OpenApiPlugin extends TracingPlugin {
 
     super.finish()
     this.sendLog(methodName, span, tags, store, error)
-    this.sendMetrics(headers, endpoint, span._duration, error, tags)
+    this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
   }
 
-  sendMetrics (headers, endpoint, duration, error, spanTags) {
+  sendMetrics (headers, body, endpoint, duration, error, spanTags) {
     const tags = [`error:${Number(!!error)}`]
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
     } else {
       tags.push(`org:${headers['openai-organization']}`)
       tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
-      tags.push(`model:${headers['openai-model']}`)
+      tags.push(`model:${headers['openai-model'] || body.model}`)
     }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
@@ -261,13 +261,27 @@ class OpenApiPlugin extends TracingPlugin {
     const completionTokens = spanTags['openai.response.usage.completion_tokens']
     const completionTokensEstimated = spanTags['openai.response.usage.completion_tokens_estimated']
 
-    this.metrics.distribution(
-      'openai.tokens.prompt', promptTokens, [...tags, `openai.estimated:${!!promptTokensEstimated}`])
-    this.metrics.distribution(
-      'openai.tokens.completion', completionTokens, [...tags, `openai.estimated:${!!completionTokensEstimated}`])
-    this.metrics.distribution(
-      'openai.tokens.total', promptTokens + completionTokens,
-      [...tags, `openai.estimated:${!!(promptTokensEstimated || completionTokensEstimated)}`])
+    if (!error) {
+      if (promptTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.prompt', promptTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
+      }
+      if (completionTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.completion', completionTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+      }
+
+      if (promptTokensEstimated || completionTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.total', promptTokens + completionTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+      }
+    }
 
     if (headers) {
       if (headers['x-ratelimit-limit-requests']) {
@@ -311,7 +325,6 @@ function countTokens (content, model) {
       const encoder = encodingForModel(model)
       const tokens = encoder.encode(content).length
       encoder.free()
-
       return { tokens, estimated }
     } catch {
       estimated = true
@@ -330,7 +343,9 @@ function estimateTokens (content) {
   let estimatedTokens = 0
   if (typeof content === 'string') {
     const estimation1 = content.length / 4
-    const estimation2 = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/).length * 0.75
+
+    const matches = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/g)
+    const estimation2 = matches ? matches.length * 0.75 : 0 // in the case of an empty string
     estimatedTokens = Math.round((1.5 * estimation1 + 0.5 * estimation2) / 2)
   } else if (Array.isArray(content) && typeof content[0] === 'number') {
     estimatedTokens = content.length
@@ -709,14 +724,16 @@ function usageExtraction (tags, body, methodName) {
     }
 
     // completion tokens
-    for (const choice of body.choices) {
-      const message = choice.message || choice.delta // delta for streamed responses
-      const text = choice.text
-      const content = text || message?.content
+    if (body?.choices) {
+      for (const choice of body.choices) {
+        const message = choice.message || choice.delta // delta for streamed responses
+        const text = choice.text
+        const content = text || message?.content
 
-      const { tokens, estimated } = countTokens(content, model)
-      completionTokens += tokens
-      completionEstimated = estimated
+        const { tokens, estimated } = countTokens(content, model)
+        completionTokens += tokens
+        completionEstimated = estimated
+      }
     }
 
     // total tokens
