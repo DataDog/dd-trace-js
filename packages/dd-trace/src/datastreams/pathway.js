@@ -1,8 +1,5 @@
-// encoding used here is sha256
-// other languages use FNV1
-// this inconsistency is ok because hashes do not need to be consistent across services
-const crypto = require('crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
+
 const LRUCache = require('lru-cache')
 
 const options = { max: 500 }
@@ -11,9 +8,24 @@ const cache = new LRUCache(options)
 const CONTEXT_PROPAGATION_KEY = 'dd-pathway-ctx'
 const CONTEXT_PROPAGATION_KEY_BASE64 = 'dd-pathway-ctx-base64'
 
-function shaHash (checkpointString) {
-  const hash = crypto.createHash('md5').update(checkpointString).digest('hex').slice(0, 16)
-  return Buffer.from(hash, 'hex')
+const FNV_64_PRIME = BigInt('0x100000001B3')
+const FNV1_64_INIT = BigInt('0xCBF29CE484222325')
+
+function fnv (data, hvalInit, fnvPrime, fnvSize) {
+  let hval = hvalInit
+  for (let i = 0; i < data.length; i++) {
+    hval = (hval * fnvPrime) % fnvSize
+    hval ^= BigInt(data[i])
+  }
+  return hval
+}
+
+function fnv1Base64 (data) {
+  return fnv(data, FNV1_64_INIT, FNV_64_PRIME, 2n ** 64n)
+}
+
+function getBytes (s) {
+  return Buffer.from(s, 'utf-8')
 }
 
 function computeHash (service, env, edgeTags, parentHash) {
@@ -21,10 +33,30 @@ function computeHash (service, env, edgeTags, parentHash) {
   if (cache.get(key)) {
     return cache.get(key)
   }
-  const currentHash = shaHash(`${service}${env}` + edgeTags.join(''))
-  const buf = Buffer.concat([currentHash, parentHash], 16)
-  const val = shaHash(buf.toString())
+
+  let b = Buffer.concat([getBytes(service), getBytes(env)])
+  for (const t of edgeTags) {
+    b = Buffer.concat([b, getBytes(t)])
+  }
+  const nodeHash = fnv1Base64(b)
+  const nodeHashBuffer = Buffer.alloc(8)
+  nodeHashBuffer.writeBigUInt64LE(nodeHash, 0)
+
+  let parentHashBuffer
+  if (typeof parentHash === 'bigint') {
+    parentHashBuffer = Buffer.alloc(8)
+    parentHashBuffer = Buffer.writeBigUInt64LE(parentHash, 0)
+  } else {
+    parentHashBuffer = parentHash
+  }
+
+  const combinedBuffer = Buffer.concat([nodeHashBuffer, parentHashBuffer])
+
+  const val = Buffer.alloc(8)
+  val.writeBigUInt64LE(fnv1Base64(combinedBuffer), 0)
+
   cache.set(key, val)
+
   return val
 }
 

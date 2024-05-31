@@ -16,8 +16,8 @@ const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 class StatsPoint {
   constructor (hash, parentHash, edgeTags) {
-    this.hash = new Uint64(hash)
-    this.parentHash = new Uint64(parentHash)
+    this.hash = new Uint64(Buffer.from(hash).reverse())
+    this.parentHash = new Uint64(Buffer.from(parentHash).reverse())
     this.edgeTags = edgeTags
     this.edgeLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
     this.pathwayLatency = new LogCollapsingLowestDenseDDSketch(HIGH_ACCURACY_DISTRIBUTION)
@@ -234,7 +234,7 @@ class DataStreamsProcessor {
       .addLatencies(checkpoint)
     // set DSM pathway hash on span to enable related traces feature on DSM tab, convert from buffer to uint64
     if (span) {
-      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64BE(0).toString())
+      span.setTag(PATHWAY_HASH, checkpoint.hash.readBigUInt64LE(0).toString())
     }
   }
 
