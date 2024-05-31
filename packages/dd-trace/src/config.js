@@ -444,9 +444,12 @@ class Config {
     this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
+    this._setValue(defaults, 'appsec.rasp.enabled', true)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
+    this._setValue(defaults, 'appsec.stackTrace.enabled', true)
+    this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -532,8 +535,11 @@ class Config {
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
+      DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_RULES,
       DD_APPSEC_SCA_ENABLED,
+      DD_APPSEC_STACK_TRACE_ENABLED,
+      DD_APPSEC_MAX_STACK_TRACE_DEPTH,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -622,10 +628,13 @@ class Config {
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
+    this._setValue(env, 'appsec.stackTrace.maxDepth', maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH))
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
@@ -749,8 +758,11 @@ class Config {
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
+    this._setValue(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._setString(opts, 'appsec.rules', options.appsec.rules)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
