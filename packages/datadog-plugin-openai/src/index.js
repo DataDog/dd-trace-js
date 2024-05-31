@@ -18,16 +18,9 @@ let MAX_TEXT_LEN = 128
 let encodingForModel
 try {
   // eslint-disable-next-line import/no-extraneous-dependencies
-  const tiktoken = require('tiktoken')
-  encodingForModel = tiktoken.encoding_for_model
+  encodingForModel = require('tiktoken').encoding_for_model
 } catch {
-  // estimate tokens based on length
-  encodingForModel = function () {
-    return {
-      encode: (text) => text.length,
-      free: () => {}
-    }
-  }
+  // we will use token count estimations in this case
 }
 
 class OpenApiPlugin extends TracingPlugin {
@@ -247,10 +240,10 @@ class OpenApiPlugin extends TracingPlugin {
 
     super.finish()
     this.sendLog(methodName, span, tags, store, error)
-    this.sendMetrics(headers, body, endpoint, span._duration, error)
+    this.sendMetrics(headers, endpoint, span._duration, error, tags)
   }
 
-  sendMetrics (headers, body, endpoint, duration, error) {
+  sendMetrics (headers, endpoint, duration, error, spanTags) {
     const tags = [`error:${Number(!!error)}`]
     if (error) {
       this.metrics.increment('openai.request.error', 1, tags)
@@ -262,37 +255,19 @@ class OpenApiPlugin extends TracingPlugin {
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
-    let promptTokens = 0
-    let completionTokens = 0
+    const promptTokens = spanTags['openai.response.usage.prompt_tokens']
+    const promptTokensEstimated = spanTags['openai.response.usage.prompt_tokens_estimated']
 
-    if (body && body.usage) {
-      promptTokens = body.usage.prompt_tokens
-      completionTokens = body.usage.completion_tokens
-    } else {
-      const encoder = encodingForModel(headers['openai-model'] || body.model)
+    const completionTokens = spanTags['openai.response.usage.completion_tokens']
+    const completionTokensEstimated = spanTags['openai.response.usage.completion_tokens_estimated']
 
-      // prompt tokens
-
-      // completion tokens
-      for (const choice of body.choices) {
-        const message = choice.message || choice.delta
-        const text = choice.text
-
-        const content = text || message.content
-        if (message) {
-          completionTokens += encoder.encode(content).length
-        }
-      }
-
-      encoder.free()
-    }
-
-    console.log('calculated prompt tokens', promptTokens)
-    console.log('calculated completion tokens', completionTokens)
-    console.log('calculated total tokens', promptTokens + completionTokens)
-    this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
-    this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
-    this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+    this.metrics.distribution(
+      'openai.tokens.prompt', promptTokens, [...tags, `openai.estimated:${!!promptTokensEstimated}`])
+    this.metrics.distribution(
+      'openai.tokens.completion', completionTokens, [...tags, `openai.estimated:${!!completionTokensEstimated}`])
+    this.metrics.distribution(
+      'openai.tokens.total', promptTokens + completionTokens,
+      [...tags, `openai.estimated:${!!(promptTokensEstimated || completionTokensEstimated)}`])
 
     if (headers) {
       if (headers['x-ratelimit-limit-requests']) {
@@ -327,6 +302,40 @@ class OpenApiPlugin extends TracingPlugin {
 
     this.logger.log(log, span, tags)
   }
+}
+
+function countTokens (content, model) {
+  let estimated = false
+  if (encodingForModel) {
+    try {
+      const encoder = encodingForModel(model)
+      const tokens = encoder.encode(content).length
+      encoder.free()
+
+      return { tokens, estimated }
+    } catch {
+      estimated = true
+    }
+  } else {
+    estimated = true
+  }
+
+  return {
+    tokens: estimateTokens(content),
+    estimated
+  }
+}
+
+function estimateTokens (content) {
+  let estimatedTokens = 0
+  if (typeof content === 'string') {
+    const estimation1 = content.length / 4
+    const estimation2 = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/).length * 0.75
+    estimatedTokens = Math.round((1.5 * estimation1 + 0.5 * estimation2) / 2)
+  } else if (Array.isArray(content) && typeof content[0] === 'number') {
+    estimatedTokens = content.length
+  }
+  return estimatedTokens
 }
 
 function createEditRequestExtraction (tags, payload, store) {
@@ -387,7 +396,7 @@ function responseDataExtractionByMethod (methodName, tags, body, store) {
     case 'chat.completions.create':
     case 'createEdit':
     case 'edits.create':
-      commonCreateResponseExtraction(tags, body, store)
+      commonCreateResponseExtraction(tags, body, store, methodName)
       break
 
     case 'listFiles':
@@ -623,8 +632,8 @@ function createModerationResponseExtraction (tags, body) {
 }
 
 // createCompletion, createChatCompletion, createEdit
-function commonCreateResponseExtraction (tags, body, store) {
-  usageExtraction(tags, body)
+function commonCreateResponseExtraction (tags, body, store, methodName) {
+  usageExtraction(tags, body, methodName)
 
   if (!body.choices) return
 
@@ -664,11 +673,61 @@ function commonCreateResponseExtraction (tags, body, store) {
 }
 
 // createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction (tags, body) {
-  if (typeof body.usage !== 'object' || !body.usage) return
-  tags['openai.response.usage.prompt_tokens'] = body.usage.prompt_tokens
-  tags['openai.response.usage.completion_tokens'] = body.usage.completion_tokens
-  tags['openai.response.usage.total_tokens'] = body.usage.total_tokens
+function usageExtraction (tags, body, methodName) {
+  let promptTokens = 0
+  let completionTokens = 0
+  let totalTokens = 0
+  if (body && body.usage) {
+    promptTokens = body.usage.prompt_tokens
+    completionTokens = body.usage.completion_tokens
+    totalTokens = body.usage.total_tokens
+  } else if (['chat.completions.create', 'completions.create'].includes(methodName)) {
+    // estimate tokens based on method name for completions and chat completions
+    const { model } = body
+    let promptEstimated = false
+    let completionEstimated = false
+
+    // prompt tokens
+    const payload = storage.getStore().openai
+    if (methodName === 'chat.completions.create') {
+      const messages = payload.messages
+      for (const message of messages) {
+        const content = message.content
+        const { tokens, estimated } = countTokens(content, model)
+        promptTokens += tokens
+        promptEstimated = estimated
+      }
+    } else if (methodName === 'completions.create') {
+      let prompt = payload.prompt
+      if (!Array.isArray(prompt)) prompt = [prompt]
+
+      for (const p of prompt) {
+        const { tokens, estimated } = countTokens(p, model)
+        promptTokens += tokens
+        promptEstimated = estimated
+      }
+    }
+
+    // completion tokens
+    for (const choice of body.choices) {
+      const message = choice.message || choice.delta // delta for streamed responses
+      const text = choice.text
+      const content = text || message?.content
+
+      const { tokens, estimated } = countTokens(content, model)
+      completionTokens += tokens
+      completionEstimated = estimated
+    }
+
+    // total tokens
+    totalTokens = promptTokens + completionTokens
+    if (promptEstimated) tags['openai.response.usage.prompt_tokens_estimated'] = true
+    if (completionEstimated) tags['openai.response.usage.completion_tokens_estimated'] = true
+  }
+
+  if (promptTokens) tags['openai.response.usage.prompt_tokens'] = promptTokens
+  if (completionTokens) tags['openai.response.usage.completion_tokens'] = completionTokens
+  if (totalTokens) tags['openai.response.usage.total_tokens'] = totalTokens
 }
 
 function truncateApiKey (apiKey) {
