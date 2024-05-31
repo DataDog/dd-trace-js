@@ -16,12 +16,10 @@ const { httpClientRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const { generateStackTraceForMetaStruct } = require('./stack_trace')
 const web = require('../../plugins/util/web')
-const telemetry = require('./telemetry')
 const waf = require('../waf')
 const addresses = require('../addresses')
 const { getBlockingAction, block } = require('../blocking')
 
-let DDWAF
 let config
 class AbortError extends Error {
   constructor (req, res, blockingAction) {
@@ -44,8 +42,6 @@ function handleUncaughtException (err) {
 
 function enable (_config) {
   config = _config
-  DDWAF = require('@datadog/native-appsec').DDWAF
-  telemetry.init(DDWAF.version())
 
   httpClientRequestStart.subscribe(analyzeSsrf)
 
@@ -89,7 +85,8 @@ function analyzeSsrf (ctx) {
       const persistent = {
         [addresses.RASP_IO_URL]: url
       }
-      const actions = waf.run({ persistent }, req)
+
+      const actions = waf.run({ persistent }, req, 'ssrf')
 
       const res = store?.res
       handleWafResults(actions, ctx.abortData, req, res)
@@ -126,7 +123,7 @@ function handleWafResults (actions, abortData, req, res) {
       if (exploitStacks.length < 2) { // TODO Check from config
         exploitStacks.push({
           id: crypto.randomBytes(8).toString('hex'), // TODO temporary id
-          language: 'javascript', // maybe delete this?
+          language: 'nodejs',
           frames
         })
       }

@@ -19,7 +19,7 @@ class WAFContextWrapper {
     this.addressesToSkip = new Set()
   }
 
-  run ({ persistent, ephemeral }, isRasp = false) {
+  run ({ persistent, ephemeral }, raspRuleType) {
     const payload = {}
     let payloadHasData = false
     const inputs = {}
@@ -64,18 +64,15 @@ class WAFContextWrapper {
 
       const blockTriggered = !!getBlockingAction(result.actions)
 
-      const durationKey = isRasp ? 'raspDuration' : 'duration'
-      const durationExtKey = isRasp ? 'raspDurationExt' : 'durationExt'
-
       Reporter.reportMetrics({
-        [durationKey]: result.totalRuntime / 1e3,
-        [durationExtKey]: parseInt(end - start) / 1e3,
+        duration: result.totalRuntime / 1e3,
+        durationExt: parseInt(end - start) / 1e3,
         rulesVersion: this.rulesVersion,
         ruleTriggered,
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      })
+      }, raspRuleType)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))

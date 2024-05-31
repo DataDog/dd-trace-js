@@ -76,19 +76,27 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function updateWafRequestsMetricTags (metrics, req) {
+function updateWafRequestsMetricTags (metrics, req, raspRuleType) {
   if (!req) return
-
   const store = getStore(req)
 
   // it does not depend on whether telemetry is enabled or not
-  addRequestMetrics(store, metrics)
+  addRequestMetrics(store, metrics, !!raspRuleType)
 
   if (!enabled) return
 
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
   trackWafDurations(metrics, versionsTags)
+
+  if (raspRuleType) {
+    const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+    appsecMetrics.count('appsec.rasp.rule.eval', tags).inc(1)
+
+    if (metrics.wafTimeout) {
+      appsecMetrics.count('appsec.rasp.timeout', tags).inc(1)
+    }
+  }
 
   const metricTags = getOrCreateMetricTags(store, versionsTags)
 
@@ -100,7 +108,7 @@ function updateWafRequestsMetricTags (metrics, req) {
   if (ruleTriggered) {
     metricTags[tags.RULE_TRIGGERED] = ruleTriggered
   }
-  if (wafTimeout) {
+  if (!raspRuleType && wafTimeout) {
     metricTags[tags.WAF_TIMEOUT] = wafTimeout
   }
 
@@ -136,11 +144,14 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
-function addRequestMetrics (store, { duration, durationExt, raspDuration, raspDurationExt }) {
-  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
-  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
-  store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += raspDuration || 0
-  store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += raspDurationExt || 0
+function addRequestMetrics (store, { duration, durationExt }, isRasp) {
+  if (isRasp) {
+    store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
+    store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
+  } else {
+    store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
+    store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+  }
 }
 
 function getRequestMetrics (req) {
