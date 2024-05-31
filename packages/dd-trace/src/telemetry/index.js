@@ -313,7 +313,8 @@ function updateConfig (changes, config) {
     sampleRate: 'DD_TRACE_SAMPLE_RATE',
     logInjection: 'DD_LOG_INJECTION',
     headerTags: 'DD_TRACE_HEADER_TAGS',
-    tags: 'DD_TAGS'
+    tags: 'DD_TAGS',
+    'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
   }
 
   const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
@@ -328,9 +329,12 @@ function updateConfig (changes, config) {
     const { origin, value } = change
     const entry = { name, value, origin }
 
-    if (Array.isArray(value)) entry.value = value.join(',')
     if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
     if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
+    if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
+      entry.value = JSON.stringify(entry.value)
+    }
+    if (Array.isArray(entry.value)) entry.value = value.join(',')
 
     configuration.push(entry)
   }
