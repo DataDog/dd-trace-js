@@ -1,7 +1,6 @@
 'use strict'
 
 const fs = require('fs')
-const jp = require('jsonpath-plus')
 const os = require('os')
 const uuid = require('crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const URL = require('url').URL
@@ -122,23 +121,14 @@ function validateNamingVersion (versionString) {
 }
 
 /**
- * Given a string of comma-separated paths, return the array of paths if
- * all paths are valid JSON paths, or undefined if any path is invalid.
+ * Given a string of comma-separated paths, return the array of paths.
  *
  * @param {string} input
- * @returns {[string] | undefined}
+ * @returns {[string]}
  */
-function validJSONPathsOrUndef (input) {
+function splitJSONPathRules (input) {
   if (input === 'all') return []
-  const rules = input.split(',')
-  for (const rule of rules) {
-    try {
-      jp.parse(rule)
-    } catch (e) {
-      return undefined
-    }
-  }
-  return rules
+  return input.split(',')
 }
 
 // Shallow clone with property name remapping
@@ -310,14 +300,14 @@ class Config {
       null
     )
 
-    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
         process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
         options.cloudPayloadTagging?.request,
         ''
       ))
 
-    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = validJSONPathsOrUndef(
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
         process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
         options.cloudPayloadTagging?.response,
