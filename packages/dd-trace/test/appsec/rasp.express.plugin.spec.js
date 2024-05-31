@@ -1,10 +1,10 @@
 'use strict'
 
 const axios = require('axios')
-const agent = require('../../plugins/agent')
+const agent = require('../plugins/agent')
 const getPort = require('get-port')
-const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
+const appsec = require('../../src/appsec')
+const Config = require('../../src/config')
 const path = require('path')
 const { assert } = require('chai')
 
@@ -17,7 +17,7 @@ withVersions('express', 'express', expressVersion => {
     })
 
     before((done) => {
-      const express = require(`../../../../../versions/express@${expressVersion}`).get()
+      const express = require(`../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
       expressApp.get('/', (req, res) => {

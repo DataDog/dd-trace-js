@@ -1,8 +1,8 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { httpClientRequestStart } = require('../../../src/appsec/channels')
-const addresses = require('../../../src/appsec/addresses')
+const { httpClientRequestStart } = require('../../src/appsec/channels')
+const addresses = require('../../src/appsec/addresses')
 
 describe('RASP', () => {
   let waf, rasp, datadogCore
@@ -16,9 +16,9 @@ describe('RASP', () => {
       run: sinon.stub()
     }
 
-    rasp = proxyquire('../../../src/appsec/rasp', {
-      '../../../../datadog-core': datadogCore,
-      '../waf': waf
+    rasp = proxyquire('../../src/appsec/rasp', {
+      '../../../datadog-core': datadogCore,
+      './waf': waf
     })
 
     rasp.enable()

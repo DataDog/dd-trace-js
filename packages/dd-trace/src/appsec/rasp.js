@@ -1,9 +1,9 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
-const addresses = require('../addresses')
-const { httpClientRequestStart } = require('../channels')
-const waf = require('../waf')
+const { storage } = require('../../../datadog-core')
+const addresses = require('./addresses')
+const { httpClientRequestStart } = require('./channels')
+const waf = require('./waf')
 
 function enable () {
   httpClientRequestStart.subscribe(analyzeSsrf)
