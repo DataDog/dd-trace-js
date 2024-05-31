@@ -15,6 +15,7 @@ function enable (config, appsec) {
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
 
   const activation = Activation.fromConfig(config)
 
