@@ -246,8 +246,8 @@ class DatadogSpan {
         tracestate: parent._tracestate
       })
 
-      if (parent._isRemote && fields.apmTracingEnabled === false) {
-        spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
+      if (parent._isRemote) {
+        this._addApmTracingTag(spanContext, fields)
       }
 
       if (!spanContext._trace.startTime) {
@@ -268,9 +268,7 @@ class DatadogSpan {
           .padEnd(16, '0')
       }
 
-      if (fields.apmTracingEnabled === false) {
-        spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
-      }
+      this._addApmTracingTag(spanContext, fields)
     }
 
     spanContext._trace.ticks = spanContext._trace.ticks || now()
@@ -293,6 +291,12 @@ class DatadogSpan {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
+  }
+
+  _addApmTracingTag (spanContext, fields) {
+    if (fields.apmTracingEnabled === false) {
+      spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
+    }
   }
 }
 
