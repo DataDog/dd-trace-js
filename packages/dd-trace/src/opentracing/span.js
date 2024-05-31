@@ -246,6 +246,10 @@ class DatadogSpan {
         tracestate: parent._tracestate
       })
 
+      if (parent._isRemote && fields.apmTracingEnabled === false) {
+        spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
+      }
+
       if (!spanContext._trace.startTime) {
         startTime = dateNow()
       }

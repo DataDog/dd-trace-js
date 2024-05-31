@@ -192,7 +192,7 @@ describe('Span', () => {
       expect(span.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
     })
 
-    it('should add _dd.apm.enabled tag only in root spans', () => {
+    it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
       const parent = new Span(tracer, processor, prioritySampler, {
         operationName: 'operation',
         apmTracingEnabled: false
@@ -208,6 +208,24 @@ describe('Span', () => {
       })
 
       expect(child.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+    })
+
+    it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
+      const parent = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: false
+      })
+
+      parent._isRemote = true
+
+      const child = new Span(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+        apmTracingEnabled: false,
+        parent
+      })
+
+      expect(child.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(child.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
     })
   })
 
