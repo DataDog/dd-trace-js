@@ -309,6 +309,7 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: false, origin: 'default' },
       { name: 'sampleRate', value: undefined, origin: 'default' },
       { name: 'sampler.rateLimit', value: undefined, origin: 'default' },
+      { name: 'sampler.rules', value: [], origin: 'default' },
       { name: 'scope', value: undefined, origin: 'default' },
       { name: 'service', value: 'node', origin: 'default' },
       { name: 'site', value: 'datadoghq.com', origin: 'default' },
@@ -575,6 +576,16 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: true, origin: 'env_var' },
       { name: 'sampleRate', value: 0.5, origin: 'env_var' },
       { name: 'sampler.rateLimit', value: '-1', origin: 'env_var' },
+      {
+        name: 'sampler.rules',
+        value: [
+          { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+          { service: 'usersvc', sampleRate: 0.5 },
+          { service: 'authsvc', sampleRate: 1.0 },
+          { sampleRate: 0.1 }
+        ],
+        origin: 'env_var'
+      },
       { name: 'service', value: 'service', origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
@@ -649,6 +660,12 @@ describe('Config', () => {
       foo: 'bar'
     }
     const logLevel = 'error'
+    const samplingRules = [
+      { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+      { service: 'usersvc', sampleRate: 0.5 },
+      { service: 'authsvc', sampleRate: 1.0 },
+      { sampleRate: 0.1 }
+    ]
     const config = new Config({
       enabled: false,
       debug: true,
@@ -667,12 +684,7 @@ describe('Config', () => {
       clientIpHeader: 'x-true-client-ip',
       sampleRate: 0.5,
       rateLimit: 1000,
-      samplingRules: [
-        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
-        { service: 'usersvc', sampleRate: 0.5 },
-        { service: 'authsvc', sampleRate: 1.0 },
-        { sampleRate: 0.1 }
-      ],
+      samplingRules,
       spanSamplingRules: [
         { service: 'mysql', name: 'mysql.query', sampleRate: 0.0, maxPerSecond: 1 },
         { service: 'mysql', sampleRate: 0.5 },
@@ -829,6 +841,7 @@ describe('Config', () => {
       { name: 'runtimeMetrics', value: true, origin: 'code' },
       { name: 'sampleRate', value: 0.5, origin: 'code' },
       { name: 'sampler.rateLimit', value: 1000, origin: 'code' },
+      { name: 'sampler.rules', value: samplingRules, origin: 'code' },
       { name: 'service', value: 'service', origin: 'code' },
       { name: 'site', value: 'datadoghq.eu', origin: 'code' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'code' },
@@ -1444,6 +1457,27 @@ describe('Config', () => {
     expect(updateConfig.getCall(1).args[0]).to.deep.equal([
       { name: 'sampleRate', value: 0, origin: 'remote_config' }
     ])
+  })
+
+  it('should remove tags from sampling rules when set through remote configuration', () => {
+    const config = new Config()
+
+    config.configure({
+      trace_sample_rules: [
+        {
+          resource: '*',
+          tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],
+          provenance: 'customer'
+        }
+      ]
+    }, true)
+
+    expect(config).to.have.deep.nested.property('sampler', {
+      spanSamplingRules: [],
+      rateLimit: undefined,
+      rules: [{ resource: '*', provenance: 'customer' }],
+      sampleRate: undefined
+    })
   })
 
   it('should have consistent runtime-id after remote configuration updates tags', () => {
