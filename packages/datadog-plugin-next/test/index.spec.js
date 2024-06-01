@@ -110,14 +110,15 @@ describe('Plugin', function () {
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
         fs.mkdirSync(cwd, { recursive: true })
-        execSync(`cp -r ${path.join(__dirname)}/app "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/pages "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/public "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/datadog.js "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/middleware.js "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/naming.js "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/next.config.js "${cwd}/"`)
-        execSync(`cp -r ${path.join(__dirname)}/server.js "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/app "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/pages "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/public "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/datadog.js "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/middleware.js "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/naming.js "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/next.config.js "${cwd}/"`)
+        execSync(`cp -r ${__dirname}/server.js "${cwd}/"`)
+        execSync(`ln -s "${__dirname}/../../../versions/next@${version}/node_modules" "${cwd}/"`)
 
         writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg, null, 2))
 
