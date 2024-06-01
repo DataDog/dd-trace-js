@@ -11,6 +11,7 @@ const { writeFileSync, readdirSync } = require('fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
+const fs = require('fs')
 
 const BUILD_COMMAND = NODE_MAJOR < 18
   ? 'yarn exec next build'
@@ -22,12 +23,19 @@ describe('Plugin', function () {
   let server
   let port
 
+  if (!process.env.CI) {
+    after(() => { // TODO remove all this
+      execSync('rm -rf packages/datadog-plugin-next/test/next-apps')
+    })
+  }
+
   describe('next', () => {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', VERSIONS_TO_TEST, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+      const cwd = path.join(__dirname, `next-apps/${version}`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
         before(async () => {
@@ -38,12 +46,12 @@ describe('Plugin', function () {
 
         before(function (done) {
           this.timeout(40000)
-          const cwd = standalone
-            ? path.join(__dirname, '.next/standalone')
-            : __dirname
+          const spawningCwd = standalone
+            ? path.join(cwd, '.next/standalone')
+            : cwd
 
           server = spawn('node', ['server'], {
-            cwd,
+            cwd: spawningCwd,
             env: {
               ...process.env,
               VERSION: version,
@@ -85,8 +93,11 @@ describe('Plugin', function () {
 
       before(async function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+        if (fs.existsSync(cwd)) {
+          // pre-built, likely from cache
+          return
+        }
 
-        const cwd = __dirname
         const pkg = require(`../../../versions/next@${version}/package.json`)
         const realVersion = require(`../../../versions/next@${version}`).version()
 
@@ -98,7 +109,17 @@ describe('Plugin', function () {
         // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
-        writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
+        fs.mkdirSync(cwd, { recursive: true })
+        execSync(`cp -r ${path.join(__dirname)}/app "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/pages "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/public "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/datadog.js "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/middleware.js "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/naming.js "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/next.config.js "${cwd}/"`)
+        execSync(`cp -r ${path.join(__dirname)}/server.js "${cwd}/"`)
+
+        writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg, null, 2))
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
@@ -117,22 +138,10 @@ describe('Plugin', function () {
         if (satisfiesStandalone(realVersion)) {
           // copy public and static files to the `standalone` folder
           const publicOrigin = path.join(__dirname, 'public')
-          const publicDestination = path.join(__dirname, '.next/standalone/public')
-          execSync(`mkdir ${publicDestination}`)
-          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+          const publicDestination = path.join(cwd, '.next/standalone/public')
+          execSync(`mkdir "${publicDestination}"`)
+          execSync(`cp ${publicOrigin}/test.txt "${publicDestination}/test.txt"`)
         }
-      })
-
-      after(function () {
-        this.timeout(5000)
-        const files = [
-          'package.json',
-          'node_modules',
-          '.next',
-          'yarn.lock'
-        ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
       })
 
       withNamingSchema(
@@ -398,7 +407,7 @@ describe('Plugin', function () {
 
           it('should do automatic instrumentation for static chunks', done => {
             // get first static chunk file programatically
-            const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
+            const file = readdirSync(path.join(cwd, '.next/static/chunks'))[0]
 
             agent
               .use(traces => {

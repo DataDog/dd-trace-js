@@ -951,7 +951,19 @@ jobs:
           cache: yarn
           node-version: ${{ matrix.version }}
       - run: yarn install
+      - name: cache restore next-apps
+        id: cache-restore-next-apps
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/packages/datadog-plugin-next/test/next-apps
+          key: next-${{ matrix.version }}-${{ hashFiles('packages/datadog-plugin-next/test/*.js') }}
       - run: yarn test:plugins:ci
+      - name: cache save next-apps
+        if: steps.cache-restore-next-apps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/packages/datadog-plugin-next/test/next-apps
+          key: next-${{ matrix.version }}-${{ hashFiles('packages/datadog-plugin-next/test/*.js') }}
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
