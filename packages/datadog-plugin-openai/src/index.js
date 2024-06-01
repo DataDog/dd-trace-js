@@ -319,23 +319,20 @@ class OpenApiPlugin extends TracingPlugin {
 }
 
 function countTokens (content, model) {
-  let estimated = false
   if (encodingForModel) {
     try {
       const encoder = encodingForModel(model)
       const tokens = encoder.encode(content).length
       encoder.free()
-      return { tokens, estimated }
+      return { tokens, estimated: false }
     } catch {
-      estimated = true
+      // ignore, we will estimate
     }
-  } else {
-    estimated = true
   }
 
   return {
     tokens: estimateTokens(content),
-    estimated
+    estimated: true
   }
 }
 
