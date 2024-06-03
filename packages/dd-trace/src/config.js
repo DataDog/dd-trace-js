@@ -288,15 +288,6 @@ class Config {
     )
 
     const sampler = {
-      rules: coalesce(
-        options.samplingRules,
-        safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
-        []
-      ).map(rule => {
-        return remapify(rule, {
-          sample_rate: 'sampleRate'
-        })
-      }),
       spanSamplingRules: coalesce(
         options.spanSamplingRules,
         safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
@@ -499,6 +490,7 @@ class Config {
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -594,6 +586,7 @@ class Config {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
       DD_TRACE_SAMPLE_RATE,
+      DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
       DD_TRACE_STARTUP_LOGS,
@@ -702,6 +695,7 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
+    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES)) // example
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
@@ -801,6 +795,7 @@ class Config {
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     const ingestion = options.ingestion || {}
     this._setValue(opts, 'sampler.rateLimit', coalesce(options.rateLimit, ingestion.rateLimit))
+    this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
     this._setString(opts, 'service', options.service || tags.service)
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
@@ -948,6 +943,17 @@ class Config {
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
+    // ignore tags for now since rc sampling rule tags format is not supported
+    this._setSamplingRule(opts, 'sampler.rules', this._ignoreTags(options.trace_sample_rules))
+  }
+
+  _ignoreTags (samplingRules) {
+    if (samplingRules) {
+      for (const rule of samplingRules) {
+        delete rule.tags
+      }
+    }
+    return samplingRules
   }
 
   _setBoolean (obj, name, value) {
@@ -974,15 +980,34 @@ class Config {
   }
 
   _setArray (obj, name, value) {
-    if (value === null || value === undefined) {
+    if (value == null) {
       return this._setValue(obj, name, null)
     }
 
     if (typeof value === 'string') {
-      value = value && value.split(',')
+      value = value.split(',')
     }
 
     if (Array.isArray(value)) {
+      this._setValue(obj, name, value)
+    }
+  }
+
+  _setSamplingRule (obj, name, value) {
+    if (value == null) {
+      return this._setValue(obj, name, null)
+    }
+
+    if (typeof value === 'string') {
+      value = value.split(',')
+    }
+
+    if (Array.isArray(value)) {
+      value = value.map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate'
+        })
+      })
       this._setValue(obj, name, value)
     }
   }
