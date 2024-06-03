@@ -735,14 +735,6 @@ class Config {
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
-    const OTEL_TRACES_SAMPLER_MAPPING = {
-      always_on: '1.0',
-      always_off: '0.0',
-      traceidratio: OTEL_TRACES_SAMPLER_ARG,
-      parentbased_always_on: '1.0',
-      parentbased_always_off: '0.0',
-      parentbased_traceidratio: OTEL_TRACES_SAMPLER_ARG
-    }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
     getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
