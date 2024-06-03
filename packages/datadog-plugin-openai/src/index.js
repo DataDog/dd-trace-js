@@ -318,15 +318,61 @@ class OpenApiPlugin extends TracingPlugin {
   }
 }
 
+function countPromptTokens (methodName, payload, model) {
+  let promptTokens = 0
+  let promptEstimated = false
+  if (methodName === 'chat.completions.create') {
+    const messages = payload.messages
+    for (const message of messages) {
+      const content = message.content
+      const { tokens, estimated } = countTokens(content, model)
+      promptTokens += tokens
+      promptEstimated = estimated
+    }
+  } else if (methodName === 'completions.create') {
+    let prompt = payload.prompt
+    if (!Array.isArray(prompt)) prompt = [prompt]
+
+    for (const p of prompt) {
+      const { tokens, estimated } = countTokens(p, model)
+      promptTokens += tokens
+      promptEstimated = estimated
+    }
+  }
+
+  return { promptTokens, promptEstimated }
+}
+
+function countCompletionTokens (body, model) {
+  let completionTokens = 0
+  let completionEstimated = false
+  if (body?.choices) {
+    for (const choice of body.choices) {
+      const message = choice.message || choice.delta // delta for streamed responses
+      const text = choice.text
+      const content = text || message?.content
+
+      const { tokens, estimated } = countTokens(content, model)
+      completionTokens += tokens
+      completionEstimated = estimated
+    }
+  }
+
+  return { completionTokens, completionEstimated }
+}
+
 function countTokens (content, model) {
   if (encodingForModel) {
     try {
+      // try using tiktoken if it was available
       const encoder = encodingForModel(model)
       const tokens = encoder.encode(content).length
       encoder.free()
       return { tokens, estimated: false }
     } catch {
-      // ignore, we will estimate
+      // possible errors from tiktoken:
+      // * model not available for token counts
+      // * issue encoding content
     }
   }
 
@@ -336,6 +382,11 @@ function countTokens (content, model) {
   }
 }
 
+// If model is unavailable or tiktoken is not imported, then provide a very rough estimate of the number of tokens
+// Approximate using the following assumptions:
+//    * English text
+//    * 1 token ~= 4 chars
+//    * 1 token ~= ¾ words
 function estimateTokens (content) {
   let estimatedTokens = 0
   if (typeof content === 'string') {
@@ -701,37 +752,14 @@ function usageExtraction (tags, body, methodName) {
 
     // prompt tokens
     const payload = storage.getStore().openai
-    if (methodName === 'chat.completions.create') {
-      const messages = payload.messages
-      for (const message of messages) {
-        const content = message.content
-        const { tokens, estimated } = countTokens(content, model)
-        promptTokens += tokens
-        promptEstimated = estimated
-      }
-    } else if (methodName === 'completions.create') {
-      let prompt = payload.prompt
-      if (!Array.isArray(prompt)) prompt = [prompt]
-
-      for (const p of prompt) {
-        const { tokens, estimated } = countTokens(p, model)
-        promptTokens += tokens
-        promptEstimated = estimated
-      }
-    }
+    const promptTokensCount = countPromptTokens(methodName, payload, model)
+    promptTokens = promptTokensCount.promptTokens
+    promptEstimated = promptTokensCount.promptEstimated
 
     // completion tokens
-    if (body?.choices) {
-      for (const choice of body.choices) {
-        const message = choice.message || choice.delta // delta for streamed responses
-        const text = choice.text
-        const content = text || message?.content
-
-        const { tokens, estimated } = countTokens(content, model)
-        completionTokens += tokens
-        completionEstimated = estimated
-      }
-    }
+    const completionTokensCount = countCompletionTokens(body, model)
+    completionTokens = completionTokensCount.completionTokens
+    completionEstimated = completionTokensCount.completionEstimated
 
     // total tokens
     totalTokens = promptTokens + completionTokens
