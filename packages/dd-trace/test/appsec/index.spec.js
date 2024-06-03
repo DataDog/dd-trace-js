@@ -609,7 +609,7 @@ describe('AppSec Index', () => {
         expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
-            [addresses.HTTP_OUTGOING_BODY]: body
+            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
           }
         }, req)
       })

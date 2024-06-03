@@ -21,7 +21,7 @@ function analyzeSsrf (ctx) {
   if (!req || !url) return
 
   const persistent = {
-    [addresses.URL_ACCESS]: url
+    [addresses.HTTP_OUTGOING_URL]: url
   }
   // TODO: Currently this is only monitoring, we should
   //     block the request if SSRF attempt and

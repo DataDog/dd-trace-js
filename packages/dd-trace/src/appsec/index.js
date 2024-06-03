@@ -208,7 +208,7 @@ function onResponseBody ({ req, body }) {
   // we don't support blocking at this point, so no results needed
   waf.run({
     persistent: {
-      [addresses.HTTP_OUTGOING_BODY]: body
+      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
     }
   }, req)
 }
