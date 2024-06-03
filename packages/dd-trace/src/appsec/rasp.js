@@ -16,18 +16,17 @@ function disable () {
 function analyzeSsrf (ctx) {
   const store = storage.getStore()
   const req = store?.req
-  if (req) {
-    const url = ctx.args.uri
-    if (url) {
-      const persistent = {
-        [addresses.URL_ACCESS]: url
-      }
-      // TODO: Currently this is only monitoring, we should
-      //     block the request if SSRF attempt and
-      //     generate stack traces
-      waf.run({ persistent }, req)
-    }
+  const url = ctx.args.uri
+
+  if (!req || !url) return
+
+  const persistent = {
+    [addresses.URL_ACCESS]: url
   }
+  // TODO: Currently this is only monitoring, we should
+  //     block the request if SSRF attempt and
+  //     generate stack traces
+  waf.run({ persistent }, req)
 }
 
 module.exports = {
