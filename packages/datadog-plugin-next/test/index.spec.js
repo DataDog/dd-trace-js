@@ -23,8 +23,8 @@ describe('Plugin', function () {
   let server
   let port
 
-  if (!process.env.CI) {
-    after(() => { // TODO remove all this
+  if (!process.env.CI) { // in CI we keep it around for caching
+    after(() => {
       execSync('rm -rf packages/datadog-plugin-next/test/next-apps')
     })
   }
@@ -93,13 +93,14 @@ describe('Plugin', function () {
 
       before(async function () {
         this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
-        if (fs.existsSync(cwd)) {
+        const pkg = require(`../../../versions/next@${version}/package.json`)
+        const realVersion = require(`../../../versions/next@${version}`).version()
+
+        const installedPackageJson = path.join(cwd, 'node_modules/next/package.json')
+        if (fs.existsSync(installedPackageJson) && require(installedPackageJson).version === realVersion) {
           // pre-built, likely from cache
           return
         }
-
-        const pkg = require(`../../../versions/next@${version}/package.json`)
-        const realVersion = require(`../../../versions/next@${version}`).version()
 
         delete pkg.workspaces
 
@@ -109,6 +110,7 @@ describe('Plugin', function () {
         // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
+        execSync(`rm -rf "${cwd}"`) // in case cached one is incorrect
         fs.mkdirSync(cwd, { recursive: true })
         execSync(`cp -r ${__dirname}/app "${cwd}/"`)
         execSync(`cp -r ${__dirname}/pages "${cwd}/"`)
