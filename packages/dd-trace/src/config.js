@@ -170,6 +170,7 @@ class Config {
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
+      process.env.OTEL_LOG_LEVEL && process.env.OTEL_LOG_LEVEL === 'debug',
       false
     ))
     this.logger = options.logger
