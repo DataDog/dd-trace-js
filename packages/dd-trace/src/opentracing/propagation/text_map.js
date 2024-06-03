@@ -247,7 +247,6 @@ class TextMapPropagator {
     }
     // the span_id in tracecontext takes precedence over the first extracted propagation style
     firstSpanContext._spanId = w3cSpanContext._spanId
-    // the first extracted context will be used to propagate the distributed trace
     return firstSpanContext
   }
 
