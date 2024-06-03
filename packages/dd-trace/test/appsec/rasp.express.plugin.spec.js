@@ -1,6 +1,6 @@
 'use strict'
 
-const axios = require('axios')
+const Axios = require('axios')
 const agent = require('../plugins/agent')
 const getPort = require('get-port')
 const appsec = require('../../src/appsec')
@@ -10,7 +10,7 @@ const { assert } = require('chai')
 
 withVersions('express', 'express', expressVersion => {
   describe('RASP', () => {
-    let app, server, port
+    let app, server, port, axios
 
     before(() => {
       return agent.load(['http'], { client: false })
@@ -24,15 +24,6 @@ withVersions('express', 'express', expressVersion => {
         app(req, res)
       })
 
-      getPort().then(newPort => {
-        port = newPort
-        server = expressApp.listen(port, () => {
-          done()
-        })
-      })
-    })
-
-    beforeEach(() => {
       appsec.enable(new Config({
         appsec: {
           enabled: true,
@@ -40,14 +31,20 @@ withVersions('express', 'express', expressVersion => {
           rasp: { enabled: true }
         }
       }))
-    })
 
-    afterEach(() => {
-      appsec.disable()
-      app = null
+      getPort().then(newPort => {
+        port = newPort
+        axios = Axios.create({
+          baseURL: `http://localhost:${port}`
+        })
+        server = expressApp.listen(port, () => {
+          done()
+        })
+      })
     })
 
     after(() => {
+      appsec.disable()
       server.close()
       return agent.close({ ritmReset: false })
     })
@@ -72,7 +69,7 @@ withVersions('express', 'express', expressVersion => {
               res.end('end')
             }
 
-            axios.get(`http://localhost:${port}/?host=www.datadoghq.com`)
+            axios.get('/?host=www.datadoghq.com')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)
@@ -86,7 +83,7 @@ withVersions('express', 'express', expressVersion => {
               res.end('end')
             }
 
-            axios.get(`http://localhost:${port}/?host=ifconfig.pro`)
+            axios.get('/?host=ifconfig.pro')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)
@@ -104,7 +101,7 @@ withVersions('express', 'express', expressVersion => {
               res.end('end')
             }
 
-            axios.get(`http://localhost:${port}/?host=ifconfig.pro`)
+            axios.get('/?host=ifconfig.pro')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)

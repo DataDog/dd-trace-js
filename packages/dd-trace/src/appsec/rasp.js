@@ -10,7 +10,7 @@ function enable () {
 }
 
 function disable () {
-  httpClientRequestStart.unsubscribe(analyzeSsrf)
+  if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
 }
 
 function analyzeSsrf (ctx) {

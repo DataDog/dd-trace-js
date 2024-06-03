@@ -41,8 +41,7 @@ describe('RASP', () => {
       httpClientRequestStart.publish(ctx)
 
       const persistent = { [addresses.HTTP_OUTGOING_URL]: 'http://example.com' }
-      sinon.assert.calledOnce(waf.run)
-      sinon.assert.calledWith(waf.run, { persistent }, req)
+      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req)
     })
 
     it('should not analyze ssrf if rasp is disabled', () => {
@@ -78,6 +77,17 @@ describe('RASP', () => {
         args: {
           uri: 'http://example.com'
         }
+      }
+      datadogCore.storage.getStore.returns({})
+
+      httpClientRequestStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze ssrf if no url', () => {
+      const ctx = {
+        args: {}
       }
       datadogCore.storage.getStore.returns({})
 
