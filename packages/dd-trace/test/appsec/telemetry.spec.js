@@ -187,6 +187,7 @@ describe('Appsec Telemetry metrics', () => {
         expect(inc).to.have.been.calledTwice
       })
 
+
       it('should increment appsec.rasp.timeout metric if timeout', () => {
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
@@ -238,6 +239,7 @@ describe('Appsec Telemetry metrics', () => {
         expect(raspDurationExt).to.be.eq(77)
         expect(raspEvalCount).to.be.eq(2)
       })
+
     })
 
     describe('incWafInitMetric', () => {

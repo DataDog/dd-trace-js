@@ -94,6 +94,32 @@ describe('WAF Manager', () => {
     })
   })
 
+  describe('run', () => {
+    it('should call wafManager.run with params', () => {
+      const run = sinon.stub()
+      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
+      waf.init(rules, config.appsec)
+
+      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const req = {}
+      waf.run(payload, req, 'ssrf')
+
+      expect(run).to.be.calledOnceWithExactly(payload, 'ssrf')
+    })
+
+    it('should call wafManager.run without raspRuleType', () => {
+      const run = sinon.stub()
+      WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
+      waf.init(rules, config.appsec)
+
+      const payload = { persistent: { 'server.io.net.url': 'http://example.com' } }
+      const req = {}
+      waf.run(payload, req)
+
+      expect(run).to.be.calledOnceWithExactly(payload, undefined)
+    })
+  })
+
   describe('wafManager.createDDWAFContext', () => {
     beforeEach(() => {
       DDWAF.prototype.constructor.version.returns('4.5.6')
@@ -271,7 +297,7 @@ describe('WAF Manager', () => {
         expect(reportMetricsArg.ruleTriggered).to.be.true
       })
 
-      it('should report raspRuleType when it is a rasp address', () => {
+      it('should report raspRuleType', () => {
         const result = {
           totalRuntime: 1,
           durationExt: 1
@@ -280,17 +306,17 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
         const params = {
           persistent: {
-            'server.io.net.url': 'url'
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 
-        wafContextWrapper.run(params)
+        wafContextWrapper.run(params, 'rule_type')
 
         expect(Reporter.reportMetrics).to.be.calledOnce
-        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('ssrf')
+        expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('rule_type')
       })
 
-      it('should not report report raspRuleType when it is a rasp address', () => {
+      it('should not report raspRuleType when it is not provided', () => {
         const result = {
           totalRuntime: 1,
           durationExt: 1
@@ -299,7 +325,7 @@ describe('WAF Manager', () => {
         ddwafContext.run.returns(result)
         const params = {
           persistent: {
-            'server.request.headers.no_cookies': 'server.request.uri.raw'
+            'server.request.headers.no_cookies': { header: 'value' }
           }
         }
 

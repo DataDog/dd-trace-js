@@ -10,14 +10,6 @@ const preventDuplicateAddresses = new Set([
   addresses.HTTP_INCOMING_QUERY
 ])
 
-const RULE_TYPES = {
-  SSRF: 'ssrf'
-}
-
-const raspRuleTypeByAddresses = {
-  [addresses.HTTP_OUTGOING_URL]: RULE_TYPES.SSRF
-}
-
 class WAFContextWrapper {
   constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion) {
     this.ddwafContext = ddwafContext
@@ -27,12 +19,11 @@ class WAFContextWrapper {
     this.addressesToSkip = new Set()
   }
 
-  run ({ persistent, ephemeral }) {
+  run ({ persistent, ephemeral }, raspRuleType) {
     const payload = {}
     let payloadHasData = false
     const inputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
-    let raspRuleType
 
     if (persistent && typeof persistent === 'object') {
       // TODO: possible optimization: only send params that haven't already been sent with same value to this wafContext
@@ -44,10 +35,6 @@ class WAFContextWrapper {
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
           }
-        }
-
-        if (raspRuleTypeByAddresses[key]) {
-          raspRuleType = raspRuleTypeByAddresses[key]
         }
       }
     }
