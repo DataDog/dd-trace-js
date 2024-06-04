@@ -946,10 +946,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
-      - uses: actions/setup-node@v3
-        with:
-          cache: yarn
-          node-version: ${{ matrix.version }}
+      - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn test:plugins:ci
       - if: always()
