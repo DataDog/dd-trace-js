@@ -199,6 +199,13 @@ describe('AppSec Index', () => {
 
       expect(rasp.enable).to.be.calledOnceWithExactly()
     })
+
+    it('should not call rasp enable when rasp is disabled', () => {
+      config.appsec.rasp.enabled = false
+      AppSec.enable(config)
+
+      expect(rasp.enable).to.not.be.called
+    })
   })
 
   describe('disable', () => {
