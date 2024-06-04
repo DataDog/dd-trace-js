@@ -143,7 +143,8 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
   return exports
 })
 
-function addStreamedChunkChoices (content, chunk) {
+function addStreamedChunk (content, chunk) {
+  content.usage = chunk.usage // add usage if it was specified to be returned
   for (const choice of chunk.choices) {
     const choiceIdx = choice.index
     const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
@@ -247,7 +248,7 @@ function wrapStreamIterator (response, options, n) {
                   body = { ...chunks[0], choices: Array.from({ length: n }) }
                   // start from the first chunk, and add its choices into the body
                   for (let i = 0; i < chunks.length; i++) {
-                    addStreamedChunkChoices(body, chunks[i])
+                    addStreamedChunk(body, chunks[i])
                   }
                 }
               }
