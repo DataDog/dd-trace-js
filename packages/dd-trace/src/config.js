@@ -664,9 +664,9 @@ class Config {
     this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
-    if (DD_INJECTION_ENABLED) {
+    if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED) {
       this._setBoolean(env, 'profiling.ssi', true)
-      if (DD_INJECTION_ENABLED.split(',').includes('profiler')) {
+      if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED.split(',').includes('profiler')) {
         this._setBoolean(env, 'profiling.heuristicsEnabled', true)
       }
       if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
