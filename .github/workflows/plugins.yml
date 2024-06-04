@@ -946,7 +946,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
       - run: yarn install
       - run: yarn test:plugins:ci
       - if: always()
