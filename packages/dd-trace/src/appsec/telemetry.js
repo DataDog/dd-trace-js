@@ -79,30 +79,37 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
+function updateRaspRequestsMetricTags (store, metrics, req, raspRuleType) {
+  // it does not depend on whether telemetry is enabled or not
+  addRaspRequestMetrics(store, metrics)
+
+  if (!enabled) return
+
+  const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+  appsecMetrics.count('appsec.rasp.rule.eval', tags).inc(1)
+
+  if (metrics.wafTimeout) {
+    appsecMetrics.count('appsec.rasp.timeout', tags).inc(1)
+  }
+
+  if (metrics.ruleTriggered) {
+    appsecMetrics.count('appsec.rasp.rule.match', tags).inc(1)
+  }
+}
+
 function updateWafRequestsMetricTags (metrics, req, raspRuleType) {
   if (!req) return
 
   const store = getStore(req)
 
+  if (raspRuleType) {
+    return updateRaspRequestsMetricTags(store, metrics, req, raspRuleType)
+  }
+
   // it does not depend on whether telemetry is enabled or not
-  addRequestMetrics(store, metrics, raspRuleType)
+  addRequestMetrics(store, metrics)
 
   if (!enabled) return
-
-  if (raspRuleType) {
-    const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
-    appsecMetrics.count('appsec.rasp.rule.eval', tags).inc(1)
-
-    if (metrics.wafTimeout) {
-      appsecMetrics.count('appsec.rasp.timeout', tags).inc(1)
-    }
-
-    if (metrics.ruleTriggered) {
-      appsecMetrics.count('appsec.rasp.rule.match', tags).inc(1)
-    }
-
-    return tags
-  }
 
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
 
@@ -118,7 +125,7 @@ function updateWafRequestsMetricTags (metrics, req, raspRuleType) {
   if (ruleTriggered) {
     metricTags[tags.RULE_TRIGGERED] = ruleTriggered
   }
-  if (!raspRuleType && wafTimeout) {
+  if (wafTimeout) {
     metricTags[tags.WAF_TIMEOUT] = wafTimeout
   }
 
@@ -154,15 +161,15 @@ function incrementWafRequestsMetric (req) {
   metricsStoreMap.delete(req)
 }
 
-function addRequestMetrics (store, { duration, durationExt }, raspRuleType) {
-  if (raspRuleType) {
-    store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
-    store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
-    store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
-  } else {
-    store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
-    store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
-  }
+function addRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].duration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
+}
+
+function addRaspRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
 }
 
 function getRequestMetrics (req) {
