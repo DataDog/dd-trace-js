@@ -637,7 +637,7 @@ class Config {
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
-    this._envUnprocessed['flushMinSpans'] = DD_APPSEC_WAF_TIMEOUT
+    this._envUnprocessed['flushMinSpans'] = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
@@ -1097,6 +1097,7 @@ function maybeInt (number) {
   const parsed = parseInt(number)
   return isNaN(parsed) ? undefined : parsed
 }
+
 function maybeFloat (number) {
   const parsed = parseFloat(number)
   return isNaN(parsed) ? undefined : parsed
