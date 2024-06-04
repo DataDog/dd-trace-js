@@ -159,6 +159,82 @@ describe('Appsec Telemetry metrics', () => {
         expect(duration).to.be.eq(66)
         expect(durationExt).to.be.eq(77)
       })
+
+      it('should not increment rasp metrics if no rule type is provided', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+          wafTimeout: true
+        }, req)
+
+        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.eval')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.timeout')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.match')
+      })
+
+      it('should increment appsec.rasp.rule.eval metric if rule type is provided', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req, 'rule-type')
+
+        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.timeout')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.match')
+        expect(inc).to.have.been.calledOnceWith(1)
+      })
+
+      it('should increment appsec.rasp.timeout metric if timeout and rule type is provided', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+          wafTimeout: true
+        }, req, 'rule-type')
+
+        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
+        expect(count).to.have.been.calledWith('appsec.rasp.timeout')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.rule.match')
+        expect(inc).to.have.been.calledTwice
+      })
+
+      it('should increment appsec.rasp.timeout metric if timeout and rule type is provided', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52,
+          ruleTriggered: true
+        }, req, 'rule-type')
+
+        expect(count).to.have.been.calledWith('appsec.rasp.rule.match')
+        expect(count).to.have.been.calledWith('appsec.rasp.rule.eval')
+        expect(count).to.not.have.been.calledWith('appsec.rasp.timeout')
+        expect(inc).to.have.been.calledTwice
+      })
+
+      it('should sum rasp.duration and eval metrics instead of waf.duration if rule-type is set', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req, 'rule-type')
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req, 'rule-type')
+
+        const {
+          duration,
+          durationExt,
+          raspDuration,
+          raspDurationExt,
+          raspEvalCount
+        } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(0)
+        expect(durationExt).to.be.eq(0)
+        expect(raspDuration).to.be.eq(66)
+        expect(raspDurationExt).to.be.eq(77)
+        expect(raspEvalCount).to.be.eq(2)
+      })
     })
 
     describe('incWafInitMetric', () => {
@@ -238,6 +314,34 @@ describe('Appsec Telemetry metrics', () => {
         })
       })
 
+      it('rasp calls should not modifiy waf.requests metric tags', () => {
+        appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: false,
+          ruleTriggered: false,
+          wafTimeout: false,
+          wafVersion,
+          rulesVersion
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          blockTriggered: true,
+          ruleTriggered: true,
+          wafTimeout: true,
+          wafVersion,
+          rulesVersion
+        }, req, 'rule_type')
+
+        appsecTelemetry.incrementWafRequestsMetric(req)
+
+        expect(count).to.have.been.calledWithExactly('waf.requests', {
+          request_blocked: false,
+          rule_triggered: false,
+          waf_timeout: false,
+          waf_version: wafVersion,
+          event_rules_version: rulesVersion
+        })
+      })
+
       it('should not fail if req has no previous tag', () => {
         appsecTelemetry.incrementWafRequestsMetric(req)
 
@@ -294,6 +398,28 @@ describe('Appsec Telemetry metrics', () => {
         expect(durationExt).to.be.eq(77)
       })
 
+      it('should sum rasp.duration and rasp.durationExt request metrics', () => {
+        appsecTelemetry.enable({
+          enabled: false,
+          metrics: true
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req, 'rasp_rule')
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req, 'rasp_rule')
+
+        const { raspDuration, raspDurationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(raspDuration).to.be.eq(66)
+        expect(raspDurationExt).to.be.eq(77)
+      })
+
       it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
         appsecTelemetry.enable({
           enabled: true,
@@ -314,6 +440,43 @@ describe('Appsec Telemetry metrics', () => {
 
         expect(duration).to.be.eq(66)
         expect(durationExt).to.be.eq(77)
+      })
+
+      it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
+        appsecTelemetry.enable({
+          enabled: true,
+          metrics: false
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req, 'rule_type')
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req, 'rule_type')
+
+        const { raspDuration, raspDurationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(raspDuration).to.be.eq(66)
+        expect(raspDurationExt).to.be.eq(77)
+      })
+
+      it('should not increment any metric if telemetry metrics are disabled', () => {
+        appsecTelemetry.enable({
+          enabled: true,
+          metrics: false
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req, 'rule_type')
+
+        expect(count).to.not.have.been.called
+        expect(inc).to.not.have.been.called
       })
     })
   })

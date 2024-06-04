@@ -92,7 +92,7 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
-function reportMetrics (metrics) {
+function reportMetrics (metrics, raspRuleType) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
@@ -101,7 +101,7 @@ function reportMetrics (metrics) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
 
-  updateWafRequestsMetricTags(metrics, store.req)
+  updateWafRequestsMetricTags(metrics, store.req, raspRuleType)
 }
 
 function reportAttack (attackData) {
@@ -178,6 +178,18 @@ function finishRequest (req, res) {
 
   if (metrics?.durationExt) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
+  if (metrics?.raspDuration) {
+    rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
+  }
+
+  if (metrics?.raspDurationExt) {
+    rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
+
+  if (metrics?.raspEvalCount) {
+    rootSpan.setTag('_dd.appsec.rasp.rule.eval', metrics.raspEvalCount)
   }
 
   incrementWafRequestsMetric(req)
