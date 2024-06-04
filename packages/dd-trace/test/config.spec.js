@@ -175,7 +175,6 @@ describe('Config', () => {
   it('should initialize with the correct defaults', () => {
     const config = new Config()
 
-    expect(config).to.have.property('apmTracingEnabled', true)
     expect(config).to.have.property('service', 'node')
     expect(config).to.have.property('tracing', true)
     expect(config).to.have.property('debug', false)
@@ -236,7 +235,6 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
-      { name: 'apmTracingEnabled', value: true, origin: 'calculated' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
       { name: 'appsec.enabled', value: undefined, origin: 'default' },
@@ -449,7 +447,6 @@ describe('Config', () => {
 
     const config = new Config()
 
-    expect(config).to.have.property('apmTracingEnabled', false)
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.property('debug', true)
     expect(config).to.have.property('protocolVersion', '0.5')
@@ -537,7 +534,6 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
-      { name: 'apmTracingEnabled', value: false, origin: 'calculated' },
       { name: 'appsec.blockedTemplateHtml', value: BLOCKED_TEMPLATE_HTML, origin: 'env_var' },
       { name: 'appsec.blockedTemplateJson', value: BLOCKED_TEMPLATE_JSON, origin: 'env_var' },
       { name: 'appsec.enabled', value: true, origin: 'env_var' },
@@ -736,7 +732,6 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true
     })
 
-    expect(config).to.have.property('apmTracingEnabled', false)
     expect(config).to.have.property('protocolVersion', '0.5')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('hostname', 'agent')
@@ -809,7 +804,6 @@ describe('Config', () => {
     expect(updateConfig).to.be.calledOnce
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
-      { name: 'apmTracingEnabled', value: false, origin: 'calculated' },
       { name: 'appsec.enabled', value: false, origin: 'code' },
       { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },

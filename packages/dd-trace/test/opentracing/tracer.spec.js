@@ -71,8 +71,7 @@ describe('Tracer', () => {
       logger: 'logger',
       tags: {},
       debug: true,
-      experimental: {},
-      apmTracingEnabled: true
+      experimental: {}
     }
 
     log = {
@@ -263,7 +262,12 @@ describe('Tracer', () => {
     })
 
     it('should start a span with APM tracing disabled', () => {
-      config.apmTracingEnabled = false
+      config.appsec = {
+        standalone: {
+          enabled: true
+        }
+      }
+
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 

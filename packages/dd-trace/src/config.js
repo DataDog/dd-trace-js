@@ -439,7 +439,6 @@ class Config {
 
     const defaults = this._defaults = {}
 
-    this._setValue(defaults, 'apmTracingEnabled', true)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
@@ -864,14 +863,6 @@ class Config {
     return spanComputePeerService
   }
 
-  _isAppsecStandaloneEnabled () {
-    return isTrue(coalesce(
-      this.options.experimental?.appsec?.standalone?.enabled,
-      process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
-      false
-    ))
-  }
-
   _isCiVisibilityGitUploadEnabled () {
     return coalesce(
       process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED,
@@ -927,7 +918,6 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
-    this._setBoolean(calc, 'apmTracingEnabled', !this._isAppsecStandaloneEnabled())
   }
 
   _applyRemote (options) {
