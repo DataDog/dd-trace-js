@@ -5,6 +5,7 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
+const tags = require('../../../../../ext/tags')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
@@ -39,8 +40,7 @@ const tracestateTagKeyFilter = /[^\x21-\x2b\x2d-\x3c\x3e-\x7e]/g
 // Tag values in tracestate replace ',', '~' and ';' with '_'
 const tracestateTagValueFilter = /[^\x20-\x2b\x2d-\x3a\x3c-\x7d]/g
 const invalidSegment = /^0+$/
-const ddParentIdTagKey = '_dd.parent_id'
-const zeroHex = '0000000000000000'
+const zeroTraceId = '0000000000000000'
 
 class TextMapPropagator {
   constructor (config) {
@@ -177,9 +177,9 @@ class TextMapPropagator {
         // SpanContext was created by a ddtrace span.
         // Last datadog span id should be set to the current span.
         state.set('p', spanContext._spanId)
-      } else if (spanContext._trace.tags[ddParentIdTagKey]) {
+      } else if (spanContext._trace.tags[tags.DD_PARENT_ID]) {
         // Propagate the last Datadog span id set on the remote span.
-        state.set('p', spanContext._trace.tags[ddParentIdTagKey])
+        state.set('p', spanContext._trace.tags[tags.DD_PARENT_ID])
       }
       state.set('s', priority)
       if (mechanism) {
@@ -223,14 +223,14 @@ class TextMapPropagator {
   }
 
   _hasParentIdInTags (spanContext) {
-    return ddParentIdTagKey in spanContext._trace.tags &&
-      spanContext._trace.tags[ddParentIdTagKey] !== zeroHex
+    return tags.DD_PARENT_ID in spanContext._trace.tags &&
+      spanContext._trace.tags[tags.DD_PARENT_ID] !== zeroTraceId
   }
 
   _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
     const ddCtx = this._extractDatadogContext(carrier)
     if (ddCtx !== null) {
-      firstSpanContext._trace.tags[ddParentIdTagKey] = ddCtx._spanId.toString().padStart(16, '0')
+      firstSpanContext._trace.tags[tags.DD_PARENT_ID] = ddCtx._spanId.toString().padStart(16, '0')
     }
   }
 
@@ -240,7 +240,7 @@ class TextMapPropagator {
     }
     if (this._hasParentIdInTags(w3cSpanContext)) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
-      firstSpanContext._trace.tags[ddParentIdTagKey] = w3cSpanContext._trace.tags[ddParentIdTagKey]
+      firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]
     } else {
       // if p value is not present in tracestate, use the parent id from the datadog headers
       this._updateParentIdFromDdHeaders(carrier, firstSpanContext)
@@ -399,7 +399,7 @@ class TextMapPropagator {
         for (const [key, value] of state.entries()) {
           switch (key) {
             case 'p': {
-              spanContext._trace.tags[ddParentIdTagKey] = value
+              spanContext._trace.tags[tags.DD_PARENT_ID] = value
               break
             }
             case 's': {
@@ -432,8 +432,8 @@ class TextMapPropagator {
         }
       })
 
-      if (!spanContext._trace.tags[ddParentIdTagKey]) {
-        spanContext._trace.tags[ddParentIdTagKey] = zeroHex
+      if (!spanContext._trace.tags[tags.DD_PARENT_ID]) {
+        spanContext._trace.tags[tags.DD_PARENT_ID] = zeroTraceId
       }
 
       this._extractBaggageItems(carrier, spanContext)
@@ -576,7 +576,7 @@ class TextMapPropagator {
 
     const tid = traceId.substring(0, 16)
 
-    if (tid === zeroHex) return
+    if (tid === zeroTraceId) return
 
     spanContext._trace.tags['_dd.p.tid'] = tid
   }
