@@ -7,6 +7,7 @@ const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   getRequestMetrics
@@ -100,8 +101,11 @@ function reportMetrics (metrics, raspRuleType) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-
-  updateWafRequestsMetricTags(metrics, store.req, raspRuleType)
+  if (raspRuleType) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+  } else {
+    updateWafRequestsMetricTags(metrics, store.req, raspRuleType)
+  }
 }
 
 function reportAttack (attackData) {

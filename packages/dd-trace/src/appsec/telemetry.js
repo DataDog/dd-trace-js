@@ -79,7 +79,11 @@ function getOrCreateMetricTags (store, versionsTags) {
   return metricTags
 }
 
-function updateRaspRequestsMetricTags (store, metrics, req, raspRuleType) {
+function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
+  if (!req) return
+
+  const store = getStore(req)
+
   // it does not depend on whether telemetry is enabled or not
   addRaspRequestMetrics(store, metrics)
 
@@ -97,14 +101,10 @@ function updateRaspRequestsMetricTags (store, metrics, req, raspRuleType) {
   }
 }
 
-function updateWafRequestsMetricTags (metrics, req, raspRuleType) {
+function updateWafRequestsMetricTags (metrics, req) {
   if (!req) return
 
   const store = getStore(req)
-
-  if (raspRuleType) {
-    return updateRaspRequestsMetricTags(store, metrics, req, raspRuleType)
-  }
 
   // it does not depend on whether telemetry is enabled or not
   addRequestMetrics(store, metrics)
@@ -184,6 +184,7 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,

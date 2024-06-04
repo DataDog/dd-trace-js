@@ -316,7 +316,7 @@ describe('WAF Manager', () => {
         expect(Reporter.reportMetrics.firstCall.args[1]).to.be.equal('rule_type')
       })
 
-      it('should not report raspRuleType when it is not defined', () => {
+      it('should not report raspRuleType when it is not provided', () => {
         const result = {
           totalRuntime: 1,
           durationExt: 1
