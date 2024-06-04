@@ -7,6 +7,7 @@ const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
 const log = require('../../../dd-trace/src/log')
+const { storage } = require('../../../datadog-core')
 
 const startChannel = channel('apm:http:client:request:start')
 const finishChannel = channel('apm:http:client:request:finish')
@@ -23,6 +24,30 @@ function hookFn (http) {
   patch(http, 'get')
 
   return http
+}
+
+let ClientRequest
+function noop () {}
+
+function createAbortedClientRequest (http, args) {
+  if (!ClientRequest) {
+    const store = storage.getStore()
+    storage.enterWith({ noop: true })
+
+    const clientRequest = http.get('<invalid-url>')
+    clientRequest.on('error', noop)
+    ClientRequest = Object.getPrototypeOf(clientRequest).constructor
+
+    storage.enterWith(store)
+  }
+
+  return new ClientRequest({
+    _defaultAgent: http.globalAgent, // needed to support http and https
+    ...args.options,
+    agent: {
+      addRequest: noop
+    }
+  })
 }
 
 function patch (http, methodName) {
@@ -43,7 +68,11 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const ctx = { args, http }
+      const abortData = {
+        abortController: new AbortController()
+      }
+
+      const ctx = { args, http, abortData }
 
       return startChannel.runStores(ctx, () => {
         let finished = false
@@ -67,7 +96,17 @@ function patch (http, methodName) {
         }
 
         try {
-          const req = request.call(this, options, callback)
+          let req
+          if (abortData.abortController?.signal.aborted) {
+            req = createAbortedClientRequest(http, args)
+
+            process.nextTick(() => {
+              req.emit('error', abortData.error || new Error('Aborted'))
+            })
+          } else {
+            req = request.call(this, options, callback)
+          }
+
           const emit = req.emit
           const setTimeout = req.setTimeout
 
