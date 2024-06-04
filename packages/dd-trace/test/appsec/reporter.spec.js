@@ -147,7 +147,8 @@ describe('reporter', () => {
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req, undefined)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set ext duration metrics if set', () => {
@@ -155,7 +156,8 @@ describe('reporter', () => {
       Reporter.reportMetrics(metrics)
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req, undefined)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set rulesVersion if set', () => {
@@ -163,6 +165,7 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should call updateWafRequestsMetricTags', () => {
@@ -171,7 +174,8 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, undefined)
+      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should call updateRaspRequestsMetricTags when ruleType if provided', () => {
@@ -181,6 +185,7 @@ describe('reporter', () => {
       Reporter.reportMetrics(metrics, 'rule_type')
 
       expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, 'rule_type')
+      expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
     })
   })
 

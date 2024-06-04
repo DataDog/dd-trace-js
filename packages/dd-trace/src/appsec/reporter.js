@@ -104,7 +104,7 @@ function reportMetrics (metrics, raspRuleType) {
   if (raspRuleType) {
     updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
   } else {
-    updateWafRequestsMetricTags(metrics, store.req, raspRuleType)
+    updateWafRequestsMetricTags(metrics, store.req)
   }
 }
 
