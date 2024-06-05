@@ -93,6 +93,10 @@ function wrapSetHeader (res) {
 
 function wrapWriteHead (writeHead) {
   return function wrappedWriteHead (statusCode, reason, obj) {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return writeHead.apply(this, arguments)
+    }
+
     const abortController = new AbortController()
 
     if (typeof reason !== 'string') {
@@ -131,6 +135,10 @@ function wrapWriteHead (writeHead) {
 
 function wrapWrite (write) {
   return function wrappedWrite () {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return write.apply(this, arguments)
+    }
+
     const abortController = new AbortController()
 
     const responseHeaders = this.getHeaders()
@@ -153,6 +161,10 @@ function wrapWrite (write) {
 
 function wrapEnd (end) {
   return function wrappedEnd () {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return end.apply(this, arguments)
+    }
+
     const abortController = new AbortController()
 
     const responseHeaders = this.getHeaders()
