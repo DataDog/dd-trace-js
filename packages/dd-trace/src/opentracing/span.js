@@ -87,6 +87,8 @@ class DatadogSpan {
     this._links = []
     fields.links && fields.links.forEach(link => this.addLink(link.context, link.attributes))
 
+    this._events = []
+
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.increment('runtime.node.spans.unfinished')
       runtimeMetrics.increment('runtime.node.spans.unfinished.by.name', `span_name:${operationName}`)
@@ -161,6 +163,24 @@ class DatadogSpan {
       context: context._ddContext ? context._ddContext : context,
       attributes: this._sanitizeAttributes(attributes)
     })
+  }
+
+  addEvent (name, attributesOrStartTime, startTime) {
+    const event = { name }
+    if (attributesOrStartTime) {
+      if (typeof attributesOrStartTime === 'object') {
+        event.attributes = this._sanitizeAttributes(attributesOrStartTime)
+      } else {
+        startTime = attributesOrStartTime
+      }
+    }
+    event.startTime = startTime
+    this._events.push({
+      name,
+      attributes: this._sanitizeAttributes(typeof attributesOrStartTime === 'object' ? attributesOrStartTime : {}),
+      startTime: startTime || dateNow()
+    })
+    return this
   }
 
   finish (finishTime) {

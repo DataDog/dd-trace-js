@@ -197,7 +197,7 @@ class Span {
   }
 
   addEvent (name, attributesOrStartTime, startTime) {
-    api.diag.warn('Events not supported')
+    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
     return this
   }
 
@@ -244,12 +244,20 @@ class Span {
     return this.ended === false
   }
 
-  recordException (exception) {
+  recordException (exception, timeInput) {
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack
     })
+
+    const attributes = {
+      'exception.message': exception.message,
+      'exception.type': exception.type,
+      'exception.escaped': exception.escaped,
+      'exception.stacktrace': exception.stack
+    }
+    this.addEvent(exception.name, attributes, timeInput)
   }
 
   get duration () {

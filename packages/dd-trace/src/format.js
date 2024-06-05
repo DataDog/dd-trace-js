@@ -34,6 +34,7 @@ function format (span) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
+  extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -86,6 +87,25 @@ function extractSpanLinks (trace, span) {
     }
   }
   if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+}
+
+function extractSpanEvents (trace, span) {
+  const events = []
+  if (span._events) {
+    for (const event of span._events) {
+      const formattedEvent = {}
+
+      formattedEvent.name = event.name
+      formattedEvent.time_unix_nano = Math.round(event.timestamp * 1e6)
+
+      if (event.attributes && Object.keys(event.attributes).length > 0) {
+        formattedEvent.attributes = event.attributes
+      }
+
+      events.push(formattedEvent)
+    }
+  }
+  if (events.length > 0) { trace.meta.events = JSON.stringify(events) }
 }
 
 function extractTags (trace, span) {

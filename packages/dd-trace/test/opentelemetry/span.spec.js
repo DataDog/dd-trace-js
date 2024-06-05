@@ -402,4 +402,49 @@ describe('OTel Span', () => {
     expect(processor.onStart).to.have.been.calledWith(span, span._context)
     expect(processor.onEnd).to.have.been.calledWith(span)
   })
+  it('should add span events', () => {
+    const span1 = tracer.startSpan('name')
+    const span2 = tracer.startSpan('name')
+    span1.addEvent('Web page unresponsive',
+      { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, 1714536311886)
+    span2.addEvent('Web page loaded')
+    span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
+    span1.end()
+    span2.end()
+    span1.addEvent('Event on finished span, event will be ignored')
+    span2.addEvent('Event on finished span, event won\'t be added')
+    const events1 = span1._ddSpan._events
+    const events2 = span2._ddSpan._events
+
+    let expectedEvents = [
+      {
+        name: 'Web page unresponsive',
+        startTime: 1714536311886,
+        attributes: {
+          'error.code': '403',
+          'unknown values': [1, ['h', 'a', [false]]]
+        }
+      }
+    ]
+    expect(events1).to.deep.equal(expectedEvents)
+
+    expectedEvents = [
+      {
+        name: 'Web page loaded',
+        startTime: 1714537311986000,
+        attributes: {}
+      },
+      {
+        name: 'Button changed color',
+        startTime: 1714537311986000,
+        attributes: {
+          colors: [112, 215, 70],
+          'response.time': 134.3,
+          success: true
+        }
+      }
+    ]
+
+    expect(events2).to.deep.equal(expectedEvents)
+  })
 })
