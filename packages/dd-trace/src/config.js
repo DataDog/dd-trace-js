@@ -637,7 +637,7 @@ class Config {
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
-    this._envUnprocessed['flushMinSpans'] = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+    this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
@@ -660,12 +660,12 @@ class Config {
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
-    this._envUnprocessed['openaiSpanCharLimit'] = DD_OPENAI_SPAN_CHAR_LIMIT
+    this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       this._setValue(env, 'peerServiceMapping', fromEntries(
         DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
-      this._envUnprocessed['peerServiceMapping'] = DD_TRACE_PEER_SERVICE_MAPPING
+      this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
@@ -714,7 +714,7 @@ class Config {
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
-      this._envUnprocessed['spanAttributeSchema'] = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+      this._envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
@@ -780,9 +780,9 @@ class Config {
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
-    this._optsUnprocessed['flushInterval'] = options.flushInterval
+    this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
-    this._optsUnprocessed['flushMinSpans'] = options.flushMinSpans
+    this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iastOptions && options.iastOptions.deduplicationEnabled)
@@ -825,7 +825,7 @@ class Config {
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
       this._setString(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
-      this._optsUnprocessed['spanAttributeSchema'] = options.spanAttributeSchema
+      this._optsUnprocessed.spanAttributeSchema = options.spanAttributeSchema
     }
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
