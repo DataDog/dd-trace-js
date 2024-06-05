@@ -99,7 +99,9 @@ describe('initialize.mjs', () => {
   context('as --loader', () => {
     testInjectionScenarios('loader', 'initialize.mjs', true)
   })
-  context('as --import', () => {
-    testInjectionScenarios('import', 'initialize.mjs', true)
-  })
+  if (Number(process.versions.node.split('.')[0]) >= 18) {
+    context('as --import', () => {
+      testInjectionScenarios('import', 'initialize.mjs', true)
+    })
+  }
 })
