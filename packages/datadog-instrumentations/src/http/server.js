@@ -114,7 +114,7 @@ function wrapWriteHead (writeHead) {
       obj = headers
     }
 
-    // this doesn't support explicit duplicate headers, but pffff, edge case
+    // this doesn't support explicit duplicate headers, but it's an edge case
     const responseHeaders = Object.assign(this.getHeaders(), obj)
 
     startWriteHeadCh.publish({
