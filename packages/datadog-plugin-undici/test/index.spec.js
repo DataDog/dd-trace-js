@@ -68,9 +68,6 @@ describe('Plugin', () => {
           rawExpectedSchema.client
         )
 
-        it('FIRST TEST FAILS BECAUSE.', () => {
-        })
-
         it('should do automatic instrumentation', function (done) {
           const app = express()
           app.get('/user', (req, res) => {
