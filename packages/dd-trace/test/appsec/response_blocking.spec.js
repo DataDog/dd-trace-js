@@ -265,7 +265,7 @@ function assertBlocked (res) {
 }
 
 function streamFile (res) {
-  const stream = fs.createReadStream(path.join(__dirname, '/streamtest.txt'), { encoding: 'utf8' })
+  const stream = fs.createReadStream(path.join(__dirname, 'streamtest.txt'), { encoding: 'utf8' })
   stream.pipe(res, { end: false })
   stream.on('end', () => res.end('end'))
 }
