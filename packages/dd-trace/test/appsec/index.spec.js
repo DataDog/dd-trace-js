@@ -42,6 +42,7 @@ describe('AppSec Index', () => {
   let appsecTelemetry
   let graphql
   let apiSecuritySampler
+  let rasp
 
   const RULES = { rules: [{ a: 1 }] }
 
@@ -63,6 +64,9 @@ describe('AppSec Index', () => {
         apiSecurity: {
           enabled: false,
           requestSampling: 0
+        },
+        rasp: {
+          enabled: true
         }
       }
     }
@@ -99,6 +103,11 @@ describe('AppSec Index', () => {
     sinon.spy(apiSecuritySampler, 'sampleRequest')
     sinon.spy(apiSecuritySampler, 'isSampled')
 
+    rasp = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
       '../plugins/util/web': web,
@@ -106,7 +115,8 @@ describe('AppSec Index', () => {
       './passport': passport,
       './telemetry': appsecTelemetry,
       './graphql': graphql,
-      './api_security_sampler': apiSecuritySampler
+      './api_security_sampler': apiSecuritySampler,
+      './rasp': rasp
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -183,6 +193,19 @@ describe('AppSec Index', () => {
 
       expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config.telemetry)
     })
+
+    it('should call rasp enable', () => {
+      AppSec.enable(config)
+
+      expect(rasp.enable).to.be.calledOnceWithExactly()
+    })
+
+    it('should not call rasp enable when rasp is disabled', () => {
+      config.appsec.rasp.enabled = false
+      AppSec.enable(config)
+
+      expect(rasp.enable).to.not.be.called
+    })
   })
 
   describe('disable', () => {
@@ -204,6 +227,7 @@ describe('AppSec Index', () => {
         .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
       expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
       expect(graphql.disable).to.have.been.calledOnceWithExactly()
+      expect(rasp.disable).to.have.been.calledOnceWithExactly()
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -592,7 +616,7 @@ describe('AppSec Index', () => {
         expect(apiSecuritySampler.isSampled).to.have.been.calledOnceWith(req)
         expect(waf.run).to.been.calledOnceWith({
           persistent: {
-            [addresses.HTTP_OUTGOING_BODY]: body
+            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
           }
         }, req)
       })
