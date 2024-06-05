@@ -170,6 +170,7 @@ class Config {
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
+      process.env.OTEL_LOG_LEVEL && process.env.OTEL_LOG_LEVEL === 'debug',
       false
     ))
     this.logger = options.logger
@@ -435,6 +436,7 @@ class Config {
     this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
+    this._setValue(defaults, 'appsec.rasp.enabled', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
@@ -526,6 +528,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
       DD_APPSEC_SCA_ENABLED,
+      DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -618,6 +621,7 @@ class Config {
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
@@ -761,6 +765,7 @@ class Config {
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec.rules)
