@@ -720,9 +720,7 @@ class Config {
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     const hasTelemetryLogsUsingFeatures =
-      isTrue(DD_IAST_ENABLED) ||
-      isTrue(DD_PROFILING_ENABLED) ||
-      (typeof DD_INJECTION_ENABLED === 'string' && DD_INJECTION_ENABLED.split(',').includes('profiling'))
+      env['iast.enabled'] || env['profiling.enabled'] || env['profiling.heuristicsEnabled']
         ? true
         : undefined
     this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
