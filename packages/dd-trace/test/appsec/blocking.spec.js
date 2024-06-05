@@ -38,7 +38,8 @@ describe('blocking', () => {
       setHeader: sinon.stub(),
       writeHead: sinon.stub(),
       end: sinon.stub(),
-      getHeaderNames: sinon.stub().returns([])
+      getHeaderNames: sinon.stub().returns([]),
+      removeHeader: sinon.stub()
     }
     res.writeHead.returns(res)
 
@@ -109,6 +110,22 @@ describe('blocking', () => {
       })
       expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
       expect(abortController.signal.aborted).to.be.true
+    })
+
+    it('should remove all headers before sending blocking response', () => {
+      res.getHeaderNames.returns(['header1', 'header2'])
+
+      block(req, res, rootSpan)
+
+      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({ 'appsec.blocked': 'true' })
+      expect(res.removeHeader).to.have.been.calledTwice
+      expect(res.removeHeader.firstCall).to.have.been.calledWithExactly('header1')
+      expect(res.removeHeader.secondCall).to.have.been.calledWithExactly('header2')
+      expect(res.writeHead).to.have.been.calledOnceWithExactly(403, {
+        'Content-Type': 'application/json',
+        'Content-Length': 8
+      })
+      expect(res.end).to.have.been.calledOnceWithExactly('jsonBody')
     })
   })
 
