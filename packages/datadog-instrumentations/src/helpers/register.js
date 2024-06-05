@@ -29,10 +29,13 @@ if (!disabledInstrumentations.has('fetch')) {
 }
 
 const HOOK_SYMBOL = Symbol('hookExportsMap')
+
+if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
+  checkRequireCache.checkForRequiredModules()
+  setImmediate(checkRequireCache.checkForPotentialConflicts)
+}
+
 // TODO: make this more efficient
-
-if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') checkRequireCache()
-
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
 

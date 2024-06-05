@@ -22,10 +22,11 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, setTemplates } = require('./blocking')
+const { block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
+const rasp = require('./rasp')
 
 let isEnabled = false
 let config
@@ -36,6 +37,10 @@ function enable (_config) {
   try {
     appsecTelemetry.enable(_config.telemetry)
     graphql.enable()
+
+    if (_config.appsec.rasp.enabled) {
+      rasp.enable()
+    }
 
     setTemplates(_config)
 
@@ -203,7 +208,7 @@ function onResponseBody ({ req, body }) {
   // we don't support blocking at this point, so no results needed
   waf.run({
     persistent: {
-      [addresses.HTTP_OUTGOING_BODY]: body
+      [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
     }
   }, req)
 }
@@ -223,8 +228,9 @@ function onPassportVerify ({ credentials, user }) {
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
-  if (actions.includes('block')) {
-    block(req, res, rootSpan, abortController)
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction) {
+    block(req, res, rootSpan, abortController, blockingAction)
   }
 }
 
@@ -236,6 +242,7 @@ function disable () {
 
   appsecTelemetry.disable()
   graphql.disable()
+  rasp.disable()
 
   remoteConfig.disableWafUpdate()
 

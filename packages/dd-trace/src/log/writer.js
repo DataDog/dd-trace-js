@@ -1,8 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
-const { getChannelLogLevel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
-
+const { LogChannel } = require('./channels')
 const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -12,7 +11,7 @@ const defaultLogger = {
 
 let enabled = false
 let logger = defaultLogger
-let logLevel = getChannelLogLevel()
+let logChannel = new LogChannel()
 
 function withNoop (fn) {
   const store = storage.getStore()
@@ -23,45 +22,21 @@ function withNoop (fn) {
 }
 
 function unsubscribeAll () {
-  if (debugChannel.hasSubscribers) {
-    debugChannel.unsubscribe(onDebug)
-  }
-  if (infoChannel.hasSubscribers) {
-    infoChannel.unsubscribe(onInfo)
-  }
-  if (warnChannel.hasSubscribers) {
-    warnChannel.unsubscribe(onWarn)
-  }
-  if (errorChannel.hasSubscribers) {
-    errorChannel.unsubscribe(onError)
-  }
+  logChannel.unsubscribe({ debug, info, warn, error })
 }
 
-function toggleSubscription (enable) {
+function toggleSubscription (enable, level) {
   unsubscribeAll()
 
   if (enable) {
-    if (debugChannel.logLevel >= logLevel) {
-      debugChannel.subscribe(onDebug)
-    }
-    if (infoChannel.logLevel >= logLevel) {
-      infoChannel.subscribe(onInfo)
-    }
-    if (warnChannel.logLevel >= logLevel) {
-      warnChannel.subscribe(onWarn)
-    }
-    if (errorChannel.logLevel >= logLevel) {
-      errorChannel.subscribe(onError)
-    }
+    logChannel = new LogChannel(level)
+    logChannel.subscribe({ debug, info, warn, error })
   }
 }
 
 function toggle (enable, level) {
-  if (level !== undefined) {
-    logLevel = getChannelLogLevel(level)
-  }
   enabled = enable
-  toggleSubscription(enabled)
+  toggleSubscription(enabled, level)
 }
 
 function use (newLogger) {
@@ -73,24 +48,7 @@ function use (newLogger) {
 function reset () {
   logger = defaultLogger
   enabled = false
-  logLevel = getChannelLogLevel()
   toggleSubscription(false)
-}
-
-function onError (err) {
-  if (enabled) error(err)
-}
-
-function onWarn (message) {
-  if (enabled) warn(message)
-}
-
-function onInfo (message) {
-  if (enabled) info(message)
-}
-
-function onDebug (message) {
-  if (enabled) debug(message)
 }
 
 function error (err) {

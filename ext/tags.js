@@ -13,6 +13,7 @@ const tags = {
   MANUAL_DROP: 'manual.drop',
   MEASURED: '_dd.measured',
   BASE_SERVICE: '_dd.base_service',
+  DD_PARENT_ID: '_dd.parent_id',
 
   // HTTP
   HTTP_URL: 'http.url',

@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
