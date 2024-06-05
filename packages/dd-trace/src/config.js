@@ -440,6 +440,9 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
+    this._setValue(defaults, 'appsec.stackTrace.enabled', true)
+    this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
+    this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -524,10 +527,13 @@ class Config {
       DD_APPSEC_ENABLED,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_MAX_STACK_TRACES,
+      DD_APPSEC_MAX_STACK_TRACE_DEPTH,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
       DD_APPSEC_SCA_ENABLED,
+      DD_APPSEC_STACK_TRACE_ENABLED,
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
@@ -627,6 +633,9 @@ class Config {
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
+    this._setValue(env, 'appsec.stackTrace.maxDepth', maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH))
+    this._setValue(env, 'appsec.stackTrace.maxStackTraces', maybeInt(DD_APPSEC_MAX_STACK_TRACES))
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
@@ -767,6 +776,9 @@ class Config {
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec.rules)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
+    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec.stackTrace?.maxStackTraces))
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
