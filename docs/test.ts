@@ -116,6 +116,9 @@ tracer.init({
     apiSecurity: {
       enabled: true,
       requestSampling: 1.0
+    },
+    rasp: {
+      enabled: true
     }
   }
 });

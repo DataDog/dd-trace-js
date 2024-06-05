@@ -170,6 +170,7 @@ class Config {
     // Configure the logger first so it can be used to warn about other configs
     this.debug = isTrue(coalesce(
       process.env.DD_TRACE_DEBUG,
+      process.env.OTEL_LOG_LEVEL && process.env.OTEL_LOG_LEVEL === 'debug',
       false
     ))
     this.logger = options.logger
@@ -288,15 +289,6 @@ class Config {
     )
 
     const sampler = {
-      rules: coalesce(
-        options.samplingRules,
-        safeJsonParse(process.env.DD_TRACE_SAMPLING_RULES),
-        []
-      ).map(rule => {
-        return remapify(rule, {
-          sample_rate: 'sampleRate'
-        })
-      }),
       spanSamplingRules: coalesce(
         options.spanSamplingRules,
         safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
@@ -444,6 +436,7 @@ class Config {
     this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
+    this._setValue(defaults, 'appsec.rasp.enabled', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
@@ -485,9 +478,12 @@ class Config {
     this._setValue(defaults, 'peerServiceMapping', {})
     this._setValue(defaults, 'plugins', true)
     this._setValue(defaults, 'port', '8126')
-    this._setValue(defaults, 'profiling.enabled', false)
+    this._setValue(defaults, 'profiling.enabled', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
+    this._setValue(defaults, 'profiling.ssi', false)
+    this._setValue(defaults, 'profiling.heuristicsEnabled', false)
+    this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
     this._setValue(defaults, 'remoteConfig.enabled', true)
@@ -496,6 +492,7 @@ class Config {
     this._setValue(defaults, 'runtimeMetrics', false)
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
+    this._setValue(defaults, 'sampler.rules', [])
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
     this._setValue(defaults, 'site', 'datadoghq.com')
@@ -531,6 +528,7 @@ class Config {
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
       DD_APPSEC_SCA_ENABLED,
+      DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
       DD_DATA_STREAMS_ENABLED,
@@ -558,6 +556,7 @@ class Config {
       DD_PROFILING_ENABLED,
       DD_PROFILING_EXPORTERS,
       DD_PROFILING_SOURCE_MAP,
+      DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD,
       DD_REMOTE_CONFIGURATION_ENABLED,
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
@@ -590,6 +589,7 @@ class Config {
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
       DD_TRACE_SAMPLE_RATE,
+      DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
       DD_TRACE_STARTUP_LOGS,
@@ -618,6 +618,7 @@ class Config {
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
+    this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
@@ -663,6 +664,17 @@ class Config {
     this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
+    if (DD_INJECTION_ENABLED) {
+      this._setBoolean(env, 'profiling.ssi', true)
+      if (DD_INJECTION_ENABLED.split(',').includes('profiler')) {
+        this._setBoolean(env, 'profiling.heuristicsEnabled', true)
+      }
+      if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
+        // This is only used in testing to not have to wait 30s
+        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
+      }
+    }
+
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
     this._setString(env, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     this._setBoolean(env, 'remoteConfig.enabled', coalesce(
@@ -687,6 +699,7 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
+    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES)) // example
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
@@ -734,6 +747,7 @@ class Config {
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
+    this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._setString(opts, 'appsec.rules', options.appsec.rules)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
@@ -786,6 +800,7 @@ class Config {
     this._setUnit(opts, 'sampleRate', coalesce(options.sampleRate, options.ingestion.sampleRate))
     const ingestion = options.ingestion || {}
     this._setValue(opts, 'sampler.rateLimit', coalesce(options.rateLimit, ingestion.rateLimit))
+    this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
     this._setString(opts, 'service', options.service || tags.service)
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
@@ -933,6 +948,17 @@ class Config {
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
+    // ignore tags for now since rc sampling rule tags format is not supported
+    this._setSamplingRule(opts, 'sampler.rules', this._ignoreTags(options.trace_sample_rules))
+  }
+
+  _ignoreTags (samplingRules) {
+    if (samplingRules) {
+      for (const rule of samplingRules) {
+        delete rule.tags
+      }
+    }
+    return samplingRules
   }
 
   _setBoolean (obj, name, value) {
@@ -959,15 +985,34 @@ class Config {
   }
 
   _setArray (obj, name, value) {
-    if (value === null || value === undefined) {
+    if (value == null) {
       return this._setValue(obj, name, null)
     }
 
     if (typeof value === 'string') {
-      value = value && value.split(',')
+      value = value.split(',')
     }
 
     if (Array.isArray(value)) {
+      this._setValue(obj, name, value)
+    }
+  }
+
+  _setSamplingRule (obj, name, value) {
+    if (value == null) {
+      return this._setValue(obj, name, null)
+    }
+
+    if (typeof value === 'string') {
+      value = value.split(',')
+    }
+
+    if (Array.isArray(value)) {
+      value = value.map(rule => {
+        return remapify(rule, {
+          sample_rate: 'sampleRate'
+        })
+      })
       this._setValue(obj, name, value)
     }
   }

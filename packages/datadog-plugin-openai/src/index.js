@@ -15,6 +15,14 @@ const RE_TAB = /\t/g
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
+let encodingForModel
+try {
+  // eslint-disable-next-line import/no-extraneous-dependencies
+  encodingForModel = require('tiktoken').encoding_for_model
+} catch {
+  // we will use token count estimations in this case
+}
+
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
   static get operation () { return 'request' }
@@ -179,12 +187,21 @@ class OpenApiPlugin extends TracingPlugin {
     span.addTags(tags)
   }
 
-  finish ({ headers, body, method, path }) {
-    if (headers.constructor.name === 'Headers') {
-      headers = Object.fromEntries(headers)
+  finish (response) {
+    const span = this.activeSpan
+    const error = !!span.context()._tags.error
+
+    let headers, body, method, path
+    if (!error) {
+      headers = response.headers
+      body = response.body
+      method = response.method
+      path = response.path
     }
 
-    const span = this.activeSpan
+    if (!error && headers?.constructor.name === 'Headers') {
+      headers = Object.fromEntries(headers)
+    }
     const methodName = span._spanContext._tags['resource.name']
 
     body = coerceResponseBody(body, methodName)
@@ -192,88 +209,98 @@ class OpenApiPlugin extends TracingPlugin {
     const fullStore = storage.getStore()
     const store = fullStore.openai
 
-    if (path.startsWith('https://') || path.startsWith('http://')) {
+    if (!error && (path.startsWith('https://') || path.startsWith('http://'))) {
       // basic checking for if the path was set as a full URL
       // not using a full regex as it will likely be "https://api.openai.com/..."
       path = new URL(path).pathname
     }
     const endpoint = lookupOperationEndpoint(methodName, path)
 
-    const tags = {
-      'openai.request.endpoint': endpoint,
-      'openai.request.method': method.toUpperCase(),
+    const tags = error
+      ? {}
+      : {
+          'openai.request.endpoint': endpoint,
+          'openai.request.method': method.toUpperCase(),
 
-      'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
-      'openai.organization.name': headers['openai-organization'],
+          'openai.organization.id': body.organization_id, // only available in fine-tunes endpoints
+          'openai.organization.name': headers['openai-organization'],
 
-      'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
-      'openai.response.id': body.id, // common creation value, numeric epoch
-      'openai.response.deleted': body.deleted, // common boolean field in delete responses
+          'openai.response.model': headers['openai-model'] || body.model, // specific model, often undefined
+          'openai.response.id': body.id, // common creation value, numeric epoch
+          'openai.response.deleted': body.deleted, // common boolean field in delete responses
 
-      // The OpenAI API appears to use both created and created_at in different places
-      // Here we're conciously choosing to surface this inconsistency instead of normalizing
-      'openai.response.created': body.created,
-      'openai.response.created_at': body.created_at
-    }
+          // The OpenAI API appears to use both created and created_at in different places
+          // Here we're conciously choosing to surface this inconsistency instead of normalizing
+          'openai.response.created': body.created,
+          'openai.response.created_at': body.created_at
+        }
 
     responseDataExtractionByMethod(methodName, tags, body, store)
     span.addTags(tags)
 
     super.finish()
-    this.sendLog(methodName, span, tags, store, false)
-    this.sendMetrics(headers, body, endpoint, span._duration)
+    this.sendLog(methodName, span, tags, store, error)
+    this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
   }
 
-  error (...args) {
-    super.error(...args)
-
-    const span = this.activeSpan
-    const methodName = span._spanContext._tags['resource.name']
-
-    const fullStore = storage.getStore()
-    const store = fullStore.openai
-
-    // We don't know most information about the request when it fails
-
-    const tags = ['error:1']
-    this.metrics.distribution('openai.request.duration', span._duration * 1000, tags)
-    this.metrics.increment('openai.request.error', 1, tags)
-
-    this.sendLog(methodName, span, {}, store, true)
-  }
-
-  sendMetrics (headers, body, endpoint, duration) {
-    const tags = [
-      `org:${headers['openai-organization']}`,
-      `endpoint:${endpoint}`, // just "/v1/models", no method
-      `model:${headers['openai-model']}`,
-      'error:0'
-    ]
+  sendMetrics (headers, body, endpoint, duration, error, spanTags) {
+    const tags = [`error:${Number(!!error)}`]
+    if (error) {
+      this.metrics.increment('openai.request.error', 1, tags)
+    } else {
+      tags.push(`org:${headers['openai-organization']}`)
+      tags.push(`endpoint:${endpoint}`) // just "/v1/models", no method
+      tags.push(`model:${headers['openai-model'] || body.model}`)
+    }
 
     this.metrics.distribution('openai.request.duration', duration * 1000, tags)
 
-    if (body && body.usage) {
-      const promptTokens = body.usage.prompt_tokens
-      const completionTokens = body.usage.completion_tokens
-      this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
-      this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
-      this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+    const promptTokens = spanTags['openai.response.usage.prompt_tokens']
+    const promptTokensEstimated = spanTags['openai.response.usage.prompt_tokens_estimated']
+
+    const completionTokens = spanTags['openai.response.usage.completion_tokens']
+    const completionTokensEstimated = spanTags['openai.response.usage.completion_tokens_estimated']
+
+    if (!error) {
+      if (promptTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.prompt', promptTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.prompt', promptTokens, tags)
+      }
+      if (completionTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.completion', completionTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.completion', completionTokens, tags)
+      }
+
+      if (promptTokensEstimated || completionTokensEstimated) {
+        this.metrics.distribution(
+          'openai.tokens.total', promptTokens + completionTokens, [...tags, 'openai.estimated:true'])
+      } else {
+        this.metrics.distribution('openai.tokens.total', promptTokens + completionTokens, tags)
+      }
     }
 
-    if (headers['x-ratelimit-limit-requests']) {
-      this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
-    }
+    if (headers) {
+      if (headers['x-ratelimit-limit-requests']) {
+        this.metrics.gauge('openai.ratelimit.requests', Number(headers['x-ratelimit-limit-requests']), tags)
+      }
 
-    if (headers['x-ratelimit-remaining-requests']) {
-      this.metrics.gauge('openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags)
-    }
+      if (headers['x-ratelimit-remaining-requests']) {
+        this.metrics.gauge(
+          'openai.ratelimit.remaining.requests', Number(headers['x-ratelimit-remaining-requests']), tags
+        )
+      }
 
-    if (headers['x-ratelimit-limit-tokens']) {
-      this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
-    }
+      if (headers['x-ratelimit-limit-tokens']) {
+        this.metrics.gauge('openai.ratelimit.tokens', Number(headers['x-ratelimit-limit-tokens']), tags)
+      }
 
-    if (headers['x-ratelimit-remaining-tokens']) {
-      this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
+      if (headers['x-ratelimit-remaining-tokens']) {
+        this.metrics.gauge('openai.ratelimit.remaining.tokens', Number(headers['x-ratelimit-remaining-tokens']), tags)
+      }
     }
   }
 
@@ -289,6 +316,89 @@ class OpenApiPlugin extends TracingPlugin {
 
     this.logger.log(log, span, tags)
   }
+}
+
+function countPromptTokens (methodName, payload, model) {
+  let promptTokens = 0
+  let promptEstimated = false
+  if (methodName === 'chat.completions.create') {
+    const messages = payload.messages
+    for (const message of messages) {
+      const content = message.content
+      const { tokens, estimated } = countTokens(content, model)
+      promptTokens += tokens
+      promptEstimated = estimated
+    }
+  } else if (methodName === 'completions.create') {
+    let prompt = payload.prompt
+    if (!Array.isArray(prompt)) prompt = [prompt]
+
+    for (const p of prompt) {
+      const { tokens, estimated } = countTokens(p, model)
+      promptTokens += tokens
+      promptEstimated = estimated
+    }
+  }
+
+  return { promptTokens, promptEstimated }
+}
+
+function countCompletionTokens (body, model) {
+  let completionTokens = 0
+  let completionEstimated = false
+  if (body?.choices) {
+    for (const choice of body.choices) {
+      const message = choice.message || choice.delta // delta for streamed responses
+      const text = choice.text
+      const content = text || message?.content
+
+      const { tokens, estimated } = countTokens(content, model)
+      completionTokens += tokens
+      completionEstimated = estimated
+    }
+  }
+
+  return { completionTokens, completionEstimated }
+}
+
+function countTokens (content, model) {
+  if (encodingForModel) {
+    try {
+      // try using tiktoken if it was available
+      const encoder = encodingForModel(model)
+      const tokens = encoder.encode(content).length
+      encoder.free()
+      return { tokens, estimated: false }
+    } catch {
+      // possible errors from tiktoken:
+      // * model not available for token counts
+      // * issue encoding content
+    }
+  }
+
+  return {
+    tokens: estimateTokens(content),
+    estimated: true
+  }
+}
+
+// If model is unavailable or tiktoken is not imported, then provide a very rough estimate of the number of tokens
+// Approximate using the following assumptions:
+//    * English text
+//    * 1 token ~= 4 chars
+//    * 1 token ~= ¾ words
+function estimateTokens (content) {
+  let estimatedTokens = 0
+  if (typeof content === 'string') {
+    const estimation1 = content.length / 4
+
+    const matches = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/g)
+    const estimation2 = matches ? matches.length * 0.75 : 0 // in the case of an empty string
+    estimatedTokens = Math.round((1.5 * estimation1 + 0.5 * estimation2) / 2)
+  } else if (Array.isArray(content) && typeof content[0] === 'number') {
+    estimatedTokens = content.length
+  }
+  return estimatedTokens
 }
 
 function createEditRequestExtraction (tags, payload, store) {
@@ -349,7 +459,7 @@ function responseDataExtractionByMethod (methodName, tags, body, store) {
     case 'chat.completions.create':
     case 'createEdit':
     case 'edits.create':
-      commonCreateResponseExtraction(tags, body, store)
+      commonCreateResponseExtraction(tags, body, store, methodName)
       break
 
     case 'listFiles':
@@ -585,8 +695,8 @@ function createModerationResponseExtraction (tags, body) {
 }
 
 // createCompletion, createChatCompletion, createEdit
-function commonCreateResponseExtraction (tags, body, store) {
-  usageExtraction(tags, body)
+function commonCreateResponseExtraction (tags, body, store, methodName) {
+  usageExtraction(tags, body, methodName)
 
   if (!body.choices) return
 
@@ -626,11 +736,40 @@ function commonCreateResponseExtraction (tags, body, store) {
 }
 
 // createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction (tags, body) {
-  if (typeof body.usage !== 'object' || !body.usage) return
-  tags['openai.response.usage.prompt_tokens'] = body.usage.prompt_tokens
-  tags['openai.response.usage.completion_tokens'] = body.usage.completion_tokens
-  tags['openai.response.usage.total_tokens'] = body.usage.total_tokens
+function usageExtraction (tags, body, methodName) {
+  let promptTokens = 0
+  let completionTokens = 0
+  let totalTokens = 0
+  if (body && body.usage) {
+    promptTokens = body.usage.prompt_tokens
+    completionTokens = body.usage.completion_tokens
+    totalTokens = body.usage.total_tokens
+  } else if (['chat.completions.create', 'completions.create'].includes(methodName)) {
+    // estimate tokens based on method name for completions and chat completions
+    const { model } = body
+    let promptEstimated = false
+    let completionEstimated = false
+
+    // prompt tokens
+    const payload = storage.getStore().openai
+    const promptTokensCount = countPromptTokens(methodName, payload, model)
+    promptTokens = promptTokensCount.promptTokens
+    promptEstimated = promptTokensCount.promptEstimated
+
+    // completion tokens
+    const completionTokensCount = countCompletionTokens(body, model)
+    completionTokens = completionTokensCount.completionTokens
+    completionEstimated = completionTokensCount.completionEstimated
+
+    // total tokens
+    totalTokens = promptTokens + completionTokens
+    if (promptEstimated) tags['openai.response.usage.prompt_tokens_estimated'] = true
+    if (completionEstimated) tags['openai.response.usage.completion_tokens_estimated'] = true
+  }
+
+  if (promptTokens) tags['openai.response.usage.prompt_tokens'] = promptTokens
+  if (completionTokens) tags['openai.response.usage.completion_tokens'] = completionTokens
+  if (totalTokens) tags['openai.response.usage.total_tokens'] = totalTokens
 }
 
 function truncateApiKey (apiKey) {

@@ -11,14 +11,32 @@ on:
     - cron:  '00 04 * * 2-6'
 
 jobs:
+  get-essential-scenarios:
+    runs-on: ubuntu-latest
+    outputs:
+      scenario: ${{ steps.parse-yml.outputs.scenario }}
+    steps:
+      - name: Checkout system tests
+        uses: actions/checkout@v4
+        with:
+          repository: 'DataDog/system-tests'
+      - name: Get Essential Scenarios
+        id: parse-yml
+        run: yq -o tsv .TRACER_ESSENTIAL_SCENARIOS ./scenario_groups.yml | xargs node -p "x=process.argv;x.shift();x.push('CROSSED_TRACING_LIBRARIES');'scenario='+JSON.stringify(x)" >> $GITHUB_OUTPUT
+
+
   system-tests:
     runs-on: ubuntu-latest
+    needs:
+      - get-essential-scenarios
     strategy:
       matrix:
-        include:
-          - weblog-variant: express4
-          - weblog-variant: express4-typescript
-          - weblog-variant: nextjs
+        weblog-variant:
+          - express4
+          - express4-typescript
+          - nextjs
+        scenario: ${{fromJson(needs.get-essential-scenarios.outputs.scenario)}}
+
     env:
       TEST_LIBRARY: nodejs
       WEBLOG_VARIANT: ${{ matrix.weblog-variant }}
@@ -29,39 +47,27 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
           path: 'binaries/dd-trace-js'
-
       - name: Build weblog
         run: ./build.sh -i weblog
-
       - name: Build runner
         uses: ./.github/actions/install_runner
-
       - name: Build agent
         id: build-agent
         run: ./build.sh -i agent
-
-      - name: Run
-        run: ./run.sh TRACER_ESSENTIAL_SCENARIOS
-
-      - name: Run Cross Tracer Propagation Tests
-        # run if builds passed (allows these tests to still run in case the previous Run step failed)
-        if: steps.build-agent.outcome == 'success'
-        run: ./run.sh CROSSED_TRACING_LIBRARIES 
-
+      - name: Run scenario ${{ matrix.scenario }}
+        run: ./run.sh ${{ matrix.scenario }}
       - name: Compress artifact
         if: ${{ always() }}
         run: tar -czvf artifact.tar.gz $(ls | grep logs)
-
       - name: Upload artifact
         uses: actions/upload-artifact@v2
         if: ${{ always() }}
         with:
-          name: logs_express-poc
+          name: logs_${{ matrix.weblog-variant }}-${{ matrix.scenario }}
           path: artifact.tar.gz
 
   parametric:

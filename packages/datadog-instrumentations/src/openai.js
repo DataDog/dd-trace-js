@@ -123,7 +123,7 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
       return fn.apply(this, arguments)
         .then((response) => {
-          finishCh.publish({
+          finish({
             headers: response.headers,
             body: response.data,
             path: response.request.path,
@@ -132,10 +132,10 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
           return response
         })
-        .catch((err) => {
-          errorCh.publish({ err })
+        .catch(error => {
+          finish(undefined, error)
 
-          throw err
+          throw error
         })
     })
   }
@@ -144,56 +144,60 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 function addStreamedChunk (content, chunk) {
-  return content.choices.map((oldChoice, choiceIdx) => {
-    const newChoice = oldChoice
-    const chunkChoice = chunk.choices[choiceIdx]
-    if (!oldChoice.finish_reason) {
-      newChoice.finish_reason = chunkChoice.finish_reason
-    }
-
-    // delta exists on chat completions
-    const delta = chunkChoice.delta
-
-    if (delta) {
-      const content = delta.content
-      if (content) {
-        if (newChoice.delta.content) { // we don't want to append to undefined
-          newChoice.delta.content += content
-        } else {
-          newChoice.delta.content = content
-        }
-      }
+  content.usage = chunk.usage // add usage if it was specified to be returned
+  for (const choice of chunk.choices) {
+    const choiceIdx = choice.index
+    const oldChoice = content.choices.find(choice => choice?.index === choiceIdx)
+    if (!oldChoice) {
+      // we don't know which choices arrive in which order
+      content.choices[choiceIdx] = choice
     } else {
-      const text = chunkChoice.text
-      if (text) {
-        if (newChoice.text) {
-          newChoice.text += text
-        } else {
-          newChoice.text = text
+      if (!oldChoice.finish_reason) {
+        oldChoice.finish_reason = choice.finish_reason
+      }
+
+      // delta exists on chat completions
+      const delta = choice.delta
+
+      if (delta) {
+        const content = delta.content
+        if (content) {
+          if (oldChoice.delta.content) { // we don't want to append to undefined
+            oldChoice.delta.content += content
+          } else {
+            oldChoice.delta.content = content
+          }
+        }
+      } else {
+        const text = choice.text
+        if (text) {
+          if (oldChoice.text) {
+            oldChoice.text += text
+          } else {
+            oldChoice.text = text
+          }
         }
       }
+
+      // tools only exist on chat completions
+      const tools = delta && choice.delta.tool_calls
+
+      if (tools) {
+        oldChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
+          const oldTool = oldChoice.delta.tool_calls[toolIdx]
+
+          if (oldTool) {
+            oldTool.function.arguments += newTool.function.arguments
+          }
+
+          return oldTool
+        })
+      }
     }
-
-    // tools only exist on chat completions
-    const tools = delta && chunkChoice.delta.tool_calls
-
-    if (tools) {
-      newChoice.delta.tool_calls = tools.map((newTool, toolIdx) => {
-        const oldTool = oldChoice.delta.tool_calls[toolIdx]
-
-        if (oldTool) {
-          oldTool.function.arguments += newTool.function.arguments
-        }
-
-        return oldTool
-      })
-    }
-
-    return newChoice
-  })
+  }
 }
 
-function buffersToJSON (chunks = []) {
+function convertBufferstoObjects (chunks = []) {
   return Buffer
     .concat(chunks) // combine the buffers
     .toString() // stringify
@@ -209,9 +213,9 @@ function buffersToJSON (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options) {
+function wrapStreamIterator (response, options, n) {
   let processChunksAsBuffers = false
-  const chunks = []
+  let chunks = []
   return function (itr) {
     return function () {
       const iterator = itr.apply(this, arguments)
@@ -230,22 +234,28 @@ function wrapStreamIterator (response, options) {
             }
 
             if (done) {
-              let content = chunks.filter(chunk => chunk != null) // filter null or undefined values
+              let body = {}
+              chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
 
               if (chunks) {
                 if (processChunksAsBuffers) {
-                  content = buffersToJSON(content)
+                  chunks = convertBufferstoObjects(chunks)
                 }
 
-                content = content.reduce((content, chunk) => {
-                  content.choices = addStreamedChunk(content, chunk)
-                  return content
-                })
+                if (chunks.length) {
+                  // define the initial body having all the content outside of choices from the first chunk
+                  // this will include import data like created, id, model, etc.
+                  body = { ...chunks[0], choices: Array.from({ length: n }) }
+                  // start from the first chunk, and add its choices into the body
+                  for (let i = 0; i < chunks.length; i++) {
+                    addStreamedChunk(body, chunks[i])
+                  }
+                }
               }
 
-              finishCh.publish({
+              finish({
                 headers: response.headers,
-                body: content,
+                body,
                 path: response.url,
                 method: options.method
               })
@@ -254,7 +264,7 @@ function wrapStreamIterator (response, options) {
             return res
           })
           .catch(err => {
-            errorCh.publish({ err })
+            finish(undefined, err)
 
             throw err
           })
@@ -278,7 +288,18 @@ for (const shim of V4_PACKAGE_SHIMS) {
         // The OpenAI library lets you set `stream: true` on the options arg to any method
         // However, we only want to handle streamed responses in specific cases
         // chat.completions and completions
-        const stream = streamedResponse && arguments[arguments.length - 1]?.stream
+        const stream = streamedResponse && getOption(arguments, 'stream', false)
+
+        // we need to compute how many prompts we are sending in streamed cases for completions
+        // not applicable for chat completiond
+        let n
+        if (stream) {
+          n = getOption(arguments, 'n', 1)
+          const prompt = getOption(arguments, 'prompt')
+          if (Array.isArray(prompt) && typeof prompt[0] !== 'number') {
+            n *= prompt.length
+          }
+        }
 
         const client = this._client || this.client
 
@@ -300,14 +321,14 @@ for (const shim of V4_PACKAGE_SHIMS) {
             .then(([{ response, options }, body]) => {
               if (stream) {
                 if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options))
+                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
                 } else {
                   shimmer.wrap(
-                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options)
+                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
                   )
                 }
               } else {
-                finishCh.publish({
+                finish({
                   headers: response.headers,
                   body,
                   path: response.url,
@@ -317,10 +338,10 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
               return body
             })
-            .catch(err => {
-              errorCh.publish({ err })
+            .catch(error => {
+              finish(undefined, error)
 
-              throw err
+              throw error
             })
             .finally(() => {
               // maybe we don't want to unwrap here in case the promise is re-used?
@@ -334,4 +355,16 @@ for (const shim of V4_PACKAGE_SHIMS) {
     }
     return exports
   })
+}
+
+function finish (response, error) {
+  if (error) {
+    errorCh.publish({ error })
+  }
+
+  finishCh.publish(response)
+}
+
+function getOption (args, option, defaultValue) {
+  return args[args.length - 1]?.[option] || defaultValue
 }

@@ -458,7 +458,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:7.14.0
+        image: elasticsearch:7.14.0
         env:
           discovery.type: single-node
         ports:
@@ -935,6 +935,11 @@ jobs:
 
   # TODO: fix performance issues and test more Node versions
   next:
+    strategy:
+      matrix:
+        version:
+          - 18
+          - latest
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
@@ -943,9 +948,6 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs

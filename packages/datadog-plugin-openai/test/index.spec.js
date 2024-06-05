@@ -85,6 +85,66 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with error', () => {
+        let scope
+
+        beforeEach(() => {
+          scope = nock('https://api.openai.com:443')
+            .get('/v1/models')
+            .reply(400, {
+              error: {
+                message: 'fake message',
+                type: 'fake type',
+                param: 'fake param',
+                code: null
+              }
+            })
+        })
+
+        afterEach(() => {
+          nock.removeInterceptor(scope)
+          scope.done()
+        })
+
+        it('should attach the error to the span', async () => {
+          const checkTraces = agent
+            .use(traces => {
+              expect(traces[0][0]).to.have.property('error', 1)
+              // the message content differs on OpenAI version, even between patches
+              expect(traces[0][0].meta['error.message']).to.exist
+              expect(traces[0][0].meta).to.have.property('error.type', 'Error')
+              expect(traces[0][0].meta['error.stack']).to.exist
+            })
+
+          try {
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              await openai.models.list()
+            } else {
+              await openai.listModels()
+            }
+          } catch {
+            // ignore, we expect an error
+          }
+
+          await checkTraces
+
+          clock.tick(10 * 1000)
+
+          const expectedTags = ['error:1']
+
+          expect(metricStub).to.have.been.calledWith('openai.request.error', 1, 'c', expectedTags)
+          expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
+
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.prompt')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.completion')
+          expect(metricStub).to.not.have.been.calledWith('openai.tokens.total')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.tokens')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.requests')
+          expect(metricStub).to.not.have.been.calledWith('openai.ratelimit.remaining.tokens')
+        })
+      })
+
       describe('create completion', () => {
         afterEach(() => {
           nock.cleanAll()
@@ -196,10 +256,10 @@ describe('Plugin', () => {
           clock.tick(10 * 1000)
 
           const expectedTags = [
+            'error:0',
             'org:kill-9',
             'endpoint:/v1/completions',
-            'model:text-davinci-002',
-            'error:0'
+            'model:text-davinci-002'
           ]
 
           expect(metricStub).to.have.been.calledWith('openai.request.duration') // timing value not guaranteed
@@ -228,51 +288,6 @@ describe('Plugin', () => {
             ]
           })
         })
-
-        if (semver.intersects('>4.0.0', version)) {
-          it('makes a successful call with streaming', async () => {
-            nock('https://api.openai.com:443')
-              .post('/v1/completions')
-              .reply(200, function () {
-                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/completions.simple.txt'))
-              }, {
-                'Content-Type': 'text/plain',
-                'openai-organization': 'kill-9'
-              })
-
-            const checkTraces = agent
-              .use(traces => {
-                const span = traces[0][0]
-
-                expect(span).to.have.property('name', 'openai.request')
-                expect(span).to.have.property('type', 'openai')
-                expect(span).to.have.property('error', 0)
-                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
-                expect(span.meta).to.have.property('openai.request.method', 'POST')
-                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/completions')
-                expect(span.meta).to.have.property('openai.request.model', 'gpt-4o')
-                expect(span.meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
-                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
-                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
-                expect(span.meta).to.have.property('openai.response.choices.0.text', ' this is a test.')
-              })
-
-            const params = {
-              model: 'gpt-4o',
-              prompt: 'Hello, OpenAI!',
-              temperature: 0.5,
-              stream: true
-            }
-            const stream = await openai.completions.create(params)
-
-            for await (const part of stream) {
-              expect(part).to.have.property('choices')
-              expect(part.choices[0]).to.have.property('text')
-            }
-
-            await checkTraces
-          })
-        }
 
         it('should not throw with empty response body', async () => {
           nock('https://api.openai.com:443')
@@ -745,10 +760,10 @@ describe('Plugin', () => {
             await checkTraces
 
             const expectedTags = [
+              'error:0',
               'org:kill-9',
               'endpoint:/v1/edits',
-              'model:text-davinci-edit:001',
-              'error:0'
+              'model:text-davinci-edit:001'
             ]
 
             expect(metricStub).to.be.calledWith('openai.ratelimit.requests', 20, 'g', expectedTags)
@@ -3072,6 +3087,14 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
                 expect(span.meta).to.have.property('openai.response.choices.0.message.content',
                   'Hello! How can I assist you today?')
+
+                // token metrics - these should be estimated counts
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.have.property('openai.response.usage.completion_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.have.property('openai.response.usage.total_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
               })
 
             const stream = await openai.chat.completions.create({
@@ -3087,6 +3110,10 @@ describe('Plugin', () => {
             }
 
             await checkTraces
+
+            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
+            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
+            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
           })
 
           it('makes a successful chat completion call with empty stream', async () => {
@@ -3126,6 +3153,222 @@ describe('Plugin', () => {
             }
 
             await checkTraces
+          })
+
+          it('makes a successful chat completion call with multiple choices', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.multiple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-4')
+                expect(span.meta).to.have.property('openai.request.messages.0.content', 'How are you?')
+                expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+
+                // message 0
+                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.0.message.content',
+                  'As an AI, I don\'t have feelings, but I\'m here to assist you. How can I help you today?'
+                )
+
+                // message 1
+                expect(span.meta).to.have.property('openai.response.choices.1.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.1.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.1.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.1.message.content',
+                  'I\'m just a computer program so I don\'t have feelings, ' +
+                  'but I\'m here and ready to help you with anything you need. How can I assis...'
+                )
+
+                // message 2
+                expect(span.meta).to.have.property('openai.response.choices.2.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.2.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.2.message.role', 'assistant')
+                expect(span.meta).to.have.property('openai.response.choices.2.message.content',
+                  'I\'m just a computer program, so I don\'t have feelings like humans do. ' +
+                  'I\'m here and ready to assist you with any questions or tas...'
+                )
+              })
+
+            const stream = await openai.chat.completions.create({
+              model: 'gpt-4',
+              messages: [{ role: 'user', content: 'How are you?', name: 'hunter2' }],
+              stream: true,
+              n: 3
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('delta')
+            }
+
+            await checkTraces
+          })
+
+          it('makes a successful chat completion call with usage included', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.simple.usage.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                expect(span.meta).to.have.property('openai.response.choices.0.message.content', 'I\'m just a computer')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens', 11)
+                expect(span.metrics).to.have.property('openai.response.usage.completion_tokens', 5)
+                expect(span.metrics).to.have.property('openai.response.usage.total_tokens', 16)
+              })
+
+            const stream = await openai.chat.completions.create({
+              model: 'gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'How are you?', name: 'hunter2' }],
+              max_tokens: 5,
+              stream: true,
+              stream_options: {
+                include_usage: true
+              }
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+            }
+
+            await checkTraces
+
+            const expectedTags = [
+              'error:0',
+              'org:kill-9',
+              'endpoint:/v1/chat/completions',
+              'model:gpt-3.5-turbo-0125'
+            ]
+
+            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt', 11, 'd', expectedTags)
+            expect(metricStub).to.have.been.calledWith('openai.tokens.completion', 5, 'd', expectedTags)
+            expect(metricStub).to.have.been.calledWith('openai.tokens.total', 16, 'd', expectedTags)
+          })
+
+          it('makes a successful completion call', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/completions.simple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                expect(span).to.have.property('name', 'openai.request')
+                expect(span).to.have.property('type', 'openai')
+                expect(span).to.have.property('error', 0)
+                expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                expect(span.meta).to.have.property('openai.request.method', 'POST')
+                expect(span.meta).to.have.property('openai.request.endpoint', '/v1/completions')
+                expect(span.meta).to.have.property('openai.request.model', 'gpt-4o')
+                expect(span.meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
+                expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
+                expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                expect(span.meta).to.have.property('openai.response.choices.0.text', ' this is a test.')
+
+                // token metrics - these should be estimated counts
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.have.property('openai.response.usage.completion_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.have.property('openai.response.usage.total_tokens')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+              })
+
+            const stream = await openai.completions.create({
+              model: 'gpt-4o',
+              prompt: 'Hello, OpenAI!',
+              temperature: 0.5,
+              stream: true
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+              expect(part.choices[0]).to.have.property('text')
+            }
+
+            await checkTraces
+
+            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt')
+            expect(metricStub).to.have.been.calledWith('openai.tokens.completion')
+            expect(metricStub).to.have.been.calledWith('openai.tokens.total')
+          })
+
+          it('makes a successful completion call with usage included', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/completions.simple.usage.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                expect(span.meta).to.have.property('openai.response.choices.0.text', '\\n\\nI am an AI')
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens', 4)
+                expect(span.metrics).to.have.property('openai.response.usage.completion_tokens', 5)
+                expect(span.metrics).to.have.property('openai.response.usage.total_tokens', 9)
+              })
+
+            const stream = await openai.completions.create({
+              model: 'gpt-3.5-turbo-instruct',
+              prompt: 'How are you?',
+              stream: true,
+              max_tokens: 5,
+              stream_options: {
+                include_usage: true
+              }
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+            }
+
+            await checkTraces
+
+            const expectedTags = [
+              'error:0',
+              'org:kill-9',
+              'endpoint:/v1/completions',
+              'model:gpt-3.5-turbo-instruct'
+            ]
+
+            expect(metricStub).to.have.been.calledWith('openai.tokens.prompt', 4, 'd', expectedTags)
+            expect(metricStub).to.have.been.calledWith('openai.tokens.completion', 5, 'd', expectedTags)
+            expect(metricStub).to.have.been.calledWith('openai.tokens.total', 9, 'd', expectedTags)
           })
 
           if (semver.intersects('>4.16.0', version)) {
