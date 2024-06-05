@@ -261,7 +261,7 @@ function handleResults (actions, req, res, rootSpan, abortController) {
   const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
     block(req, res, rootSpan, abortController, blockingAction)
-    if (!abortController || abortController.signal.aborted) {
+    if (!abortController?.signal || abortController.signal.aborted) {
       responseBlockedSet.add(res)
     }
   }
