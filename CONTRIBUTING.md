@@ -86,14 +86,22 @@ $ yarn
 
 ## Testing
 
-Before running _plugin_ tests, the data stores need to be running.
-The easiest way to start all of them is to use the provided
-docker-compose configuration:
+### Prerequisites
 
-```sh
-$ docker-compose up -d -V --remove-orphans --force-recreate
-$ yarn services
-```
+Before running _plugin_ tests, the data stores need to be running. And for that to work you first need to authenticate Docker against the GitHub Container Registry.
+
+1. [Create a new classic GitHub Personal Access Token (PAT)](https://github.com/settings/tokens/new) with `read:packages` permissions.
+2. [Authorise the new PAT with the Datadog org](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-an-ssh-key-for-use-with-saml-single-sign-on).
+3. Configure Docker to log in using this new PAT:
+   ```sh
+   # Ensure you have the PAT in the clipboard, then run:
+   $ pbpaste | docker login ghcr.io -u <github-username> --password-stdin
+   ```
+4. The easiest way to start all of them is to use the provided docker compose configuration:
+   ```sh
+   $ docker compose up -d -V --remove-orphans --force-recreate
+   $ yarn services
+   ```
 
 > **Note**
 > The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
