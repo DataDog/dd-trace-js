@@ -14,7 +14,6 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
-
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 const {
@@ -78,7 +77,6 @@ class DatadogSpan {
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
-
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -279,6 +277,10 @@ class DatadogSpan {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
+  }
+
+  _initTags (fields) {
+    return Object.assign({}, fields.tags)
   }
 
   _addTags (keyValuePairs) {

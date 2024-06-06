@@ -45,6 +45,7 @@ const zeroTraceId = '0000000000000000'
 class TextMapPropagator {
   constructor (config) {
     this._config = config
+    this._apmTracingEnabled = !config.appsec?.standalone?.enabled
   }
 
   inject (spanContext, carrier) {

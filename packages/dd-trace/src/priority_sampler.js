@@ -64,11 +64,13 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    const tag = this._getPriorityFromTags(context._tags)
+    const tag = this._getPriorityFromTags(context._tags, context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
-      context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      if (!context._sampling.mechanism) {
+        context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      }
     } else if (auto) {
       context._sampling.priority = this._getPriorityFromAuto(root)
     } else {
@@ -198,8 +200,38 @@ class PrioritySampler {
   }
 }
 
+class DelegatingPrioritySampler {
+  constructor (env, sampler) {
+    this._sampler = new PrioritySampler(env, sampler)
+  }
+
+  configure (env, sampler) {
+    return this._sampler.configure(env, sampler)
+  }
+
+  isSampled (span) {
+    return this._sampler.isSampled(span)
+  }
+
+  sample (span, auto) {
+    return this._sampler.sample(span, auto)
+  }
+
+  update (rates) {
+    return this._sampler.update(rates)
+  }
+
+  validate (samplingPriority) {
+    return this._sampler.validate(samplingPriority)
+  }
+
+  setSampler (sampler) {
+    this._sampler = sampler
+  }
+}
+
 function hasOwn (object, prop) {
   return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
-module.exports = PrioritySampler
+module.exports = { DelegatingPrioritySampler, PrioritySampler, hasOwn }

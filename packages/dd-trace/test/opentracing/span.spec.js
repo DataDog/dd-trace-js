@@ -3,7 +3,6 @@
 require('../setup/tap')
 
 const Config = require('../../src/config')
-const { APM_TRACING_ENABLED_KEY } = require('../../src/constants')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Span', () => {

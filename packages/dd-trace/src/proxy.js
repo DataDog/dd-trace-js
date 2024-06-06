@@ -181,7 +181,7 @@ class Tracer extends NoopProxy {
       if (!this._tracingInitialized) {
         this._tracer = new DatadogTracer(config)
         this.appsec = new AppsecSdk(this._tracer, config)
-        appsecStandalone.configure(config)
+        appsecStandalone.configure(config, this._tracer)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {

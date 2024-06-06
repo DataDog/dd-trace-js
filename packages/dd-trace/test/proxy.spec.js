@@ -54,7 +54,8 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
+      setPrioritySampler: sinon.stub()
     }
 
     noop = {
@@ -343,7 +344,8 @@ describe('TracerProxy', () => {
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
 
-        expect(standalone.configure).to.have.been.calledOnce
+        const config = AppsecSdk.firstCall.args[1]
+        expect(standalone.configure).to.have.been.calledOnceWithExactly(config, remoteConfigProxy._tracer)
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
