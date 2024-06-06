@@ -1108,7 +1108,7 @@ describe('Config', () => {
         rasp: {
           enabled: false
         },
-        stackTrace : {
+        stackTrace: {
           enabled: false,
           maxDepth: 42,
           maxStackTraces: 5
