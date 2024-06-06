@@ -118,6 +118,8 @@ function block (req, res, rootSpan, abortController, actionParameters) {
   res.writeHead(statusCode, headers).end(body)
 
   abortController?.abort()
+
+  // TODO add res in blocked weak set when response blocking is merged
 }
 
 function getBlockingAction (actions) {

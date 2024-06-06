@@ -3,7 +3,28 @@
 const { storage } = require('../../../datadog-core')
 const addresses = require('./addresses')
 const { httpClientRequestStart } = require('./channels')
+const web = require('../plugins/util/web')
 const waf = require('./waf')
+const { getBlockingAction, block } = require('./blocking')
+
+class AbortError extends Error {
+  constructor (req, res, blockingAction) {
+    super('AbortError')
+    this.name = 'AbortError'
+    this.req = req
+    this.res = res
+    this.blockingAction = blockingAction
+  }
+}
+
+function handleUncaughtException (err) {
+  if (err instanceof AbortError) {
+    const { req, res, blockingAction } = err
+    block(req, res, web.root(req), null, blockingAction)
+  } else {
+    throw err
+  }
+}
 
 const RULE_TYPES = {
   SSRF: 'ssrf'
@@ -11,10 +32,14 @@ const RULE_TYPES = {
 
 function enable () {
   httpClientRequestStart.subscribe(analyzeSsrf)
+
+  process.on('uncaughtException', handleUncaughtException)
 }
 
 function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
+
+  process.off('uncaughtException', handleUncaughtException)
 }
 
 function analyzeSsrf (ctx) {
@@ -27,10 +52,20 @@ function analyzeSsrf (ctx) {
   const persistent = {
     [addresses.HTTP_OUTGOING_URL]: url
   }
-  // TODO: Currently this is only monitoring, we should
-  //     block the request if SSRF attempt and
-  //     generate stack traces
-  waf.run({ persistent }, req, RULE_TYPES.SSRF)
+  // TODO: Currently this is monitoring/blocking, we should
+  //     generate stack traces if SSRF attempts
+  const actions = waf.run({ persistent }, req, RULE_TYPES.SSRF)
+
+  const res = store?.res
+  handleWafResults(actions, ctx.abortData, req, res)
+}
+
+function handleWafResults (actions, abortData, req, res) {
+  const blockingAction = getBlockingAction(actions)
+  if (blockingAction && abortData) {
+    abortData.abortController.abort()
+    abortData.error = new AbortError(req, res, blockingAction)
+  }
 }
 
 module.exports = {

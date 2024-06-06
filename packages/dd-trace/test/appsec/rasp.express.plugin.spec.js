@@ -61,6 +61,26 @@ withVersions('express', 'express', expressVersion => {
     }
 
     describe('ssrf', () => {
+      async function testBlockingRequest () {
+        try {
+          await axios.get('/?host=ifconfig.pro')
+          assert.fail('Request should be blocked')
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+        }
+
+        await agent.use((traces) => {
+          const span = getWebSpan(traces)
+          assert.property(span.meta, '_dd.appsec.json')
+          assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
+          assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+          assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+          assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+        })
+      }
+
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
@@ -79,20 +99,16 @@ withVersions('express', 'express', expressVersion => {
 
           it('Should detect threat doing a GET request', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
-              res.end('end')
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', (e) => {
+                if (e.message === 'AbortError') {
+                  res.writeHead(500)
+                }
+                res.end('end')
+              })
             }
 
-            axios.get('/?host=ifconfig.pro')
-
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.property(span.meta, '_dd.appsec.json')
-              assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
-              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-              assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-              assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-            })
+            await testBlockingRequest()
           })
 
           it('Should detect threat doing a POST request', async () => {
@@ -101,19 +117,15 @@ withVersions('express', 'express', expressVersion => {
                 .request(`${protocol}://${req.query.host}`, { method: 'POST' })
               clientRequest.write('dummy_post_data')
               clientRequest.end()
-              res.end('end')
+              clientRequest.on('error', (e) => {
+                if (e.message === 'AbortError') {
+                  res.writeHead(500)
+                }
+                res.end('end')
+              })
             }
 
-            axios.get('/?host=ifconfig.pro')
-
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.property(span.meta, '_dd.appsec.json')
-              assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
-              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-              assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-              assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-            })
+            await testBlockingRequest()
           })
         })
       })
