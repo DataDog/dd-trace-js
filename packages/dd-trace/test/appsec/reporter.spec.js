@@ -204,9 +204,6 @@ describe('reporter', () => {
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -246,12 +243,9 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -264,13 +258,10 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -439,6 +430,104 @@ describe('reporter', () => {
       expect(span.addTags).to.have.been.calledWithExactly({
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
+      })
+    })
+
+    it('should add http request data inside request span when appsec.event is true', () => {
+      const req = {
+        headers: {
+          host: 'localhost',
+          'user-agent': 'arachni'
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+      span.context()._tags['appsec.event'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+    })
+
+    it('should add http request data inside request span when user login success is tracked', () => {
+      const req = {
+        headers: {
+          host: 'localhost',
+          'user-agent': 'arachni'
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.success.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+    })
+
+    it('should add http request data inside request span when user login failure is tracked', () => {
+      const req = {
+        headers: {
+          host: 'localhost',
+          'user-agent': 'arachni'
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.failure.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+    })
+
+    it('should add http request data inside request span when user custom event is tracked', () => {
+      const req = {
+        headers: {
+          host: 'localhost',
+          'user-agent': 'arachni'
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.custon.event.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
       })
     })
 

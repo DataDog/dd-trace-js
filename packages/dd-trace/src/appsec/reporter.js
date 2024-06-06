@@ -112,9 +112,9 @@ function reportAttack (attackData) {
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
-
-  newTags['appsec.event'] = 'true'
+  const newTags = {
+    'appsec.event': 'true'
+  }
 
   if (limiter.isAllowed()) {
     newTags['manual.keep'] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
@@ -132,11 +132,6 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
   } else {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
-  }
-
-  const ua = newTags['http.request.headers.user-agent']
-  if (ua) {
-    newTags['http.useragent'] = ua
   }
 
   newTags['network.client.ip'] = req.socket.remoteAddress
@@ -185,15 +180,37 @@ function finishRequest (req, res) {
   // collect some headers even when no attack is detected
   rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
 
-  if (!rootSpan.context()._tags['appsec.event']) return
+  const tags = rootSpan.context()._tags
+  if (!shouldTrackHeaders(tags)) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
+  Object.assign(newTags, filterHeaders(req.headers, REQUEST_HEADERS_MAP))
 
-  if (req.route && typeof req.route.path === 'string') {
+  const appsecEvent = tags['appsec.event'] === 'true'
+  if (req.route && typeof req.route.path === 'string' && appsecEvent) {
     newTags['http.endpoint'] = req.route.path
   }
 
+  const ua = newTags['http.request.headers.user-agent']
+  if (ua) {
+    newTags['http.useragent'] = ua
+  }
+
   rootSpan.addTags(newTags)
+}
+
+function shouldTrackHeaders (tags) {
+  if (tags['appsec.event'] === 'true') {
+    return true
+  }
+
+  for (const tagName of Object.keys(tags)) {
+    if (tagName.startsWith('appsec.events.')) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function setRateLimit (rateLimit) {
