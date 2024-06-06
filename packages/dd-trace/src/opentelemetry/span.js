@@ -250,13 +250,11 @@ class Span {
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack
     })
-
-    const attributes = {
-      'exception.message': exception.message,
-      'exception.type': exception.type,
-      'exception.escaped': exception.escaped,
-      'exception.stacktrace': exception.stack
-    }
+    const attributes = {}
+    if (exception.message) attributes['exception.message'] = exception.message
+    if (exception.type) attributes['exception.type'] = exception.type
+    if (exception.escaped) attributes['exception.escaped'] = exception.escaped
+    if (exception.stack) attributes['exception.stacktrace'] = exception.stack
     this.addEvent(exception.name, attributes, timeInput)
   }
 

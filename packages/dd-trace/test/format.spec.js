@@ -206,6 +206,28 @@ describe('format', () => {
       )
     })
 
+    it('should format span events', () => {
+      span._events = [
+        { name: 'Something went so wrong', startTime: 1 },
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+          startTime: 1633023102
+        }
+      ]
+
+      trace = format(span)
+      const spanEvents = JSON.parse(trace.meta.events)
+      expect(spanEvents).to.deep.equal([{
+        name: 'Something went so wrong',
+        time_unix_nano: 1000000
+      }, {
+        name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+        time_unix_nano: 1633023102000000,
+        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+      }])
+    })
+
     it('should format span links', () => {
       span._links = [
         {

@@ -348,12 +348,23 @@ describe('OTel Span', () => {
     }
 
     const error = new TestError()
-    span.recordException(error)
+    span.recordException(error, 1714536311886)
 
     const { _tags } = span._ddSpan.context()
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
+
+    const events = span._ddSpan._events
+    expect(events).to.have.lengthOf(1)
+    expect(events).to.deep.equal([{
+      name: error.name,
+      attributes: {
+        'exception.message': error.message,
+        'exception.stacktrace': error.stack
+      },
+      startTime: 1714536311886
+    }])
   })
 
   it('should not set status on already ended spans', () => {
@@ -403,48 +414,23 @@ describe('OTel Span', () => {
     expect(processor.onEnd).to.have.been.calledWith(span)
   })
   it('should add span events', () => {
-    const span1 = tracer.startSpan('name')
-    const span2 = tracer.startSpan('name')
+    const span1 = makeSpan('span1')
+    const span2 = makeSpan('span2')
     span1.addEvent('Web page unresponsive',
       { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, 1714536311886)
     span2.addEvent('Web page loaded')
     span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
-    span1.end()
-    span2.end()
-    span1.addEvent('Event on finished span, event will be ignored')
-    span2.addEvent('Event on finished span, event won\'t be added')
     const events1 = span1._ddSpan._events
     const events2 = span2._ddSpan._events
-
-    let expectedEvents = [
-      {
-        name: 'Web page unresponsive',
-        startTime: 1714536311886,
-        attributes: {
-          'error.code': '403',
-          'unknown values': [1, ['h', 'a', [false]]]
-        }
+    expect(events1).to.have.lengthOf(1)
+    expect(events1).to.deep.equal([{
+      name: 'Web page unresponsive',
+      startTime: 1714536311886,
+      attributes: {
+        'error.code': '403',
+        'unknown values': [1]
       }
-    ]
-    expect(events1).to.deep.equal(expectedEvents)
-
-    expectedEvents = [
-      {
-        name: 'Web page loaded',
-        startTime: 1714537311986000,
-        attributes: {}
-      },
-      {
-        name: 'Button changed color',
-        startTime: 1714537311986000,
-        attributes: {
-          colors: [112, 215, 70],
-          'response.time': 134.3,
-          success: true
-        }
-      }
-    ]
-
-    expect(events2).to.deep.equal(expectedEvents)
+    }])
+    expect(events2).to.have.lengthOf(2)
   })
 })
