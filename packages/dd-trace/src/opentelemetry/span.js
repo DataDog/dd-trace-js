@@ -196,15 +196,6 @@ class Span {
     return this
   }
 
-  addEvent (name, attributesOrStartTime, startTime) {
-    startTime = typeof attributesOrStartTime === 'number' ? attributesOrStartTime : startTime
-    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
-    startTime = hrTimeToMilliseconds(hrStartTime)
-
-    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
-    return this
-  }
-
   addLink (context, attributes) {
     // extract dd context
     const ddSpanContext = context._ddContext
@@ -248,12 +239,24 @@ class Span {
     return this.ended === false
   }
 
+  addEvent (name, attributesOrStartTime, startTime) {
+    startTime = typeof attributesOrStartTime === 'number' ? attributesOrStartTime : startTime
+    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
+    startTime = hrTimeToMilliseconds(hrStartTime)
+
+    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
+    return this
+  }
+
   recordException (exception, timeInput) {
+    console.log(55, this._ddSpan.context())
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack
     })
+    this.setStatus({ code: 0 })
+    console.log(55, this._ddSpan.context())
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
     if (exception.type) attributes['exception.type'] = exception.type
