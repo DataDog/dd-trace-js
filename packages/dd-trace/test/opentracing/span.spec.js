@@ -170,7 +170,7 @@ describe('Span', () => {
         operationName: 'operation'
       })
 
-      expect(span.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
     })
 
     it('should not add _dd.apm.enabled tag when apmTracingEnabled = true', () => {
@@ -179,7 +179,7 @@ describe('Span', () => {
         apmTracingEnabled: true
       })
 
-      expect(span.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag when apmTracingEnabled = false', () => {
@@ -188,8 +188,8 @@ describe('Span', () => {
         apmTracingEnabled: false
       })
 
-      expect(span.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(span.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      expect(span.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(span.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -198,8 +198,8 @@ describe('Span', () => {
         apmTracingEnabled: false
       })
 
-      expect(parent.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(parent.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      expect(parent.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(parent.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
 
       const child = new Span(tracer, processor, prioritySampler, {
         operationName: 'operation',
@@ -207,7 +207,7 @@ describe('Span', () => {
         parent
       })
 
-      expect(child.context()._trace.tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      expect(child.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -224,8 +224,8 @@ describe('Span', () => {
         parent
       })
 
-      expect(child.context()._trace.tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(child.context()._trace.tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      expect(child.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      expect(child.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
     })
   })
 

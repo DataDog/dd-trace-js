@@ -79,6 +79,9 @@ class DatadogSpan {
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
+
+    this._addApmTracingTag(this._spanContext._tags, fields, parent)
+
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -251,10 +254,6 @@ class DatadogSpan {
         tracestate: parent._tracestate
       })
 
-      if (parent._isRemote) {
-        this._addApmTracingTag(spanContext, fields)
-      }
-
       if (!spanContext._trace.startTime) {
         startTime = dateNow()
       }
@@ -272,8 +271,6 @@ class DatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
       }
-
-      this._addApmTracingTag(spanContext, fields)
     }
 
     spanContext._trace.ticks = spanContext._trace.ticks || now()
@@ -298,9 +295,9 @@ class DatadogSpan {
     this._prioritySampler.sample(this, false)
   }
 
-  _addApmTracingTag (spanContext, fields) {
-    if (fields.apmTracingEnabled === false) {
-      spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
+  _addApmTracingTag (tags, fields, parent) {
+    if (fields.apmTracingEnabled === false && (!parent || parent._isRemote)) {
+      tags[APM_TRACING_ENABLED_KEY] = 0
     }
   }
 }
