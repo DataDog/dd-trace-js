@@ -268,6 +268,18 @@ describe('track_event', () => {
 
         expect(rootSpan.setTraceTag).to.have.been.calledOnceWithExactly('_dd.p.appsec', 1)
       })
+
+      it('should not add _dd.p.appsec tag if standaloneEnabled', () => {
+        isStandaloneEnabled.returns(false)
+
+        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true'
+        })
+
+        expect(rootSpan.setTraceTag).to.have.not.been.called
+      })
     })
   })
 
