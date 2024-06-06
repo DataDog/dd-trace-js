@@ -17,7 +17,8 @@ describe('reporter', () => {
         _tags: {}
       }),
       addTags: sinon.stub(),
-      setTag: sinon.stub()
+      setTag: sinon.stub(),
+      setTraceTag: sinon.stub()
     }
 
     web = {
@@ -124,18 +125,6 @@ describe('reporter', () => {
       expect(Reporter.metricsQueue.get('_dd.appsec.event_rules.error_count')).to.be.eq(0)
 
       expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion)
-    })
-
-    it('should not add _dd.p.appsec entrie if standalone ASM disabled', () => {
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
-      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.undefined
-    })
-
-    it('should add _dd.p.appsec entrie if standalone ASM enabled', () => {
-      isStandaloneEnabled.returns(true)
-
-      Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules)
-      expect(Reporter.metricsQueue.get('_dd.p.appsec')).to.be.eq(1)
     })
   })
 
@@ -307,12 +296,13 @@ describe('reporter', () => {
         'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
-        '_dd.p.appsec': 1,
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
         'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+
+      expect(span.setTraceTag).to.have.been.calledOnceWithExactly('_dd.p.appsec', 1)
     })
   })
 

@@ -60,10 +60,6 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
     [MANUAL_KEEP]: 'true'
   }
 
-  if (isStandaloneEnabled()) {
-    tags[APPSEC_PROPAGATION_KEY] = 1
-  }
-
   if (mode === 'sdk') {
     tags[`_dd.appsec.events.${eventName}.sdk`] = 'true'
   }
@@ -79,6 +75,10 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
   }
 
   rootSpan.addTags(tags)
+
+  if (isStandaloneEnabled()) {
+    rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
+  }
 }
 
 module.exports = {

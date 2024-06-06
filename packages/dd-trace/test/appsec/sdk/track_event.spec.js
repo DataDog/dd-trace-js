@@ -22,7 +22,8 @@ describe('track_event', () => {
       }
 
       rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
+        setTraceTag: sinon.stub()
       }
 
       getRootSpan = sinon.stub().callsFake(() => rootSpan)
@@ -262,9 +263,10 @@ describe('track_event', () => {
         trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
-          'manual.keep': 'true',
-          '_dd.p.appsec': 1
+          'manual.keep': 'true'
         })
+
+        expect(rootSpan.setTraceTag).to.have.been.calledOnceWithExactly('_dd.p.appsec', 1)
       })
     })
   })

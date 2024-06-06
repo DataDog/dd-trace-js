@@ -151,6 +151,11 @@ class DatadogSpan {
     return this
   }
 
+  setTraceTag (key, value) {
+    tagger.add(this._spanContext._trace.tags, { [key]: value })
+    return this
+  }
+
   log () {
     return this
   }

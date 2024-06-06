@@ -38,7 +38,8 @@ describe('user_blocking', () => {
         context: () => {
           return { _tags: {} }
         },
-        setTag: sinon.stub()
+        setTag: sinon.stub(),
+        setTraceTag: sinon.stub()
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 

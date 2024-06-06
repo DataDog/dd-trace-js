@@ -92,10 +92,6 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
 
   metricsQueue.set(MANUAL_KEEP, 'true')
 
-  if (isStandaloneEnabled()) {
-    metricsQueue.set(APPSEC_PROPAGATION_KEY, 1)
-  }
-
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
@@ -127,7 +123,7 @@ function reportAttack (attackData) {
     newTags[MANUAL_KEEP] = 'true'
 
     if (isStandaloneEnabled()) {
-      newTags[APPSEC_PROPAGATION_KEY] = 1
+      rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
     }
   }
 
@@ -178,6 +174,11 @@ function finishRequest (req, res) {
 
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
+
+    if (isStandaloneEnabled()) {
+      rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
+    }
+
     metricsQueue.clear()
   }
 

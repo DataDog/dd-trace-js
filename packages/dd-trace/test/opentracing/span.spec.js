@@ -385,6 +385,15 @@ describe('Span', () => {
     })
   })
 
+  describe('setTraceTag', () => {
+    it('should set a trace tag', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTraceTag('foo', 'bar')
+
+      expect(tagger.add).to.have.been.calledWith(span.context()._trace.tags, { foo: 'bar' })
+    })
+  })
+
   describe('finish', () => {
     it('should add itself to the context trace finished spans', () => {
       processor.process.returns(Promise.resolve())
