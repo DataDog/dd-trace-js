@@ -10,6 +10,7 @@ const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
+const { timeInputToHrTime } = require('@opentelemetry/core')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
@@ -337,7 +338,27 @@ describe('OTel Span', () => {
     error.setStatus({ code: 2, message: 'error' })
     expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
   })
+  // it('should use user set time in span events', () => {
+  //   const hrnow = process.hrtime()
+  //   const perfnow = performance.now()
+  //   const datenow = Date.now()
 
+  //   const checks = [
+  //     // hrtime
+  //     [hrnow, hrnow],
+  //     // performance.now()
+  //     [perfnow, hrTime(perfnow)],
+  //     // Date.now()
+  //     [datenow, timeInputToHrTime(datenow)]
+  //   ]
+
+  //   for (const [input, output] of checks) {
+  //     const span = otelTracer.startSpan('name', {
+  //       startTime: input
+  //     })
+  //     expect(span.startTime).to.eql(output)
+  //   }
+  // })
   it('should record exceptions', () => {
     const span = makeSpan('name')
 
@@ -348,7 +369,8 @@ describe('OTel Span', () => {
     }
 
     const error = new TestError()
-    span.recordException(error, 1714536311886)
+    const datenow = Date.now()
+    span.recordException(error, datenow)
 
     const { _tags } = span._ddSpan.context()
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
@@ -363,7 +385,7 @@ describe('OTel Span', () => {
         'exception.message': error.message,
         'exception.stacktrace': error.stack
       },
-      startTime: 1714536311886
+      startTime: datenow
     }])
   })
 
@@ -416,8 +438,9 @@ describe('OTel Span', () => {
   it('should add span events', () => {
     const span1 = makeSpan('span1')
     const span2 = makeSpan('span2')
+    const datenow = Date.now()
     span1.addEvent('Web page unresponsive',
-      { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, 1714536311886)
+      { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, datenow)
     span2.addEvent('Web page loaded')
     span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
     const events1 = span1._ddSpan._events
@@ -425,7 +448,7 @@ describe('OTel Span', () => {
     expect(events1).to.have.lengthOf(1)
     expect(events1).to.deep.equal([{
       name: 'Web page unresponsive',
-      startTime: 1714536311886,
+      startTime: datenow,
       attributes: {
         'error.code': '403',
         'unknown values': [1]

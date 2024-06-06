@@ -197,6 +197,10 @@ class Span {
   }
 
   addEvent (name, attributesOrStartTime, startTime) {
+    startTime = typeof attributesOrStartTime === 'number' ? attributesOrStartTime : startTime
+    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
+    startTime = hrTimeToMilliseconds(hrStartTime)
+
     this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
     return this
   }

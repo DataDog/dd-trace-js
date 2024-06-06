@@ -170,12 +170,11 @@ class DatadogSpan {
     if (attributesOrStartTime) {
       if (typeof attributesOrStartTime === 'object') {
         event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
-      } else {
+      } else if (typeof attributesOrStartTime === 'number') {
         startTime = attributesOrStartTime
       }
     }
-    event.startTime = startTime || dateNow()
-
+    event.startTime = startTime || this._getTime()
     this._events.push(event)
   }
 
