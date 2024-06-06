@@ -91,7 +91,7 @@ $ yarn
 Before running _plugin_ tests, the data stores need to be running. And for that to work you first need to authenticate Docker against the GitHub Container Registry.
 
 1. [Create a new classic GitHub Personal Access Token (PAT)](https://github.com/settings/tokens/new) with `read:packages` permissions.
-2. [Authorise the new PAT with the Datadog org](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-an-ssh-key-for-use-with-saml-single-sign-on).
+2. [Authorise the new PAT with the Datadog org](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-saml-single-sign-on/authorizing-an-ssh-key-for-use-with-saml-single-sign-on) (required only if you want to pull the `couchbase-server-sandbox` package).
 3. Configure Docker to log in using this new PAT:
    ```sh
    # Ensure you have the PAT in the clipboard, then run:
