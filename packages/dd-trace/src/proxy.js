@@ -174,8 +174,6 @@ class Tracer extends NoopProxy {
   }
 
   _enableOrDisableTracing (config) {
-    appsecStandalone.configure(config)
-
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
@@ -194,6 +192,7 @@ class Tracer extends NoopProxy {
     }
 
     if (this._tracingInitialized) {
+      appsecStandalone.configure(config)
       this._tracer.configure(config)
       this._pluginManager.configure(config)
       setStartupLogPluginManager(this._pluginManager)
