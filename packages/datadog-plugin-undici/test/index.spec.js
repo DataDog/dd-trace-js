@@ -138,6 +138,7 @@ describe('Plugin', () => {
             })
           })
         })
+
         it('should remove the query string from the URL', done => {
           const app = express()
 
