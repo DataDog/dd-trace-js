@@ -96,7 +96,7 @@ function extractSpanEvents (trace, span) {
       const formattedEvent = {}
 
       formattedEvent.name = event.name
-      formattedEvent.time_unix_nano = Math.round(event.startTime * 1e9)
+      formattedEvent.time_unix_nano = Math.round(event.startTime * 1e6)
 
       if (event.attributes && Object.keys(event.attributes).length > 0) {
         formattedEvent.attributes = event.attributes
