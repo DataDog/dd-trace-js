@@ -249,14 +249,14 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    console.log(55, this._ddSpan.context())
+    // console.log(55, this._ddSpan.error)
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack
+      [ERROR_STACK]: exception.stack,
+      error: 0
     })
-    this.setStatus({ code: 0 })
-    console.log(55, this._ddSpan.context())
+    // console.log(55, this._ddSpan.context())
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
     if (exception.type) attributes['exception.type'] = exception.type
