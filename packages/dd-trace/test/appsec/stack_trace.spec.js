@@ -201,7 +201,7 @@ describe('Stack trace reporter', () => {
     it('should add stack trace to rootSpan when meta_struct is already present', () => {
       const rootSpan = {
         meta_struct: {
-          'another_tag': []
+          another_tag: []
         }
       }
       const stackId = 'test_stack_id'
@@ -227,7 +227,7 @@ describe('Stack trace reporter', () => {
     it('should add stack trace to rootSpan when meta_struct is already present and contains another stack', () => {
       const rootSpan = {
         meta_struct: {
-          'another_tag': [],
+          another_tag: [],
           '_dd.stack': {
             exploit: [callSiteList]
           }
