@@ -154,7 +154,11 @@ function extractTags (trace, span) {
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          trace.error = 1
+          if (tags[ERROR_TYPE].startsWith('otel.recordException')) {
+            tags[ERROR_TYPE] = tags[ERROR_TYPE].replace('otel.recordException', '')
+          } else {
+            trace.error = 1
+          }
         } else {
           break
         }

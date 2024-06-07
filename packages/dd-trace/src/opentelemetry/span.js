@@ -251,12 +251,12 @@ class Span {
   recordException (exception, timeInput) {
     // console.log(55, this._ddSpan.error)
     this._ddSpan.addTags({
-      [ERROR_TYPE]: exception.name,
+      [ERROR_TYPE]: 'otel.recordException' + exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack
     })
-    this._ddSpan.setTag('error', this._ddSpan.error ? this._ddSpan.error : 0)
-    console.log(55, this._ddSpan.context())
+    // this._ddSpan.setTag('error', this._ddSpan.error ? this._ddSpan.error : 0)
+    // console.log(55, this._ddSpan.context())
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
     if (exception.type) attributes['exception.type'] = exception.type
