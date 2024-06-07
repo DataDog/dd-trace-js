@@ -11,7 +11,6 @@
   */
 
 import { isMainThread } from 'worker_threads'
-import { register } from 'node:module';
 
 import { fileURLToPath } from 'node:url'
 import {
@@ -46,5 +45,8 @@ export async function getSource (...args) {
 
 if (isMainThread) {
   await import('./init.js')
-  register('./loader-hook.mjs', import.meta.url)
+  const { register } = await import('node:module')
+  if (register) {
+    register('./loader-hook.mjs', import.meta.url)
+  }
 }
