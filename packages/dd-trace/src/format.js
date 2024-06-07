@@ -157,9 +157,10 @@ function extractTags (trace, span) {
           if (!tags[ERROR_TYPE].startsWith('otel.recordException')) {
             trace.error = 1
           }
-        } else {
-          break
-        }
+        } break
+      case 'setTraceError':
+        trace.error = 1
+        break
       default: // eslint-disable-line no-fallthrough
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
