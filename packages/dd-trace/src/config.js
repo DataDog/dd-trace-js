@@ -607,6 +607,7 @@ class Config {
 
     const tags = {}
     const env = this._env = {}
+    this._envUnprocessed = {}
 
     tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
     tagger.add(tags, DD_TAGS)
@@ -614,16 +615,20 @@ class Config {
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
+    this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
+    this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
     this._setValue(env, 'appsec.rateLimit', maybeInt(DD_APPSEC_TRACE_RATE_LIMIT))
+    this._envUnprocessed['appsec.rateLimit'] = DD_APPSEC_TRACE_RATE_LIMIT
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
+    this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
@@ -636,13 +641,16 @@ class Config {
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
+    this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
     this._setBoolean(env, 'gitMetadataEnabled', DD_TRACE_GIT_METADATA_ENABLED)
     this._setArray(env, 'headerTags', DD_TRACE_HEADER_TAGS)
     this._setString(env, 'hostname', coalesce(DD_AGENT_HOST, DD_TRACE_AGENT_HOSTNAME))
     this._setBoolean(env, 'iast.deduplicationEnabled', DD_IAST_DEDUPLICATION_ENABLED)
     this._setBoolean(env, 'iast.enabled', DD_IAST_ENABLED)
     this._setValue(env, 'iast.maxConcurrentRequests', maybeInt(DD_IAST_MAX_CONCURRENT_REQUESTS))
+    this._envUnprocessed['iast.maxConcurrentRequests'] = DD_IAST_MAX_CONCURRENT_REQUESTS
     this._setValue(env, 'iast.maxContextOperations', maybeInt(DD_IAST_MAX_CONTEXT_OPERATIONS))
+    this._envUnprocessed['iast.maxContextOperations'] = DD_IAST_MAX_CONTEXT_OPERATIONS
     this._setBoolean(env, 'iast.redactionEnabled', DD_IAST_REDACTION_ENABLED && !isFalse(DD_IAST_REDACTION_ENABLED))
     this._setString(env, 'iast.redactionNamePattern', DD_IAST_REDACTION_NAME_PATTERN)
     this._setString(env, 'iast.redactionValuePattern', DD_IAST_REDACTION_VALUE_PATTERN)
@@ -650,15 +658,18 @@ class Config {
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(env, 'iast.requestSampling', iastRequestSampling)
     }
+    this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
+    this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
     if (DD_TRACE_PEER_SERVICE_MAPPING) {
       this._setValue(env, 'peerServiceMapping', fromEntries(
-        process.env.DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+        DD_TRACE_PEER_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
       ))
+      this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
@@ -682,6 +693,7 @@ class Config {
       !this._isInServerlessEnvironment()
     ))
     this._setValue(env, 'remoteConfig.pollInterval', maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS))
+    this._envUnprocessed['remoteConfig.pollInterval'] = DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
     this._setBoolean(env, 'reportHostname', DD_TRACE_REPORT_HOSTNAME)
     // only used to explicitly set runtimeMetrics to false
     const otelSetRuntimeMetrics = String(OTEL_METRICS_EXPORTER).toLowerCase() === 'none'
@@ -699,12 +711,14 @@ class Config {
     }
     this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
-    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES)) // example
+    this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
+    this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
+      this._envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
@@ -719,6 +733,7 @@ class Config {
     this._setBoolean(env, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
+    this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
     const hasTelemetryLogsUsingFeatures =
       env['iast.enabled'] || env['profiling.enabled'] || env['profiling.heuristicsEnabled']
         ? true
@@ -735,20 +750,25 @@ class Config {
   _applyOptions (options) {
     const opts = this._options = this._options || {}
     const tags = {}
+    this._optsUnprocessed = {}
 
     options = this.options = Object.assign({ ingestion: {} }, options, opts)
 
     tagger.add(tags, options.tags)
 
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
+    this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
+    this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
+    this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec.rules)
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
+    this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
@@ -763,22 +783,26 @@ class Config {
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
+    this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
+    this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
     this._setBoolean(opts, 'iast.deduplicationEnabled', options.iastOptions && options.iastOptions.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
       options.iastOptions && (options.iastOptions === true || options.iastOptions.enabled === true))
-    const iastRequestSampling = maybeInt(options.iastOptions?.requestSampling)
     this._setValue(opts, 'iast.maxConcurrentRequests',
       maybeInt(options.iastOptions?.maxConcurrentRequests))
-    this._setValue(opts, 'iast.maxContextOperations',
-      maybeInt(options.iastOptions && options.iastOptions.maxContextOperations))
-    this._setBoolean(opts, 'iast.redactionEnabled', options.iastOptions && options.iastOptions.redactionEnabled)
+    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iastOptions?.maxConcurrentRequests
+    this._setValue(opts, 'iast.maxContextOperations', maybeInt(options.iastOptions?.maxContextOperations))
+    this._optsUnprocessed['iast.maxContextOperations'] = options.iastOptions?.maxContextOperations
+    this._setBoolean(opts, 'iast.redactionEnabled', options.iastOptions?.redactionEnabled)
     this._setString(opts, 'iast.redactionNamePattern', options.iastOptions?.redactionNamePattern)
     this._setString(opts, 'iast.redactionValuePattern', options.iastOptions?.redactionValuePattern)
+    const iastRequestSampling = maybeInt(options.iastOptions?.requestSampling)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
+      this._optsUnprocessed['iast.requestSampling'] = options.iastOptions?.requestSampling
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iastOptions && options.iastOptions.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
@@ -792,6 +816,7 @@ class Config {
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
+      this._optsUnprocessed['remoteConfig.pollInterval'] = options.remoteConfig.pollInterval
     }
     this._setBoolean(opts, 'reportHostname', options.reportHostname)
     this._setBoolean(opts, 'runtimeMetrics', options.runtimeMetrics)
@@ -803,6 +828,7 @@ class Config {
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
       this._setString(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
+      this._optsUnprocessed.spanAttributeSchema = options.spanAttributeSchema
     }
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
@@ -931,6 +957,7 @@ class Config {
 
   _applyRemote (options) {
     const opts = this._remote = this._remote || {}
+    this._remoteUnprocessed = {}
     const tags = {}
     const headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
@@ -948,6 +975,7 @@ class Config {
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
     // ignore tags for now since rc sampling rule tags format is not supported
     this._setSamplingRule(opts, 'sampler.rules', this._ignoreTags(options.tracing_sampling_rules))
+    this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
   }
 
   _ignoreTags (samplingRules) {
@@ -1040,18 +1068,21 @@ class Config {
   _merge () {
     const containers = [this._remote, this._options, this._env, this._calculated, this._defaults]
     const origins = ['remote_config', 'code', 'env_var', 'calculated', 'default']
+    const unprocessedValues = [this._remoteUnprocessed, this._optsUnprocessed, this._envUnprocessed, {}, {}]
     const changes = []
 
     for (const name in this._defaults) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
         const origin = origins[i]
+        const unprocessed = unprocessedValues[i]
 
         if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
           if (get(this, name) === container[name] && has(this, name)) break
 
-          const value = container[name]
+          let value = container[name]
           set(this, name, value)
+          value = unprocessed[name] || value
 
           changes.push({ name, value, origin })
 
@@ -1069,6 +1100,7 @@ function maybeInt (number) {
   const parsed = parseInt(number)
   return isNaN(parsed) ? undefined : parsed
 }
+
 function maybeFloat (number) {
   const parsed = parseFloat(number)
   return isNaN(parsed) ? undefined : parsed

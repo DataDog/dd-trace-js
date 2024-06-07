@@ -287,6 +287,26 @@ describe('OTel Span', () => {
     expect(_tags).to.have.property('baz', 'buz')
   })
 
+  describe('should remap http.response.status_code', () => {
+    it('should remap when setting attributes', () => {
+      const span = makeSpan('name')
+
+      const { _tags } = span._ddSpan.context()
+
+      span.setAttributes({ 'http.response.status_code': 200 })
+      expect(_tags).to.have.property('http.status_code', '200')
+    })
+
+    it('should remap when setting singular attribute', () => {
+      const span = makeSpan('name')
+
+      const { _tags } = span._ddSpan.context()
+
+      span.setAttribute('http.response.status_code', 200)
+      expect(_tags).to.have.property('http.status_code', '200')
+    })
+  })
+
   it('should set span links', () => {
     const span = makeSpan('name')
     const span2 = makeSpan('name2')
