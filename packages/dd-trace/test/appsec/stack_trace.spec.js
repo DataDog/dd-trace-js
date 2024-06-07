@@ -166,7 +166,18 @@ describe('Stack trace reporter', () => {
       }
     ))
 
-    it('should add stack trace to rootSpan meta_struct', () => {
+    it('should not fail if no root span is passed', () => {
+      const rootSpan = undefined
+      const stackId = 'test_stack_id'
+      const maxDepth = 32
+      try {
+        reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+      } catch (e) {
+        assert.fail()
+      }
+    })
+
+    it('should add stack trace to rootSpan when meta_struct is not present', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 32
@@ -185,6 +196,61 @@ describe('Stack trace reporter', () => {
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
       assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
       assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+    })
+
+    it('should add stack trace to rootSpan when meta_struct is already present', () => {
+      const rootSpan = {
+        meta_struct: {
+          'another_tag': []
+        }
+      }
+      const stackId = 'test_stack_id'
+      const maxDepth = 32
+      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+
+      const expectedFrames = callSiteList.map((callSite, i) => (
+        {
+          id: i,
+          file: callSite.getFileName(),
+          line: callSite.getLineNumber(),
+          column: callSite.getColumnNumber(),
+          function: callSite.getFunctionName()
+        }
+      ))
+
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].id, stackId)
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].language, 'nodejs')
+      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      assert.property(rootSpan.meta_struct, 'another_tag')
+    })
+
+    it('should add stack trace to rootSpan when meta_struct is already present and contains another stack', () => {
+      const rootSpan = {
+        meta_struct: {
+          'another_tag': [],
+          '_dd.stack': {
+            exploit: [callSiteList]
+          }
+        }
+      }
+      const stackId = 'test_stack_id'
+      const maxDepth = 32
+      reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
+
+      const expectedFrames = callSiteList.map((callSite, i) => (
+        {
+          id: i,
+          file: callSite.getFileName(),
+          line: callSite.getLineNumber(),
+          column: callSite.getColumnNumber(),
+          function: callSite.getFunctionName()
+        }
+      ))
+
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].id, stackId)
+      assert.strictEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].language, 'nodejs')
+      assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[1].frames, expectedFrames)
+      assert.property(rootSpan.meta_struct, 'another_tag')
     })
 
     it('should not report stack trace when the maximum has been reached', () => {

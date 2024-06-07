@@ -55,24 +55,22 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
 function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSiteListGetter = getCallSiteList) {
   if (!rootSpan) return
 
-  let metaStruct = rootSpan.meta_struct
-  if (!metaStruct) {
-    metaStruct = {}
-    rootSpan.meta_struct = metaStruct
+  if (!rootSpan.meta_struct) {
+    rootSpan.meta_struct = {}
   }
-  let ddStack = metaStruct['_dd.stack']
-  if (!ddStack) {
-    metaStruct['_dd.stack'] = ddStack = {}
+
+  if (!rootSpan.meta_struct['_dd.stack']) {
+    rootSpan.meta_struct['_dd.stack'] = {}
   }
-  let exploitStacks = ddStack.exploit
-  if (!exploitStacks) {
-    exploitStacks = []
-    ddStack.exploit = exploitStacks
+
+  if (!rootSpan.meta_struct['_dd.stack'].exploit) {
+    rootSpan.meta_struct['_dd.stack'].exploit = []
   }
-  if (exploitStacks.length < maxStackTraces) {
+
+  if (rootSpan.meta_struct['_dd.stack'].exploit.length < maxStackTraces) {
     const callSiteList = callSiteListGetter()
     const frames = getFramesForMetaStruct(callSiteList, maxDepth)
-    exploitStacks.push({
+    rootSpan.meta_struct['_dd.stack'].exploit.push({
       id: stackId,
       language: 'nodejs',
       frames
