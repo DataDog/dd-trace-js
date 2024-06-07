@@ -39,6 +39,8 @@
     K6_OPTIONS_HIGH_LOAD_PRE_ALLOCATED_VUS: 4
     K6_OPTIONS_HIGH_LOAD_MAX_VUS: 4
 
+    DDTRACE_INSTALL_VERSION: "git://github.com/Datadog/dd-trace-js.git#${CI_COMMIT_SHA}"
+
   # Workaround: Currently we're not running the benchmarks on every PR, but GitHub still shows them as pending.
   # By marking the benchmarks as allow_failure, this should go away. (This workaround should be removed once the
   # benchmarks get changed to run on every PR)
