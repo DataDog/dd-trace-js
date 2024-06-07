@@ -32,13 +32,11 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'via',
   ...contentHeaderList,
   'host',
-  'user-agent',
-  'accept',
   'accept-encoding',
   'accept-language'
 ], 'http.request.headers.')
 
-const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+const identificationHeaders = [
   'x-amzn-trace-id',
   'cloudfront-viewer-ja3-fingerprint',
   'cf-ray',
@@ -47,6 +45,14 @@ const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
   'x-sigsci-requestid',
   'x-sigsci-tags',
   'akamai-user-risk'
+]
+
+// this request headers are always collected, and it breaks the expected spec orders
+const MANDATORY_REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  'content-type',
+  'user-agent',
+  'accept',
+  ...identificationHeaders
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
@@ -178,7 +184,12 @@ function finishRequest (req, res) {
   incrementWafRequestsMetric(req)
 
   // collect some headers even when no attack is detected
-  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
+  const mandatoryTags = filterHeaders(req.headers, MANDATORY_REQUEST_HEADERS_MAP)
+  const ua = mandatoryTags['http.request.headers.user-agent']
+  if (ua) {
+    mandatoryTags['http.useragent'] = ua
+  }
+  rootSpan.addTags(mandatoryTags)
 
   const tags = rootSpan.context()._tags
   if (!shouldTrackHeaders(tags)) return
@@ -190,12 +201,6 @@ function finishRequest (req, res) {
   if (req.route && typeof req.route.path === 'string' && appsecEvent) {
     newTags['http.endpoint'] = req.route.path
   }
-
-  const ua = newTags['http.request.headers.user-agent']
-  if (ua) {
-    newTags['http.useragent'] = ua
-  }
-
   rootSpan.addTags(newTags)
 }
 
