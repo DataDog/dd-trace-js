@@ -157,7 +157,8 @@ function extractTags (trace, span) {
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          if (!tags[ERROR_TYPE].startsWith('otel.recordException')) {
+          // HACK: to leave trace.error unchanged after a call to otel.recordException
+          if (!tags[ERROR_TYPE].startsWith('otel.recordException:')) {
             trace.error = 1
           }
         } else {
@@ -167,9 +168,9 @@ function extractTags (trace, span) {
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
-
-  if (tags[ERROR_TYPE] && tags[ERROR_TYPE].startsWith('otel.recordException')) {
-    tags[ERROR_TYPE] = tags[ERROR_TYPE].replace('otel.recordException', '')
+  // HACK: to leave trace.error unchanged after a call to otel.recordException
+  if (tags[ERROR_TYPE] && tags[ERROR_TYPE].startsWith('otel.recordException:')) {
+    tags[ERROR_TYPE] = tags[ERROR_TYPE].replace('otel.recordException:', '')
   }
 
   setSingleSpanIngestionTags(trace, context._spanSampling)

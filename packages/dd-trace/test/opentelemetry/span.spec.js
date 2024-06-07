@@ -10,7 +10,6 @@ const api = require('@opentelemetry/api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const SpanContext = require('../../src/opentelemetry/span_context')
 const { NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')
-const { timeInputToHrTime } = require('@opentelemetry/core')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../src/constants')
 const { SERVICE_NAME, RESOURCE_NAME } = require('../../../../ext/tags')
@@ -338,27 +337,7 @@ describe('OTel Span', () => {
     error.setStatus({ code: 2, message: 'error' })
     expect(errorCtx._tags).to.have.property(ERROR_MESSAGE, 'error')
   })
-  // it('should use user set time in span events', () => {
-  //   const hrnow = process.hrtime()
-  //   const perfnow = performance.now()
-  //   const datenow = Date.now()
 
-  //   const checks = [
-  //     // hrtime
-  //     [hrnow, hrnow],
-  //     // performance.now()
-  //     [perfnow, hrTime(perfnow)],
-  //     // Date.now()
-  //     [datenow, timeInputToHrTime(datenow)]
-  //   ]
-
-  //   for (const [input, output] of checks) {
-  //     const span = otelTracer.startSpan('name', {
-  //       startTime: input
-  //     })
-  //     expect(span.startTime).to.eql(output)
-  //   }
-  // })
   it('should record exceptions', () => {
     const span = makeSpan('name')
 
@@ -373,7 +352,7 @@ describe('OTel Span', () => {
     span.recordException(error, datenow)
 
     const { _tags } = span._ddSpan.context()
-    expect(_tags).to.have.property(ERROR_TYPE, 'otel.recordException' + error.name)
+    expect(_tags).to.have.property(ERROR_TYPE, 'otel.recordException:' + error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
 

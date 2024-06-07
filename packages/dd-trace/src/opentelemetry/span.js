@@ -20,6 +20,20 @@ function hrTimeToMilliseconds (time) {
   return time[0] * 1e3 + time[1] / 1e6
 }
 
+function isTimeInput (startTime) {
+  if (typeof startTime === 'number') {
+    return true
+  }
+  if (startTime instanceof Date) {
+    return true
+  }
+  if (Array.isArray(startTime) && startTime.length === 2 &&
+      typeof startTime[0] === 'number' && typeof startTime[1] === 'number') {
+    return true
+  }
+  return false
+}
+
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
   [api.SpanKind.SERVER]: kinds.SERVER,
@@ -241,7 +255,7 @@ class Span {
   }
 
   addEvent (name, attributesOrStartTime, startTime) {
-    startTime = typeof attributesOrStartTime === 'number' ? attributesOrStartTime : startTime
+    startTime = attributesOrStartTime && isTimeInput(attributesOrStartTime) ? attributesOrStartTime : startTime
     const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
     startTime = hrTimeToMilliseconds(hrStartTime)
 
@@ -250,14 +264,12 @@ class Span {
   }
 
   recordException (exception, timeInput) {
-    // console.log(55, this._ddSpan.error)
+    // HACK: identifier is added so that trace.error remains unchanged after a call to otel.recordException
     this._ddSpan.addTags({
-      [ERROR_TYPE]: 'otel.recordException' + exception.name,
+      [ERROR_TYPE]: 'otel.recordException:' + exception.name,
       [ERROR_MESSAGE]: exception.message,
       [ERROR_STACK]: exception.stack
     })
-    // this._ddSpan.setTag('error', this._ddSpan.error ? this._ddSpan.error : 0)
-    // console.log(55, this._ddSpan.context())
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message
     if (exception.type) attributes['exception.type'] = exception.type
