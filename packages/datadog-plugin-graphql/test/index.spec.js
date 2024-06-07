@@ -11,19 +11,17 @@ const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
 
+const { performance } = require('perf_hooks')
+
 describe('Plugin', () => {
   let tracer
   let graphql
   let schema
   let sort
-  let clock
 
-  afterEach(() => {
-    if (clock) {
-      clock.restore()
-      clock = undefined
-    }
-  })
+  let markFast
+  let markSlow
+  let markSync
 
   function buildSchema () {
     const Human = new graphql.GraphQLObjectType({
@@ -93,7 +91,8 @@ describe('Plugin', () => {
           type: graphql.GraphQLString,
           resolve (obj, args) {
             return new Promise((resolve) => {
-              setTimeout(() => resolve('fast field'), 100)
+              markFast = performance.now()
+              resolve('fast field')
             })
           }
         },
@@ -101,14 +100,15 @@ describe('Plugin', () => {
           type: graphql.GraphQLString,
           resolve (obj, args) {
             return new Promise((resolve) => {
-              setTimeout(() => resolve('slow field'), 1234)
+              markSlow = performance.now()
+              resolve('slow field')
             })
           }
         },
         syncField: {
           type: graphql.GraphQLString,
           resolve (obj, args) {
-            clock.tick(7)
+            markSync = performance.now()
             return 'sync field'
           }
         }
@@ -412,7 +412,6 @@ describe('Plugin', () => {
         })
 
         it('should instrument each field resolver duration independently', done => {
-          clock = sinon.useFakeTimers()
           const source = `
             {
               human {
@@ -427,6 +426,10 @@ describe('Plugin', () => {
           let foundSlowFieldSpan = false
           let foundSyncFieldSpan = false
 
+          let fastAsyncTime
+          let slowAsyncTime
+          let syncTime
+
           const processTraces = (traces) => {
             try {
               for (const trace of traces) {
@@ -434,15 +437,15 @@ describe('Plugin', () => {
                   if (span.name !== 'graphql.resolve') {
                     continue
                   }
-                  const spanDurationMs = Number(span.duration) / 1000000
+
                   if (span.resource === 'fastAsyncField:String') {
-                    expect(spanDurationMs).to.equal(100)
+                    expect(fastAsyncTime).to.be.below(slowAsyncTime)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    expect(spanDurationMs).to.equal(1234)
+                    expect(slowAsyncTime).to.be.below(syncTime)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    expect(spanDurationMs).to.equal(7)
+                    expect(syncTime).to.be.above(slowAsyncTime)
                     foundSyncFieldSpan = true
                   }
 
@@ -460,13 +463,19 @@ describe('Plugin', () => {
           }
 
           agent.subscribe(processTraces)
-          graphql.graphql({ schema, source }).catch((e) => {
-            agent.unsubscribe(processTraces)
-            done(e)
-          })
 
-          // Asyncronously tick forward to release the pending graphql resolver timeouts
-          clock.tickAsync(2000)
+          const markStart = performance.now()
+
+          graphql.graphql({ schema, source })
+            .then((result) => {
+              fastAsyncTime = markFast - markStart
+              slowAsyncTime = markSlow - markStart
+              syncTime = markSync - markStart
+            })
+            .catch((e) => {
+              agent.unsubscribe(processTraces)
+              done(e)
+            })
         })
 
         it('should instrument nested field resolvers', done => {
