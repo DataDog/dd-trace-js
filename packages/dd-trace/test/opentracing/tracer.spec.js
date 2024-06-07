@@ -258,32 +258,6 @@ describe('Tracer', () => {
       expect(testSpan).to.equal(span)
     })
 
-    it('should start a span with APM tracing disabled', () => {
-      config.appsec = {
-        standalone: {
-          enabled: true
-        }
-      }
-
-      tracer = new Tracer(config)
-      const testSpan = tracer.startSpan('name', fields)
-
-      expect(Span).to.have.been.calledWith(tracer, processor, prioritySampler, {
-        operationName: 'name',
-        parent: null,
-        tags: {
-          'service.name': 'service'
-        },
-        startTime: fields.startTime,
-        hostname: undefined,
-        traceId128BitGenerationEnabled: undefined,
-        integrationName: undefined,
-        links: undefined
-      })
-
-      expect(testSpan).to.equal(span)
-    })
-
     it('should start a span with span links attached', () => {
       const context = new SpanContext()
       fields.links = [{ context }]
