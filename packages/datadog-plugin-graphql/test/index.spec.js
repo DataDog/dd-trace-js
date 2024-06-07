@@ -439,13 +439,13 @@ describe('Plugin', () => {
                   }
 
                   if (span.resource === 'fastAsyncField:String') {
-                    expect(fastAsyncTime).to.be.below(slowAsyncTime)
+                    expect(fastAsyncTime).to.be.lessThan(slowAsyncTime)
                     foundFastFieldSpan = true
                   } else if (span.resource === 'slowAsyncField:String') {
-                    expect(slowAsyncTime).to.be.below(syncTime)
+                    expect(slowAsyncTime).to.be.lessThan(syncTime)
                     foundSlowFieldSpan = true
                   } else if (span.resource === 'syncField:String') {
-                    expect(syncTime).to.be.above(slowAsyncTime)
+                    expect(syncTime).to.be.greaterThan(slowAsyncTime)
                     foundSyncFieldSpan = true
                   }
 
