@@ -388,6 +388,30 @@ describe('Appsec Telemetry metrics', () => {
         expect(durationExt).to.be.eq(77)
       })
 
+      it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
+        appsecTelemetry.enable({
+          enabled: true,
+          metrics: false
+        })
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 42,
+          durationExt: 52
+        }, req)
+
+        appsecTelemetry.updateWafRequestsMetricTags({
+          duration: 24,
+          durationExt: 25
+        }, req)
+
+        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
+
+        expect(duration).to.be.eq(66)
+        expect(durationExt).to.be.eq(77)
+      })
+    })
+
+    describe('updateRaspRequestsMetricTags', () => {
       it('should sum rasp.duration and rasp.durationExt request metrics', () => {
         appsecTelemetry.enable({
           enabled: false,
@@ -409,28 +433,6 @@ describe('Appsec Telemetry metrics', () => {
         expect(raspDuration).to.be.eq(66)
         expect(raspDurationExt).to.be.eq(77)
         expect(raspEvalCount).to.be.eq(2)
-      })
-
-      it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
-        appsecTelemetry.enable({
-          enabled: true,
-          metrics: false
-        })
-
-        appsecTelemetry.updateWafRequestsMetricTags({
-          duration: 42,
-          durationExt: 52
-        }, req)
-
-        appsecTelemetry.updateWafRequestsMetricTags({
-          duration: 24,
-          durationExt: 25
-        }, req)
-
-        const { duration, durationExt } = appsecTelemetry.getRequestMetrics(req)
-
-        expect(duration).to.be.eq(66)
-        expect(durationExt).to.be.eq(77)
       })
 
       it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
