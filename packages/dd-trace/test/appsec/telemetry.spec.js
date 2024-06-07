@@ -462,7 +462,7 @@ describe('Appsec Telemetry metrics', () => {
           metrics: false
         })
 
-        appsecTelemetry.updateWafRequestsMetricTags({
+        appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,
           durationExt: 25
         }, req, 'rule_type')
