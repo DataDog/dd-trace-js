@@ -27,10 +27,14 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans } = this._config
+    const { flushMinSpans, tracing } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
+    if (tracing === false) {
+      this._erase(trace, active)
+      return
+    }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this._prioritySampler.sample(spanContext)
       this._spanSampler.sample(spanContext)
@@ -54,11 +58,11 @@ class SpanProcessor {
     }
 
     if (this._killAll) {
-      started.map(startedSpan => {
+      for (const startedSpan of started) {
         if (!startedSpan._finished) {
           startedSpan.finish()
         }
-      })
+      }
     }
   }
 
@@ -136,6 +140,10 @@ class SpanProcessor {
           log.error(`Span finished in one trace but was started in another trace: ${span}`)
         }
       }
+    }
+
+    for (const span of trace.finished) {
+      span.context()._tags = {}
     }
 
     trace.started = active

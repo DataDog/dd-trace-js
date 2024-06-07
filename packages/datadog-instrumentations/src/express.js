@@ -3,7 +3,6 @@
 const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const { AbortController } = require('node-abort-controller')
 
 const handleChannel = channel('apm:express:request:handle')
 
@@ -19,10 +18,30 @@ function wrapHandle (handle) {
 
 const wrapRouterMethod = createWrapRouterMethod('express')
 
+const responseJsonChannel = channel('datadog:express:response:json:start')
+
+function wrapResponseJson (json) {
+  return function wrappedJson (obj) {
+    if (responseJsonChannel.hasSubscribers) {
+      // backward compat as express 4.x supports deprecated 3.x signature
+      if (arguments.length === 2 && typeof arguments[1] !== 'number') {
+        obj = arguments[1]
+      }
+
+      responseJsonChannel.publish({ req: this.req, body: obj })
+    }
+
+    return json.apply(this, arguments)
+  }
+}
+
 addHook({ name: 'express', versions: ['>=4'] }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
+
+  shimmer.wrap(express.response, 'json', wrapResponseJson)
+  shimmer.wrap(express.response, 'jsonp', wrapResponseJson)
 
   return express
 })
@@ -33,8 +52,9 @@ function publishQueryParsedAndNext (req, res, next) {
   return function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
+      const query = req.query
 
-      queryParserReadCh.publish({ req, res, abortController })
+      queryParserReadCh.publish({ req, res, query, abortController })
 
       if (abortController.signal.aborted) return
     }

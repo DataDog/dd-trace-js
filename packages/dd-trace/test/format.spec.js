@@ -24,14 +24,20 @@ const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
 
 const spanId = id('0234567812345678')
+const spanId2 = id('0254567812345678')
+const spanId3 = id('0264567812345678')
 
 describe('format', () => {
   let format
   let span
   let trace
   let spanContext
+  let spanContext2
+  let spanContext3
+  let TraceState
 
   beforeEach(() => {
+    TraceState = require('../src/opentracing/propagation/tracestate')
     spanContext = {
       _traceId: spanId,
       _spanId: spanId,
@@ -40,9 +46,12 @@ describe('format', () => {
       _metrics: {},
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
+        tags: {}
       },
-      _name: 'operation'
+      _name: 'operation',
+      toTraceId: sinon.stub().returns(spanId),
+      toSpanId: sinon.stub().returns(spanId)
     }
 
     span = {
@@ -56,6 +65,23 @@ describe('format', () => {
     }
 
     spanContext._trace.started.push(span)
+
+    spanContext2 = {
+      ...spanContext,
+      _traceId: spanId2,
+      _spanId: spanId2,
+      _parentId: spanId2,
+      toTraceId: sinon.stub().returns(spanId2.toString(16)),
+      toSpanId: sinon.stub().returns(spanId2.toString(16))
+    }
+    spanContext3 = {
+      ...spanContext,
+      _traceId: spanId3,
+      _spanId: spanId3,
+      _parentId: spanId3,
+      toTraceId: sinon.stub().returns(spanId3.toString(16)),
+      toSpanId: sinon.stub().returns(spanId3.toString(16))
+    }
 
     format = require('../src/format')
   })
@@ -180,6 +206,60 @@ describe('format', () => {
       )
     })
 
+    it('should format span links', () => {
+      span._links = [
+        {
+          context: spanContext2
+        },
+        {
+          context: spanContext3
+        }
+      ]
+
+      trace = format(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      expect(spanLinks).to.deep.equal([{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16)
+      }, {
+        trace_id: spanId3.toString(16),
+        span_id: spanId3.toString(16)
+      }])
+    })
+
+    it('creates a span link', () => {
+      const ts = TraceState.fromString('dd=s:-1;o:foo;t.dm:-4;t.usr.id:bar')
+      const traceIdHigh = '0000000000000010'
+      spanContext2._tracestate = ts
+      spanContext2._trace = {
+        started: [],
+        finished: [],
+        origin: 'synthetics',
+        tags: {
+          '_dd.p.tid': traceIdHigh
+        }
+      }
+
+      spanContext2._sampling.priority = 0
+      const link = {
+        context: spanContext2,
+        attributes: { foo: 'bar' }
+      }
+      span._links = [link]
+
+      trace = format(span)
+      const spanLinks = JSON.parse(trace.meta['_dd.span_links'])
+
+      expect(spanLinks).to.deep.equal([{
+        trace_id: spanId2.toString(16),
+        span_id: spanId2.toString(16),
+        attributes: { foo: 'bar' },
+        tracestate: ts.toString(),
+        flags: 0
+      }])
+    })
+
     it('should extract trace chunk tags', () => {
       spanContext._trace.tags = {
         chunk: 'test',
@@ -262,7 +342,7 @@ describe('format', () => {
     it('should extract errors', () => {
       const error = new Error('boom')
 
-      spanContext._tags['error'] = error
+      spanContext._tags.error = error
       trace = format(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
@@ -275,7 +355,7 @@ describe('format', () => {
 
       error.name = null
       error.stack = null
-      spanContext._tags['error'] = error
+      spanContext._tags.error = error
       trace = format(span)
 
       expect(trace.meta[ERROR_MESSAGE]).to.equal(error.message)
@@ -294,12 +374,12 @@ describe('format', () => {
     it('should add the language tag for a basic span', () => {
       trace = format(span)
 
-      expect(trace.meta['language']).to.equal('javascript')
+      expect(trace.meta.language).to.equal('javascript')
     })
 
     describe('when there is an `error` tag ', () => {
       it('should set the error flag when error tag is true', () => {
-        spanContext._tags['error'] = true
+        spanContext._tags.error = true
 
         trace = format(span)
 
@@ -307,7 +387,7 @@ describe('format', () => {
       })
 
       it('should not set the error flag when error is false', () => {
-        spanContext._tags['error'] = false
+        spanContext._tags.error = false
 
         trace = format(span)
 
@@ -315,11 +395,11 @@ describe('format', () => {
       })
 
       it('should not extract error to meta', () => {
-        spanContext._tags['error'] = true
+        spanContext._tags.error = true
 
         trace = format(span)
 
-        expect(trace.meta['error']).to.be.undefined
+        expect(trace.meta.error).to.be.undefined
       })
     })
 
@@ -345,7 +425,7 @@ describe('format', () => {
     })
 
     it('should not set the error flag for internal spans with error tag', () => {
-      spanContext._tags['error'] = new Error('boom')
+      spanContext._tags.error = new Error('boom')
       spanContext._name = 'fs.operation'
 
       trace = format(span)
@@ -387,7 +467,7 @@ describe('format', () => {
         num: '1'
       }
 
-      spanContext._tags['nested'] = tag
+      spanContext._tags.nested = tag
       trace = format(span)
 
       expect(trace.meta['nested.num']).to.equal('1')
@@ -445,10 +525,18 @@ describe('format', () => {
 
     it('should not crash on prototype-free tags objects when nesting', () => {
       const tags = Object.create(null)
-      tags['nested'] = { foo: 'bar' }
-      spanContext._tags['nested'] = tags
+      tags.nested = { foo: 'bar' }
+      spanContext._tags.nested = tags
 
       format(span)
+    })
+
+    it('should capture analytics.event', () => {
+      spanContext._tags['analytics.event'] = 1
+
+      trace = format(span)
+
+      expect(trace.metrics).to.have.property('_dd1.sr.eausr', 1)
     })
   })
 })

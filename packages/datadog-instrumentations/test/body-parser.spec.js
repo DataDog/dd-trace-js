@@ -1,7 +1,7 @@
 'use strict'
 
 const getPort = require('get-port')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
 

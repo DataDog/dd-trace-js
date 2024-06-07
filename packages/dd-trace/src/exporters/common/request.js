@@ -6,7 +6,10 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+// eslint-disable-next-line n/no-deprecated-api
 const { parse: urlParse } = require('url')
+const zlib = require('zlib')
+
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 const { storage } = require('../../../../datadog-core')
@@ -93,16 +96,31 @@ function request (data, options, callback) {
   options.agent = isSecure ? httpsAgent : httpAgent
 
   const onResponse = res => {
-    let responseData = ''
+    const chunks = []
 
     res.setTimeout(timeout)
 
-    res.on('data', chunk => { responseData += chunk })
+    res.on('data', chunk => {
+      chunks.push(chunk)
+    })
     res.on('end', () => {
       activeRequests--
+      const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
-        callback(null, responseData, res.statusCode)
+        const isGzip = res.headers['content-encoding'] === 'gzip'
+        if (isGzip) {
+          zlib.gunzip(buffer, (err, result) => {
+            if (err) {
+              log.error(`Could not gunzip response: ${err.message}`)
+              callback(null, '', res.statusCode)
+            } else {
+              callback(null, result.toString(), res.statusCode)
+            }
+          })
+        } else {
+          callback(null, buffer.toString(), res.statusCode)
+        }
       } else {
         let errorMessage = ''
         try {
@@ -114,6 +132,7 @@ function request (data, options, callback) {
         } catch (e) {
           // ignore error
         }
+        const responseData = buffer.toString()
         if (responseData) {
           errorMessage += ` Response from the endpoint: "${responseData}"`
         }

@@ -2,7 +2,7 @@
 
 // TODO: move anything related to tracing to TracingPlugin instead
 
-const dc = require('../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const { storage } = require('../../../datadog-core')
 
 class Subscription {
@@ -84,7 +84,7 @@ module.exports = class Plugin {
 
     if (!store || !store.span) return
 
-    if (!store.span._spanContext._tags['error']) {
+    if (!store.span._spanContext._tags.error) {
       store.span.setTag('error', error || 1)
     }
   }

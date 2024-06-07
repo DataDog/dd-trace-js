@@ -1,33 +1,9 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const log = require('../../log')
-const telemetryLogs = require('./telemetry/log')
-const { calculateDDBasePath } = require('../../util')
 
-const ddBasePath = calculateDDBasePath(__dirname)
-const EOL = '\n'
-const STACK_FRAME_LINE_REGEX = /^\s*at\s/gm
-
-function sanitize (logEntry, stack) {
-  if (!stack) return logEntry
-
-  let stackLines = stack.split(EOL)
-
-  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
-
-  const isDDCode = firstIndex > -1 && stackLines[firstIndex].includes(ddBasePath)
-  stackLines = stackLines
-    .filter((line, index) => (isDDCode && index < firstIndex) || line.includes(ddBasePath))
-    .map(line => line.replace(ddBasePath, ''))
-
-  logEntry.stack_trace = stackLines.join(EOL)
-
-  if (!isDDCode) {
-    logEntry.message = 'omitted'
-  }
-
-  return logEntry
-}
+const telemetryLog = dc.channel('datadog:telemetry:log')
 
 function getTelemetryLog (data, level) {
   try {
@@ -40,18 +16,13 @@ function getTelemetryLog (data, level) {
       message = String(data.message || data)
     }
 
-    let logEntry = {
+    const logEntry = {
       message,
       level
     }
-
     if (data.stack) {
-      logEntry = sanitize(logEntry, data.stack)
-      if (logEntry.stack_trace === '') {
-        return
-      }
+      logEntry.stack_trace = data.stack
     }
-
     return logEntry
   } catch (e) {
     log.error(e)
@@ -80,9 +51,8 @@ const iastLog = {
   },
 
   publish (data, level) {
-    if (telemetryLogs.isLevelEnabled(level)) {
-      const telemetryLog = getTelemetryLog(data, level)
-      telemetryLogs.publish(telemetryLog)
+    if (telemetryLog.hasSubscribers) {
+      telemetryLog.publish(getTelemetryLog(data, level))
     }
     return this
   },
@@ -92,6 +62,10 @@ const iastLog = {
     return this.publish(data, 'DEBUG')
   },
 
+  /**
+   * forward 'INFO' log level to 'DEBUG' telemetry log level
+   * see also {@link ../../telemetry/logs#isLevelEnabled } method
+   */
   infoAndPublish (data) {
     this.info(data)
     return this.publish(data, 'DEBUG')

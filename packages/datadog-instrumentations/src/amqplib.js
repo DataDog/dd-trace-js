@@ -5,8 +5,11 @@ const {
   addHook,
   AsyncResource
 } = require('./helpers/instrument')
-const kebabCase = require('lodash.kebabcase')
+const kebabCase = require('../../datadog-core/src/utils/src/kebabcase')
 const shimmer = require('../../datadog-shimmer')
+
+const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
+const MIN_VERSION = ((NODE_MAJOR > 22) || (NODE_MAJOR === 22 && NODE_MINOR >= 2)) ? '>=0.5.3' : '>=0.5.0'
 
 const startCh = channel('apm:amqplib:command:start')
 const finishCh = channel('apm:amqplib:command:finish')
@@ -14,7 +17,7 @@ const errorCh = channel('apm:amqplib:command:error')
 
 let methods = {}
 
-addHook({ name: 'amqplib', file: 'lib/defs.js', versions: ['>=0.5'] }, defs => {
+addHook({ name: 'amqplib', file: 'lib/defs.js', versions: [MIN_VERSION] }, defs => {
   methods = Object.keys(defs)
     .filter(key => Number.isInteger(defs[key]))
     .filter(key => isCamelCase(key))
@@ -22,13 +25,13 @@ addHook({ name: 'amqplib', file: 'lib/defs.js', versions: ['>=0.5'] }, defs => {
   return defs
 })
 
-addHook({ name: 'amqplib', file: 'lib/channel.js', versions: ['>=0.5'] }, channel => {
+addHook({ name: 'amqplib', file: 'lib/channel.js', versions: [MIN_VERSION] }, channel => {
   shimmer.wrap(channel.Channel.prototype, 'sendImmediately', sendImmediately => function (method, fields) {
     return instrument(sendImmediately, this, arguments, methods[method], fields)
   })
 
   shimmer.wrap(channel.Channel.prototype, 'sendMessage', sendMessage => function (fields) {
-    return instrument(sendMessage, this, arguments, 'basic.publish', fields)
+    return instrument(sendMessage, this, arguments, 'basic.publish', fields, arguments[2])
   })
 
   shimmer.wrap(channel.BaseChannel.prototype, 'dispatchMessage', dispatchMessage => function (fields, message) {

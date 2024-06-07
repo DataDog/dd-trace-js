@@ -1,7 +1,9 @@
 'use strict'
 
+const path = require('path')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
+const semver = require('semver')
 const Readable = require('stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
@@ -42,20 +44,20 @@ describe('Plugin', () => {
           server.addService(TestService.service, service)
           server.start()
 
-          resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+          resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
         })
       } else {
         server.bind(`127.0.0.1:${port}`, grpc.ServerCredentials.createInsecure())
         server.addService(TestService.service, service)
         server.start()
 
-        resolve(new ClientService(`localhost:${port}`, grpc.credentials.createInsecure()))
+        resolve(new ClientService(`127.0.0.1:${port}`, grpc.credentials.createInsecure()))
       }
     })
   }
 
   function buildProtoClient (service, ClientService) {
-    const definition = loader.loadSync(`${__dirname}/test.proto`)
+    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
     const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
     return buildGenericService(service, TestService, ClientService)
@@ -126,6 +128,26 @@ describe('Plugin', () => {
               }
             )
 
+            if (semver.intersects(version, '>=1.1.4')) {
+              it('should provide host information', async () => {
+                const client = await buildClient({
+                  getUnary: (_, callback) => callback()
+                })
+
+                client.getUnary({ first: 'foobar' }, () => {})
+                return agent
+                  .use(traces => {
+                    expect(traces[0][0].meta).to.include({
+                      'network.destination.ip': '127.0.0.1',
+                      'network.destination.port': port.toString(),
+                      'rpc.service': 'test.TestService',
+                      'span.kind': 'client',
+                      component: 'grpc'
+                    })
+                  })
+              })
+            }
+
             it('should handle `unary` calls', async () => {
               const client = await buildClient({
                 getUnary: (_, callback) => callback()
@@ -149,7 +171,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'unary',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
 
                   expect(traces[0][0].metrics).to.include({
@@ -186,7 +208,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'server_streaming',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
 
                   expect(traces[0][0].metrics).to.include({
@@ -221,7 +243,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'client_streaming',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
 
                   expect(traces[0][0].metrics).to.include({
@@ -324,7 +346,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'unary',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK)
                   expect(traces[0][0].metrics).to.have.property('grpc.status.code', 2)
@@ -332,7 +354,7 @@ describe('Plugin', () => {
             })
 
             it('should handle protocol errors', async () => {
-              const definition = loader.loadSync(`${__dirname}/invalid.proto`)
+              const definition = loader.loadSync(path.join(__dirname, 'invalid.proto'))
               const test = grpc.loadPackageDefinition(definition).test
               const client = await buildClient({
                 getUnary: (_, callback) => callback(null)
@@ -352,7 +374,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'unary',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
                   expect(traces[0][0].meta).to.have.property(ERROR_STACK)
                   expect(traces[0][0].meta[ERROR_MESSAGE]).to.match(/^13 INTERNAL:.+$/m)
@@ -361,7 +383,7 @@ describe('Plugin', () => {
             })
 
             it('should handle property named "service"', async () => {
-              const definition = loader.loadSync(`${__dirname}/hasservice.proto`)
+              const definition = loader.loadSync(path.join(__dirname, 'hasservice.proto'))
               const thing = grpc.loadPackageDefinition(definition).thing
               await buildClient({
                 getUnary: (_, callback) => callback(null)
@@ -391,7 +413,7 @@ describe('Plugin', () => {
                     'rpc.service': 'test.TestService',
                     'grpc.method.kind': 'unary',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
 
                   expect(traces[0][0].metrics).to.deep.include({
@@ -423,7 +445,7 @@ describe('Plugin', () => {
                     'grpc.method.kind': 'unary',
                     'rpc.service': 'test.TestService',
                     'span.kind': 'client',
-                    'component': 'grpc'
+                    component: 'grpc'
                   })
 
                   expect(traces[0][0].metrics).to.deep.include({

@@ -6,7 +6,7 @@ const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
 const Config = require('../../src/config')
 
-const { channel } = require('../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const { expect } = require('chai')
 
 const testLogChannel = channel('apm:test:log')

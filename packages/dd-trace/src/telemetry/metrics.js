@@ -75,8 +75,8 @@ class CountMetric extends Metric {
     return this.track(value)
   }
 
-  dec (value = -1) {
-    return this.track(value)
+  dec (value = 1) {
+    return this.track(-value)
   }
 
   track (value = 1) {

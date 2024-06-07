@@ -9,12 +9,15 @@ class CallSiteMock {
     this.lineNumber = lineNumber
     this.columnNumber = columnNumber
   }
+
   getLineNumber () {
     return this.lineNumber
   }
+
   getColumnNumber () {
     return this.columnNumber
   }
+
   getFileName () {
     return this.fileName
   }
@@ -32,7 +35,7 @@ describe('path-line', function () {
   const rootPath = tmpdir.slice(0, firstSep + 1)
 
   const DIAGNOSTICS_CHANNEL_PATHS = [
-    path.join(rootPath, 'path', 'node_modules', 'diagnostics_channel', 'index.js'),
+    path.join(rootPath, 'path', 'node_modules', 'dc-polyfill'),
     'node:diagnostics_channel',
     'diagnostics_channel'
   ]
@@ -41,8 +44,8 @@ describe('path-line', function () {
     mockPath = {}
     mockProcess = {}
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
-      'path': mockPath,
-      'process': mockProcess
+      path: mockPath,
+      process: mockProcess
     })
   })
   describe('getFirstNonDDPathAndLine', () => {

@@ -41,6 +41,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -52,8 +53,7 @@ describe('CI Visibility Agentless Exporter', () => {
         isIntelligentTestRunnerEnabled: true,
         tags: {}
       })
-      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
-      agentlessExporter.getItrConfiguration({}, () => {
+      agentlessExporter.getLibraryConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
         expect(agentlessExporter.canReportCodeCoverage()).to.be.true
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
@@ -66,6 +66,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -83,7 +84,7 @@ describe('CI Visibility Agentless Exporter', () => {
         tags: {}
       })
       agentlessExporter._resolveGit()
-      agentlessExporter.getItrConfiguration({}, () => {
+      agentlessExporter.getLibraryConfiguration({}, () => {
         agentlessExporter.getSkippableSuites({}, () => {
           expect(scope.isDone()).to.be.true
           done()
@@ -96,6 +97,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -104,8 +106,7 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
-      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
-      agentlessExporter.getItrConfiguration({}, () => {
+      agentlessExporter.getLibraryConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
         expect(agentlessExporter.canReportCodeCoverage()).to.be.true
         expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
@@ -118,6 +119,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -126,7 +128,7 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
       })
-      agentlessExporter.getItrConfiguration({}, () => {
+      agentlessExporter.getLibraryConfiguration({}, () => {
         expect(scope.isDone()).to.be.true
         expect(agentlessExporter.canReportCodeCoverage()).to.be.true
         done()
@@ -141,6 +143,7 @@ describe('CI Visibility Agentless Exporter', () => {
         .reply(200, JSON.stringify({
           data: {
             attributes: {
+              require_git: false,
               code_coverage: true,
               tests_skipping: true
             }
@@ -157,8 +160,7 @@ describe('CI Visibility Agentless Exporter', () => {
         })
       }
 
-      expect(agentlessExporter.shouldRequestItrConfiguration()).to.be.true
-      agentlessExporter.getItrConfiguration({}, (err) => {
+      agentlessExporter.getLibraryConfiguration({}, (err) => {
         expect(scope.isDone()).not.to.be.true
         expect(err.message).to.contain(
           'Request to settings endpoint was not done because Datadog API key is not defined'

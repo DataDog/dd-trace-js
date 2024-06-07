@@ -4,8 +4,7 @@
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations.js')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
-
-warnIfUnsupported()
+const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
   hook()
@@ -23,7 +22,6 @@ for (const instrumentation of Object.values(instrumentations)) {
   }
 }
 
-const NM = 'node_modules/'
 const INSTRUMENTED = Object.keys(instrumentations)
 const RAW_BUILTINS = require('module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
@@ -77,7 +75,10 @@ module.exports.setup = function (build) {
     try {
       fullPathToModule = dotFriendlyResolve(args.path, args.resolveDir)
     } catch (err) {
-      console.warn(`MISSING: Unable to find "${args.path}". Is the package dead code?`)
+      if (DEBUG) {
+        console.warn(`Warning: Unable to find "${args.path}".` +
+          "Unless it's dead code this could cause a problem at runtime.")
+      }
       return
     }
     const extracted = extractPackageAndModulePath(fullPathToModule)
@@ -91,11 +92,14 @@ module.exports.setup = function (build) {
 
       let pathToPackageJson
       try {
-        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [ args.resolveDir ] })
+        pathToPackageJson = require.resolve(`${extracted.pkg}/package.json`, { paths: [args.resolveDir] })
       } catch (err) {
         if (err.code === 'MODULE_NOT_FOUND') {
           if (!internal) {
-            console.warn(`MISSING: Unable to find "${extracted.pkg}/package.json". Is the package dead code?`)
+            if (DEBUG) {
+              console.warn(`Warning: Unable to find "${extracted.pkg}/package.json".` +
+              "Unless it's dead code this could cause a problem at runtime.")
+            }
           }
           return
         } else {
@@ -144,7 +148,7 @@ module.exports.setup = function (build) {
         ${fileCode}
       })(...arguments);
       {
-        const dc = require('diagnostics_channel');
+        const dc = require('dc-polyfill');
         const ch = dc.channel('${CHANNEL}');
         const mod = module.exports
         const payload = {
@@ -167,23 +171,6 @@ module.exports.setup = function (build) {
   })
 }
 
-// Currently esbuild support requires Node.js >=v16.17 or >=v18.7
-// Better yet it would support Node >=v14.17 or >=v16
-// Of course, the most ideal would be to support all versions of Node that dd-trace supports.
-// Version constraints based on Node's diagnostics_channel support
-function warnIfUnsupported () {
-  const [major, minor] = process.versions.node.split('.').map(Number)
-  if (
-    major < 16 ||
-    (major === 16 && minor < 17) ||
-    (major === 18 && minor < 7)) {
-    console.error('WARNING: Esbuild support isn\'t available for older versions of Node.js.')
-    console.error(`Expected: Node.js >=v16.17 or >=v18.7. Actual: Node.js = ${process.version}.`)
-    console.error('This application may build properly with this version of Node.js, but unless a')
-    console.error('more recent version is used at runtime, third party packages won\'t be instrumented.')
-  }
-}
-
 // @see https://github.com/nodejs/node/issues/47000
 function dotFriendlyResolve (path, directory) {
   if (path === '.') {
@@ -192,35 +179,5 @@ function dotFriendlyResolve (path, directory) {
     path = '../'
   }
 
-  return require.resolve(path, { paths: [ directory ] })
-}
-
-/**
- * For a given full path to a module,
- *   return the package name it belongs to and the local path to the module
- *   input: '/foo/node_modules/@co/stuff/foo/bar/baz.js'
- *   output: { pkg: '@co/stuff', path: 'foo/bar/baz.js' }
- */
-function extractPackageAndModulePath (fullPath) {
-  const nm = fullPath.lastIndexOf(NM)
-  if (nm < 0) {
-    return { pkg: null, path: null }
-  }
-
-  const subPath = fullPath.substring(nm + NM.length)
-  const firstSlash = subPath.indexOf('/')
-
-  if (subPath[0] === '@') {
-    const secondSlash = subPath.substring(firstSlash + 1).indexOf('/')
-
-    return {
-      pkg: subPath.substring(0, firstSlash + 1 + secondSlash),
-      path: subPath.substring(firstSlash + 1 + secondSlash + 1)
-    }
-  }
-
-  return {
-    pkg: subPath.substring(0, firstSlash),
-    path: subPath.substring(firstSlash + 1)
-  }
+  return require.resolve(path, { paths: [directory] })
 }

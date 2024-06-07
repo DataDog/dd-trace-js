@@ -18,10 +18,10 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [16, 18, latest]
+        version: [18, 20, latest]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -33,18 +33,37 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [16, latest]
-        framework: [cucumber, playwright]
+        version: [18, latest]
+        framework: [cucumber, playwright, selenium]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
+      - name: Install Google Chrome
+        run: |
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          if [ $? -ne 0 ]; then echo "Failed to add Google key"; exit 1; fi
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
+        if: ${{ matrix.framework == 'selenium' }}
+      - name: Install ChromeDriver
+        run: |
+          export CHROME_VERSION=$(google-chrome --version)
+          CHROME_DRIVER_DOWNLOAD_URL=$(node --experimental-fetch scripts/get-chrome-driver-download-url.js)
+          wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
+          if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
+          unzip chromedriver-linux64.zip
+          sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
+          sudo chmod +x /usr/bin/chromedriver
+        if: ${{ matrix.framework == 'selenium' }}
       - run: yarn install
       - run: yarn test:integration:${{ matrix.framework }}
         env:
@@ -53,6 +72,9 @@ jobs:
   integration-cypress:
     strategy:
       matrix:
+        # Important: This is outside the minimum supported version of dd-trace-js
+        # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
+        # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
         version: [16, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
@@ -62,13 +84,14 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - run: yarn install --ignore-engines
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn test:integration:cypress
+      - run: yarn config set ignore-engines true
+      - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
@@ -76,7 +99,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn lint
@@ -84,8 +107,9 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
       - run: yarn install
       - run: yarn type:test
       - run: yarn type:doc
+

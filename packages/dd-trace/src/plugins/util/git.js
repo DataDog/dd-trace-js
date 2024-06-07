@@ -1,10 +1,9 @@
-const { execFileSync } = require('child_process')
+const cp = require('child_process')
 const os = require('os')
 const path = require('path')
 const fs = require('fs')
 
 const log = require('../../log')
-const { sanitizedExec } = require('./exec')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -19,8 +18,55 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   CI_WORKSPACE_PATH
 } = require('./tags')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_GIT_COMMAND,
+  TELEMETRY_GIT_COMMAND_MS,
+  TELEMETRY_GIT_COMMAND_ERRORS
+} = require('../../ci-visibility/telemetry')
+const { filterSensitiveInfoFromRepository } = require('./url')
+const { storage } = require('../../../../datadog-core')
 
-const GIT_REV_LIST_MAX_BUFFER = 8 * 1024 * 1024 // 8MB
+const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
+
+function sanitizedExec (
+  cmd,
+  flags,
+  operationMetric,
+  durationMetric,
+  errorMetric
+) {
+  const store = storage.getStore()
+  storage.enterWith({ noop: true })
+
+  let startTime
+  if (operationMetric) {
+    incrementCountMetric(operationMetric.name, operationMetric.tags)
+  }
+  if (durationMetric) {
+    startTime = Date.now()
+  }
+  try {
+    const result = cp.execFileSync(cmd, flags, { stdio: 'pipe' }).toString().replace(/(\r\n|\n|\r)/gm, '')
+    if (durationMetric) {
+      distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
+    }
+    return result
+  } catch (err) {
+    if (errorMetric) {
+      incrementCountMetric(errorMetric.name, {
+        ...errorMetric.tags,
+        errorType: err.code,
+        exitCode: err.status || err.errno
+      })
+    }
+    log.error(err)
+    return ''
+  } finally {
+    storage.enterWith(store)
+  }
+}
 
 function isDirectory (path) {
   try {
@@ -32,7 +78,13 @@ function isDirectory (path) {
 }
 
 function isShallowRepository () {
-  return sanitizedExec('git', ['rev-parse', '--is-shallow-repository']) === 'true'
+  return sanitizedExec(
+    'git',
+    ['rev-parse', '--is-shallow-repository'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'check_shallow' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'check_shallow' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'check_shallow' } }
+  ) === 'true'
 }
 
 function getGitVersion () {
@@ -61,38 +113,95 @@ function unshallowRepository () {
   }
   const defaultRemoteName = sanitizedExec('git', ['config', '--default', 'origin', '--get', 'clone.defaultRemoteName'])
   const revParseHead = sanitizedExec('git', ['rev-parse', 'HEAD'])
-  sanitizedExec('git', [
+
+  const baseGitOptions = [
     'fetch',
     '--shallow-since="1 month ago"',
     '--update-shallow',
     '--filter=blob:none',
     '--recurse-submodules=no',
-    defaultRemoteName,
-    revParseHead
-  ])
+    defaultRemoteName
+  ]
+
+  incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'unshallow' })
+  const start = Date.now()
+  try {
+    cp.execFileSync('git', [
+      ...baseGitOptions,
+      revParseHead
+    ], { stdio: 'pipe' })
+  } catch (err) {
+    // If the local HEAD is a commit that has not been pushed to the remote, the above command will fail.
+    log.error(err)
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+    )
+    const upstreamRemote = sanitizedExec('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    try {
+      cp.execFileSync('git', [
+        ...baseGitOptions,
+        upstreamRemote
+      ], { stdio: 'pipe' })
+    } catch (err) {
+      // If the CI is working on a detached HEAD or branch tracking hasn’t been set up, the above command will fail.
+      log.error(err)
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMAND_ERRORS,
+        { command: 'unshallow', errorType: err.code, exitCode: err.status || err.errno }
+      )
+      // We use sanitizedExec here because if this last option fails, we'll give up.
+      sanitizedExec(
+        'git',
+        baseGitOptions,
+        null,
+        null,
+        { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'unshallow' } } // we log the error in sanitizedExec
+      )
+    }
+  }
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
 }
 
 function getRepositoryUrl () {
-  return sanitizedExec('git', ['config', '--get', 'remote.origin.url'])
+  return sanitizedExec(
+    'git',
+    ['config', '--get', 'remote.origin.url'],
+    { name: TELEMETRY_GIT_COMMAND, tags: { command: 'get_repository' } },
+    { name: TELEMETRY_GIT_COMMAND_MS, tags: { command: 'get_repository' } },
+    { name: TELEMETRY_GIT_COMMAND_ERRORS, tags: { command: 'get_repository' } }
+  )
 }
 
 function getLatestCommits () {
+  incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_local_commits' })
+  const startTime = Date.now()
   try {
-    return execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
+    const result = cp.execFileSync('git', ['log', '--format=%H', '-n 1000', '--since="1 month ago"'], { stdio: 'pipe' })
       .toString()
       .split('\n')
       .filter(commit => commit)
+    distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_local_commits' }, Date.now() - startTime)
+    return result
   } catch (err) {
     log.error(`Get latest commits failed: ${err.message}`)
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'get_local_commits', errorType: err.status }
+    )
     return []
   }
 }
 
-function getCommitsToUpload (commitsToExclude, commitsToInclude) {
+function getCommitsRevList (commitsToExclude, commitsToInclude) {
+  let result = null
+
   const commitsToExcludeString = commitsToExclude.map(commit => `^${commit}`)
 
+  incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'get_objects' })
+  const startTime = Date.now()
   try {
-    return execFileSync(
+    result = cp.execFileSync(
       'git',
       [
         'rev-list',
@@ -109,11 +218,17 @@ function getCommitsToUpload (commitsToExclude, commitsToInclude) {
       .filter(commit => commit)
   } catch (err) {
     log.error(`Get commits to upload failed: ${err.message}`)
-    return []
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'get_objects', errorType: err.code, exitCode: err.status || err.errno } // err.status might be null
+    )
   }
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'get_objects' }, Date.now() - startTime)
+  return result
 }
 
 function generatePackFilesForCommits (commitsToUpload) {
+  let result = []
   const tmpFolder = os.tmpdir()
 
   if (!isDirectory(tmpFolder)) {
@@ -125,10 +240,12 @@ function generatePackFilesForCommits (commitsToUpload) {
   const temporaryPath = path.join(tmpFolder, randomPrefix)
   const cwdPath = path.join(process.cwd(), randomPrefix)
 
+  incrementCountMetric(TELEMETRY_GIT_COMMAND, { command: 'pack_objects' })
+  const startTime = Date.now()
   // Generates pack files to upload and
   // returns the ordered list of packfiles' paths
   function execGitPackObjects (targetPath) {
-    return execFileSync(
+    return cp.execFileSync(
       'git',
       [
         'pack-objects',
@@ -141,9 +258,13 @@ function generatePackFilesForCommits (commitsToUpload) {
   }
 
   try {
-    return execGitPackObjects(temporaryPath)
+    result = execGitPackObjects(temporaryPath)
   } catch (err) {
     log.error(err)
+    incrementCountMetric(
+      TELEMETRY_GIT_COMMAND_ERRORS,
+      { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+    )
     /**
      * The generation of pack files in the temporary folder (from `os.tmpdir()`)
      * sometimes fails in certain CI setups with the error message
@@ -157,13 +278,18 @@ function generatePackFilesForCommits (commitsToUpload) {
      * TODO: fix issue and remove workaround.
      */
     try {
-      return execGitPackObjects(cwdPath)
+      result = execGitPackObjects(cwdPath)
     } catch (err) {
       log.error(err)
+      incrementCountMetric(
+        TELEMETRY_GIT_COMMAND_ERRORS,
+        { command: 'pack_objects', exitCode: err.status || err.errno, errorType: err.code }
+      )
     }
-
-    return []
   }
+  distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'pack_objects' }, Date.now() - startTime)
+
+  return result
 }
 
 // If there is ciMetadata, it takes precedence.
@@ -192,7 +318,7 @@ function getGitMetadata (ciMetadata) {
 
   return {
     [GIT_REPOSITORY_URL]:
-      repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url']),
+      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
     [GIT_COMMIT_MESSAGE]:
       commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
     [GIT_COMMIT_AUTHOR_DATE]: authorDate,
@@ -213,7 +339,7 @@ module.exports = {
   getLatestCommits,
   getRepositoryUrl,
   generatePackFilesForCommits,
-  getCommitsToUpload,
+  getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
   unshallowRepository

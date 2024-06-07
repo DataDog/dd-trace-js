@@ -1,6 +1,6 @@
 {
   "parserOptions": {
-    "ecmaVersion": 2020
+    "ecmaVersion": 2021
   },
   "extends": [
     "eslint:recommended",
@@ -34,6 +34,8 @@
     "mocha/no-exports": 0,
     "mocha/no-skipped-tests": 0,
     "n/no-restricted-require": [2, ["diagnostics_channel"]],
-    "object-curly-newline": ["error", {"multiline": true, "consistent": true }]
+    "n/no-callback-literal": 0,
+    "object-curly-newline": ["error", {"multiline": true, "consistent": true }],
+    "import/no-absolute-path": 0
   }
 }

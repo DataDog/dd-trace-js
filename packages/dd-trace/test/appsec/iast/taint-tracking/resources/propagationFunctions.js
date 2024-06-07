@@ -52,6 +52,14 @@ function sliceStr (str) {
   return str.slice(1, 4)
 }
 
+function toLowerCaseStr (str) {
+  return str.toLowerCase()
+}
+
+function toUpperCaseStr (str) {
+  return str.toUpperCase()
+}
+
 function replaceStr (str) {
   return str.replace('ls', 'sl')
 }
@@ -60,20 +68,43 @@ function replaceRegexStr (str) {
   return str.replace(/ls/g, 'ls')
 }
 
+function jsonParseStr (str) {
+  return JSON.parse(str)
+}
+
+function arrayJoin (str) {
+  return [str, str].join(str)
+}
+
+function arrayInVariableJoin (str) {
+  const testArr = [str, str]
+  return testArr.join(',')
+}
+
+function arrayProtoJoin (str) {
+  return Array.prototype.join.call([str, str], ',')
+}
+
 module.exports = {
-  concatSuffix,
-  insertStr,
   appendStr,
-  trimStr,
-  trimStartStr,
+  arrayInVariableJoin,
+  arrayJoin,
+  arrayProtoJoin,
+  concatProtoStr,
+  concatStr,
+  concatSuffix,
+  concatTaintedStr,
+  insertStr,
+  jsonParseStr,
+  replaceRegexStr,
+  replaceStr,
+  sliceStr,
+  substrStr,
+  substringStr,
+  toLowerCaseStr,
+  toUpperCaseStr,
   trimEndStr,
   trimProtoStr,
-  concatStr,
-  concatTaintedStr,
-  concatProtoStr,
-  substringStr,
-  substrStr,
-  sliceStr,
-  replaceStr,
-  replaceRegexStr
+  trimStartStr,
+  trimStr
 }

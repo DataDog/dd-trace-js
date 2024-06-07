@@ -3,7 +3,7 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const axios = require('axios')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 withVersions('passport-local', 'passport-local', version => {
   describe('passport-local instrumentation', () => {
@@ -15,7 +15,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
     before((done) => {
       const express = require('../../../versions/express').get()
-      const passport = require(`../../../versions/passport`).get()
+      const passport = require('../../../versions/passport').get()
       const LocalStrategy = require(`../../../versions/passport-local@${version}`).get().Strategy
       const app = express()
 

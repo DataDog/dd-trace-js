@@ -4,12 +4,15 @@ class Greeter {
   sayFarewell () {
     return 'farewell'
   }
+
   sayGreetings () {
     return 'greetings'
   }
+
   sayYo () {
     return 'yo'
   }
+
   sayYeah () {
     return 'yeah whatever'
   }
@@ -37,4 +40,8 @@ When('the greeter says yeah', function () {
 
 When('the greeter says greetings', function () {
   this.whatIHeard = new Greeter().sayGreetings()
+})
+
+When('the greeter says whatever', function () {
+  this.whatIHeard = 'whatever'
 })

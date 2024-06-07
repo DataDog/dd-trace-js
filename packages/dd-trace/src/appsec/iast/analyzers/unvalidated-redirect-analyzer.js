@@ -6,8 +6,8 @@ const { getNodeModulesPaths } = require('../path-line')
 const { getRanges } = require('../taint-tracking/operations')
 const {
   HTTP_REQUEST_HEADER_VALUE,
-  HTTP_REQUEST_PATH,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_URI
 } = require('../taint-tracking/source-types')
 
 const EXCLUDED_PATHS = getNodeModulesPaths('express/lib/response.js')
@@ -56,7 +56,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
   }
 
   _isUrl (range) {
-    return range.iinfo.type === HTTP_REQUEST_PATH
+    return range.iinfo.type === HTTP_REQUEST_URI
   }
 
   _getExcludedPaths () {

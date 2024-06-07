@@ -1,7 +1,7 @@
 'use strict'
 
 const setCookiesHeaderInterceptor = require('../../../../src/appsec/iast/analyzers/set-cookies-header-interceptor')
-const dc = require('../../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 const iastSetCookieChannel = dc.channel('datadog:iast:set-cookie')
 const setHeaderChannel = dc.channel('datadog:http:server:response:set-header:finish')

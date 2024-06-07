@@ -80,7 +80,10 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = [].concat(instrumentation.versions || [])
+  const versions = process.env.PACKAGE_VERSION_RANGE
+    ? [process.env.PACKAGE_VERSION_RANGE]
+    : [].concat(instrumentation.versions || [])
+
   for (const version of versions) {
     if (version) {
       await assertModules(instrumentation.name, semver.coerce(version).version, external)
@@ -130,8 +133,14 @@ async function assertPackage (name, version, dependency, external) {
   }
 
   if (!external) {
-    pkg.workspaces = {
-      nohoist: ['**/**']
+    if (name === 'aerospike') {
+      pkg.installConfig = {
+        hoistingLimits: 'workspaces'
+      }
+    } else {
+      pkg.workspaces = {
+        nohoist: ['**/**']
+      }
     }
   }
   fs.writeFileSync(filename(name, version, 'package.json'), JSON.stringify(pkg, null, 2) + '\n')

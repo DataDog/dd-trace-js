@@ -8,9 +8,11 @@ const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsProcessor } = require('./datastreams/processor')
-const { decodePathwayContext } = require('./datastreams/pathway')
+const { DsmPathwayCodec } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
 const DataStreamsContext = require('./data_streams_context')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
+const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -23,6 +25,7 @@ class DatadogTracer extends Tracer {
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._scope = new Scope()
     setStartupLogConfig(config)
+    flushStartupLogs(log)
   }
 
   configure ({ env, sampler }) {
@@ -31,17 +34,23 @@ class DatadogTracer extends Tracer {
 
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
-  setCheckpoint (edgeTags) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(edgeTags, DataStreamsContext.getDataStreamsContext())
+  setCheckpoint (edgeTags, span, payloadSize = 0) {
+    const ctx = this._dataStreamsProcessor.setCheckpoint(
+      edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
+    )
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
   }
 
-  decodeDataStreamsContext (data) {
-    const ctx = decodePathwayContext(data)
+  decodeDataStreamsContext (carrier) {
+    const ctx = DsmPathwayCodec.decode(carrier)
     // we erase the previous context everytime we decode a new one
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
+  }
+
+  setOffset (offsetData) {
+    return this._dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {
@@ -129,6 +138,7 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
+    this._dataStreamsProcessor.setUrl(url)
   }
 
   scope () {

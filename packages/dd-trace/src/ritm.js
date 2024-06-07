@@ -3,7 +3,7 @@
 const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
-const dc = require('../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 const origRequire = Module.prototype.require
 
@@ -50,8 +50,20 @@ function Hook (modules, options, onrequire) {
 
   if (patchedRequire) return
 
+  const _origRequire = Module.prototype.require
   patchedRequire = Module.prototype.require = function (request) {
-    const filename = Module._resolveFilename(request, this)
+    /*
+    If resolving the filename for a `require(...)` fails, defer to the wrapped
+    require implementation rather than failing right away. This allows a
+    possibly monkey patched `require` to work.
+    */
+    let filename
+    try {
+      filename = Module._resolveFilename(request, this)
+    } catch (resolveErr) {
+      return _origRequire.apply(this, arguments)
+    }
+
     const core = filename.indexOf(path.sep) === -1
     let name, basedir, hooks
     // return known patched modules immediately

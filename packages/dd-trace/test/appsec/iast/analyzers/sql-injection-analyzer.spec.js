@@ -3,7 +3,7 @@
 const proxyquire = require('proxyquire')
 
 const iastLog = require('../../../../src/appsec/iast/iast-log')
-const dc = require('../../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
@@ -29,7 +29,7 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(9)
+    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(11)
     expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('apm:mysql2:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
@@ -39,6 +39,8 @@ describe('sql-injection-analyzer', () => {
     expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:pg:pool:query:finish')
     expect(sqlInjectionAnalyzer._subscriptions[7]._channel.name).to.equals('datadog:mysql:pool:query:start')
     expect(sqlInjectionAnalyzer._subscriptions[8]._channel.name).to.equals('datadog:mysql:pool:query:finish')
+    expect(sqlInjectionAnalyzer._subscriptions[9]._channel.name).to.equals('datadog:knex:raw:start')
+    expect(sqlInjectionAnalyzer._subscriptions[10]._channel.name).to.equals('datadog:knex:raw:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -76,6 +78,9 @@ describe('sql-injection-analyzer', () => {
       },
       '../overhead-controller': { hasQuota: () => true }
     })
+    sinon.stub(ProxyAnalyzer.prototype, '_reportEvidence')
+    const reportEvidence = ProxyAnalyzer.prototype._reportEvidence
+
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
       './vulnerability-analyzer': ProxyAnalyzer
@@ -89,11 +94,11 @@ describe('sql-injection-analyzer', () => {
         },
         '../vulnerability-reporter': { addVulnerability }
       })
-    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, dialect)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, {
-      type: 'SQL_INJECTION',
-      evidence: { dialect: dialect }
+    proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, undefined, dialect)
+    expect(reportEvidence).to.have.been.calledOnce
+    expect(reportEvidence).to.have.been.calledWithMatch(TAINTED_QUERY, {}, {
+      value: TAINTED_QUERY,
+      dialect
     })
   })
 
@@ -160,6 +165,31 @@ describe('sql-injection-analyzer', () => {
       onPgQueryStart({ sql: 'SELECT 1', name: 'apm:pg:query:start' })
 
       expect(analyze).to.be.calledOnceWith('SELECT 1')
+    })
+  })
+
+  describe('knex dialects', () => {
+    const sqlInjectionAnalyzer = require('../../../../src/appsec/iast/analyzers/sql-injection-analyzer')
+
+    const knexDialects = {
+      mssql: 'MSSQL',
+      oracle: 'ORACLE',
+      mysql: 'MYSQL',
+      redshift: 'REDSHIFT',
+      postgresql: 'POSTGRES',
+      sqlite3: 'SQLITE'
+    }
+
+    Object.keys(knexDialects).forEach((knexDialect) => {
+      it(`should normalize knex dialect ${knexDialect} to uppercase`, () => {
+        const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect(knexDialect)
+        expect(normalizedDialect).to.equals(knexDialects[knexDialect])
+      })
+    })
+
+    it('should not fail when normalizing a non string knex dialect', () => {
+      const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect()
+      expect(normalizedDialect).to.be.undefined
     })
   })
 })

@@ -6,7 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const { exec, getStdio } = require('./run-util')
 
-process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 require('./squash-affinity')
 

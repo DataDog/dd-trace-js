@@ -13,8 +13,14 @@ module.exports = {
   HTTP_INCOMING_RESPONSE_HEADERS: 'server.response.headers.no_cookies',
   // TODO: 'server.response.trailers',
   HTTP_INCOMING_GRAPHQL_RESOLVERS: 'graphql.server.all_resolvers',
+  HTTP_INCOMING_GRAPHQL_RESOLVER: 'graphql.server.resolver',
+
+  HTTP_INCOMING_RESPONSE_BODY: 'server.response.body',
 
   HTTP_CLIENT_IP: 'http.client_ip',
 
-  USER_ID: 'usr.id'
+  USER_ID: 'usr.id',
+  WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
+
+  HTTP_OUTGOING_URL: 'server.io.net.url'
 }

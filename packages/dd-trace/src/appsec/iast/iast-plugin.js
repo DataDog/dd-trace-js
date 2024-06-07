@@ -1,11 +1,12 @@
 'use strict'
 
-const { channel } = require('../../../../diagnostics_channel')
+const { channel } = require('dc-polyfill')
 
 const iastLog = require('./iast-log')
 const Plugin = require('../../plugins/plugin')
 const iastTelemetry = require('./telemetry')
-const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE } = require('./telemetry/iast-metric')
+const { getInstrumentedMetric, getExecutedMetric, TagKey, EXECUTED_SOURCE, formatTags } =
+  require('./telemetry/iast-metric')
 const { storage } = require('../../../../datadog-core')
 const { getIastContext } = require('./iast-context')
 const instrumentations = require('../../../../datadog-instrumentations/src/helpers/instrumentations')
@@ -20,25 +21,29 @@ const instrumentations = require('../../../../datadog-instrumentations/src/helpe
  * - tagKey can be only SOURCE_TYPE (Source) or VULNERABILITY_TYPE (Sink)
  */
 class IastPluginSubscription {
-  constructor (moduleName, channelName, tag, tagKey = TagKey.VULNERABILITY_TYPE) {
+  constructor (moduleName, channelName, tagValues, tagKey = TagKey.VULNERABILITY_TYPE) {
     this.moduleName = moduleName
     this.channelName = channelName
-    this.tag = tag
-    this.tagKey = tagKey
-    this.executedMetric = getExecutedMetric(this.tagKey)
-    this.instrumentedMetric = getInstrumentedMetric(this.tagKey)
+
+    tagValues = Array.isArray(tagValues) ? tagValues : [tagValues]
+    this.tags = formatTags(tagValues, tagKey)
+
+    this.executedMetric = getExecutedMetric(tagKey)
+    this.instrumentedMetric = getInstrumentedMetric(tagKey)
+
     this.moduleInstrumented = false
   }
 
   increaseInstrumented () {
-    if (this.moduleInstrumented) return
+    if (!this.moduleInstrumented) {
+      this.moduleInstrumented = true
 
-    this.moduleInstrumented = true
-    this.instrumentedMetric.inc(this.tag)
+      this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+    }
   }
 
   increaseExecuted (iastContext) {
-    this.executedMetric.inc(this.tag, iastContext)
+    this.tags.forEach(tag => this.executedMetric.inc(iastContext, tag))
   }
 
   matchesModuleInstrumented (name) {
@@ -76,10 +81,16 @@ class IastPlugin extends Plugin {
     }
   }
 
-  _execHandlerAndIncMetric ({ handler, metric, tag, iastContext = getIastContext(storage.getStore()) }) {
+  _execHandlerAndIncMetric ({ handler, metric, tags, iastContext = getIastContext(storage.getStore()) }) {
     try {
       const result = handler()
-      iastTelemetry.isEnabled() && metric.inc(tag, iastContext)
+      if (iastTelemetry.isEnabled()) {
+        if (Array.isArray(tags)) {
+          tags.forEach(tag => metric.inc(iastContext, tag))
+        } else {
+          metric.inc(iastContext, tags)
+        }
+      }
       return result
     } catch (e) {
       iastLog.errorAndPublish(e)
@@ -99,6 +110,14 @@ class IastPlugin extends Plugin {
         }
       }
     }
+  }
+
+  enable () {
+    this.configure(true)
+  }
+
+  disable () {
+    this.configure(false)
   }
 
   onConfigure () {}
@@ -127,10 +146,13 @@ class IastPlugin extends Plugin {
     if (!channelName && !moduleName) return
 
     if (!moduleName) {
-      const firstSep = channelName.indexOf(':')
+      let firstSep = channelName.indexOf(':')
       if (firstSep === -1) {
         moduleName = channelName
       } else {
+        if (channelName.startsWith('tracing:')) {
+          firstSep = channelName.indexOf(':', 'tracing:'.length + 1)
+        }
         const lastSep = channelName.indexOf(':', firstSep + 1)
         moduleName = channelName.substring(firstSep + 1, lastSep !== -1 ? lastSep : channelName.length)
       }
@@ -195,6 +217,10 @@ class SourceIastPlugin extends IastPlugin {
 class SinkIastPlugin extends IastPlugin {
   addSub (iastPluginSub, handler) {
     return super.addSub({ tagKey: TagKey.VULNERABILITY_TYPE, ...iastPluginSub }, handler)
+  }
+
+  addNotSinkSub (iastPluginSub, handler) {
+    return super.addSub(iastPluginSub, handler)
   }
 }
 

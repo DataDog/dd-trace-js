@@ -3,7 +3,7 @@ const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const overheadController = require('./overhead-controller')
-const dc = require('../../../../diagnostics_channel')
+const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
 const {
   enableTaintTracking,
@@ -21,8 +21,12 @@ const requestStart = dc.channel('dd-trace:incomingHttpRequestStart')
 const requestClose = dc.channel('dd-trace:incomingHttpRequestEnd')
 const iastResponseEnd = dc.channel('datadog:iast:response-end')
 
+let isEnabled = false
+
 function enable (config, _tracer) {
-  iastTelemetry.configure(config, config.iast && config.iast.telemetryVerbosity)
+  if (isEnabled) return
+
+  iastTelemetry.configure(config, config.iast?.telemetryVerbosity)
   enableAllAnalyzers(config)
   enableTaintTracking(config.iast, iastTelemetry.verbosity)
   requestStart.subscribe(onIncomingHttpRequestStart)
@@ -30,9 +34,15 @@ function enable (config, _tracer) {
   overheadController.configure(config.iast)
   overheadController.startGlobalContext()
   vulnerabilityReporter.start(config, _tracer)
+
+  isEnabled = true
 }
 
 function disable () {
+  if (!isEnabled) return
+
+  isEnabled = false
+
   iastTelemetry.stop()
   disableAllAnalyzers()
   disableTaintTracking()
@@ -43,7 +53,7 @@ function disable () {
 }
 
 function onIncomingHttpRequestStart (data) {
-  if (data && data.req) {
+  if (data?.req) {
     const store = storage.getStore()
     if (store) {
       const topContext = web.getContext(data.req)
@@ -68,11 +78,11 @@ function onIncomingHttpRequestStart (data) {
 }
 
 function onIncomingHttpRequestEnd (data) {
-  if (data && data.req) {
+  if (data?.req) {
     const store = storage.getStore()
     const topContext = web.getContext(data.req)
     const iastContext = iastContextFunctions.getIastContext(store, topContext)
-    if (iastContext && iastContext.rootSpan) {
+    if (iastContext?.rootSpan) {
       iastResponseEnd.publish(data)
 
       const vulnerabilities = iastContext.vulnerabilities

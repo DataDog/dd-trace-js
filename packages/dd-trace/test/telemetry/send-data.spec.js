@@ -2,6 +2,7 @@
 
 require('../setup/tap')
 
+const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 describe('sendData', () => {
   const application = {
@@ -33,7 +34,7 @@ describe('sendData', () => {
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
         'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version
@@ -58,7 +59,7 @@ describe('sendData', () => {
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
         'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version
@@ -84,7 +85,7 @@ describe('sendData', () => {
       path: '/telemetry/proxy/api/v2/apmtelemetry',
       headers: {
         'content-type': 'application/json',
-        'dd-telemetry-api-version': 'v1',
+        'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-telemetry-debug-enabled': 'true',
         'dd-client-library-language': application.language_name,
@@ -112,13 +113,61 @@ describe('sendData', () => {
     expect(data.payload).to.deep.equal(trimmedPayload)
   })
 
-  it('should not destructure a payload with array type', () => {
-    const arrayPayload = [{ message: 'test' }, { message: 'test2' }]
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', arrayPayload)
+  it('should send batch request with retryPayload', () => {
+    const retryObjData = { payload: { foo: 'bar' }, request_type: 'req-type-1' }
+    const payload = [{
+      request_type: 'req-type-2',
+      payload: {
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      }
+
+    }, retryObjData]
+
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
+      { language: 'js' }, 'test', 'message-batch', payload) /
 
     expect(request).to.have.been.calledOnce
-    const data = JSON.parse(request.getCall(0).args[0])
 
-    expect(data.payload).to.deep.equal(arrayPayload)
+    const data = JSON.parse(request.getCall(0).args[0])
+    const expectedPayload = [{
+      request_type: 'req-type-2',
+      payload: {
+        integrations: [
+          { name: 'foo2', enabled: true, auto_enabled: true },
+          { name: 'bar2', enabled: false, auto_enabled: true }
+        ]
+      }
+    }, {
+      request_type: 'req-type-1',
+      payload: { foo: 'bar' }
+    }]
+    expect(data.request_type).to.equal('message-batch')
+    expect(data.payload).to.deep.equal(expectedPayload)
+  })
+
+  it('should also work in CI Visibility agentless mode', () => {
+    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 1
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu'
+      },
+      application,
+      'test', 'req-type'
+    )
+
+    expect(request).to.have.been.calledOnce
+    const options = request.getCall(0).args[1]
+    expect(options).to.include({
+      method: 'POST',
+      path: '/api/v2/apmtelemetry'
+    })
+    const { url } = options
+    expect(url).to.eql(new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
+    delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
   })
 })

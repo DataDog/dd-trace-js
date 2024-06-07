@@ -15,7 +15,7 @@ describe('graphql', () => {
   let sandbox, cwd, agent, webFile, proc, appPort
 
   before(async function () {
-    sandbox = await createSandbox([`@apollo/server`, 'graphql', 'koalas'])
+    sandbox = await createSandbox(['@apollo/server', 'graphql', 'koalas'])
     cwd = sandbox.folder
     webFile = path.join(cwd, 'graphql/index.js')
     appPort = await getPort()
@@ -79,7 +79,6 @@ describe('graphql', () => {
           {
             id: 'test-rule-id-1',
             name: 'test-rule-name-1',
-            on_match: ['block'],
             tags:
             {
               category: 'attack_attempt',
@@ -92,8 +91,8 @@ describe('graphql', () => {
               operator_value: '',
               parameters: [
                 {
-                  address: 'graphql.server.all_resolvers',
-                  key_path: ['images', '0', 'category'],
+                  address: 'graphql.server.resolver',
+                  key_path: ['images', 'category'],
                   value: 'testattack',
                   highlight: ['testattack']
                 }

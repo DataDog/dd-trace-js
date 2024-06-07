@@ -17,7 +17,7 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 class HttpClientPlugin extends ClientPlugin {
   static get id () { return 'http' }
-  static get prefix () { return `apm:http:client:request` }
+  static get prefix () { return 'apm:http:client:request' }
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -58,7 +58,7 @@ class HttpClientPlugin extends ClientPlugin {
       span._spanContext._trace.record = false
     }
 
-    if (!(hasAmazonSignature(options) || !this.config.propagationFilter(uri))) {
+    if (this.shouldInjectTraceHeaders(options, uri)) {
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
 
@@ -71,11 +71,24 @@ class HttpClientPlugin extends ClientPlugin {
     return message.currentStore
   }
 
+  shouldInjectTraceHeaders (options, uri) {
+    if (hasAmazonSignature(options) && !this.config.enablePropagationWithAmazonHeaders) {
+      return false
+    }
+
+    if (!this.config.propagationFilter(uri)) {
+      return false
+    }
+
+    return true
+  }
+
   bindAsyncStart ({ parentStore }) {
     return parentStore
   }
 
   finish ({ req, res, span }) {
+    if (!span) return
     if (res) {
       const status = res.status || res.statusCode
 
@@ -97,7 +110,8 @@ class HttpClientPlugin extends ClientPlugin {
     span.finish()
   }
 
-  error ({ span, error }) {
+  error ({ span, error, args, customRequestTimeout }) {
+    if (!span) return
     if (error) {
       span.addTags({
         [ERROR_TYPE]: error.name,
@@ -105,6 +119,11 @@ class HttpClientPlugin extends ClientPlugin {
         [ERROR_STACK]: error.stack
       })
     } else {
+      // conditions for no error:
+      // 1. not using a custom agent instance with custom timeout specified
+      // 2. no invocation of `req.setTimeout`
+      if (!args.options.agent?.options?.timeout && !customRequestTimeout) return
+
       span.setTag('error', 1)
     }
   }
@@ -208,7 +227,7 @@ function hasAmazonSignature (options) {
       return true
     }
 
-    if ([].concat(headers['authorization']).some(startsWith('AWS4-HMAC-SHA256'))) {
+    if ([].concat(headers.authorization).some(startsWith('AWS4-HMAC-SHA256'))) {
       return true
     }
   }

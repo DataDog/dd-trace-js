@@ -1,3 +1,4 @@
+@datadog:unskippable
 Feature: Greetings
   Scenario: Say greetings
     When the greeter says greetings

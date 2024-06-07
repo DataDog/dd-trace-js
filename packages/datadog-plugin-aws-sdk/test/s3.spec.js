@@ -37,7 +37,7 @@ describe('Plugin', () => {
         before(done => {
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
 
-          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4567', s3ForcePathStyle: true, region: 'us-east-1' })
           s3.createBucket({ Bucket: bucketName }, (err) => {
             if (err) return done(err)
             done()
@@ -85,9 +85,9 @@ describe('Plugin', () => {
             })
 
             expect(span.meta).to.include({
-              'bucketname': bucketName,
-              'aws_service': 'S3',
-              'region': 'us-east-1'
+              bucketname: bucketName,
+              aws_service: 'S3',
+              region: 'us-east-1'
             })
 
             total++

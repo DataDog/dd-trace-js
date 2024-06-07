@@ -4,7 +4,7 @@ const log = require('./log')
 
 function maybeStartServerlessMiniAgent (config) {
   if (process.platform !== 'win32' && process.platform !== 'linux') {
-    log.error(`Serverless Mini Agent is only supported on Windows and Linux.`)
+    log.error('Serverless Mini Agent is only supported on Windows and Linux.')
     return
   }
 
@@ -34,7 +34,8 @@ function getRustBinaryPath (config) {
 
   const rustBinaryPathRoot = config.isGCPFunction ? '/workspace' : '/home/site/wwwroot'
   const rustBinaryPathOsFolder = process.platform === 'win32'
-    ? 'datadog-serverless-agent-windows-amd64' : 'datadog-serverless-agent-linux-amd64'
+    ? 'datadog-serverless-agent-windows-amd64'
+    : 'datadog-serverless-agent-linux-amd64'
 
   const rustBinaryExtension = process.platform === 'win32' ? '.exe' : ''
 
@@ -52,18 +53,16 @@ function getIsGCPFunction () {
   return isDeprecatedGCPFunction || isNewerGCPFunction
 }
 
-function getIsAzureFunctionConsumptionPlan () {
+function getIsAzureFunction () {
   const isAzureFunction =
     process.env.FUNCTIONS_EXTENSION_VERSION !== undefined && process.env.FUNCTIONS_WORKER_RUNTIME !== undefined
-  const azureWebsiteSKU = process.env.WEBSITE_SKU
-  const isConsumptionPlan = azureWebsiteSKU === undefined || azureWebsiteSKU === 'Dynamic'
 
-  return isAzureFunction && isConsumptionPlan
+  return isAzureFunction
 }
 
 module.exports = {
   maybeStartServerlessMiniAgent,
   getIsGCPFunction,
-  getIsAzureFunctionConsumptionPlan,
+  getIsAzureFunction,
   getRustBinaryPath
 }

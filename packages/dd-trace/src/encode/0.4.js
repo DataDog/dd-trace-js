@@ -83,13 +83,17 @@ class AgentEncoder {
       span = formatSpan(span)
       bytes.reserve(1)
 
-      if (span.type) {
+      if (span.type && span.meta_struct) {
+        bytes.buffer[bytes.length++] = 0x8d
+      } else if (span.type || span.meta_struct) {
         bytes.buffer[bytes.length++] = 0x8c
-
-        this._encodeString(bytes, 'type')
-        this._encodeString(bytes, span.type)
       } else {
         bytes.buffer[bytes.length++] = 0x8b
+      }
+
+      if (span.type) {
+        this._encodeString(bytes, 'type')
+        this._encodeString(bytes, span.type)
       }
 
       this._encodeString(bytes, 'trace_id')
@@ -114,6 +118,10 @@ class AgentEncoder {
       this._encodeMap(bytes, span.meta)
       this._encodeString(bytes, 'metrics')
       this._encodeMap(bytes, span.metrics)
+      if (span.meta_struct) {
+        this._encodeString(bytes, 'meta_struct')
+        this._encodeMetaStruct(bytes, span.meta_struct)
+      }
     }
   }
 
@@ -260,6 +268,84 @@ class AgentEncoder {
       for (let i = 7; i >= 0; i--) {
         bytes.buffer[bytes.length - i - 1] = uInt8Float64Array[i]
       }
+    }
+  }
+
+  _encodeMetaStruct (bytes, value) {
+    const keys = Array.isArray(value) ? [] : Object.keys(value)
+    const validKeys = keys.filter(key => {
+      const v = value[key]
+      return typeof v === 'string' ||
+        typeof v === 'number' ||
+        (v !== null && typeof v === 'object')
+    })
+
+    this._encodeMapPrefix(bytes, validKeys.length)
+
+    for (const key of validKeys) {
+      const v = value[key]
+      this._encodeString(bytes, key)
+      this._encodeObjectAsByteArray(bytes, v)
+    }
+  }
+
+  _encodeObjectAsByteArray (bytes, value) {
+    const prefixLength = 5
+    const offset = bytes.length
+
+    bytes.reserve(prefixLength)
+    bytes.length += prefixLength
+
+    this._encodeObject(bytes, value)
+
+    // we should do it after encoding the object to know the real length
+    const length = bytes.length - offset - prefixLength
+    bytes.buffer[offset] = 0xc6
+    bytes.buffer[offset + 1] = length >> 24
+    bytes.buffer[offset + 2] = length >> 16
+    bytes.buffer[offset + 3] = length >> 8
+    bytes.buffer[offset + 4] = length
+  }
+
+  _encodeObject (bytes, value, circularReferencesDetector = new Set()) {
+    circularReferencesDetector.add(value)
+    if (Array.isArray(value)) {
+      this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
+    } else if (value !== null && typeof value === 'object') {
+      this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
+    } else if (typeof value === 'string' || typeof value === 'number') {
+      this._encodeValue(bytes, value)
+    }
+  }
+
+  _encodeObjectAsMap (bytes, value, circularReferencesDetector) {
+    const keys = Object.keys(value)
+    const validKeys = keys.filter(key => {
+      const v = value[key]
+      return typeof v === 'string' ||
+        typeof v === 'number' ||
+        (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
+    })
+
+    this._encodeMapPrefix(bytes, validKeys.length)
+
+    for (const key of validKeys) {
+      const v = value[key]
+      this._encodeString(bytes, key)
+      this._encodeObject(bytes, v, circularReferencesDetector)
+    }
+  }
+
+  _encodeObjectAsArray (bytes, value, circularReferencesDetector) {
+    const validValue = value.filter(item =>
+      typeof item === 'string' ||
+      typeof item === 'number' ||
+      (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item)))
+
+    this._encodeArrayPrefix(bytes, validValue)
+
+    for (const item of validValue) {
+      this._encodeObject(bytes, item, circularReferencesDetector)
     }
   }
 

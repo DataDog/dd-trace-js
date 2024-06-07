@@ -6,26 +6,31 @@ const path = require('path')
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
-const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { newTaintedString, isTainted, getRanges } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 const { expect } = require('chai')
 
 const propagationFns = [
-  'concatSuffix',
-  'insertStr',
   'appendStr',
-  'trimStr',
-  'trimStartStr',
+  'arrayInVariableJoin',
+  'arrayJoin',
+  'arrayProtoJoin',
+  'concatProtoStr',
+  'concatStr',
+  'concatSuffix',
+  'concatTaintedStr',
+  'insertStr',
+  'replaceRegexStr',
+  'replaceStr',
+  'sliceStr',
+  'substrStr',
+  'substringStr',
+  'toLowerCaseStr',
+  'toUpperCaseStr',
   'trimEndStr',
   'trimProtoStr',
-  'concatStr',
-  'concatTaintedStr',
-  'concatProtoStr',
-  'substringStr',
-  'substrStr',
-  'sliceStr',
-  'replaceStr',
-  'replaceRegexStr'
+  'trimStartStr',
+  'trimStr'
 ]
 
 const commands = [
@@ -82,10 +87,55 @@ describe('TaintTracking', () => {
         })
       })
     })
+
+    describe('using JSON.parse', () => {
+      testThatRequestHasVulnerability(function () {
+        const store = storage.getStore()
+        const iastContext = iastContextFunctions.getIastContext(store)
+
+        const json = '{"command":"ls -la"}'
+        const jsonTainted = newTaintedString(iastContext, json, 'param', 'request.type')
+
+        const propFnInstrumented = require(instrumentedFunctionsFile).jsonParseStr
+        const propFnOriginal = propagationFunctions.jsonParseStr
+
+        const result = propFnInstrumented(jsonTainted)
+        expect(isTainted(iastContext, result.command)).to.be.true
+        expect(getRanges(iastContext, result.command)).to.be.deep
+          .eq([{
+            start: 0,
+            end: 6,
+            iinfo: {
+              parameterName: 'command',
+              parameterValue: 'ls -la',
+              type: 'request.type'
+            },
+            secureMarks: 0
+          }])
+
+        const resultOrig = propFnOriginal(jsonTainted)
+        expect(result).deep.eq(resultOrig)
+
+        try {
+          const childProcess = require('child_process')
+          childProcess.execSync(result.command, { stdio: 'ignore' })
+        } catch (e) {
+          // do nothing
+        }
+      }, 'COMMAND_INJECTION')
+    })
   })
 
   describe('should not catch original Error', () => {
-    const filtered = ['concatSuffix', 'insertStr', 'appendStr', 'concatTaintedStr']
+    const filtered = [
+      'appendStr',
+      'arrayInVariableJoin',
+      'arrayJoin',
+      'arrayProtoJoin',
+      'concatSuffix',
+      'concatTaintedStr',
+      'insertStr'
+    ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return
       it(`invoking ${propFn} with null argument`, () => {

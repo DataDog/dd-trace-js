@@ -1,6 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
 const {
   channel,
   addHook
@@ -15,14 +14,17 @@ const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finis
 
 const requestFinishedSet = new WeakSet()
 
-addHook({ name: 'https' }, http => {
-  // http.ServerResponse not present on https
+const httpNames = ['http', 'node:http']
+const httpsNames = ['https', 'node:https']
+
+addHook({ name: httpNames }, http => {
+  shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })
 
-addHook({ name: 'http' }, http => {
-  shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
+addHook({ name: httpsNames }, http => {
+  // http.ServerResponse not present on https
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
   return http
 })

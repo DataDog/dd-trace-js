@@ -48,10 +48,21 @@ const TEST_MODULE_ID = 'test_module_id'
 const TEST_SUITE_ID = 'test_suite_id'
 const TEST_TOOLCHAIN = 'test.toolchain'
 const TEST_SKIPPED_BY_ITR = 'test.skipped_by_itr'
+// Browser used in browser test. Namespaced by test.configuration because it affects the fingerprint
+const TEST_CONFIGURATION_BROWSER_NAME = 'test.configuration.browser_name'
+// Early flake detection
+const TEST_IS_NEW = 'test.is_new'
+const TEST_IS_RETRY = 'test.is_retry'
+const TEST_EARLY_FLAKE_ENABLED = 'test.early_flake.enabled'
+const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
+const JEST_DISPLAY_NAME = 'test.jest.display_name'
+
+const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
+const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
 
 const TEST_ITR_TESTS_SKIPPED = '_dd.ci.itr.tests_skipped'
 const TEST_ITR_SKIPPING_ENABLED = 'test.itr.tests_skipping.enabled'
@@ -60,18 +71,38 @@ const TEST_ITR_SKIPPING_COUNT = 'test.itr.tests_skipping.count'
 const TEST_CODE_COVERAGE_ENABLED = 'test.code_coverage.enabled'
 const TEST_ITR_UNSKIPPABLE = 'test.itr.unskippable'
 const TEST_ITR_FORCED_RUN = 'test.itr.forced_run'
+const ITR_CORRELATION_ID = 'itr_correlation_id'
 
 const TEST_CODE_COVERAGE_LINES_PCT = 'test.code_coverage.lines_pct'
+
+// selenium tags
+const TEST_BROWSER_DRIVER = 'test.browser.driver'
+const TEST_BROWSER_DRIVER_VERSION = 'test.browser.driver_version'
+const TEST_BROWSER_NAME = 'test.browser.name'
+const TEST_BROWSER_VERSION = 'test.browser.version'
 
 // jest worker variables
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
+
+// cucumber worker variables
+const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
+
+// mocha worker variables
+const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
+
+// Early flake detection util strings
+const EFD_STRING = "Retried by Datadog's Early Flake Detection"
+const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
+  JEST_DISPLAY_NAME,
+  CUCUMBER_IS_PARALLEL,
+  MOCHA_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
@@ -84,8 +115,15 @@ module.exports = {
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
+  TEST_CONFIGURATION_BROWSER_NAME,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -111,6 +149,7 @@ module.exports = {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
+  ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -118,7 +157,17 @@ module.exports = {
   fromCoverageMapToCoverage,
   getTestLineStart,
   getCallSites,
-  removeInvalidMetadata
+  removeInvalidMetadata,
+  parseAnnotations,
+  EFD_STRING,
+  EFD_TEST_NAME_REGEX,
+  removeEfdStringFromTestName,
+  addEfdStringToTestName,
+  getIsFaultyEarlyFlakeDetection,
+  TEST_BROWSER_DRIVER,
+  TEST_BROWSER_DRIVER_VERSION,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -250,7 +299,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [SAMPLING_PRIORITY]: AUTO_KEEP,
     [TEST_NAME]: name,
     [TEST_SUITE]: suite,
-    [TEST_SOURCE_FILE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
     [LIBRARY_VERSION]: ddTraceVersion
@@ -266,7 +314,8 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     return sourceRoot
   }
   const testSuitePath = testSuiteAbsolutePath === sourceRoot
-    ? testSuiteAbsolutePath : path.relative(sourceRoot, testSuiteAbsolutePath)
+    ? testSuiteAbsolutePath
+    : path.relative(sourceRoot, testSuiteAbsolutePath)
 
   return testSuitePath.replace(path.sep, '/')
 }
@@ -278,16 +327,36 @@ const POSSIBLE_CODEOWNERS_LOCATIONS = [
   '.gitlab/CODEOWNERS'
 ]
 
-function getCodeOwnersFileEntries (rootDir = process.cwd()) {
-  let codeOwnersContent
-
-  POSSIBLE_CODEOWNERS_LOCATIONS.forEach(location => {
+function readCodeOwners (rootDir) {
+  for (const location of POSSIBLE_CODEOWNERS_LOCATIONS) {
     try {
-      codeOwnersContent = fs.readFileSync(`${rootDir}/${location}`).toString()
+      return fs.readFileSync(path.join(rootDir, location)).toString()
     } catch (e) {
       // retry with next path
     }
-  })
+  }
+  return ''
+}
+
+function getCodeOwnersFileEntries (rootDir) {
+  let codeOwnersContent
+  let usedRootDir = rootDir
+  let isTriedCwd = false
+
+  const processCwd = process.cwd()
+
+  if (!usedRootDir || usedRootDir === processCwd) {
+    usedRootDir = processCwd
+    isTriedCwd = true
+  }
+
+  codeOwnersContent = readCodeOwners(usedRootDir)
+
+  // If we haven't found CODEOWNERS in the provided root dir, we try with process.cwd()
+  if (!codeOwnersContent && !isTriedCwd) {
+    codeOwnersContent = readCodeOwners(processCwd)
+  }
+
   if (!codeOwnersContent) {
     return null
   }
@@ -370,7 +439,9 @@ function addIntelligentTestRunnerSpanTags (
     isCodeCoverageEnabled,
     testCodeCoverageLinesTotal,
     skippingCount,
-    skippingType = 'suite'
+    skippingType = 'suite',
+    hasUnskippableSuites,
+    hasForcedToRunSuites
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -385,8 +456,18 @@ function addIntelligentTestRunnerSpanTags (
   testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, skippingCount)
   testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
 
-  // If suites have been skipped we don't want to report the total coverage, as it will be wrong
-  if (testCodeCoverageLinesTotal !== undefined && !isSuitesSkipped) {
+  if (hasUnskippableSuites) {
+    testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+    testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+  }
+  if (hasForcedToRunSuites) {
+    testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+    testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+  }
+
+  // This will not be reported unless the user has manually added code coverage.
+  // This is always the case for Mocha and Cucumber, but not for Jest.
+  if (testCodeCoverageLinesTotal !== undefined) {
     testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
     testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
   }
@@ -480,4 +561,57 @@ function getCallSites () {
   Error.stackTraceLimit = oldLimit
 
   return v8StackTrace
+}
+
+/**
+ * Gets an object of test tags from an Playwright annotations array.
+ * @param {Object[]} annotations - Annotations from a Playwright test.
+ * @param {string} annotations[].type - Type of annotation. A string of the shape DD_TAGS[$tag_name].
+ * @param {string} annotations[].description - Value of the tag.
+ */
+function parseAnnotations (annotations) {
+  return annotations.reduce((tags, annotation) => {
+    if (!annotation?.type) {
+      return tags
+    }
+    const { type, description } = annotation
+    if (type.startsWith('DD_TAGS')) {
+      const regex = /\[(.*?)\]/
+      const match = regex.exec(type)
+      let tagValue = ''
+      if (match) {
+        tagValue = match[1]
+      }
+      if (tagValue) {
+        tags[tagValue] = description
+      }
+    }
+    return tags
+  }, {})
+}
+
+function addEfdStringToTestName (testName, numAttempt) {
+  return `${EFD_STRING} (#${numAttempt}): ${testName}`
+}
+
+function removeEfdStringFromTestName (testName) {
+  return testName.replace(EFD_TEST_NAME_REGEX, '')
+}
+
+function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
+  let newSuites = 0
+  for (const suite of projectSuites) {
+    if (!testsBySuiteName[suite]) {
+      newSuites++
+    }
+  }
+  const newSuitesPercentage = (newSuites / projectSuites.length) * 100
+
+  // The faulty threshold represents a percentage, but we also want to consider
+  // smaller projects, where big variations in the % are more likely.
+  // This is why we also check the absolute number of new suites.
+  return (
+    newSuites > faultyThresholdPercentage &&
+    newSuitesPercentage > faultyThresholdPercentage
+  )
 }

@@ -118,4 +118,59 @@ describe('getJestSuitesToRun', () => {
       'fixtures/test-to-skip.js'
     ])
   })
+
+  it('returns hasUnskippableSuites if there is a unskippable suite', () => {
+    const skippableSuites = []
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: { config: { testEnvironmentOptions: {} } }
+      }
+    ]
+    const rootDir = __dirname
+
+    const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(hasUnskippableSuites).to.equal(true)
+    expect(hasForcedToRunSuites).to.equal(false)
+  })
+
+  it('returns hasForcedToRunSuites if there is a forced to run suite', () => {
+    const skippableSuites = ['fixtures/test-unskippable.js']
+    const tests = [
+      { path: path.join(__dirname, './fixtures/test-to-run.js'), context: { config: { testEnvironmentOptions: {} } } },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: { config: { testEnvironmentOptions: {} } }
+      }
+    ]
+    const rootDir = __dirname
+
+    const { hasUnskippableSuites, hasForcedToRunSuites } = getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(hasUnskippableSuites).to.equal(true)
+    expect(hasForcedToRunSuites).to.equal(true)
+  })
+
+  it('adds extra `testEnvironmentOptions` if suite is unskippable or forced to run', () => {
+    const skippableSuites = ['fixtures/test-unskippable.js']
+    // tests share a config object
+    const globalConfig = { testEnvironmentOptions: {} }
+    const tests = [
+      {
+        path: path.join(__dirname, './fixtures/test-to-run.js'),
+        context: { config: globalConfig }
+      },
+      {
+        path: path.join(__dirname, './fixtures/test-unskippable.js'),
+        context: { config: globalConfig }
+      }
+    ]
+    const rootDir = __dirname
+
+    getJestSuitesToRun(skippableSuites, tests, rootDir)
+    expect(globalConfig.testEnvironmentOptions._ddUnskippable)
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+    expect(globalConfig.testEnvironmentOptions._ddForcedToRun)
+      .to.eql(JSON.stringify({ 'fixtures/test-unskippable.js': true }))
+  })
 })

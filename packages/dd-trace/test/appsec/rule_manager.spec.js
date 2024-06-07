@@ -1,12 +1,11 @@
 'use strict'
 
-const { applyRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
+const { loadRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
-const blocking = require('../../src/appsec/blocking')
 
 describe('AppSec Rule Manager', () => {
   let config
@@ -18,8 +17,6 @@ describe('AppSec Rule Manager', () => {
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(waf, 'destroy').callThrough()
     sinon.stub(waf, 'update').callThrough()
-
-    sinon.stub(blocking, 'updateBlockingConfiguration').callThrough()
   })
 
   afterEach(() => {
@@ -27,53 +24,30 @@ describe('AppSec Rule Manager', () => {
     clearAllRules()
   })
 
-  describe('applyRules', () => {
+  describe('loadRules', () => {
     it('should call waf init with proper params', () => {
-      applyRules(rules, config.appsec)
+      loadRules(config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(rules, config.appsec)
-      expect(blocking.updateBlockingConfiguration).not.to.have.been.called
-    })
-
-    it('should call updateBlockingConfiguration with proper params', () => {
-      const testRules = {
-        ...rules,
-        actions: [
-          {
-            id: 'block',
-            otherParam: 'other'
-          },
-          {
-            id: 'otherId',
-            moreParams: 'more'
-          }
-        ]
-      }
-
-      applyRules(testRules, config.appsec)
-
-      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly({
-        id: 'block',
-        otherParam: 'other'
-      })
     })
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
-      expect(() => { applyRules(undefined, config.appsec) }).to.throw()
-      expect(() => { applyRules(null, config.appsec) }).to.throw()
+      config.appsec.rules = './not/existing/file.json'
+      expect(() => { loadRules(config.appsec) }).to.throw()
+
+      config.appsec.rules = './bad-formatted-rules.json'
+      expect(() => { loadRules(config.appsec) }).to.throw()
     })
   })
 
   describe('clearAllRules', () => {
     it('should call clear method on all applied rules', () => {
-      applyRules(rules, config.appsec)
+      loadRules(config.appsec)
       expect(waf.init).to.have.been.calledOnce
 
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
-      expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
     })
   })
 
@@ -288,22 +262,49 @@ describe('AppSec Rule Manager', () => {
 
     describe('ASM_DD', () => {
       beforeEach(() => {
-        applyRules(rules, config.appsec)
+        loadRules(config.appsec)
       })
 
       it('should apply new rules', () => {
         const testRules = {
           version: '2.2',
-          metadata: { 'rules_version': '1.5.0' },
+          metadata: { rules_version: '1.5.0' },
           rules: [{
-            'id': 'test-id',
-            'name': 'test-name',
-            'tags': {
-              'type': 'security_scanner',
-              'category': 'attack_attempt',
-              'confidence': '1'
+            id: 'test-id',
+            name: 'test-name',
+            tags: {
+              type: 'security_scanner',
+              category: 'attack_attempt',
+              confidence: '1'
             },
-            'conditions': []
+            conditions: []
+          }],
+          processors: [{
+            id: 'test-processor-id',
+            generator: 'test-generator',
+            evaluate: false,
+            output: true
+          }],
+          scanners: [{
+            id: 'test-scanner-id',
+            name: 'Test name',
+            key: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex'
+              }
+            },
+            value: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex-2'
+              }
+            },
+            tags: {
+              type: 'card',
+              card_type: 'test',
+              category: 'payment'
+            }
           }]
         }
 
@@ -327,16 +328,43 @@ describe('AppSec Rule Manager', () => {
         }
         const testRules = {
           version: '2.2',
-          metadata: { 'rules_version': '1.5.0' },
+          metadata: { rules_version: '1.5.0' },
           rules: [{
-            'id': 'test-id',
-            'name': 'test-name',
-            'tags': {
-              'type': 'security_scanner',
-              'category': 'attack_attempt',
-              'confidence': '1'
+            id: 'test-id',
+            name: 'test-name',
+            tags: {
+              type: 'security_scanner',
+              category: 'attack_attempt',
+              confidence: '1'
             },
-            'conditions': []
+            conditions: []
+          }],
+          processors: [{
+            id: 'test-processor-id',
+            generator: 'test-generator',
+            evaluate: false,
+            output: true
+          }],
+          scanners: [{
+            id: 'test-scanner-id',
+            name: 'Test name',
+            key: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex'
+              }
+            },
+            value: {
+              operator: 'match_regex',
+              parameters: {
+                regex: 'test-regex-2'
+              }
+            },
+            tags: {
+              type: 'card',
+              card_type: 'test',
+              category: 'payment'
+            }
           }]
         }
 
@@ -363,14 +391,14 @@ describe('AppSec Rule Manager', () => {
           id: 'rules1',
           file: {
             version: '2.2',
-            metadata: { 'rules_version': '1.5.0' },
+            metadata: { rules_version: '1.5.0' },
             rules: [{
-              'id': 'test-id',
-              'name': 'test-name',
-              'tags': {
-                'type': 'security_scanner',
-                'category': 'attack_attempt',
-                'confidence': '1'
+              id: 'test-id',
+              name: 'test-name',
+              tags: {
+                type: 'security_scanner',
+                category: 'attack_attempt',
+                confidence: '1'
               },
               conditions: [
                 {
@@ -392,14 +420,14 @@ describe('AppSec Rule Manager', () => {
           id: 'rules2',
           file: {
             version: '2.2',
-            metadata: { 'rules_version': '1.5.0' },
+            metadata: { rules_version: '1.5.0' },
             rules: [{
-              'id': 'test-id',
-              'name': 'test-name',
-              'tags': {
-                'type': 'security_scanner',
-                'category': 'attack_attempt',
-                'confidence': '1'
+              id: 'test-id',
+              name: 'test-name',
+              tags: {
+                type: 'security_scanner',
+                category: 'attack_attempt',
+                confidence: '1'
               },
               conditions: [
                 {
@@ -430,13 +458,13 @@ describe('AppSec Rule Manager', () => {
     describe('ASM', () => {
       it('should apply both rules_override and exclusions', () => {
         const asm = {
-          'exclusions': [{
+          exclusions: [{
             ekey: 'eValue'
           }],
-          'rules_override': [{
+          rules_override: [{
             roKey: 'roValue'
           }],
-          'custom_rules': [{
+          custom_rules: [{
             piKey: 'piValue'
           }]
         }
@@ -477,13 +505,7 @@ describe('AppSec Rule Manager', () => {
         ]
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-
-        expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(
-          {
-            id: 'block',
-            otherParam: 'other'
-          })
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
       })
 
       it('should unapply blocking actions', () => {
@@ -507,8 +529,6 @@ describe('AppSec Rule Manager', () => {
           }
         ]
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        // reset counters
-        blocking.updateBlockingConfiguration.reset()
 
         const toUnapply = [
           {
@@ -519,19 +539,18 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
 
-        expect(waf.update).not.to.have.been.called
-        expect(blocking.updateBlockingConfiguration).to.have.been.calledOnceWithExactly(undefined)
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
       })
 
       it('should ignore other properties', () => {
         const asm = {
-          'exclusions': [{
+          exclusions: [{
             ekey: 'eValue'
           }],
-          'rules_override': [{
+          rules_override: [{
             roKey: 'roValue'
           }],
-          'not_supported': [{
+          not_supported: [{
             nsKey: 'nsValue'
           }]
         }
@@ -547,8 +566,8 @@ describe('AppSec Rule Manager', () => {
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
         expect(waf.update).to.have.been.calledOnceWithExactly({
-          'exclusions': asm['exclusions'],
-          'rules_override': asm['rules_override']
+          exclusions: asm.exclusions,
+          rules_override: asm.rules_override
         })
       })
     })

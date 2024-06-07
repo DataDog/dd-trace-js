@@ -1,6 +1,6 @@
 'use strict'
 
-const uniq = require('lodash.uniq')
+const uniq = require('../../../../datadog-core/src/utils/src/uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
@@ -63,7 +63,7 @@ const web = {
     if (!span) return
 
     span.context()._name = `${name}.request`
-    span.context()._tags['component'] = name
+    span.context()._tags.component = name
 
     web.setConfig(req, config)
   },
@@ -263,7 +263,7 @@ const web = {
     const context = contexts.get(req)
     const span = context.span
     const error = context.error
-    const hasExistingError = span.context()._tags['error'] || span.context()._tags[ERROR_MESSAGE]
+    const hasExistingError = span.context()._tags.error || span.context()._tags[ERROR_MESSAGE]
 
     if (!hasExistingError && !context.config.validateStatus(statusCode)) {
       span.setTag(ERROR, error || true)
@@ -405,7 +405,7 @@ function addAllowHeaders (req, res, headers) {
 }
 
 function isOriginAllowed (req, headers) {
-  const origin = req.headers['origin']
+  const origin = req.headers.origin
   const allowOrigin = headers['access-control-allow-origin']
 
   return origin && (allowOrigin === '*' || allowOrigin === origin)
@@ -498,7 +498,7 @@ function extractURL (req) {
     return `${headers[HTTP2_HEADER_SCHEME]}://${headers[HTTP2_HEADER_AUTHORITY]}${headers[HTTP2_HEADER_PATH]}`
   } else {
     const protocol = getProtocol(req)
-    return `${protocol}://${req.headers['host']}${req.originalUrl || req.url}`
+    return `${protocol}://${req.headers.host}${req.originalUrl || req.url}`
   }
 }
 

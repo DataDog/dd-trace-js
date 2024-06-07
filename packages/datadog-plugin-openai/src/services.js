@@ -1,6 +1,7 @@
 'use strict'
 
-const { DogStatsDClient, NoopDogStatsDClient } = require('../../dd-trace/src/dogstatsd')
+const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
+const NoopDogStatsDClient = require('../../dd-trace/src/noop/dogstatsd')
 const { ExternalLogger, NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 
 const FLUSH_INTERVAL = 10 * 1000

@@ -6,8 +6,8 @@ const overheadController = require('../../../../src/appsec/iast/overhead-control
 const {
   HTTP_REQUEST_HEADER_VALUE,
   HTTP_REQUEST_PARAMETER,
-  HTTP_REQUEST_PATH,
-  HTTP_REQUEST_PATH_PARAM
+  HTTP_REQUEST_PATH_PARAM,
+  HTTP_REQUEST_URI
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
 describe('unvalidated-redirect-analyzer', () => {
@@ -46,7 +46,7 @@ describe('unvalidated-redirect-analyzer', () => {
   }
   const URL_RANGE = {
     iinfo: {
-      type: HTTP_REQUEST_PATH,
+      type: HTTP_REQUEST_URI,
       parameterName: 'path'
     }
   }

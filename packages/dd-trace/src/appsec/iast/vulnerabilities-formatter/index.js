@@ -1,12 +1,16 @@
+'use strict'
+
 const sensitiveHandler = require('./evidence-redaction/sensitive-handler')
+const { stringifyWithRanges } = require('./utils')
 
 class VulnerabilityFormatter {
   constructor () {
     this._redactVulnearbilities = true
   }
 
-  setRedactVulnerabilities (shouldRedactVulnerabilities) {
+  setRedactVulnerabilities (shouldRedactVulnerabilities, redactionNamePattern, redactionValuePattern) {
     this._redactVulnearbilities = shouldRedactVulnerabilities
+    sensitiveHandler.setRedactionPatterns(redactionNamePattern, redactionValuePattern)
   }
 
   extractSourcesFromVulnerability (vulnerability) {
@@ -38,6 +42,17 @@ class VulnerabilityFormatter {
   getUnredactedValueParts (evidence, sourcesIndexes) {
     const valueParts = []
     let fromIndex = 0
+
+    if (typeof evidence.value === 'object' && evidence.rangesToApply) {
+      const { value, ranges } = stringifyWithRanges(evidence.value, evidence.rangesToApply)
+      evidence.value = value
+      evidence.ranges = ranges
+    }
+
+    if (!evidence.ranges) {
+      return { value: evidence.value }
+    }
+
     evidence.ranges.forEach((range, rangeIndex) => {
       if (fromIndex < range.start) {
         valueParts.push({ value: evidence.value.substring(fromIndex, range.start) })
@@ -45,19 +60,17 @@ class VulnerabilityFormatter {
       valueParts.push({ value: evidence.value.substring(range.start, range.end), source: sourcesIndexes[rangeIndex] })
       fromIndex = range.end
     })
+
     if (fromIndex < evidence.value.length) {
       valueParts.push({ value: evidence.value.substring(fromIndex) })
     }
+
     return { valueParts }
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (!evidence.ranges) {
-      if (typeof evidence.value === 'undefined') {
-        return undefined
-      } else {
-        return { value: evidence.value }
-      }
+    if (typeof evidence.value === 'undefined') {
+      return undefined
     }
 
     return this._redactVulnearbilities

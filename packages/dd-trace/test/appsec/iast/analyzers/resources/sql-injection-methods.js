@@ -8,4 +8,7 @@ function executeQueryWithCallback (sql, clientOrPool, cb) {
   return clientOrPool.query(sql, cb)
 }
 
-module.exports = { executeQuery, executeQueryWithCallback }
+module.exports = {
+  executeQuery,
+  executeQueryWithCallback
+}

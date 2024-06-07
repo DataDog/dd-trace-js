@@ -12,7 +12,7 @@ const url = require('url')
 const { once } = require('events')
 const { expect } = require('chai')
 
-process.env.DD_TRACE_TELEMETRY_ENABLED = 'false'
+process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
 const mkdtemp = util.promisify(fs.mkdtemp)
 
@@ -35,6 +35,7 @@ async function getLatest (modName, repoUrl) {
 
 function get (theUrl) {
   return new Promise((resolve, reject) => {
+    // eslint-disable-next-line n/no-deprecated-api
     const options = url.parse(theUrl)
     options.headers = {
       'user-agent': 'dd-trace plugin test suites'
@@ -131,7 +132,7 @@ async function setup (modName, repoName, commitish) {
   const repoUrl = `https://github.com/${repoName}.git`
   const cwd = await getTmpDir()
   await execOrError(`git clone ${repoUrl} --branch ${commitish} --single-branch ${cwd}`)
-  await execOrError(`npm install --legacy-peer-deps`, { cwd })
+  await execOrError('npm install --legacy-peer-deps', { cwd })
 }
 
 async function cleanup () {
@@ -195,7 +196,7 @@ ${withTracer.stderr}
 
 function getOpts (args) {
   args = Array.from(args)
-  const [ modName, repoUrl, commitish, runner, timeout, testCmd ] = args
+  const [modName, repoUrl, commitish, runner, timeout, testCmd] = args
   const options = {
     modName,
     repoUrl,

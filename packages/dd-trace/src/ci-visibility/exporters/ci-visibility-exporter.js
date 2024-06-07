@@ -3,8 +3,9 @@
 const URL = require('url').URL
 
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
-const { getItrConfiguration: getItrConfigurationRequest } = require('../intelligent-test-runner/get-itr-configuration')
+const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
+const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const log = require('../../log')
 const AgentInfoExporter = require('../../exporters/common/agent-info-exporter')
 
@@ -76,11 +77,18 @@ class CiVisibilityExporter extends AgentInfoExporter {
   shouldRequestSkippableSuites () {
     return !!(this._config.isIntelligentTestRunnerEnabled &&
       this._canUseCiVisProtocol &&
-      this._itrConfig &&
-      this._itrConfig.isSuitesSkippingEnabled)
+      this._libraryConfig?.isSuitesSkippingEnabled)
   }
 
-  shouldRequestItrConfiguration () {
+  shouldRequestKnownTests () {
+    return !!(
+      this._config.isEarlyFlakeDetectionEnabled &&
+      this._canUseCiVisProtocol &&
+      this._libraryConfig?.isEarlyFlakeDetectionEnabled
+    )
+  }
+
+  shouldRequestLibraryConfiguration () {
     return this._config.isIntelligentTestRunnerEnabled
   }
 
@@ -90,6 +98,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
 
   canReportCodeCoverage () {
     return this._canUseCiVisProtocol
+  }
+
+  getRequestConfiguration (testConfiguration) {
+    return {
+      url: this._getApiUrl(),
+      env: this._config.env,
+      service: this._config.service,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      isGzipCompatible: this._isGzipCompatible,
+      evpProxyPrefix: this.evpProxyPrefix,
+      custom: getTestConfigurationTags(this._config.tags),
+      ...testConfiguration
+    }
   }
 
   // We can't call the skippable endpoint until git upload has finished,
@@ -102,50 +123,84 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
-      const configuration = {
-        url: this._getApiUrl(),
-        site: this._config.site,
-        env: this._config.env,
-        service: this._config.service,
-        isEvpProxy: !!this._isUsingEvpProxy,
-        custom: getTestConfigurationTags(this._config.tags),
-        ...testConfiguration
-      }
-      getSkippableSuitesRequest(configuration, callback)
+      getSkippableSuitesRequest(this.getRequestConfiguration(testConfiguration), callback)
     })
   }
 
+  getKnownTests (testConfiguration, callback) {
+    if (!this.shouldRequestKnownTests()) {
+      return callback(null)
+    }
+    getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
+  }
+
   /**
-   * We can't request ITR configuration until we know whether we can use the
+   * We can't request library configuration until we know whether we can use the
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
    */
-  getItrConfiguration (testConfiguration, callback) {
+  getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
     this.sendGitMetadata(repositoryUrl)
-    if (!this.shouldRequestItrConfiguration()) {
+    if (!this.shouldRequestLibraryConfiguration()) {
       return callback(null, {})
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
       }
-      const configuration = {
-        url: this._getApiUrl(),
-        env: this._config.env,
-        service: this._config.service,
-        isEvpProxy: !!this._isUsingEvpProxy,
-        custom: getTestConfigurationTags(this._config.tags),
-        ...testConfiguration
-      }
-      getItrConfigurationRequest(configuration, (err, itrConfig) => {
+      const configuration = this.getRequestConfiguration(testConfiguration)
+
+      getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
-         * **Important**: this._itrConfig remains empty in testing frameworks
-         * where the tests run in a subprocess, because `getItrConfiguration` is called only once.
+         * **Important**: this._libraryConfig remains empty in testing frameworks
+         * where the tests run in a subprocess, like Jest,
+         * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._itrConfig = itrConfig
-        callback(err, itrConfig)
+        this._libraryConfig = this.filterConfiguration(libraryConfig)
+
+        if (err) {
+          callback(err, {})
+        } else if (libraryConfig?.requireGit) {
+          // If the backend requires git, we'll wait for the upload to finish and request settings again
+          this._gitUploadPromise.then(gitUploadError => {
+            if (gitUploadError) {
+              return callback(gitUploadError, {})
+            }
+            getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
+              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
+              callback(err, this._libraryConfig)
+            })
+          })
+        } else {
+          callback(null, this._libraryConfig)
+        }
       })
     })
+  }
+
+  // Takes into account potential kill switches
+  filterConfiguration (remoteConfiguration) {
+    if (!remoteConfiguration) {
+      return {}
+    }
+    const {
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isItrEnabled,
+      requireGit,
+      isEarlyFlakeDetectionEnabled,
+      earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionFaultyThreshold
+    } = remoteConfiguration
+    return {
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isItrEnabled,
+      requireGit,
+      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
+      earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionFaultyThreshold
+    }
   }
 
   sendGitMetadata (repositoryUrl) {
@@ -156,14 +211,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return
       }
-      sendGitMetadataRequest(this._getApiUrl(), !!this._isUsingEvpProxy, repositoryUrl, (err) => {
-        if (err) {
-          log.error(`Error uploading git metadata: ${err.message}`)
-        } else {
-          log.debug('Successfully uploaded git metadata')
+      sendGitMetadataRequest(
+        this._getApiUrl(),
+        { isEvpProxy: !!this._isUsingEvpProxy, evpProxyPrefix: this.evpProxyPrefix },
+        repositoryUrl,
+        (err) => {
+          if (err) {
+            log.error(`Error uploading git metadata: ${err.message}`)
+          } else {
+            log.debug('Successfully uploaded git metadata')
+          }
+          this._resolveGit(err)
         }
-        this._resolveGit(err)
-      })
+      )
     })
   }
 

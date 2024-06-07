@@ -43,6 +43,21 @@
         "ATTACK_404": "1",
         "ATTACK_QS": "1"
       }
+    },
+    "startup-time-control": {
+      "run": "node --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "env": {
+        "DD_APPSEC_ENABLED": "0"
+      }
+    },
+    "startup-time-appsec-enabled": {
+      "run": "node --require ../../../init.js insecure-bank.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
+      "baseline": "startup-time-control",
+      "env": {
+        "DD_APPSEC_ENABLED": "1"
+      }
     }
   }
 }

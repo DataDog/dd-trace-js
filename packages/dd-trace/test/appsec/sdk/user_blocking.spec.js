@@ -11,6 +11,14 @@ const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
 
+const resultActions = {
+  block_request: {
+    status_code: '401',
+    type: 'auto',
+    grpc_status_code: '10'
+  }
+}
+
 describe('user_blocking', () => {
   describe('Internal API', () => {
     const req = { protocol: 'https' }
@@ -21,8 +29,8 @@ describe('user_blocking', () => {
 
     before(() => {
       const runStub = sinon.stub(waf, 'run')
-      runStub.withArgs({ [USER_ID]: 'user' }).returns(['block'])
-      runStub.withArgs({ [USER_ID]: 'gooduser' }).returns([''])
+      runStub.withArgs({ persistent: { [USER_ID]: 'user' } }).returns(resultActions)
+      runStub.withArgs({ persistent: { [USER_ID]: 'gooduser' } }).returns({})
     })
 
     beforeEach(() => {

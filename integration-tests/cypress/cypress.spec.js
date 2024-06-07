@@ -24,19 +24,26 @@ const {
   TEST_ITR_TESTS_SKIPPED,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_SKIPPING_COUNT,
-  TEST_ITR_SKIPPING_TYPE
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
+  TEST_SOURCE_FILE,
+  TEST_IS_NEW,
+  TEST_IS_RETRY,
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
-const semver = require('semver')
+const { NODE_MAJOR } = require('../../version')
 
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
+const NUM_RETRIES_EFD = 3
 
 const moduleType = [
   {
     type: 'commonJS',
     testCommand: function commandWithSuffic (version) {
-      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json' : ''
+      const commandSuffix = version === '6.7.0' ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"' : ''
       return `./node_modules/.bin/cypress run ${commandSuffix}`
     }
   },
@@ -51,7 +58,10 @@ moduleType.forEach(({
   testCommand
 }) => {
   // cypress only supports esm on versions >= 10.0.0
-  if (type === 'esm' && semver.satisfies(version, '<10.0.0')) {
+  if (type === 'esm' && version === '6.7.0') {
+    return
+  }
+  if (version === '6.7.0' && NODE_MAJOR > 16) {
     return
   }
   describe(`cypress@${version} ${type}`, function () {
@@ -64,7 +74,8 @@ moduleType.forEach(({
     }
 
     before(async () => {
-      sandbox = await createSandbox([`cypress@${version}`], true)
+      // cypress-fail-fast is required as an incompatible plugin
+      sandbox = await createSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
       cwd = sandbox.folder
       webAppPort = await getPort()
       webAppServer.listen(webAppPort)
@@ -276,6 +287,10 @@ moduleType.forEach(({
             assert.exists(testSuiteId)
             assert.equal(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
             assert.equal(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.equal(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
+            // Can read DD_TAGS
+            assert.propertyVal(meta, 'test.customtag', 'customvalue')
+            assert.propertyVal(meta, 'test.customtag2', 'customvalue2')
           })
         }, 25000)
 
@@ -290,7 +305,8 @@ moduleType.forEach(({
           cwd,
           env: {
             ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
           },
           stdio: 'pipe'
         }
@@ -544,6 +560,147 @@ moduleType.forEach(({
           }).catch(done)
         })
       })
+      it('does not skip tests if suite is marked as unskippable', (done) => {
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: true
+        })
+
+        receiver.setSuitesToSkip([
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/other.cy.js'
+            }
+          },
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/spec.cy.js'
+            }
+          }
+        ])
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testSession.meta, TEST_ITR_FORCED_RUN, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(testModule.meta, TEST_ITR_FORCED_RUN, 'true')
+
+            const unskippablePassedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
+            )
+            const unskippableFailedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
+            )
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_FORCED_RUN, 'true')
+
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // This was not going to be skipped
+            assert.notProperty(unskippableFailedTest.content.meta, TEST_ITR_FORCED_RUN)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('only sets forced to run if test was going to be skipped by ITR', (done) => {
+        receiver.setSettings({
+          code_coverage: true,
+          tests_skipping: true
+        })
+
+        receiver.setSuitesToSkip([
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/other.cy.js'
+            }
+          }
+        ])
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_session_end').content
+
+            assert.propertyVal(testSession.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testSession.meta, TEST_ITR_FORCED_RUN)
+            assert.propertyVal(testModule.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            assert.notProperty(testModule.meta, TEST_ITR_FORCED_RUN)
+
+            const unskippablePassedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.context passes'
+            )
+            const unskippableFailedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/spec.cy.js.other context fails'
+            )
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_STATUS, 'pass')
+            assert.propertyVal(unskippablePassedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // This was not going to be skipped
+            assert.notProperty(unskippablePassedTest.content.meta, TEST_ITR_FORCED_RUN)
+
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_STATUS, 'fail')
+            assert.propertyVal(unskippableFailedTest.content.meta, TEST_ITR_UNSKIPPABLE, 'true')
+            // This was not going to be skipped
+            assert.notProperty(unskippableFailedTest.content.meta, TEST_ITR_FORCED_RUN)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
       it('sets _dd.ci.itr.tests_skipped to false if the received test is not skipped', (done) => {
         receiver.setSuitesToSkip([{
           type: 'test',
@@ -591,6 +748,406 @@ moduleType.forEach(({
         )
         childProcess.on('exit', () => {
           Promise.all([eventsPromise, skippableRequestPromise]).then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('reports itr_correlation_id in tests', (done) => {
+        const itrCorrelationId = '4321'
+        receiver.setItrCorrelationId(itrCorrelationId)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            tests.forEach(test => {
+              assert.equal(test.itr_correlation_id, itrCorrelationId)
+            })
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisAgentlessConfig(receiver.port)
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+            },
+            stdio: 'pipe'
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
+
+    it('still reports correct format if there is a plugin incompatibility', (done) => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+
+          testEvents.forEach(testEvent => {
+            assert.exists(testEvent.content.test_suite_id)
+            assert.exists(testEvent.content.test_module_id)
+            assert.exists(testEvent.content.test_session_id)
+            assert.notEqual(testEvent.content.test_suite_id, testModuleEvent.content.test_module_id)
+          })
+        })
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('works if after:run is explicitly used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.exists(testSessionEvent)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          assert.exists(testModuleEvent)
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 4)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 9)
+        })
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('works if after:spec is explicitly used', (done) => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.exists(testSessionEvent)
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          assert.exists(testModuleEvent)
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          assert.equal(testSuiteEvents.length, 4)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 9)
+        })
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1'
+          },
+          stdio: 'pipe'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        receiverPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    context('early flake detection', () => {
+      it('retries new tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes', // This test will be considered new
+              'other context fails'
+            ]
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 5)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, NUM_RETRIES_EFD + 1)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.equal(retriedTests.length, NUM_RETRIES_EFD)
+
+            newTests.forEach(newTest => {
+              assert.equal(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
+            })
+
+            const knownTest = tests.filter(test => !test.meta[TEST_IS_NEW])
+            assert.equal(knownTest.length, 1)
+            assert.equal(knownTest[0].resource, 'cypress/e2e/spec.cy.js.other context fails')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({
+          cypress: {
+            'cypress/e2e/spec.cy.js': [
+              // 'context passes', // This test will be considered new
+              'other context fails'
+            ]
+          }
+        })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+          })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('does not retry tests that are skipped', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTests({})
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 1)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+
+            assert.equal(tests[0].resource, 'cypress/e2e/skipped-test.js.skipped skipped')
+            assert.propertyVal(tests[0].meta, TEST_STATUS, 'skip')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.propertyVal(testSession.meta, TEST_EARLY_FLAKE_ENABLED, 'true')
+          })
+
+        const specToRun = 'cypress/e2e/skipped-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/skipped-test.js'
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+      it('does not run EFD if the known tests request fails', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD
+            }
+          }
+        })
+
+        receiver.setKnownTestsResponseCode(500)
+        receiver.setKnownTests({})
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.notProperty(testSession.meta, TEST_EARLY_FLAKE_ENABLED)
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 2)
+
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.equal(newTests.length, 0)
+          })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
             done()
           }).catch(done)
         })

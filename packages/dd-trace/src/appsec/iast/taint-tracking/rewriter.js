@@ -7,9 +7,12 @@ const { isPrivateModule, isNotLibraryFile } = require('./filter')
 const { csiMethods } = require('./csi-methods')
 const { getName } = require('../telemetry/verbosity')
 const { getRewriteFunction } = require('./rewriter-telemetry')
+const dc = require('dc-polyfill')
 
+const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 let rewriter
 let getPrepareStackTrace
+let kSymbolPrepareStackTrace
 
 let getRewriterOriginalPathAndLineFromSourceMap = function (path, line, column) {
   return { path, line, column }
@@ -42,6 +45,7 @@ function getRewriter (telemetryVerbosity) {
       const iastRewriter = require('@datadog/native-iast-rewriter')
       const Rewriter = iastRewriter.Rewriter
       getPrepareStackTrace = iastRewriter.getPrepareStackTrace
+      kSymbolPrepareStackTrace = iastRewriter.kSymbolPrepareStackTrace
 
       const chainSourceMap = isFlagPresent('--enable-source-maps')
       const getOriginalPathAndLineFromSourceMap = iastRewriter.getOriginalPathAndLineFromSourceMap
@@ -50,7 +54,11 @@ function getRewriter (telemetryVerbosity) {
           getGetOriginalPathAndLineFromSourceMapFunction(chainSourceMap, getOriginalPathAndLineFromSourceMap)
       }
 
-      rewriter = new Rewriter({ csiMethods, telemetryVerbosity: getName(telemetryVerbosity), chainSourceMap })
+      rewriter = new Rewriter({
+        csiMethods,
+        telemetryVerbosity: getName(telemetryVerbosity),
+        chainSourceMap
+      })
     } catch (e) {
       iastLog.error('Unable to initialize TaintTracking Rewriter')
         .errorAndPublish(e)
@@ -59,8 +67,9 @@ function getRewriter (telemetryVerbosity) {
   return rewriter
 }
 
-let originalPrepareStackTrace = Error.prepareStackTrace
+let originalPrepareStackTrace
 function getPrepareStackTraceAccessor () {
+  originalPrepareStackTrace = Error.prepareStackTrace
   let actual = getPrepareStackTrace(originalPrepareStackTrace)
   return {
     configurable: true,
@@ -80,7 +89,12 @@ function getCompileMethodFn (compileMethod) {
     try {
       if (isPrivateModule(filename) && isNotLibraryFile(filename)) {
         const rewritten = rewriteFn(content, filename)
-        if (rewritten && rewritten.content) {
+
+        if (rewritten?.literalsResult && hardcodedSecretCh.hasSubscribers) {
+          hardcodedSecretCh.publish(rewritten.literalsResult)
+        }
+
+        if (rewritten?.content) {
           return compileMethod.apply(this, [rewritten.content, filename])
         }
       }
@@ -110,7 +124,16 @@ function enableRewriter (telemetryVerbosity) {
 
 function disableRewriter () {
   shimmer.unwrap(Module.prototype, '_compile')
-  Error.prepareStackTrace = originalPrepareStackTrace
+
+  if (!Error.prepareStackTrace?.[kSymbolPrepareStackTrace]) return
+
+  try {
+    delete Error.prepareStackTrace
+
+    Error.prepareStackTrace = originalPrepareStackTrace
+  } catch (e) {
+    iastLog.warn(e)
+  }
 }
 
 function getOriginalPathAndLineFromSourceMap ({ path, line, column }) {

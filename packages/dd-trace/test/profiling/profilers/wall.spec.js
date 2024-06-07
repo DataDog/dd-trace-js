@@ -55,7 +55,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 
@@ -73,7 +74,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 
@@ -107,15 +109,36 @@ describe('profilers/native/wall', () => {
   it('should collect profiles from the internal time profiler', () => {
     const profiler = new NativeWallProfiler()
 
+    expect(profiler.isStarted()).to.be.false
     profiler.start()
+    expect(profiler.isStarted()).to.be.true
 
-    const profile = profiler.profile()
+    const profile = profiler.profile(true)
 
     expect(profile).to.equal('profile')
 
     sinon.assert.calledOnce(pprof.time.stop)
     sinon.assert.calledOnce(pprof.time.start)
+    expect(profiler.isStarted()).to.be.true
     profiler.stop()
+    expect(profiler.isStarted()).to.be.false
+    sinon.assert.calledTwice(pprof.time.stop)
+  })
+
+  it('should collect profiles from the internal time profiler and stop profiler if not restarted', () => {
+    const profiler = new NativeWallProfiler()
+
+    profiler.start()
+
+    const profile = profiler.profile(false)
+
+    expect(profile).to.equal('profile')
+
+    sinon.assert.calledOnce(pprof.time.stop)
+    sinon.assert.calledOnce(pprof.time.start)
+    expect(profiler.isStarted()).to.be.false
+    profiler.stop()
+    sinon.assert.calledOnce(pprof.time.stop)
   })
 
   it('should encode profiles from the pprof time profiler', () => {
@@ -123,7 +146,7 @@ describe('profilers/native/wall', () => {
 
     profiler.start()
 
-    const profile = profiler.profile()
+    const profile = profiler.profile(true)
 
     profiler.encode(profile)
 
@@ -147,7 +170,8 @@ describe('profilers/native/wall', () => {
         sourceMapper: mapper,
         withContexts: false,
         lineNumbers: false,
-        workaroundV8Bug: false
+        workaroundV8Bug: false,
+        collectCpuTime: false
       })
   })
 })

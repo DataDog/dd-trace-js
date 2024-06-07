@@ -9,7 +9,7 @@ const path = require('path')
 
 const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')
-const sanitizedExecStub = sinon.stub().returns('')
+const execFileSyncStub = sinon.stub().returns('')
 
 const {
   GIT_COMMIT_SHA,
@@ -26,10 +26,10 @@ const {
   CI_WORKSPACE_PATH
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata } = proxyquire('../../../src/plugins/util/git',
+const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
   {
-    './exec': {
-      'sanitizedExec': sanitizedExecStub
+    child_process: {
+      execFileSync: execFileSyncStub
     }
   }
 )
@@ -43,7 +43,7 @@ function getFakeDirectory () {
 
 describe('git', () => {
   afterEach(() => {
-    sanitizedExecStub.reset()
+    execFileSyncStub.reset()
     delete process.env.DD_GIT_COMMIT_SHA
     delete process.env.DD_GIT_REPOSITORY_URL
     delete process.env.DD_GIT_BRANCH
@@ -76,23 +76,23 @@ describe('git', () => {
       }
     )
     expect(metadata[GIT_REPOSITORY_URL]).not.to.equal('ciRepositoryUrl')
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(sanitizedExecStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(execFileSyncStub).not.to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
   })
   it('does not crash if git is not available', () => {
-    sanitizedExecStub.returns('')
-    const ciMetadata = { repositoryUrl: 'ciRepositoryUrl' }
+    execFileSyncStub.returns('')
+    const ciMetadata = { repositoryUrl: 'https://github.com/datadog/safe-repository.git' }
     const metadata = getGitMetadata(ciMetadata)
     expect(metadata).to.eql({
       [GIT_BRANCH]: '',
       [GIT_TAG]: undefined,
       [GIT_COMMIT_MESSAGE]: '',
       [GIT_COMMIT_SHA]: '',
-      [GIT_REPOSITORY_URL]: 'ciRepositoryUrl',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_COMMITTER_EMAIL]: undefined,
       [GIT_COMMIT_COMMITTER_DATE]: undefined,
       [GIT_COMMIT_COMMITTER_NAME]: undefined,
@@ -103,12 +103,12 @@ describe('git', () => {
     })
   })
   it('returns all git metadata is git is available', () => {
-    sanitizedExecStub
+    execFileSyncStub
       .onCall(0).returns(
         'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
         'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
       )
-      .onCall(1).returns('gitRepositoryUrl')
+      .onCall(1).returns('https://github.com/datadog/safe-repository.git')
       .onCall(2).returns('this is a commit message')
       .onCall(3).returns('gitBranch')
       .onCall(4).returns('gitCommitSHA')
@@ -120,7 +120,7 @@ describe('git', () => {
       [GIT_TAG]: 'ciTag',
       [GIT_COMMIT_MESSAGE]: 'this is a commit message',
       [GIT_COMMIT_SHA]: 'gitCommitSHA',
-      [GIT_REPOSITORY_URL]: 'gitRepositoryUrl',
+      [GIT_REPOSITORY_URL]: 'https://github.com/datadog/safe-repository.git',
       [GIT_COMMIT_AUTHOR_EMAIL]: 'git.author@email.com',
       [GIT_COMMIT_AUTHOR_DATE]: '2022-02-14T16:22:03-05:00',
       [GIT_COMMIT_AUTHOR_NAME]: 'git author',
@@ -129,23 +129,23 @@ describe('git', () => {
       [GIT_COMMIT_COMMITTER_NAME]: 'git committer',
       [CI_WORKSPACE_PATH]: 'ciWorkspacePath'
     })
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
-    expect(sanitizedExecStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['ls-remote', '--get-url'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%s'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', 'HEAD'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--abbrev-ref', 'HEAD'])
+    expect(execFileSyncStub).to.have.been.calledWith('git', ['rev-parse', '--show-toplevel'])
   })
 })
 
-describe('getCommitsToUpload', () => {
+describe('getCommitsRevList', () => {
   it('gets the commits to upload if the repository is smaller than the limit', () => {
     const logErrorSpy = sinon.spy()
 
-    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
         '../../log': {
@@ -153,17 +153,17 @@ describe('getCommitsToUpload', () => {
         }
       }
     )
-    getCommitsToUpload([], [])
+    getCommitsRevList([], [])
     expect(logErrorSpy).not.to.have.been.called
   })
 
   it('does not crash and logs the error if the repository is bigger than the limit', () => {
     const logErrorSpy = sinon.spy()
 
-    const { getCommitsToUpload } = proxyquire('../../../src/plugins/util/git',
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': (command, flags, options) =>
+        child_process: {
+          execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
         '../../log': {
@@ -171,9 +171,33 @@ describe('getCommitsToUpload', () => {
         }
       }
     )
-    const commitsToUpload = getCommitsToUpload([], [])
+    getCommitsRevList([], [])
     expect(logErrorSpy).to.have.been.called
-    expect(commitsToUpload.length).to.equal(0)
+  })
+
+  it('returns null if the repository is bigger than the limit', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: (command, flags, options) =>
+            execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
+        }
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
+  })
+
+  it('returns null if execFileSync fails for whatever reason', () => {
+    const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
+      {
+        child_process: {
+          execFileSync: () => { throw new Error('error!') }
+        }
+      }
+    )
+    const commitsToUpload = getCommitsRevList([], [])
+    expect(commitsToUpload).to.be.null
   })
 })
 
@@ -194,8 +218,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -212,8 +236,8 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
@@ -230,12 +254,116 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        'child_process': {
-          'execFileSync': execFileSyncSpy
+        child_process: {
+          execFileSync: execFileSyncSpy
         }
       }
     )
     const packFilesToUpload = generatePackFilesForCommits(['commitSHA'])
     expect(packFilesToUpload).to.eql([])
+  })
+})
+
+describe('unshallowRepository', () => {
+  afterEach(() => {
+    execFileSyncStub.reset()
+  })
+  it('works for the usual case', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin',
+      'daede5785233abb1a3cb76b9453d4eb5b98290b3'
+    ]
+
+    unshallowRepository()
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+  it('works if the local HEAD is a commit that has not been pushed to the remote', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+      .onCall(3).throws()
+      .onCall(4).returns('origin/master')
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin',
+      'origin/master'
+    ]
+
+    unshallowRepository()
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+  it('works if the CI is working on a detached HEAD or branch tracking hasn’t been set up', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git version 2.39.0'
+      )
+      .onCall(1).returns('origin')
+      .onCall(2).returns('daede5785233abb1a3cb76b9453d4eb5b98290b3')
+      .onCall(3).throws()
+      .onCall(4).returns('origin/master')
+      .onCall(5).throws()
+
+    const options = [
+      'fetch',
+      '--shallow-since="1 month ago"',
+      '--update-shallow',
+      '--filter=blob:none',
+      '--recurse-submodules=no',
+      'origin'
+    ]
+
+    unshallowRepository()
+    expect(execFileSyncStub).to.have.been.calledWith('git', options)
+  })
+})
+
+describe('user credentials', () => {
+  afterEach(() => {
+    execFileSyncStub.reset()
+    execFileSyncStub.reset()
+  })
+  it('scrubs https user credentials', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
+        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+      )
+      .onCall(1).returns('https://x-oauth-basic:ghp_safe_characters@github.com/datadog/safe-repository.git')
+
+    const metadata = getGitMetadata({})
+    expect(metadata[GIT_REPOSITORY_URL])
+      .to.equal('https://github.com/datadog/safe-repository.git')
+  })
+  it('scrubs ssh user credentials', () => {
+    execFileSyncStub
+      .onCall(0).returns(
+        'git author,git.author@email.com,2022-02-14T16:22:03-05:00,' +
+        'git committer,git.committer@email.com,2022-02-14T16:23:03-05:00'
+      )
+      .onCall(1).returns('ssh://username@host.xz:port/path/to/repo.git/')
+
+    const metadata = getGitMetadata({})
+    expect(metadata[GIT_REPOSITORY_URL])
+      .to.equal('ssh://host.xz:port/path/to/repo.git/')
   })
 })
