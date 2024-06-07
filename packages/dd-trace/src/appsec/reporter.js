@@ -13,8 +13,7 @@ const {
 } = require('./telemetry')
 const zlib = require('zlib')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
-const { APPSEC_PROPAGATION_KEY } = require('../constants')
-const { isStandaloneEnabled } = require('./standalone')
+const standalone = require('./standalone')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -122,9 +121,7 @@ function reportAttack (attackData) {
   if (limiter.isAllowed()) {
     newTags[MANUAL_KEEP] = 'true'
 
-    if (isStandaloneEnabled()) {
-      rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
-    }
+    standalone.sample(rootSpan)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -175,9 +172,7 @@ function finishRequest (req, res) {
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
-    if (isStandaloneEnabled()) {
-      rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
-    }
+    standalone.sample(rootSpan)
 
     metricsQueue.clear()
   }

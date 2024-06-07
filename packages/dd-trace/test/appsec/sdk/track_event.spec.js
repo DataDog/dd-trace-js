@@ -14,7 +14,7 @@ describe('track_event', () => {
     let getRootSpan
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
-    let isStandaloneEnabled
+    let sample
 
     beforeEach(() => {
       log = {
@@ -22,15 +22,14 @@ describe('track_event', () => {
       }
 
       rootSpan = {
-        addTags: sinon.stub(),
-        setTraceTag: sinon.stub()
+        addTags: sinon.stub()
       }
 
       getRootSpan = sinon.stub().callsFake(() => rootSpan)
 
       setUserTags = sinon.stub()
 
-      isStandaloneEnabled = sinon.stub().returns(false)
+      sample = sinon.stub()
 
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
@@ -41,7 +40,7 @@ describe('track_event', () => {
           setUserTags
         },
         '../standalone': {
-          isStandaloneEnabled
+          sample
         }
       })
 
@@ -257,28 +256,14 @@ describe('track_event', () => {
         })
       })
 
-      it('should add _dd.p.appsec tag if standaloneEnabled', () => {
-        isStandaloneEnabled.returns(true)
-
+      it('should call standalone sample', () => {
         trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true'
         })
 
-        expect(rootSpan.setTraceTag).to.have.been.calledOnceWithExactly('_dd.p.appsec', 1)
-      })
-
-      it('should not add _dd.p.appsec tag if standaloneEnabled', () => {
-        isStandaloneEnabled.returns(false)
-
-        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
-        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
-          'appsec.events.event.track': 'true',
-          'manual.keep': 'true'
-        })
-
-        expect(rootSpan.setTraceTag).to.have.not.been.called
+        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
       })
     })
   })

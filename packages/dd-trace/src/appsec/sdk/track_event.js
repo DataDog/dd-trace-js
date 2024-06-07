@@ -4,8 +4,7 @@ const log = require('../../log')
 const { getRootSpan } = require('./utils')
 const { MANUAL_KEEP } = require('../../../../../ext/tags')
 const { setUserTags } = require('./set_user')
-const { APPSEC_PROPAGATION_KEY } = require('../../constants')
-const { isStandaloneEnabled } = require('../standalone')
+const standalone = require('../standalone')
 
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -76,9 +75,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan, mode) {
 
   rootSpan.addTags(tags)
 
-  if (isStandaloneEnabled()) {
-    rootSpan.setTraceTag(APPSEC_PROPAGATION_KEY, 1)
-  }
+  standalone.sample(rootSpan)
 }
 
 module.exports = {

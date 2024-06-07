@@ -164,71 +164,6 @@ describe('Span', () => {
     expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
   })
 
-  describe('apmTracingEnabled', () => {
-    it('should not add _dd.apm.enabled tag when apmTracingEnabled = undefined', () => {
-      span = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation'
-      })
-
-      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
-    })
-
-    it('should not add _dd.apm.enabled tag when apmTracingEnabled = true', () => {
-      span = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: true
-      })
-
-      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
-    })
-
-    it('should add _dd.apm.enabled tag when apmTracingEnabled = false', () => {
-      span = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: false
-      })
-
-      expect(span.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(span.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
-    })
-
-    it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
-      const parent = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: false
-      })
-
-      expect(parent.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(parent.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
-
-      const child = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: false,
-        parent
-      })
-
-      expect(child.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
-    })
-
-    it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
-      const parent = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: false
-      })
-
-      parent._isRemote = true
-
-      const child = new Span(tracer, processor, prioritySampler, {
-        operationName: 'operation',
-        apmTracingEnabled: false,
-        parent
-      })
-
-      expect(child.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(child.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
-    })
-  })
-
   describe('tracer', () => {
     it('should return its parent tracer', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
@@ -382,15 +317,6 @@ describe('Span', () => {
       span.addTags(tags)
 
       expect(prioritySampler.sample).to.have.been.calledWith(span, false)
-    })
-  })
-
-  describe('setTraceTag', () => {
-    it('should set a trace tag', () => {
-      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      span.setTraceTag('foo', 'bar')
-
-      expect(tagger.add).to.have.been.calledWith(span.context()._trace.tags, { foo: 'bar' })
     })
   })
 

@@ -181,6 +181,7 @@ class Tracer extends NoopProxy {
       if (!this._tracingInitialized) {
         this._tracer = new DatadogTracer(config)
         this.appsec = new AppsecSdk(this._tracer, config)
+        appsecStandalone.configure(config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -192,7 +193,6 @@ class Tracer extends NoopProxy {
     }
 
     if (this._tracingInitialized) {
-      appsecStandalone.configure(config)
       this._tracer.configure(config)
       this._pluginManager.configure(config)
       setStartupLogPluginManager(this._pluginManager)

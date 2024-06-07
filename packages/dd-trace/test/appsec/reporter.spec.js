@@ -9,7 +9,7 @@ describe('reporter', () => {
   let span
   let web
   let telemetry
-  let isStandaloneEnabled
+  let sample
 
   beforeEach(() => {
     span = {
@@ -17,8 +17,7 @@ describe('reporter', () => {
         _tags: {}
       }),
       addTags: sinon.stub(),
-      setTag: sinon.stub(),
-      setTraceTag: sinon.stub()
+      setTag: sinon.stub()
     }
 
     web = {
@@ -33,13 +32,13 @@ describe('reporter', () => {
       getRequestMetrics: sinon.stub()
     }
 
-    isStandaloneEnabled = sinon.stub().returns(false)
+    sample = sinon.stub()
 
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
       './telemetry': telemetry,
       './standalone': {
-        isStandaloneEnabled
+        sample
       }
     })
   })
@@ -283,8 +282,6 @@ describe('reporter', () => {
     })
 
     it('should add _dd.p.appsec trace tag if standalone ASM enabled', () => {
-      isStandaloneEnabled.returns(true)
-
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
       const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
@@ -302,30 +299,7 @@ describe('reporter', () => {
         'network.client.ip': '8.8.8.8'
       })
 
-      expect(span.setTraceTag).to.have.been.calledOnceWithExactly('_dd.p.appsec', 1)
-    })
-
-    it('should not add _dd.p.appsec trace tag if standalone ASM enabled', () => {
-      isStandaloneEnabled.returns(false)
-
-      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
-
-      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
-      expect(result).to.not.be.false
-      expect(web.root).to.have.been.calledOnceWith(req)
-
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
-        'appsec.event': 'true',
-        'manual.keep': 'true',
-        '_dd.origin': 'appsec',
-        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
-        'network.client.ip': '8.8.8.8'
-      })
-
-      expect(span.setTraceTag).to.have.not.been.called
+      expect(sample).to.have.been.calledOnceWithExactly(span)
     })
   })
 

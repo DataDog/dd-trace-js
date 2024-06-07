@@ -14,7 +14,6 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
-const { APM_TRACING_ENABLED_KEY } = require('../constants')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -80,8 +79,6 @@ class DatadogSpan {
     this._spanContext._name = operationName
     this._spanContext._tags = tags
 
-    this._addApmTracingTag(this._spanContext._tags, fields, parent)
-
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -101,7 +98,7 @@ class DatadogSpan {
       unfinishedRegistry.register(this, operationName, this)
     }
     spanleak.addSpan(this, operationName)
-    startCh.publish(this)
+    startCh.publish({ span: this, fields })
   }
 
   toString () {
@@ -151,11 +148,6 @@ class DatadogSpan {
 
   addTags (keyValueMap) {
     this._addTags(keyValueMap)
-    return this
-  }
-
-  setTraceTag (key, value) {
-    tagger.add(this._spanContext._trace.tags, { [key]: value })
     return this
   }
 
@@ -293,12 +285,6 @@ class DatadogSpan {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
-  }
-
-  _addApmTracingTag (tags, fields, parent) {
-    if (fields.apmTracingEnabled === false && (!parent || parent._isRemote)) {
-      tags[APM_TRACING_ENABLED_KEY] = 0
-    }
   }
 }
 

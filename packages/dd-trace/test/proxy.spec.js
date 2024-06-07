@@ -330,13 +330,11 @@ describe('TracerProxy', () => {
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
-        expect(standalone.configure).to.have.been.calledOnce
 
         let conf = { tracing_enabled: false }
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
         expect(appsec.disable).to.not.have.been.called
         expect(iast.disable).to.not.have.been.called
-        expect(standalone.configure).to.have.been.calledTwice
 
         conf = { tracing_enabled: true }
         rc.emit('APM_TRACING', 'apply', { lib_config: conf })
@@ -344,6 +342,8 @@ describe('TracerProxy', () => {
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
+
+        expect(standalone.configure).to.have.been.calledOnce
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
