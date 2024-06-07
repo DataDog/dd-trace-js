@@ -159,7 +159,7 @@ function extractTags (trace, span) {
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
           // HACK: to leave trace.error unchanged after a call to otel.recordException
-          if (!tags[ERROR_TYPE].startsWith('otel.recordException:')) {
+          if (tags[ERROR_TYPE] && !tags[ERROR_TYPE].startsWith('otel.recordException:')) {
             trace.error = 1
           }
         } else {
