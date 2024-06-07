@@ -149,6 +149,7 @@ function extractTags (trace, span) {
           extractError(trace, tags[tag])
         }
         break
+      // to ensure any error set through otel.setStatus is still set even though otel.recordException has been called
       case 'setTraceError':
         trace.error = 1
         break
