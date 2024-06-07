@@ -165,7 +165,7 @@ function extractTags (trace, span) {
     }
   }
 
-  if (tags[ERROR_TYPE].startsWith('otel.recordException')) {
+  if (tags[ERROR_TYPE] && tags[ERROR_TYPE].startsWith('otel.recordException')) {
     tags[ERROR_TYPE] = tags[ERROR_TYPE].replace('otel.recordException', '')
   }
 
