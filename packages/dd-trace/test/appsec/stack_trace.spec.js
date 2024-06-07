@@ -258,7 +258,8 @@ describe('Stack trace reporter', () => {
         meta_struct: {
           '_dd.stack': {
             exploit: [callSiteList, callSiteList]
-          }
+          },
+          another_tag: []
         }
       }
       const stackId = 'test_stack_id'
@@ -266,6 +267,7 @@ describe('Stack trace reporter', () => {
       reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteList)
 
       assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 2)
+      assert.property(rootSpan.meta_struct, 'another_tag')
     })
   })
 })
