@@ -266,9 +266,10 @@ class Span {
   recordException (exception, timeInput) {
     // HACK: identifier is added so that trace.error remains unchanged after a call to otel.recordException
     this._ddSpan.addTags({
-      [ERROR_TYPE]: 'otel.recordException:' + exception.name,
+      [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack
+      [ERROR_STACK]: exception.stack,
+      doNotSetTraceError: true
     })
     const attributes = {}
     if (exception.message) attributes['exception.message'] = exception.message

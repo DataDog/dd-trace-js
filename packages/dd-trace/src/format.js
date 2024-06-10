@@ -149,17 +149,13 @@ function extractTags (trace, span) {
           extractError(trace, tags[tag])
         }
         break
-      // to ensure any error set through otel.setStatus is still set even though otel.recordException has been called
-      case 'setTraceError':
-        trace.error = 1
-        break
       case ERROR_TYPE:
       case ERROR_MESSAGE:
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          // HACK: to leave trace.error unchanged after a call to otel.recordException
-          if (tags[ERROR_TYPE] && !tags[ERROR_TYPE].startsWith('otel.recordException:')) {
+          // HACK: to ensure otel.recordException does not influence trace.error
+          if (tags.setTraceError) {
             trace.error = 1
           }
         } else {
@@ -169,11 +165,6 @@ function extractTags (trace, span) {
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
-  // HACK: to leave trace.error unchanged after a call to otel.recordException
-  if (tags[ERROR_TYPE] && tags[ERROR_TYPE].startsWith('otel.recordException:')) {
-    tags[ERROR_TYPE] = tags[ERROR_TYPE].replace('otel.recordException:', '')
-  }
-
   setSingleSpanIngestionTags(trace, context._spanSampling)
 
   addTag(trace.meta, trace.metrics, 'language', 'javascript')

@@ -352,7 +352,7 @@ describe('OTel Span', () => {
     span.recordException(error, datenow)
 
     const { _tags } = span._ddSpan.context()
-    expect(_tags).to.have.property(ERROR_TYPE, 'otel.recordException:' + error.name)
+    expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
 

@@ -1,6 +1,10 @@
 'use strict'
 
+const constants = require('../src/constants')
 require('./setup/tap')
+const ERROR_MESSAGE = constants.ERROR_MESSAGE
+const ERROR_STACK = constants.ERROR_STACK
+const ERROR_TYPE = constants.ERROR_TYPE
 
 describe('tagger', () => {
   let carrier
@@ -44,5 +48,30 @@ describe('tagger', () => {
 
   it('should handle missing carrier', () => {
     expect(() => tagger.add()).not.to.throw()
+  })
+
+  it('should set trace error', () => {
+    tagger.add(carrier, {
+      [ERROR_TYPE]: 'foo',
+      [ERROR_MESSAGE]: 'foo',
+      [ERROR_STACK]: 'foo'
+    })
+
+    expect(carrier).to.have.property(ERROR_TYPE, 'foo')
+    expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
+    expect(carrier).to.have.property(ERROR_STACK, 'foo')
+    expect(carrier).to.have.property('setTraceError', true)
+
+    tagger.add(carrier, {
+      [ERROR_TYPE]: 'foo',
+      [ERROR_MESSAGE]: 'foo',
+      [ERROR_STACK]: 'foo',
+      doNotSetTraceError: true
+    })
+
+    expect(carrier).to.have.property(ERROR_TYPE, 'foo')
+    expect(carrier).to.have.property(ERROR_MESSAGE, 'foo')
+    expect(carrier).to.have.property(ERROR_STACK, 'foo')
+    expect(carrier).to.have.property('setTraceError', true)
   })
 })
