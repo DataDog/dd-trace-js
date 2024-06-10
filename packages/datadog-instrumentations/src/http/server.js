@@ -10,6 +10,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
+const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 
 const requestFinishedSet = new WeakSet()
@@ -20,6 +21,9 @@ const httpsNames = ['https', 'node:https']
 addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'emit', wrapResponseEmit)
   shimmer.wrap(http.Server.prototype, 'emit', wrapEmit)
+  shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
+  shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
+  shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
   return http
 })
 
@@ -85,4 +89,98 @@ function wrapSetHeader (res) {
       return setHeaderResult
     }
   })
+}
+
+function wrapWriteHead (writeHead) {
+  return function wrappedWriteHead (statusCode, reason, obj) {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return writeHead.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+
+    if (typeof reason !== 'string') {
+      obj ??= reason
+    }
+
+    // support writeHead(200, ['key1', 'val1', 'key2', 'val2'])
+    if (Array.isArray(obj)) {
+      const headers = {}
+
+      for (let i = 0; i < obj.length; i += 2) {
+        headers[obj[i]] = obj[i + 1]
+      }
+
+      obj = headers
+    }
+
+    // this doesn't support explicit duplicate headers, but it's an edge case
+    const responseHeaders = Object.assign(this.getHeaders(), obj)
+
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode,
+      responseHeaders
+    })
+
+    if (abortController.signal.aborted) {
+      return this
+    }
+
+    return writeHead.apply(this, arguments)
+  }
+}
+
+function wrapWrite (write) {
+  return function wrappedWrite () {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return write.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+
+    const responseHeaders = this.getHeaders()
+
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders
+    })
+
+    if (abortController.signal.aborted) {
+      return true
+    }
+
+    return write.apply(this, arguments)
+  }
+}
+
+function wrapEnd (end) {
+  return function wrappedEnd () {
+    if (!startWriteHeadCh.hasSubscribers) {
+      return end.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+
+    const responseHeaders = this.getHeaders()
+
+    startWriteHeadCh.publish({
+      req: this.req,
+      res: this,
+      abortController,
+      statusCode: this.statusCode,
+      responseHeaders
+    })
+
+    if (abortController.signal.aborted) {
+      return this
+    }
+
+    return end.apply(this, arguments)
+  }
 }
