@@ -72,6 +72,8 @@ function onSpanExtract ({ spanContext, carrier }) {
   // reset upstream priority if _dd.p.appsec is not found
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
     spanContext._sampling = {}
+  } else if (spanContext._sampling.priority !== USER_KEEP) {
+    spanContext._sampling.priority = USER_KEEP
   }
 }
 
