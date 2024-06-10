@@ -31,7 +31,7 @@ function configure (config) {
 
 function sample (span) {
   if (enabled) {
-    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = 1
+    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
   }
 }
 
