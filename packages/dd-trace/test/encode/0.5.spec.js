@@ -65,6 +65,27 @@ describe('encode 0.5', () => {
     expect(stringMap[trace[0][11]]).to.equal('') // unset
   })
 
+  it('should encode span events', () => {
+    const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
+    '{"name":"I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx","time_unix_nano":1633023102000000,' +
+    '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false}}]'
+
+    data[0].meta.events = encodedLink
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
+    const stringMap = decoded[0]
+    const trace = decoded[1][0]
+    expect(stringMap).to.include('events')
+    expect(stringMap).to.include(encodedLink)
+    expect(trace[0][9]).to.include({
+      [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
+      [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink)
+    })
+  })
+
   it('should encode span links', () => {
     const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
