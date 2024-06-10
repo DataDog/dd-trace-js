@@ -179,19 +179,11 @@ class Span {
   }
 
   setAttribute (key, value) {
-    if (key === 'http.response.status_code') {
-      this._ddSpan.setTag('http.status_code', value.toString())
-    }
-
     this._ddSpan.setTag(key, value)
     return this
   }
 
   setAttributes (attributes) {
-    if ('http.response.status_code' in attributes) {
-      attributes['http.status_code'] = attributes['http.response.status_code'].toString()
-    }
-
     this._ddSpan.addTags(attributes)
     return this
   }
