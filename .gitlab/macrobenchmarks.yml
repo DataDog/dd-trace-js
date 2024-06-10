@@ -46,12 +46,63 @@
   # benchmarks get changed to run on every PR)
   allow_failure: true
 
-baseline:
+baseline-1:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: baseline
 
-only-tracing:
+baseline-2:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: baseline
+
+baseline-3:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: baseline
+
+baseline-4:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: baseline
+
+baseline-5:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: baseline
+
+baseline-6:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: baseline
+
+
+only-tracing-1:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-2:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-3:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-4:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-5:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-6:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
