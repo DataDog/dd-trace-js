@@ -63,7 +63,7 @@ function onSpanStart ({ span, fields }) {
 
 function sample (span) {
   if (enabled) {
-    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = 1
+    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: reset priority if less than AUTO_KEEP
   }
