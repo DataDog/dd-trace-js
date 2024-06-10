@@ -30,22 +30,3 @@ jobs:
           git tag --force dev
           git push origin :refs/tags/dev
           git push origin --tags
-
-  injection-image-publish:
-    runs-on: ubuntu-latest
-    needs: ['dev_release']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-      - name: Log in to the Container registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: npm pack for injection image
-        run: |
-          npm pack dd-trace@dev
-      - uses: ./.github/actions/injection
-        with:
-          init-image-version: dev
