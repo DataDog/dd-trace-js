@@ -11,15 +11,19 @@ function isStandaloneEnabled () {
 }
 
 function onSpanStart ({ span, fields }) {
-  const { parent } = fields
-  const tags = span.context()._tags
+  const tags = span.context()?._tags
+  if (!tags) return
 
+  const { parent } = fields
   if (!parent || parent._isRemote) {
     tags[APM_TRACING_ENABLED_KEY] = 0
   }
 }
 
 function configure (config) {
+  const configChanged = enabled !== config.appsec?.standalone?.enabled
+  if (!configChanged) return
+
   enabled = config.appsec?.standalone?.enabled
 
   if (enabled) {
