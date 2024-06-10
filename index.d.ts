@@ -197,6 +197,7 @@ interface Plugins {
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
+  "undici": tracer.plugins.undici;
   "winston": tracer.plugins.winston;
 }
 
@@ -1799,6 +1800,12 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [undici](https://github.com/nodejs/undici) module.
+     */
+    interface undici extends HttpClient {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
