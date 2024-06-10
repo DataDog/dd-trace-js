@@ -56,6 +56,28 @@ app.get('/vulnerableReadFile', (req, res) => {
   res.status(200).send(readFile(req.query.filename))
 })
 
+app.get('/propagation-with-event', async (req, res) => {
+  tracer.appsec.trackCustomEvent('custom-event')
+
+  const port = server.address().port
+  const url = `http://localhost:${port}/`
+
+  const resFetch = await fetch(url)
+  await resFetch.text()
+
+  res.status(200).send('propagation-with-event')
+})
+
+app.get('/propagation-without-event', async (req, res) => {
+  const port = server.address().port
+  const url = `http://localhost:${port}/`
+
+  const resFetch = await fetch(url)
+  await resFetch.text()
+
+  res.status(200).send('propagation-without-event')
+})
+
 const server = http.createServer(app).listen(0, () => {
   const port = server.address().port
   process.send({ port })

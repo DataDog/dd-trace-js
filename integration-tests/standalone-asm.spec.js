@@ -12,7 +12,7 @@ const {
 } = require('./helpers')
 
 describe('Standalone ASM', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env
+  let sandbox, cwd, startupTestFile, agent, proc, env, port
   before(async () => {
     sandbox = await createSandbox(['express'], true)
     cwd = sandbox.folder
@@ -35,6 +35,8 @@ describe('Standalone ASM', () => {
       const execArgv = []
 
       proc = await spawnProc(startupTestFile, { cwd, env, execArgv })
+
+      port = parseInt(proc.url.substring(proc.url.lastIndexOf(':') + 1), 10)
     })
 
     afterEach(async () => {
@@ -42,19 +44,21 @@ describe('Standalone ASM', () => {
       await agent.stop()
     })
 
-    function assertKeep (payload) {
+    function assertKeep (payload, manual = true) {
       const { meta, metrics } = payload
       assert.propertyVal(meta, '_dd.p.dm', '-5')
-      assert.propertyVal(meta, 'manual.keep', 'true')
+      if (manual) {
+        assert.propertyVal(meta, 'manual.keep', 'true')
+      }
+      assert.propertyVal(meta, '_dd.p.appsec', '1')
 
       assert.propertyVal(metrics, '_sampling_priority_v1', 2)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-      assert.propertyVal(metrics, '_dd.p.appsec', 1)
     }
 
     function assertDrop (payload) {
       const { metrics } = payload
-      assert.propertyVal(metrics, '_sampling_priority_v1', -1)
+      assert.propertyVal(metrics, '_sampling_priority_v1', 0)
       assert.propertyVal(metrics, '_dd.apm.enabled', 0)
       assert.notProperty(metrics, '_dd.p.appsec')
     }
@@ -98,10 +102,10 @@ describe('Standalone ASM', () => {
         const { meta, metrics } = secondReq[0]
         assert.propertyVal(meta, '_dd.p.dm', '-5')
         assert.notProperty(meta, 'manual.keep')
+        assert.notProperty(meta, '_dd.p.appsec')
 
-        assert.propertyVal(metrics, '_sampling_priority_v1', 2)
+        assert.propertyVal(metrics, '_sampling_priority_v1', 1)
         assert.propertyVal(metrics, '_dd.apm.enabled', 0)
-        assert.notProperty(metrics, '_dd.p.appsec')
 
         assertDrop(payload[2][0])
 
@@ -162,6 +166,79 @@ describe('Standalone ASM', () => {
         assert.property(expressReq4.meta, '_dd.iast.json')
         assert.propertyVal(expressReq4.metrics, '_dd.iast.enabled', 1)
       })
+    })
+
+    context.only('propagation', () => {
+      const traceId = '12312312'
+      const parentId = '42424242'
+
+      it('should keep trace even if parent prio is -1', async () => {
+        await doRequests(proc)
+
+        const options = {
+          url: {
+            host: 'localhost',
+            port,
+            path: '/sdk',
+            headers: {
+              'x-datadog-trace-id': traceId,
+              'x-datadog-parent-id': parentId,
+              'x-datadog-sampling-priority': '-1'
+            }
+          }
+        }
+        return curlAndAssertMessage(agent, options, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 4)
+
+          const expressReq4 = payload[3][0]
+          assertKeep(expressReq4)
+        })
+      })
+
+      it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no ev in the local trace', async () => {
+        await doRequests(proc)
+
+        const options = {
+          url: {
+            host: 'localhost',
+            port,
+            path: '/',
+            headers: {
+              'x-datadog-trace-id': traceId,
+              'x-datadog-parent-id': parentId,
+              'x-datadog-sampling-priority': '2',
+              'x-datadog-tags': '_dd.p.appsec=1,_dd.p.dm=-5'
+            }
+          }
+        }
+        return curlAndAssertMessage(agent, options, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 4)
+
+          const expressReq4 = payload[3][0]
+          assertKeep(expressReq4, false)
+        })
+      })
+
+      // it('should remove _sampling_priority_v1 if there is no ev in the local trace', async () => {
+      //   await doRequests(proc)
+
+      //   const url = `${proc.url}/propagation-without-event`
+      //   return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
+      //     assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+      //     assert.isArray(payload)
+      //     assert.strictEqual(payload.length, 5)
+
+      //     const expressReq4 = payload[3][0]
+
+      //     const { metrics } = expressReq4
+
+      //     assert.notProperty(metrics, '_sampling_priority_v1')
+      //   })
+      // })
     })
   })
 
