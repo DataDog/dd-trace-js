@@ -109,6 +109,7 @@ module.exports = {
   sequelize: () => require('../sequelize'),
   sharedb: () => require('../sharedb'),
   tedious: () => require('../tedious'),
+  undici: () => require('../undici'),
   when: () => require('../when'),
   winston: () => require('../winston')
 }
