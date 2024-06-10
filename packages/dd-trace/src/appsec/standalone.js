@@ -2,12 +2,17 @@
 
 const { channel } = require('dc-polyfill')
 const startCh = channel('dd-trace:span:start')
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
+
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../constants')
 
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
+
+const samplingKey = 'x-datadog-sampling-priority'
 
 let enabled
 
@@ -54,10 +59,19 @@ function onSpanStart ({ span, fields }) {
   if (!parent || parent._isRemote) {
     tags[APM_TRACING_ENABLED_KEY] = 0
   }
+}
 
+function onSpanInject ({ spanContext, carrier }) {
+  // do not inject sampling if there is no appsec event
+  if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
+    delete carrier[samplingKey]
+  }
+}
+
+function onSpanExtract ({ spanContext, carrier }) {
   // reset upstream priority if _dd.p.appsec is not found
-  if (parent?._isRemote && !parent._trace.tags[APPSEC_PROPAGATION_KEY]) {
-    span._spanContext._sampling = {}
+  if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
+    spanContext._sampling = {}
   }
 }
 
@@ -65,7 +79,13 @@ function sample (span) {
   if (enabled) {
     span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
-    // TODO: reset priority if less than AUTO_KEEP
+    // TODO: ask. can we reset here sampling like this?
+    // all spans is the trace are sharing the parent sampling object so...
+    // should we get prio from StandAloneAsmPrioritySampler._getPriorityFromTags?
+    // but then we should set dm too...
+    if (span._spanContext._sampling.priority < AUTO_KEEP) {
+      span._spanContext._sampling = {}
+    }
   }
 }
 
@@ -74,8 +94,12 @@ function configure (config, tracer) {
 
   if (enabled) {
     startCh.subscribe(onSpanStart)
+    injectCh.subscribe(onSpanInject)
+    extractCh.subscribe(onSpanExtract)
   } else {
     startCh.unsubscribe(onSpanStart)
+    injectCh.subscribe(onSpanInject)
+    extractCh.unsubscribe(onSpanExtract)
   }
 
   const prioritySampler = enabled
@@ -90,44 +114,3 @@ module.exports = {
   sample,
   StandAloneAsmPrioritySampler
 }
-
-/**
- *
-
-class NoApmTracingSpan extends DatadogSpan {
-  _createContext (parent, fields) {
-    const spanContext = super._createContext(parent, fields)
-
-    if (!parent || parent._isRemote) {
-      spanContext._trace.tags[APM_TRACING_ENABLED_KEY] = 0
-    }
-
-    // when injecting the context before a downstream call use remoteSampling priority instead of the sampling priority
-    if (parent) {
-      spanContext._remoteSampling = parent._isRemote ? parent._sampling : parent._remoteSampling
-
-      if (parent._isRemote) {
-        spanContext._sampling = {}
-      }
-    }
-
-    return spanContext
-  }
-
-  _addTags (keyValuePairs) {
-    this._resetSamplingPriorityIfNeeded(keyValuePairs)
-
-    return super._addTags(keyValuePairs)
-  }
-
-  _resetSamplingPriorityIfNeeded (keyValuePairs) {
-    if (!keyValuePairs) return
-
-    const { priority } = this._spanContext._sampling
-    if (keyValuePairs[APPSEC_PROPAGATION_KEY] && priority && priority < AUTO_KEEP) {
-      this._spanContext._sampling = {}
-    }
-  }
-}
-
- */

@@ -7,6 +7,10 @@ const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
 
+const { channel } = require('dc-polyfill')
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
+
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 
 const traceKey = 'x-datadog-trace-id'
@@ -54,6 +58,8 @@ class TextMapPropagator {
     this._injectB3SingleHeader(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
 
+    injectCh.publish({ spanContext, carrier })
+
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
@@ -61,6 +67,8 @@ class TextMapPropagator {
     const spanContext = this._extractSpanContext(carrier)
 
     if (!spanContext) return spanContext
+
+    extractCh.publish({ spanContext, carrier })
 
     log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
