@@ -93,13 +93,10 @@ function extractSpanEvents (trace, span) {
   const events = []
   if (span._events) {
     for (const event of span._events) {
-      const formattedEvent = {}
-
-      formattedEvent.name = event.name
-      formattedEvent.time_unix_nano = Math.round(event.startTime * 1e6)
-
-      if (event.attributes && Object.keys(event.attributes).length > 0) {
-        formattedEvent.attributes = event.attributes
+      const formattedEvent = {
+        name: event.name,
+        time_unix_nano: Math.round(event.startTime * 1e6),
+        attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
       }
 
       events.push(formattedEvent)
