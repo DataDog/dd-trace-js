@@ -58,7 +58,9 @@ class TextMapPropagator {
     this._injectB3SingleHeader(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
 
-    injectCh.publish({ spanContext, carrier })
+    if (injectCh.hasSubscribers) {
+      injectCh.publish({ spanContext, carrier })
+    }
 
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
@@ -68,7 +70,9 @@ class TextMapPropagator {
 
     if (!spanContext) return spanContext
 
-    extractCh.publish({ spanContext, carrier })
+    if (extractCh.hasSubscribers) {
+      extractCh.publish({ spanContext, carrier })
+    }
 
     log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
