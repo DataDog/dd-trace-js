@@ -87,6 +87,27 @@ describe('format', () => {
   })
 
   describe('format', () => {
+    it('should format span events', () => {
+      span._events = [
+        { name: 'Something went so wrong', startTime: 1 },
+        {
+          name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+          startTime: 1633023102
+        }
+      ]
+
+      trace = format(span)
+      const spanEvents = JSON.parse(trace.meta.events)
+      expect(spanEvents).to.deep.equal([{
+        name: 'Something went so wrong',
+        time_unix_nano: 1000000
+      }, {
+        name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
+        time_unix_nano: 1633023102000000,
+        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
+      }])
+    })
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 
@@ -403,12 +424,29 @@ describe('format', () => {
       })
     })
 
-    it('should set the error flag when there is an error-related tag', () => {
+    it('should not set the error flag when there is an error-related tag without a set trace tag', () => {
       spanContext._tags[ERROR_TYPE] = 'Error'
       spanContext._tags[ERROR_MESSAGE] = 'boom'
       spanContext._tags[ERROR_STACK] = ''
 
       trace = format(span)
+
+      expect(trace.error).to.equal(0)
+    })
+
+    it('should set the error flag when there is an error-related tag with should setTrace', () => {
+      spanContext._tags[ERROR_TYPE] = 'Error'
+      spanContext._tags[ERROR_MESSAGE] = 'boom'
+      spanContext._tags[ERROR_STACK] = ''
+      spanContext._tags.setTraceError = 1
+
+      trace = format(span)
+
+      expect(trace.error).to.equal(1)
+
+      spanContext._tags[ERROR_TYPE] = 'foo'
+      spanContext._tags[ERROR_MESSAGE] = 'foo'
+      spanContext._tags[ERROR_STACK] = 'foo'
 
       expect(trace.error).to.equal(1)
     })
