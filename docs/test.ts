@@ -352,6 +352,7 @@ tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
+tracer.use('undici');
 tracer.use('winston');
 
 tracer.use('express', false)

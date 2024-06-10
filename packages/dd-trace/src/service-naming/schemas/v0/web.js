@@ -30,6 +30,10 @@ const web = {
     lambda: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0
+    },
+    undici: {
+      opName: () => 'undici.request',
+      serviceName: httpPluginClientService
     }
   },
   server: {
