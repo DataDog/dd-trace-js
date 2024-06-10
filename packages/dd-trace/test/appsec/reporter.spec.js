@@ -281,7 +281,7 @@ describe('reporter', () => {
       })
     })
 
-    it('should add _dd.p.appsec trace tag if standalone ASM enabled', () => {
+    it('should call standalone sample if standalone ASM enabled', () => {
       span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
 
       const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
