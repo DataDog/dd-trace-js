@@ -12,6 +12,8 @@ const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
 
+const traceKey = 'x-datadog-trace-id'
+const spanKey = 'x-datadog-parent-id'
 const samplingKey = 'x-datadog-sampling-priority'
 
 let enabled
@@ -62,8 +64,10 @@ function onSpanStart ({ span, fields }) {
 }
 
 function onSpanInject ({ spanContext, carrier }) {
-  // do not inject sampling if there is no appsec event
+  // do not inject trace and sampling if there is no appsec event
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
+    delete carrier[traceKey]
+    delete carrier[spanKey]
     delete carrier[samplingKey]
   }
 }
@@ -79,19 +83,23 @@ function onSpanExtract ({ spanContext, carrier }) {
 
 function sample (span) {
   if (enabled) {
-    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
+    const spanContext = span.context()
+    spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: ask. can we reset here sampling like this?
     // all spans is the trace are sharing the parent sampling object so...
     // should we get prio from StandAloneAsmPrioritySampler._getPriorityFromTags?
     // but then we should set dm too...
-    if (span._spanContext._sampling.priority < AUTO_KEEP) {
-      span._spanContext._sampling = {}
+    if (spanContext._sampling.priority < AUTO_KEEP) {
+      spanContext._sampling = {}
     }
   }
 }
 
 function configure (config, tracer) {
+  const configChanged = enabled !== config.appsec?.standalone?.enabled
+  if (!configChanged) return
+
   enabled = config.appsec?.standalone?.enabled
 
   if (enabled) {
@@ -100,7 +108,7 @@ function configure (config, tracer) {
     extractCh.subscribe(onSpanExtract)
   } else {
     startCh.unsubscribe(onSpanStart)
-    injectCh.subscribe(onSpanInject)
+    injectCh.unsubscribe(onSpanInject)
     extractCh.unsubscribe(onSpanExtract)
   }
 

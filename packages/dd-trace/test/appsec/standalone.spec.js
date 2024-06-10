@@ -8,13 +8,21 @@ const DatadogSpan = require('../../src/opentracing/span')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { PrioritySampler } = require('../../src/priority_sampler')
+const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Appsec Standalone', () => {
   let config
   let tracer, processor, prioritySampler
 
   beforeEach(() => {
-    config = { appsec: { standalone: { enabled: true } } }
+    config = {
+      appsec: { standalone: { enabled: true } },
+
+      tracePropagationStyle: {
+        inject: ['datadog'],
+        extract: ['datadog']
+      }
+    }
 
     tracer = {
       setPrioritySampler: sinon.stub()
@@ -52,8 +60,16 @@ describe('Appsec Standalone', () => {
       expect(startChUnsubscribe).to.be.calledOnce
     })
 
-    it('should disable standalone ASM', () => {
+    it('should set prioritySampler only when config changes', () => {
       standalone.configure({}, tracer)
+      standalone.configure({}, tracer)
+      standalone.configure({}, tracer)
+
+      expect(tracer.setPrioritySampler).to.not.have.been.calledOnce
+    })
+
+    it('should disable standalone ASM', () => {
+      standalone.configure({ appsec: { standalone: { enabled: false } } }, tracer)
 
       expect(tracer.setPrioritySampler).to.have.been.calledOnce
       expect(tracer.setPrioritySampler.firstCall.args[0] instanceof PrioritySampler).to.be.true
@@ -90,6 +106,8 @@ describe('Appsec Standalone', () => {
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
+      standalone.configure(config, tracer)
+
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
       })
@@ -106,6 +124,8 @@ describe('Appsec Standalone', () => {
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
+      standalone.configure(config, tracer)
+
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
       })
@@ -121,6 +141,153 @@ describe('Appsec Standalone', () => {
       expect(child.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
     })
   })
+
+  describe('onSpanExtract', () => {
+    it('should reset priority if _dd.p.appsec not present', () => {
+      standalone.configure(config, tracer)
+
+      const carrier = {
+        'x-datadog-trace-id': 123123,
+        'x-datadog-parent-id': 345345,
+        'x-datadog-sampling-priority': 2
+      }
+
+      const propagator = new TextMapPropagator(config)
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._sampling.priority).to.undefined
+    })
+
+    it('should keep priority if _dd.p.appsec is present', () => {
+      standalone.configure(config, tracer)
+
+      const carrier = {
+        'x-datadog-trace-id': 123123,
+        'x-datadog-parent-id': 345345,
+        'x-datadog-sampling-priority': 2,
+        'x-datadog-tags': '_dd.p.appsec=1'
+      }
+
+      const propagator = new TextMapPropagator(config)
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+    })
+
+    it('should set USER_KEEP priority if _dd.p.appsec=1 is present', () => {
+      standalone.configure(config, tracer)
+
+      const carrier = {
+        'x-datadog-trace-id': 123123,
+        'x-datadog-parent-id': 345345,
+        'x-datadog-sampling-priority': 1,
+        'x-datadog-tags': '_dd.p.appsec=1'
+      }
+
+      const propagator = new TextMapPropagator(config)
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+    })
+
+    it('should keep priority if standalone is disabled', () => {
+      delete config.appsec.standalone
+      standalone.configure(config, tracer)
+
+      const carrier = {
+        'x-datadog-trace-id': 123123,
+        'x-datadog-parent-id': 345345,
+        'x-datadog-sampling-priority': 2
+      }
+
+      const propagator = new TextMapPropagator(config)
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+    })
+  })
+
+  describe('onSpanInject', () => {
+    it('should reset priority if standalone enabled and there is no appsec event', () => {
+      standalone.configure(config, tracer)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      span._spanContext._sampling = {
+        priority: USER_KEEP,
+        mechanism: SAMPLING_MECHANISM_APPSEC
+      }
+
+      const carrier = {}
+      const propagator = new TextMapPropagator(config)
+      propagator.inject(span._spanContext, carrier)
+
+      expect(carrier).to.not.have.property('x-datadog-trace-id')
+      expect(carrier).to.not.have.property('x-datadog-parent-id')
+      expect(carrier).to.not.have.property('x-datadog-sampling-priority')
+    })
+
+    it('should keep priority if standalone enabled and there is an appsec event', () => {
+      standalone.configure(config, tracer)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      span._spanContext._sampling = {
+        priority: USER_KEEP,
+        mechanism: SAMPLING_MECHANISM_APPSEC
+      }
+
+      span._spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
+
+      const carrier = {}
+      const propagator = new TextMapPropagator(config)
+      propagator.inject(span._spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-trace-id')
+      expect(carrier).to.have.property('x-datadog-parent-id')
+      expect(carrier).to.have.property('x-datadog-sampling-priority')
+      expect(carrier).to.have.property('x-datadog-tags', '_dd.p.appsec=1')
+    })
+
+    it('should not reset priority if standalone disabled', () => {
+      delete config.appsec.standalone
+      standalone.configure(config, tracer)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      span._spanContext._sampling = {
+        priority: USER_KEEP,
+        mechanism: SAMPLING_MECHANISM_APPSEC
+      }
+
+      const carrier = {}
+      const propagator = new TextMapPropagator(config)
+      propagator.inject(span._spanContext, carrier)
+
+      expect(carrier).to.have.property('x-datadog-trace-id')
+      expect(carrier).to.have.property('x-datadog-parent-id')
+      expect(carrier).to.have.property('x-datadog-sampling-priority')
+    })
+  })
+
+  /**
+   *
+
+function onSpanExtract ({ spanContext, carrier }) {
+  // reset upstream priority if _dd.p.appsec is not found
+  if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
+    spanContext._sampling = {}
+  } else if (spanContext._sampling.priority !== USER_KEEP) {
+    spanContext._sampling.priority = USER_KEEP
+  }
+}
+   */
 
   describe('StandaloneASMPriorityManager', () => {
     let prioritySampler
