@@ -56,7 +56,7 @@ describe('opentelemetry', () => {
 
   before(async () => {
     const dependencies = [
-      '@opentelemetry/api@1.8.0'
+      '@opentelemetry/api'
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
       dependencies.push('@opentelemetry/sdk-node')
