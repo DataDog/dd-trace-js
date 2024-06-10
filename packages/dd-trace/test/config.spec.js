@@ -1474,7 +1474,7 @@ describe('Config', () => {
     const config = new Config()
 
     config.configure({
-      tracing_sampling_rules: [
+      trace_sample_rules: [
         {
           resource: '*',
           tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],

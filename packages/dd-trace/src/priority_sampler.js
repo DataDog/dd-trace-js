@@ -10,8 +10,6 @@ const {
   SAMPLING_MECHANISM_AGENT,
   SAMPLING_MECHANISM_RULE,
   SAMPLING_MECHANISM_MANUAL,
-  SAMPLING_MECHANISM_REMOTE_USER,
-  SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
@@ -43,9 +41,9 @@ class PrioritySampler {
     this.update({})
   }
 
-  configure (env, { sampleRate, provenance = undefined, rateLimit = 100, rules = [] } = {}) {
+  configure (env, { sampleRate, rateLimit = 100, rules = [] } = {}) {
     this._env = env
-    this._rules = this._normalizeRules(rules, sampleRate, rateLimit, provenance)
+    this._rules = this._normalizeRules(rules, sampleRate, rateLimit)
     this._limiter = new RateLimiter(rateLimit)
 
     setSamplingRules(this._rules)
@@ -139,8 +137,6 @@ class PrioritySampler {
   _getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
-    if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
-    if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
 
     return rule.sample() && this._isSampledByRateLimit(context)
       ? USER_KEEP
@@ -185,11 +181,11 @@ class PrioritySampler {
     }
   }
 
-  _normalizeRules (rules, sampleRate, rateLimit, provenance) {
+  _normalizeRules (rules, sampleRate, rateLimit) {
     rules = [].concat(rules || [])
 
     return rules
-      .concat({ sampleRate, maxPerSecond: rateLimit, provenance })
+      .concat({ sampleRate, maxPerSecond: rateLimit })
       .map(rule => ({ ...rule, sampleRate: parseFloat(rule.sampleRate) }))
       .filter(rule => !isNaN(rule.sampleRate))
       .map(SamplingRule.from)

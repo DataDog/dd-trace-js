@@ -64,7 +64,7 @@ function serviceLocator (span) {
 }
 
 class SamplingRule {
-  constructor ({ name, service, resource, tags, sampleRate = 1.0, provenance = undefined, maxPerSecond } = {}) {
+  constructor ({ name, service, resource, tags, sampleRate = 1.0, maxPerSecond } = {}) {
     this.matchers = []
 
     if (name) {
@@ -82,7 +82,6 @@ class SamplingRule {
 
     this._sampler = new Sampler(sampleRate)
     this._limiter = undefined
-    this.provenance = provenance
 
     if (Number.isFinite(maxPerSecond)) {
       this._limiter = new RateLimiter(maxPerSecond)
