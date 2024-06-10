@@ -222,8 +222,7 @@ class Span {
       this._hasStatus = true
       if (code === 2) {
         this._ddSpan.addTags({
-          [ERROR_MESSAGE]: message,
-          setTraceError: 1
+          [ERROR_MESSAGE]: message
         })
       }
     }
