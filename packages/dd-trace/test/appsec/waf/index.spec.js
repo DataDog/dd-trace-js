@@ -95,7 +95,7 @@ describe('WAF Manager', () => {
   })
 
   describe('run', () => {
-    it('should call wafManager.run with params', () => {
+    it('should call wafManager.run with raspRuleType', () => {
       const run = sinon.stub()
       WAFManager.prototype.getWAFContext = sinon.stub().returns({ run })
       waf.init(rules, config.appsec)
