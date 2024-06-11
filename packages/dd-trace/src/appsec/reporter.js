@@ -198,7 +198,7 @@ function finishRequest (req, res) {
   Object.assign(newTags, filterHeaders(req.headers, REQUEST_HEADERS_MAP))
 
   const appsecEvent = tags['appsec.event'] === 'true'
-  if (req.route && typeof req.route.path === 'string' && appsecEvent) {
+  if (typeof req.route?.path === 'string' && appsecEvent) {
     newTags['http.endpoint'] = req.route.path
   }
   rootSpan.addTags(newTags)
