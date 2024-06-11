@@ -387,8 +387,8 @@ describe('reporter', () => {
           'x-sigsci-tags': 'g',
           'akamai-user-risk': 'h',
           'content-type': 'i',
-          'user-agent': 'j',
-          accept: 'k'
+          accept: 'j',
+          'user-agent': 'k'
         }
       }
 
@@ -404,9 +404,9 @@ describe('reporter', () => {
         'http.request.headers.x-sigsci-tags': 'g',
         'http.request.headers.akamai-user-risk': 'h',
         'http.request.headers.content-type': 'i',
-        'http.request.headers.user-agent': 'j',
-        'http.request.headers.accept': 'k',
-        'http.useragent': 'j'
+        'http.request.headers.accept': 'j',
+        'http.request.headers.user-agent': 'k',
+        'http.useragent': 'k'
       })
     })
 

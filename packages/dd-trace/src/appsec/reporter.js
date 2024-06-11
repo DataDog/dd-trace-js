@@ -47,7 +47,7 @@ const identificationHeaders = [
   'akamai-user-risk'
 ]
 
-// this request headers are always collected, and it breaks the expected spec orders
+// these request headers are always collected - it breaks the expected spec orders
 const MANDATORY_REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'content-type',
   'user-agent',
