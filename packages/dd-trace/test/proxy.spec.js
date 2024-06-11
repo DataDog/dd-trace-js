@@ -54,8 +54,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy(),
-      setPrioritySampler: sinon.stub()
+      configure: sinon.spy()
     }
 
     noop = {

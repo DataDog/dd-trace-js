@@ -23,9 +23,7 @@ describe('Appsec Standalone', () => {
       }
     }
 
-    tracer = {
-      setPrioritySampler: sinon.stub()
-    }
+    tracer = {}
     processor = {}
     prioritySampler = {}
   })
@@ -39,14 +37,10 @@ describe('Appsec Standalone', () => {
     beforeEach(() => {
       startChSubscribe = sinon.stub(startCh, 'subscribe')
       startChUnsubscribe = sinon.stub(startCh, 'unsubscribe')
-
-      tracer = {
-        setPrioritySampler: sinon.stub()
-      }
     })
 
     it('should subscribe to start span if standalone enabled', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       expect(startChSubscribe).to.be.calledOnce
     })
@@ -54,27 +48,27 @@ describe('Appsec Standalone', () => {
     it('should not subscribe to start span if standalone disabled', () => {
       delete config.appsec.standalone
 
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       expect(startChUnsubscribe).to.be.calledOnce
     })
 
-    it('should set prioritySampler only when config changes', () => {
-      standalone.configure({}, tracer)
-      standalone.configure({}, tracer)
-      standalone.configure({}, tracer)
+    it('should subscribe only once', () => {
+      standalone.configure(config)
+      standalone.configure(config)
+      standalone.configure(config)
 
-      expect(tracer.setPrioritySampler).to.not.have.been.calledOnce
+      expect(startChSubscribe).to.be.calledOnce
     })
 
     it('should not return a prioritySampler when standalone ASM is disabled', () => {
-      const prioritySampler = standalone.configure({ appsec: { standalone: { enabled: false } } }, tracer)
+      const prioritySampler = standalone.configure({ appsec: { standalone: { enabled: false } } })
 
       expect(prioritySampler).to.undefined
     })
 
     it('should return a StandAloneAsmPrioritySampler when standalone ASM is enabled', () => {
-      const prioritySampler = standalone.configure(config, tracer)
+      const prioritySampler = standalone.configure(config)
 
       expect(prioritySampler).to.not.undefined
       expect(prioritySampler instanceof standalone.StandAloneAsmPrioritySampler).to.be.true
@@ -84,7 +78,7 @@ describe('Appsec Standalone', () => {
   describe('onStartSpan', () => {
     it('should not add _dd.apm.enabled tag when standalone is disabled', () => {
       delete config.appsec.standalone
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -94,7 +88,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -104,7 +98,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -122,7 +116,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const parent = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -142,7 +136,7 @@ describe('Appsec Standalone', () => {
 
   describe('onSpanExtract', () => {
     it('should reset priority if _dd.p.appsec not present', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
@@ -157,7 +151,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should keep priority if _dd.p.appsec is present', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
@@ -173,7 +167,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should set USER_KEEP priority if _dd.p.appsec=1 is present', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
@@ -190,7 +184,7 @@ describe('Appsec Standalone', () => {
 
     it('should keep priority if standalone is disabled', () => {
       delete config.appsec.standalone
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const carrier = {
         'x-datadog-trace-id': 123123,
@@ -207,7 +201,7 @@ describe('Appsec Standalone', () => {
 
   describe('onSpanInject', () => {
     it('should reset priority if standalone enabled and there is no appsec event', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -228,7 +222,7 @@ describe('Appsec Standalone', () => {
     })
 
     it('should keep priority if standalone enabled and there is an appsec event', () => {
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -253,7 +247,7 @@ describe('Appsec Standalone', () => {
 
     it('should not reset priority if standalone disabled', () => {
       delete config.appsec.standalone
-      standalone.configure(config, tracer)
+      standalone.configure(config)
 
       const span = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation'
@@ -273,19 +267,6 @@ describe('Appsec Standalone', () => {
       expect(carrier).to.have.property('x-datadog-sampling-priority')
     })
   })
-
-  /**
-   *
-
-function onSpanExtract ({ spanContext, carrier }) {
-  // reset upstream priority if _dd.p.appsec is not found
-  if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
-    spanContext._sampling = {}
-  } else if (spanContext._sampling.priority !== USER_KEEP) {
-    spanContext._sampling.priority = USER_KEEP
-  }
-}
-   */
 
   describe('StandaloneASMPriorityManager', () => {
     let prioritySampler
