@@ -71,7 +71,7 @@ describe('Appsec Standalone', () => {
       const prioritySampler = standalone.configure(config)
 
       expect(prioritySampler).to.not.undefined
-      expect(prioritySampler instanceof standalone.StandAloneAsmPrioritySampler).to.be.true
+      expect(prioritySampler).to.be.instanceOf(standalone.StandAloneAsmPrioritySampler)
     })
   })
 
