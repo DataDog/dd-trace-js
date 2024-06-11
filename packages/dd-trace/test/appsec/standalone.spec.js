@@ -43,6 +43,14 @@ describe('Appsec Standalone', () => {
 
       expect(startChUnsubscribe).to.be.calledOnce
     })
+
+    it('should subscribe only once', () => {
+      standalone.configure(config)
+      standalone.configure(config)
+      standalone.configure(config)
+
+      expect(startChSubscribe).to.be.calledOnce
+    })
   })
 
   describe('onStartSpan', () => {
