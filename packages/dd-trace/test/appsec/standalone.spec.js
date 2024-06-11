@@ -7,7 +7,6 @@ const standalone = require('../../src/appsec/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
-const { PrioritySampler } = require('../../src/priority_sampler')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
 describe('Appsec Standalone', () => {
@@ -68,18 +67,17 @@ describe('Appsec Standalone', () => {
       expect(tracer.setPrioritySampler).to.not.have.been.calledOnce
     })
 
-    it('should disable standalone ASM', () => {
-      standalone.configure({ appsec: { standalone: { enabled: false } } }, tracer)
+    it('should not return a prioritySampler when standalone ASM is disabled', () => {
+      const prioritySampler = standalone.configure({ appsec: { standalone: { enabled: false } } }, tracer)
 
-      expect(tracer.setPrioritySampler).to.have.been.calledOnce
-      expect(tracer.setPrioritySampler.firstCall.args[0] instanceof PrioritySampler).to.be.true
+      expect(prioritySampler).to.undefined
     })
 
-    it('should enable standalone ASM', () => {
-      standalone.configure(config, tracer)
+    it('should return a StandAloneAsmPrioritySampler when standalone ASM is enabled', () => {
+      const prioritySampler = standalone.configure(config, tracer)
 
-      expect(tracer.setPrioritySampler).to.have.been.calledOnce
-      expect(tracer.setPrioritySampler.firstCall.args[0] instanceof standalone.StandAloneAsmPrioritySampler).to.be.true
+      expect(prioritySampler).to.not.undefined
+      expect(prioritySampler instanceof standalone.StandAloneAsmPrioritySampler).to.be.true
     })
   })
 

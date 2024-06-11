@@ -13,7 +13,6 @@ const {
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY
 } = require('../src/constants')
-const { DelegatingPrioritySampler, PrioritySampler } = require('../src/priority_sampler')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -451,79 +450,5 @@ describe('PrioritySampler', () => {
       expect(context._sampling.priority).to.equal(AUTO_REJECT)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_AGENT)
     })
-  })
-})
-
-describe('DelegatingPrioritySampler', () => {
-  const span = {}
-
-  let prioritySampler
-  let sampler
-
-  beforeEach(() => {
-    prioritySampler = new DelegatingPrioritySampler('test')
-
-    sampler = {
-      configure: sinon.stub(),
-      isSampled: sinon.stub(),
-      sample: sinon.stub(),
-      update: sinon.stub(),
-      validate: sinon.stub()
-    }
-  })
-
-  it('should initialize the default PioritySampler', () => {
-    expect(prioritySampler._sampler).to.not.undefined
-    expect(prioritySampler._sampler instanceof PrioritySampler).to.be.true
-  })
-
-  it('should allow different samplers to be configured', () => {
-    prioritySampler.setSampler(sampler)
-
-    expect(prioritySampler._sampler).to.equal(sampler)
-  })
-
-  it('should forward calls to the configure method', () => {
-    prioritySampler.setSampler(sampler)
-
-    const samplerConfig = {}
-    prioritySampler.configure('env', samplerConfig)
-
-    expect(sampler.configure).to.have.been.calledOnceWithExactly('env', samplerConfig)
-  })
-
-  it('should forward calls to the sample method', () => {
-    prioritySampler.setSampler(sampler)
-
-    const auto = true
-    prioritySampler.sample(span, auto)
-
-    expect(sampler.sample).to.have.been.calledOnceWithExactly(span, auto)
-  })
-
-  it('should forward calls to the isSampled method', () => {
-    prioritySampler.setSampler(sampler)
-
-    prioritySampler.isSampled(span)
-
-    expect(sampler.isSampled).to.have.been.calledOnceWithExactly(span)
-  })
-
-  it('should forward calls to the update method', () => {
-    prioritySampler.setSampler(sampler)
-
-    const rates = {}
-    prioritySampler.update(rates)
-
-    expect(sampler.update).to.have.been.calledOnceWithExactly(rates)
-  })
-
-  it('should forward calls to the validate method', () => {
-    prioritySampler.setSampler(sampler)
-
-    const priority = {}
-    prioritySampler.validate(priority)
-
-    expect(sampler.validate).to.have.been.calledOnceWithExactly(priority)
   })
 })

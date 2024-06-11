@@ -204,38 +204,8 @@ class PrioritySampler {
   }
 }
 
-class DelegatingPrioritySampler {
-  constructor (env, sampler) {
-    this._sampler = new PrioritySampler(env, sampler)
-  }
-
-  configure (env, sampler) {
-    return this._sampler.configure(env, sampler)
-  }
-
-  isSampled (span) {
-    return this._sampler.isSampled(span)
-  }
-
-  sample (span, auto) {
-    return this._sampler.sample(span, auto)
-  }
-
-  update (rates) {
-    return this._sampler.update(rates)
-  }
-
-  validate (samplingPriority) {
-    return this._sampler.validate(samplingPriority)
-  }
-
-  setSampler (sampler) {
-    this._sampler = sampler
-  }
-}
-
 function hasOwn (object, prop) {
   return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
-module.exports = { DelegatingPrioritySampler, PrioritySampler, hasOwn }
+module.exports = { PrioritySampler, hasOwn }

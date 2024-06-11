@@ -41,7 +41,7 @@ describe('Tracer', () => {
       sample: sinon.stub()
     }
     PrioritySampler = {
-      DelegatingPrioritySampler: sinon.stub().returns(prioritySampler)
+      PrioritySampler: sinon.stub().returns(prioritySampler)
     }
 
     agentExporter = {
@@ -103,6 +103,15 @@ describe('Tracer', () => {
     expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, prioritySampler)
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
+  })
+
+  it('should allow to configure an alternative prioritySampler', () => {
+    const sampler = {}
+    tracer = new Tracer(config, sampler)
+
+    expect(AgentExporter).to.have.been.called
+    expect(AgentExporter).to.have.been.calledWith(config, sampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, sampler, config)
   })
 
   describe('startSpan', () => {

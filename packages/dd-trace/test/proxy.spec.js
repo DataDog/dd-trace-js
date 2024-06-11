@@ -345,7 +345,7 @@ describe('TracerProxy', () => {
         expect(iast.enable).to.not.have.been.called
 
         const config = AppsecSdk.firstCall.args[1]
-        expect(standalone.configure).to.have.been.calledOnceWithExactly(config, remoteConfigProxy._tracer)
+        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
