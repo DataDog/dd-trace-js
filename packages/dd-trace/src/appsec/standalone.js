@@ -6,10 +6,6 @@ const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY } = require('../constant
 
 let enabled
 
-function isStandaloneEnabled () {
-  return enabled
-}
-
 function onSpanStart ({ span, fields }) {
   const tags = span.context()?._tags
   if (!tags) return
@@ -40,7 +36,6 @@ function sample (span) {
 }
 
 module.exports = {
-  isStandaloneEnabled,
   configure,
   sample
 }
