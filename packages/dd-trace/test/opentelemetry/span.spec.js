@@ -2,8 +2,12 @@
 
 require('../setup/tap')
 
-const { expect } = require('chai')
+const sinon = require('sinon')
+const { performance } = require('perf_hooks')
+const { timeOrigin } = performance
+const { timeInputToHrTime } = require('@opentelemetry/core')
 
+const { expect } = require('chai')
 const tracer = require('../../').init()
 
 const api = require('@opentelemetry/api')
@@ -348,12 +352,58 @@ describe('OTel Span', () => {
     }
 
     const error = new TestError()
+    const datenow = Date.now()
+    span.recordException(error, datenow)
+
+    const { _tags } = span._ddSpan.context()
+    expect(_tags).to.have.property(ERROR_TYPE, error.name)
+    expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
+    expect(_tags).to.have.property(ERROR_STACK, error.stack)
+
+    const events = span._ddSpan._events
+    expect(events).to.have.lengthOf(1)
+    expect(events).to.deep.equal([{
+      name: error.name,
+      attributes: {
+        'exception.message': error.message,
+        'exception.stacktrace': error.stack
+      },
+      startTime: datenow
+    }])
+  })
+
+  it('should record exception without passing in time', () => {
+    const stub = sinon.stub(performance, 'now').returns(60000)
+    const span = makeSpan('name')
+
+    class TestError extends Error {
+      constructor () {
+        super('test message')
+      }
+    }
+
+    const time = timeInputToHrTime(60000 + timeOrigin)
+    const timeInMilliseconds = time[0] * 1e3 + time[1] / 1e6
+
+    const error = new TestError()
     span.recordException(error)
 
     const { _tags } = span._ddSpan.context()
     expect(_tags).to.have.property(ERROR_TYPE, error.name)
     expect(_tags).to.have.property(ERROR_MESSAGE, error.message)
     expect(_tags).to.have.property(ERROR_STACK, error.stack)
+
+    const events = span._ddSpan._events
+    expect(events).to.have.lengthOf(1)
+    expect(events).to.deep.equal([{
+      name: error.name,
+      attributes: {
+        'exception.message': error.message,
+        'exception.stacktrace': error.stack
+      },
+      startTime: timeInMilliseconds
+    }])
+    stub.restore()
   })
 
   it('should not set status on already ended spans', () => {
@@ -401,5 +451,26 @@ describe('OTel Span', () => {
 
     expect(processor.onStart).to.have.been.calledWith(span, span._context)
     expect(processor.onEnd).to.have.been.calledWith(span)
+  })
+  it('should add span events', () => {
+    const span1 = makeSpan('span1')
+    const span2 = makeSpan('span2')
+    const datenow = Date.now()
+    span1.addEvent('Web page unresponsive',
+      { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, datenow)
+    span2.addEvent('Web page loaded')
+    span2.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
+    const events1 = span1._ddSpan._events
+    const events2 = span2._ddSpan._events
+    expect(events1).to.have.lengthOf(1)
+    expect(events1).to.deep.equal([{
+      name: 'Web page unresponsive',
+      startTime: datenow,
+      attributes: {
+        'error.code': '403',
+        'unknown values': [1]
+      }
+    }])
+    expect(events2).to.have.lengthOf(2)
   })
 })
