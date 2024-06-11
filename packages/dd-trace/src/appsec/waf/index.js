@@ -46,7 +46,7 @@ function update (newRules) {
   }
 }
 
-function run (data, req) {
+function run (data, req, raspRuleType) {
   if (!req) {
     const store = storage.getStore()
     if (!store || !store.req) {
@@ -59,7 +59,7 @@ function run (data, req) {
 
   const wafContext = waf.wafManager.getWAFContext(req)
 
-  return wafContext.run(data)
+  return wafContext.run(data, raspRuleType)
 }
 
 function disposeContext (req) {
