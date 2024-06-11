@@ -17,7 +17,6 @@ const spanKey = 'x-datadog-parent-id'
 const samplingKey = 'x-datadog-sampling-priority'
 
 let enabled
-let prioritySampler
 
 class StandAloneAsmPrioritySampler extends PrioritySampler {
   constructor (env) {
@@ -104,6 +103,7 @@ function configure (config) {
 
   enabled = config.appsec?.standalone?.enabled
 
+  let prioritySampler
   if (enabled) {
     startCh.subscribe(onSpanStart)
     injectCh.subscribe(onSpanInject)
@@ -114,8 +114,6 @@ function configure (config) {
     startCh.unsubscribe(onSpanStart)
     injectCh.unsubscribe(onSpanInject)
     extractCh.unsubscribe(onSpanExtract)
-
-    prioritySampler = undefined
   }
 
   return prioritySampler
