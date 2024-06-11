@@ -311,17 +311,12 @@ describe('TracerProxy', () => {
       })
 
       it('should support applying remote config', () => {
-        const standalone = {
-          configure: sinon.stub()
-        }
-
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
           './appsec/remote_config': remoteConfig,
-          './appsec/sdk': AppsecSdk,
-          './appsec/standalone': standalone
+          './appsec/sdk': AppsecSdk
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -342,9 +337,6 @@ describe('TracerProxy', () => {
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
-
-        const config = AppsecSdk.firstCall.args[1]
-        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
@@ -530,6 +522,30 @@ describe('TracerProxy', () => {
         proxy.init()
 
         expect(telemetry.start).to.have.been.called
+      })
+
+      it('should configure appsec standalone', () => {
+        const standalone = {
+          configure: sinon.stub()
+        }
+
+        const options = {}
+        const DatadogProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './config': Config,
+          './appsec': appsec,
+          './appsec/iast': iast,
+          './appsec/remote_config': remoteConfig,
+          './appsec/sdk': AppsecSdk,
+          './appsec/standalone': standalone,
+          './telemetry': telemetry
+        })
+
+        const proxy = new DatadogProxy()
+        proxy.init(options)
+
+        const config = AppsecSdk.firstCall.args[1]
+        expect(standalone.configure).to.have.been.calledOnceWithExactly(config)
       })
     })
 
