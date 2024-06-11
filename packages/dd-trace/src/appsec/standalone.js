@@ -92,7 +92,7 @@ function sample (span) {
     // all spans is the trace are sharing the parent sampling object so...
     // should we get prio from StandAloneAsmPrioritySampler._getPriorityFromTags?
     // but then we should set dm too...
-    if (spanContext._sampling.priority < AUTO_KEEP) {
+    if (spanContext._sampling?.priority < AUTO_KEEP) {
       spanContext._sampling = {}
     }
   }
