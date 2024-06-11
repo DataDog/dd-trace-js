@@ -3,6 +3,7 @@
 const os = require('os')
 const Span = require('./span')
 const SpanProcessor = require('../span_processor')
+const { PrioritySampler } = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
@@ -13,7 +14,6 @@ const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const SpanContext = require('./span_context')
-const { PrioritySampler } = require('../priority_sampler')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -93,10 +93,6 @@ class DatadogTracer {
       runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
-  }
-
-  setPrioritySampler (sampler) {
-    this._prioritySampler.setSampler(sampler)
   }
 }
 
