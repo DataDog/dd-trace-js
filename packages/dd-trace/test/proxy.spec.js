@@ -311,10 +311,6 @@ describe('TracerProxy', () => {
       })
 
       it('should support applying remote config', () => {
-        const standalone = {
-          configure: sinon.stub()
-        }
-
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
           './appsec': appsec,
