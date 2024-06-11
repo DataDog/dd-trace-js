@@ -321,6 +321,7 @@ describe('Appsec Telemetry metrics', () => {
           rulesVersion
         }, req, 'rule_type')
 
+        expect(count).to.have.not.been.calledWith('waf.requests')
         appsecTelemetry.incrementWafRequestsMetric(req)
 
         expect(count).to.have.been.calledWithExactly('waf.requests', {
