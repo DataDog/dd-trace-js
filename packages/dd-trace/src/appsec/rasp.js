@@ -5,6 +5,10 @@ const addresses = require('./addresses')
 const { httpClientRequestStart } = require('./channels')
 const waf = require('./waf')
 
+const RULE_TYPES = {
+  SSRF: 'ssrf'
+}
+
 function enable () {
   httpClientRequestStart.subscribe(analyzeSsrf)
 }
@@ -26,7 +30,7 @@ function analyzeSsrf (ctx) {
   // TODO: Currently this is only monitoring, we should
   //     block the request if SSRF attempt and
   //     generate stack traces
-  waf.run({ persistent }, req)
+  waf.run({ persistent }, req, RULE_TYPES.SSRF)
 }
 
 module.exports = {
