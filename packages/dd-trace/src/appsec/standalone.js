@@ -7,10 +7,6 @@ const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../constants')
 
-const traceKey = 'x-datadog-trace-id'
-const spanKey = 'x-datadog-parent-id'
-const samplingKey = 'x-datadog-sampling-priority'
-
 const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -66,9 +62,10 @@ function onSpanStart ({ span, fields }) {
 function onSpanInject ({ spanContext, carrier }) {
   // do not inject trace and sampling if there is no appsec event
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
-    delete carrier[traceKey]
-    delete carrier[spanKey]
-    delete carrier[samplingKey]
+    // TODO: should delete only own keys?
+    for (const key in carrier) {
+      delete carrier[key]
+    }
   }
 }
 
