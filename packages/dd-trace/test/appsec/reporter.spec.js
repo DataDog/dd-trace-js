@@ -26,6 +26,7 @@ describe('reporter', () => {
     telemetry = {
       incrementWafInitMetric: sinon.stub(),
       updateWafRequestsMetricTags: sinon.stub(),
+      updateRaspRequestsMetricTags: sinon.stub(),
       incrementWafUpdatesMetric: sinon.stub(),
       incrementWafRequestsMetric: sinon.stub(),
       getRequestMetrics: sinon.stub()
@@ -147,6 +148,7 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set ext duration metrics if set', () => {
@@ -155,6 +157,7 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should set rulesVersion if set', () => {
@@ -162,6 +165,7 @@ describe('reporter', () => {
 
       expect(web.root).to.have.been.calledOnceWithExactly(req)
       expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
     })
 
     it('should call updateWafRequestsMetricTags', () => {
@@ -171,6 +175,17 @@ describe('reporter', () => {
       Reporter.reportMetrics(metrics)
 
       expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
+      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+    })
+
+    it('should call updateRaspRequestsMetricTags when ruleType if provided', () => {
+      const metrics = { rulesVersion: '1.2.3' }
+      const store = storage.getStore()
+
+      Reporter.reportMetrics(metrics, 'rule_type')
+
+      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, 'rule_type')
+      expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
     })
   })
 
@@ -584,6 +599,21 @@ describe('reporter', () => {
 
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
       expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration_ext')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
+    })
+
+    it('should set rasp.duration tags if there are metrics stored', () => {
+      telemetry.getRequestMetrics.returns({ raspDuration: 123, raspDurationExt: 321, raspEvalCount: 3 })
+
+      Reporter.finishRequest({}, {})
+
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration')
+      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration_ext')
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
+      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
     })
   })
 })
