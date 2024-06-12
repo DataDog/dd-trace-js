@@ -1,13 +1,14 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const startCh = channel('dd-trace:span:start')
-
+const { assert } = require('chai')
 const standalone = require('../../src/appsec/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+
+const startCh = channel('dd-trace:span:start')
 
 describe('Appsec Standalone', () => {
   let config
@@ -28,7 +29,7 @@ describe('Appsec Standalone', () => {
     prioritySampler = {}
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => { sinon.restore() })
 
   describe('configure', () => {
     let startChSubscribe
@@ -42,7 +43,7 @@ describe('Appsec Standalone', () => {
     it('should subscribe to start span if standalone enabled', () => {
       standalone.configure(config)
 
-      expect(startChSubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChSubscribe)
     })
 
     it('should not subscribe to start span if standalone disabled', () => {
@@ -50,7 +51,7 @@ describe('Appsec Standalone', () => {
 
       standalone.configure(config)
 
-      expect(startChUnsubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChUnsubscribe)
     })
 
     it('should subscribe only once', () => {
@@ -58,20 +59,19 @@ describe('Appsec Standalone', () => {
       standalone.configure(config)
       standalone.configure(config)
 
-      expect(startChSubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChSubscribe)
     })
 
     it('should not return a prioritySampler when standalone ASM is disabled', () => {
       const prioritySampler = standalone.configure({ appsec: { standalone: { enabled: false } } })
 
-      expect(prioritySampler).to.undefined
+      assert.isUndefined(prioritySampler)
     })
 
     it('should return a StandAloneAsmPrioritySampler when standalone ASM is enabled', () => {
       const prioritySampler = standalone.configure(config)
 
-      expect(prioritySampler).to.not.undefined
-      expect(prioritySampler).to.be.instanceOf(standalone.StandAloneAsmPrioritySampler)
+      assert.instanceOf(prioritySampler, standalone.StandAloneAsmPrioritySampler)
     })
   })
 
@@ -84,7 +84,7 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      assert.notProperty(span.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -94,7 +94,7 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(span.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      assert.property(span.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -104,15 +104,14 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(parent.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(parent.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      assert.propertyVal(parent.context()._tags, APM_TRACING_ENABLED_KEY, 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent
       })
 
-      expect(child.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      assert.notProperty(child.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -129,8 +128,7 @@ describe('Appsec Standalone', () => {
         parent
       })
 
-      expect(child.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(child.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      assert.propertyVal(child.context()._tags, APM_TRACING_ENABLED_KEY, 0)
     })
   })
 
@@ -147,7 +145,7 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._sampling.priority).to.undefined
+      assert.isUndefined(spanContext._sampling.priority)
     })
 
     it('should keep priority if _dd.p.appsec is present', () => {
@@ -163,7 +161,7 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
     })
 
     it('should set USER_KEEP priority if _dd.p.appsec=1 is present', () => {
@@ -179,7 +177,7 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
     })
 
     it('should keep priority if standalone is disabled', () => {
@@ -195,7 +193,7 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      expect(spanContext._sampling.priority).to.equal(USER_KEEP)
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
     })
   })
 
@@ -216,9 +214,9 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      expect(carrier).to.not.have.property('x-datadog-trace-id')
-      expect(carrier).to.not.have.property('x-datadog-parent-id')
-      expect(carrier).to.not.have.property('x-datadog-sampling-priority')
+      assert.notProperty(carrier, 'x-datadog-trace-id')
+      assert.notProperty(carrier, 'x-datadog-parent-id')
+      assert.notProperty(carrier, 'x-datadog-sampling-priority')
     })
 
     it('should keep priority if standalone enabled and there is an appsec event', () => {
@@ -239,10 +237,10 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      expect(carrier).to.have.property('x-datadog-trace-id')
-      expect(carrier).to.have.property('x-datadog-parent-id')
-      expect(carrier).to.have.property('x-datadog-sampling-priority')
-      expect(carrier).to.have.property('x-datadog-tags', '_dd.p.appsec=1')
+      assert.property(carrier, 'x-datadog-trace-id')
+      assert.property(carrier, 'x-datadog-parent-id')
+      assert.property(carrier, 'x-datadog-sampling-priority')
+      assert.propertyVal(carrier, 'x-datadog-tags', '_dd.p.appsec=1')
     })
 
     it('should not reset priority if standalone disabled', () => {
@@ -262,9 +260,9 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      expect(carrier).to.have.property('x-datadog-trace-id')
-      expect(carrier).to.have.property('x-datadog-parent-id')
-      expect(carrier).to.have.property('x-datadog-sampling-priority')
+      assert.property(carrier, 'x-datadog-trace-id')
+      assert.property(carrier, 'x-datadog-parent-id')
+      assert.property(carrier, 'x-datadog-sampling-priority')
     })
   })
 
@@ -289,12 +287,12 @@ describe('Appsec Standalone', () => {
     describe('_getPriorityFromTags', () => {
       it('should keep the trace if manual.keep and _dd.p.appsec are present', () => {
         context._trace.tags[APPSEC_PROPAGATION_KEY] = 1
-        expect(prioritySampler._getPriorityFromTags(tags, context)).is.equal(USER_KEEP)
-        expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
+        assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), USER_KEEP)
+        assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should return undefined if manual.keep or _dd.p.appsec are not present', () => {
-        expect(prioritySampler._getPriorityFromTags(tags, context)).is.undefined
+        assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
       })
     })
 
@@ -306,18 +304,18 @@ describe('Appsec Standalone', () => {
 
         const clock = sinon.useFakeTimers(new Date())
 
-        expect(prioritySampler._getPriorityFromAuto(span)).is.equal(AUTO_KEEP)
-        expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_APPSEC)
+        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
+        assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
 
-        expect(prioritySampler._getPriorityFromAuto(span)).is.equal(AUTO_REJECT)
+        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_REJECT)
 
         clock.tick(30000)
 
-        expect(prioritySampler._getPriorityFromAuto(span)).is.equal(AUTO_REJECT)
+        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_REJECT)
 
         clock.tick(60000)
 
-        expect(prioritySampler._getPriorityFromAuto(span)).is.equal(AUTO_KEEP)
+        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
 
         clock.restore()
       })
@@ -329,7 +327,7 @@ describe('Appsec Standalone', () => {
 
         context._trace.tags[APPSEC_PROPAGATION_KEY] = 1
 
-        expect(prioritySampler._getPriorityFromAuto(span)).is.equal(USER_KEEP)
+        assert.strictEqual(prioritySampler._getPriorityFromAuto(span), USER_KEEP)
       })
     })
   })

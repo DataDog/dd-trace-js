@@ -50,7 +50,7 @@ class StandAloneAsmPrioritySampler extends PrioritySampler {
 }
 
 function onSpanStart ({ span, fields }) {
-  const tags = span.context()?._tags
+  const tags = span.context?.()?._tags
   if (!tags) return
 
   const { parent } = fields
@@ -79,8 +79,8 @@ function onSpanExtract ({ spanContext, carrier }) {
 }
 
 function sample (span) {
-  if (enabled) {
-    const spanContext = span.context()
+  const spanContext = span.context?.()
+  if (enabled && spanContext._trace?.tags) {
     spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: ask. can we reset here sampling like this?
