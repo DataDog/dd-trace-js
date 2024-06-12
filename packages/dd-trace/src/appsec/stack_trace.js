@@ -76,6 +76,7 @@ function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSite
     const stackTraceLimit = maxDepth < 1 ? Infinity : maxDepth + LIBRARY_FRAMES_BUFFER
     const callSiteList = callSiteListGetter(stackTraceLimit)
     const frames = getFramesForMetaStruct(callSiteList, maxDepth)
+
     rootSpan.meta_struct['_dd.stack'].exploit.push({
       id: stackId,
       language: 'nodejs',
