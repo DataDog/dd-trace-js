@@ -60,7 +60,7 @@ app.get('/propagation-with-event', async (req, res) => {
   tracer.appsec.trackCustomEvent('custom-event')
 
   const port = server.address().port
-  const url = `http://localhost:${port}/`
+  const url = `http://localhost:${port}/down`
 
   const resFetch = await fetch(url)
   await resFetch.text()
@@ -70,12 +70,16 @@ app.get('/propagation-with-event', async (req, res) => {
 
 app.get('/propagation-without-event', async (req, res) => {
   const port = server.address().port
-  const url = `http://localhost:${port}/`
+  const url = `http://localhost:${port}/down`
 
   const resFetch = await fetch(url)
   await resFetch.text()
 
   res.status(200).send('propagation-without-event')
+})
+
+app.get('/down', async (req, res) => {
+  res.status(200).send('down')
 })
 
 const server = http.createServer(app).listen(0, () => {

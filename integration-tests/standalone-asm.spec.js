@@ -223,22 +223,37 @@ describe('Standalone ASM', () => {
         })
       })
 
-      // it('should remove _sampling_priority_v1 if there is no ev in the local trace', async () => {
-      //   await doRequests(proc)
+      it('should remove parent trace data if there is no ev in the local trace', async () => {
+        await doRequests(proc)
 
-      //   const url = `${proc.url}/propagation-without-event`
-      //   return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-      //     assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-      //     assert.isArray(payload)
-      //     assert.strictEqual(payload.length, 5)
+        const url = `${proc.url}/propagation-without-event`
+        return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 5)
 
-      //     const expressReq4 = payload[3][0]
+          const fetchReq = payload[4][0]
+          const downReq = payload[3][0]
+          assert.strictEqual(downReq.parent_id.toString(), '0')
+          assert.notStrictEqual(fetchReq.trace_id.toString(), downReq.trace_id.toString())
+        })
+      })
 
-      //     const { metrics } = expressReq4
+      it('should not remove parent trace data if there is ev in the local trace', async () => {
+        await doRequests(proc)
 
-      //     assert.notProperty(metrics, '_sampling_priority_v1')
-      //   })
-      // })
+        const url = `${proc.url}/propagation-with-event`
+        return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+          assert.isArray(payload)
+          assert.strictEqual(payload.length, 5)
+
+          const fetchReq = payload[4][0]
+          const downReq = payload[3][0]
+          assert.notStrictEqual(downReq.parent_id.toString(), '0')
+          assert.strictEqual(fetchReq.trace_id.toString(), downReq.trace_id.toString())
+        })
+      })
     })
   })
 
