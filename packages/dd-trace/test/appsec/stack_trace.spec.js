@@ -15,8 +15,8 @@ describe('Stack trace reporter', () => {
         [...Array(10).keys()].map(i => (
           {
             getFileName: () => path.join(__dirname, `file${i}`),
-            getLineNumber: () => `${i}`,
-            getColumnNumber: () => `${i}`,
+            getLineNumber: () => i,
+            getColumnNumber: () => i,
             getFunctionName: () => `function${i}`
           }
         )
@@ -24,8 +24,8 @@ describe('Stack trace reporter', () => {
           [...Array(10).keys()].map(i => (
             {
               getFileName: () => `file${i}`,
-              getLineNumber: () => `${i}`,
-              getColumnNumber: () => `${i}`,
+              getLineNumber: () => i,
+              getColumnNumber: () => i,
               getFunctionName: () => `function${i}`
             }
           ))
@@ -34,8 +34,8 @@ describe('Stack trace reporter', () => {
       const expectedFrames = [...Array(10).keys()].map(i => (
         {
           file: `file${i}`,
-          line: `${i}`,
-          column: `${i}`,
+          line: i,
+          column: i,
           function: `function${i}`
         }
       ))
