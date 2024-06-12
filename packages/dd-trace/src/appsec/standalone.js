@@ -1,8 +1,9 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const startCh = channel('dd-trace:span:start')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY } = require('../constants')
+
+const startCh = channel('dd-trace:span:start')
 
 let enabled
 
