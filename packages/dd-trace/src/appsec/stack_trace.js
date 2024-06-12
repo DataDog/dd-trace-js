@@ -6,7 +6,6 @@ const ddBasePath = calculateDDBasePath(__dirname)
 
 const LIBRARY_FRAMES_BUFFER = 20
 
-
 function getCallSiteList (maxDepth = 100) {
   const previousPrepareStackTrace = Error.prepareStackTrace
   const previousStackTraceLimit = Error.stackTraceLimit
