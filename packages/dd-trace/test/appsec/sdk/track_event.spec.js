@@ -258,11 +258,11 @@ describe('track_event', () => {
 
       it('should call standalone sample', () => {
         trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
+
         expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
           'appsec.events.event.track': 'true',
           'manual.keep': 'true'
         })
-
         expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
       })
     })
