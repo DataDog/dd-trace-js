@@ -1,11 +1,12 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const startCh = channel('dd-trace:span:start')
-
+const { assert } = require('chai')
 const standalone = require('../../src/appsec/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
 const { APM_TRACING_ENABLED_KEY } = require('../../src/constants')
+
+const startCh = channel('dd-trace:span:start')
 
 describe('Appsec Standalone', () => {
   let config
@@ -33,7 +34,7 @@ describe('Appsec Standalone', () => {
     it('should subscribe to start span if standalone enabled', () => {
       standalone.configure(config)
 
-      expect(startChSubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChSubscribe)
     })
 
     it('should not subscribe to start span if standalone disabled', () => {
@@ -41,7 +42,7 @@ describe('Appsec Standalone', () => {
 
       standalone.configure(config)
 
-      expect(startChUnsubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChUnsubscribe)
     })
 
     it('should subscribe only once', () => {
@@ -49,7 +50,7 @@ describe('Appsec Standalone', () => {
       standalone.configure(config)
       standalone.configure(config)
 
-      expect(startChSubscribe).to.be.calledOnce
+      sinon.assert.calledOnce(startChSubscribe)
     })
   })
 
@@ -62,7 +63,7 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(span.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      assert.notProperty(span.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -72,7 +73,7 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(span.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
+      assert.property(span.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -80,15 +81,14 @@ describe('Appsec Standalone', () => {
         operationName: 'operation'
       })
 
-      expect(parent.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(parent.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      assert.propertyVal(parent.context()._tags, APM_TRACING_ENABLED_KEY, 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent
       })
 
-      expect(child.context()._tags).to.not.have.property(APM_TRACING_ENABLED_KEY)
+      assert.notProperty(child.context()._tags, APM_TRACING_ENABLED_KEY)
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -103,8 +103,7 @@ describe('Appsec Standalone', () => {
         parent
       })
 
-      expect(child.context()._tags).to.have.property(APM_TRACING_ENABLED_KEY)
-      expect(child.context()._tags[APM_TRACING_ENABLED_KEY]).to.equal(0)
+      assert.propertyVal(child.context()._tags, APM_TRACING_ENABLED_KEY, 0)
     })
   })
 })
