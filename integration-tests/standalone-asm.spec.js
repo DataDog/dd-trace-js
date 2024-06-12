@@ -168,7 +168,7 @@ describe('Standalone ASM', () => {
       })
     })
 
-    context.only('propagation', () => {
+    context('propagation', () => {
       const traceId = '12312312'
       const parentId = '42424242'
 
