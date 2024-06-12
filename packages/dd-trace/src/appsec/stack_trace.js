@@ -69,7 +69,7 @@ function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSite
     rootSpan.meta_struct['_dd.stack'].exploit = []
   }
 
-  if (rootSpan.meta_struct['_dd.stack'].exploit.length < maxStackTraces) {
+  if (maxStackTraces < 1 || rootSpan.meta_struct['_dd.stack'].exploit.length < maxStackTraces) {
     // Since some frames will be discarded because they come from tracer codebase, a buffer is added
     // to the limit in order to get as close as `maxDepth` number of frames.
     const stackTraceLimit = maxDepth < 1 ? Infinity : maxDepth + LIBRARY_FRAMES_BUFFER

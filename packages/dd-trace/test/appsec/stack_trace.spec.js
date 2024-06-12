@@ -172,6 +172,42 @@ describe('Stack trace reporter', () => {
         assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 2)
         assert.property(rootSpan.meta_struct, 'another_tag')
       })
+
+      it('should add stack trace when the max stack trace is 0', () => {
+        const rootSpan = {
+          meta_struct: {
+            '_dd.stack': {
+              exploit: [callSiteList, callSiteList]
+            },
+            another_tag: []
+          }
+        }
+        const stackId = 'test_stack_id'
+        const maxDepth = 32
+
+        reportStackTrace(rootSpan, stackId, maxDepth, 0, () => callSiteList)
+
+        assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
+        assert.property(rootSpan.meta_struct, 'another_tag')
+      })
+
+      it('should add stack trace when the max stack trace is negative', () => {
+        const rootSpan = {
+          meta_struct: {
+            '_dd.stack': {
+              exploit: [callSiteList, callSiteList]
+            },
+            another_tag: []
+          }
+        }
+        const stackId = 'test_stack_id'
+        const maxDepth = 32
+
+        reportStackTrace(rootSpan, stackId, maxDepth, -1, () => callSiteList)
+
+        assert.equal(rootSpan.meta_struct['_dd.stack'].exploit.length, 3)
+        assert.property(rootSpan.meta_struct, 'another_tag')
+      })
     })
 
     describe('limit stack traces frames', () => {
