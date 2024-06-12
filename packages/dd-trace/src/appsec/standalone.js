@@ -1,20 +1,19 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const startCh = channel('dd-trace:span:start')
-const injectCh = channel('dd-trace:span:inject')
-const extractCh = channel('dd-trace:span:extract')
-
-const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../constants')
-
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
+const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../constants')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
 const samplingKey = 'x-datadog-sampling-priority'
+
+const startCh = channel('dd-trace:span:start')
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
 
 let enabled
 
