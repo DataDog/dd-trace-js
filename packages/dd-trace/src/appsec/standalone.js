@@ -8,7 +8,7 @@ const startCh = channel('dd-trace:span:start')
 let enabled
 
 function onSpanStart ({ span, fields }) {
-  const tags = span.context()?._tags
+  const tags = span.context?.()?._tags
   if (!tags) return
 
   const { parent } = fields
@@ -31,8 +31,9 @@ function configure (config) {
 }
 
 function sample (span) {
-  if (enabled) {
-    span.context()._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
+  const context = span.context?.()
+  if (enabled && context._trace?.tags) {
+    context._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
   }
 }
 
