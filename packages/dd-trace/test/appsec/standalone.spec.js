@@ -19,7 +19,7 @@ describe('Appsec Standalone', () => {
     prioritySampler = {}
   })
 
-  afterEach(sinon.restore)
+  afterEach(() => { sinon.restore() })
 
   describe('configure', () => {
     let startChSubscribe
