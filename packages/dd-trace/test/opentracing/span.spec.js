@@ -298,6 +298,43 @@ describe('Span', () => {
     })
   })
 
+  describe('events', () => {
+    it('should add span events', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addEvent('Web page unresponsive',
+        { 'error.code': '403', 'unknown values': [1, ['h', 'a', [false]]] }, 1714536311886)
+      span.addEvent('Web page loaded')
+      span.addEvent('Button changed color', { colors: [112, 215, 70], 'response.time': 134.3, success: true })
+
+      const events = span._events
+      const expectedEvents = [
+        {
+          name: 'Web page unresponsive',
+          startTime: 1714536311886,
+          attributes: {
+            'error.code': '403',
+            'unknown values': [1]
+          }
+        },
+        {
+          name: 'Web page loaded',
+          startTime: 1500000000000
+        },
+        {
+          name: 'Button changed color',
+          attributes: {
+            colors: [112, 215, 70],
+            'response.time': 134.3,
+            success: true
+          },
+          startTime: 1500000000000
+        }
+      ]
+      expect(events).to.deep.equal(expectedEvents)
+    })
+  })
+
   describe('getBaggageItem', () => {
     it('should get a baggage item', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
