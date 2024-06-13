@@ -57,10 +57,10 @@ function analyzeSsrf (ctx) {
   const actions = waf.run({ persistent }, req, RULE_TYPES.SSRF)
 
   const res = store?.res
-  handleWafResults(actions, ctx.abortData, req, res)
+  handleResult(actions, req, res, ctx.abortData)
 }
 
-function handleWafResults (actions, abortData, req, res) {
+function handleResult (actions, req, res, abortData) {
   const blockingAction = getBlockingAction(actions)
   if (blockingAction && abortData) {
     abortData.abortController.abort()
