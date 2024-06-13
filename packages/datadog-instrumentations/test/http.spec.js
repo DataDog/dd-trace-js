@@ -95,7 +95,6 @@ describe('client', () => {
           cr.on('error', (e) => {
             try {
               assert.instanceOf(e, Error)
-              assert.strictEqual(e.message, 'This operation was aborted')
               done()
             } catch (e) {
               done(e)

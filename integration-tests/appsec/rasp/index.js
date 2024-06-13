@@ -56,7 +56,7 @@ app.get('/ssrf/http/unhandled-async-write-C', (req, res) => {
 app.get('/ssrf/http/unhandled-async-write-D', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
     res.setHeader('key', 'value')
-    res.appendHeader('key2', 'value2')
+    res.appendHeader?.('key2', 'value2')
     res.removeHeader('key')
     res.flushHeaders()
     res.end('end')
@@ -80,7 +80,7 @@ app.get('/ssrf/http/unhandled-async-write-F', (req, res) => {
 app.get('/ssrf/http/unhandled-async-write-G', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
     const earlyHintsLink = '</styles.css>; rel=preload; as=style'
-    res.writeEarlyHints({
+    res.writeEarlyHints?.({
       link: earlyHintsLink
     })
     res.end()
