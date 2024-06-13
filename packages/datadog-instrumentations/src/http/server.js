@@ -172,7 +172,7 @@ function wrapSetHeader (setHeader) {
     const setHeaderResult = setHeader.apply(this, arguments)
 
     if (finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name, value, res })
+      finishSetHeaderCh.publish({ name, value, res: this })
     }
 
     return setHeaderResult

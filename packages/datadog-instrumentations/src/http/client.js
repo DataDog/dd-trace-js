@@ -44,7 +44,7 @@ function createAbortedClientRequest (http, args) {
   return new ClientRequest({
     _defaultAgent: http.globalAgent, // needed to support http and https
     ...args.options,
-    agent: {
+    agent: { // noop agent, to prevent doing a real request
       addRequest: noop
     }
   })
@@ -68,11 +68,9 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const abortData = {
-        abortController: new AbortController()
-      }
+      const abortController = new AbortController()
 
-      const ctx = { args, http, abortData }
+      const ctx = { args, http, abortController }
 
       return startChannel.runStores(ctx, () => {
         let finished = false
@@ -97,11 +95,11 @@ function patch (http, methodName) {
 
         try {
           let req
-          if (abortData.abortController?.signal.aborted) {
+          if (abortController.signal.aborted) {
             req = createAbortedClientRequest(http, args)
 
             process.nextTick(() => {
-              req.emit('error', abortData.error || new Error('Aborted'))
+              req.emit('error', abortController.signal.reason || new Error('Aborted'))
             })
           } else {
             req = request.call(this, options, callback)

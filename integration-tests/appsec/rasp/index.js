@@ -1,8 +1,9 @@
 'use strict'
 
+require('dd-trace').init()
+
 const path = require('path')
 const fs = require('fs')
-require('dd-trace').init()
 
 const http = require('https')
 const express = require('express')

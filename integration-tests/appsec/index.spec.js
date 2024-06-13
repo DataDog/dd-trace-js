@@ -1,10 +1,10 @@
 'use strict'
 
 const getPort = require('get-port')
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
 
 describe('RASP', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc, stdioHandler
@@ -51,15 +51,19 @@ describe('RASP', () => {
     stdioHandler = () => {
       hasOutput = true
     }
+
     try {
       await axios.get(`${path}?host=ifconfig.pro`)
+
       assert.fail('Request should have failed')
     } catch (e) {
       if (!e.response) {
         throw e
       }
+
       assert.strictEqual(e.response.status, 403)
     }
+
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         if (hasOutput) {
@@ -75,13 +79,13 @@ describe('RASP', () => {
     it('should block when error is unhandled', async () => {
       try {
         await axios.get('/ssrf/http/unhandled-error?host=ifconfig.pro')
+
         assert.fail('Request should have failed')
       } catch (e) {
         assert.strictEqual(e.response.status, 403)
       }
     })
 
-    // Not implemented yet
     it('should not crash the app when app send data after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-A')
     })
