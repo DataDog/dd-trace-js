@@ -178,6 +178,8 @@ describe('Span', () => {
 
     expect(onSpan).to.have.been.calledOnce
     expect(onSpan.firstCall.args[0]).to.deep.equal({ span, fields })
+
+    startCh.unsubscribe(onSpan)
   })
 
   describe('tracer', () => {
