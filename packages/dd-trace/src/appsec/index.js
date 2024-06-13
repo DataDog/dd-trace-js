@@ -13,7 +13,8 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   responseBody,
-  responseWriteHead
+  responseWriteHead,
+  responseSetHeader
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -23,7 +24,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, setTemplates, getBlockingAction } = require('./blocking')
+const { responseBlockedSet, block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -62,6 +63,7 @@ function enable (_config) {
     cookieParser.subscribe(onRequestCookieParser)
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
+    responseSetHeader.subscribe(onResponseSetHeader)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -223,7 +225,6 @@ function onPassportVerify ({ credentials, user }) {
 }
 
 const responseAnalyzedSet = new WeakSet()
-const responseBlockedSet = new WeakSet()
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
   // avoid "write after end" error
@@ -253,6 +254,12 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   responseAnalyzedSet.add(res)
 
   handleResults(results, req, res, rootSpan, abortController)
+}
+
+function onResponseSetHeader ({ res, abortController }) {
+  if (responseBlockedSet.has(res)) {
+    abortController?.abort()
+  }
 }
 
 function handleResults (actions, req, res, rootSpan, abortController) {
@@ -290,6 +297,7 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }
 
 module.exports = {

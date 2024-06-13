@@ -19,5 +19,6 @@ module.exports = {
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
   responseBody: dc.channel('datadog:express:response:json:start'),
   responseWriteHead: dc.channel('apm:http:server:response:writeHead:start'),
-  httpClientRequestStart: dc.channel('apm:http:client:request:start')
+  httpClientRequestStart: dc.channel('apm:http:client:request:start'),
+  responseSetHeader: dc.channel('datadog:http:server:response:set-header:start')
 }

@@ -12,6 +12,7 @@ const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
+const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
 
 const requestFinishedSet = new WeakSet()
 
@@ -24,6 +25,12 @@ addHook({ name: httpNames }, http => {
   shimmer.wrap(http.ServerResponse.prototype, 'writeHead', wrapWriteHead)
   shimmer.wrap(http.ServerResponse.prototype, 'write', wrapWrite)
   shimmer.wrap(http.ServerResponse.prototype, 'end', wrapEnd)
+  shimmer.wrap(http.ServerResponse.prototype, 'setHeader', wrapSetHeader)
+  shimmer.wrap(http.ServerResponse.prototype, 'removeHeader', wrapRemoveHeader)
+  // Added in node v16.17.0
+  if (http.ServerResponse.prototype.appendHeader) {
+    shimmer.wrap(http.ServerResponse.prototype, 'appendHeader', wrapAppendHeader)
+  }
   return http
 })
 
@@ -65,9 +72,7 @@ function wrapEmit (emit) {
           // TODO: should this always return true ?
           return this.listenerCount(eventName) > 0
         }
-        if (finishSetHeaderCh.hasSubscribers) {
-          wrapSetHeader(res)
-        }
+
         return emit.apply(this, arguments)
       } catch (err) {
         errorServerCh.publish(err)
@@ -79,16 +84,6 @@ function wrapEmit (emit) {
     }
     return emit.apply(this, arguments)
   }
-}
-
-function wrapSetHeader (res) {
-  shimmer.wrap(res, 'setHeader', setHeader => {
-    return function (name, value) {
-      const setHeaderResult = setHeader.apply(this, arguments)
-      finishSetHeaderCh.publish({ name, value, res })
-      return setHeaderResult
-    }
-  })
 }
 
 function wrapWriteHead (writeHead) {
@@ -156,6 +151,65 @@ function wrapWrite (write) {
     }
 
     return write.apply(this, arguments)
+  }
+}
+
+function wrapSetHeader (setHeader) {
+  return function wrappedSetHeader (name, value) {
+    if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
+      return setHeader.apply(this, arguments)
+    }
+
+    if (startSetHeaderCh.hasSubscribers) {
+      const abortController = new AbortController()
+      startSetHeaderCh.publish({ res: this, abortController })
+
+      if (abortController.signal.aborted) {
+        return
+      }
+    }
+
+    const setHeaderResult = setHeader.apply(this, arguments)
+
+    if (finishSetHeaderCh.hasSubscribers) {
+      finishSetHeaderCh.publish({ name, value, res })
+    }
+
+    return setHeaderResult
+  }
+}
+
+function wrapAppendHeader (appendHeader) {
+  return function wrappedAppendHeader () {
+    if (!startSetHeaderCh.hasSubscribers) {
+      return appendHeader.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+    startSetHeaderCh.publish({ res: this, abortController })
+
+    if (abortController.signal.aborted) {
+      return this
+    }
+
+    return appendHeader.apply(this, arguments)
+  }
+}
+
+function wrapRemoveHeader (removeHeader) {
+  return function wrappedRemoveHeader () {
+    if (!startSetHeaderCh.hasSubscribers) {
+      return removeHeader.apply(this, arguments)
+    }
+
+    const abortController = new AbortController()
+    startSetHeaderCh.publish({ res: this, abortController })
+
+    if (abortController.signal.aborted) {
+      return this
+    }
+
+    return removeHeader.apply(this, arguments)
   }
 }
 

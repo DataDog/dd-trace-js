@@ -13,7 +13,8 @@ const {
   queryParser,
   passportVerify,
   responseBody,
-  responseWriteHead
+  responseWriteHead,
+  responseSetHeader
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -37,6 +38,7 @@ describe('AppSec Index', () => {
   let config
   let AppSec
   let web
+  let responseBlockedSet
   let blocking
   let passport
   let log
@@ -76,8 +78,10 @@ describe('AppSec Index', () => {
       root: sinon.stub()
     }
 
+    responseBlockedSet = new WeakSet()
     blocking = {
-      setTemplates: sinon.stub()
+      setTemplates: sinon.stub(),
+      responseBlockedSet
     }
 
     passport = {
@@ -168,6 +172,7 @@ describe('AppSec Index', () => {
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
@@ -176,6 +181,7 @@ describe('AppSec Index', () => {
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
+      expect(responseSetHeader.hasSubscribers).to.be.true
     })
 
     it('should not subscribe to passportVerify if eventTracking is disabled', () => {
@@ -253,6 +259,7 @@ describe('AppSec Index', () => {
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
     })
 
     it('should call appsec telemetry disable', () => {
@@ -914,6 +921,23 @@ describe('AppSec Index', () => {
         }, req)
         expect(abortController.abort).to.have.been.calledOnce
         expect(res.end).to.have.been.calledOnce
+      })
+    })
+
+    describe('onResponseSetHeader', () => {
+      it('should call abortController if response was already blocked', () => {
+        responseBlockedSet.add(res)
+
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.been.called
+        responseBlockedSet.delete(res)
+      })
+
+      it('should not call abortController if response was not blocked', () => {
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.not.been.calledOnce
       })
     })
   })
