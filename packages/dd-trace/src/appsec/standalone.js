@@ -5,7 +5,12 @@ const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority'
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
-const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../constants')
+const {
+  APM_TRACING_ENABLED_KEY,
+  APPSEC_PROPAGATION_KEY,
+  SAMPLING_MECHANISM_APPSEC,
+  DECISION_MAKER_KEY
+} = require('../constants')
 
 const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
@@ -72,7 +77,7 @@ function onSpanInject ({ spanContext, carrier }) {
 function onSpanExtract ({ spanContext, carrier }) {
   // reset upstream priority if _dd.p.appsec is not found
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
-    spanContext._sampling = {}
+    resetSampling(spanContext)
   } else if (spanContext._sampling.priority !== USER_KEEP) {
     spanContext._sampling.priority = USER_KEEP
   }
@@ -84,13 +89,18 @@ function sample (span) {
     spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: ask. can we reset here sampling like this?
-    // all spans is the trace are sharing the parent sampling object so...
+    // all spans in the trace are sharing the parent sampling object so...
     // should we get prio from StandAloneAsmPrioritySampler._getPriorityFromTags?
     // but then we should set dm too...
     if (spanContext._sampling?.priority < AUTO_KEEP) {
-      spanContext._sampling = {}
+      resetSampling(spanContext)
     }
   }
+}
+
+function resetSampling (spanContext) {
+  spanContext._sampling.priority = undefined
+  delete spanContext._trace.tags[DECISION_MAKER_KEY]
 }
 
 function configure (config) {
