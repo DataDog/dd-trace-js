@@ -122,8 +122,6 @@ function block (req, res, rootSpan, abortController, actionParameters) {
   responseBlockedSet.add(res)
 
   abortController?.abort()
-
-  // TODO add res in blocked weak set when response blocking is merged
 }
 
 function getBlockingAction (actions) {

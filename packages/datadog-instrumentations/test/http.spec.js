@@ -73,8 +73,7 @@ describe('client', () => {
 
         it('abortController is sent on startChannel', (done) => {
           http.get(url, (res) => {
-            res.on('data', () => {
-            })
+            res.on('data', () => {})
             res.on('end', () => {
               done()
             })
@@ -92,6 +91,7 @@ describe('client', () => {
           const cr = http.get(url, () => {
             done('Request should be blocked')
           })
+
           cr.on('error', (e) => {
             try {
               assert.instanceOf(e, Error)
@@ -115,6 +115,7 @@ describe('client', () => {
           const cr = http.get(url, () => {
             done('Request should be blocked')
           })
+
           cr.on('error', (e) => {
             try {
               assert.instanceOf(e, CustomError)
@@ -132,6 +133,7 @@ describe('client', () => {
           const cr = http.get(url, () => {
             done('Request should be blocked')
           })
+
           cr.on('error', () => {
             try {
               sinon.assert.calledOnce(errorChannelCb)
@@ -149,6 +151,7 @@ describe('client', () => {
           const cr = http.get(url, () => {
             done('Request should be blocked')
           })
+
           cr.on('error', () => {
             try {
               sinon.assert.called(endChannelCb)
@@ -167,6 +170,7 @@ describe('client', () => {
           const cr = http.get(url, () => {
             done('Request should be blocked')
           })
+
           cr.on('error', () => {
             try {
               // Necessary because the tracer makes extra requests to the agent
