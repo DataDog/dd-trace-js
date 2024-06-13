@@ -62,7 +62,7 @@ describe('client', () => {
       describe('abort controller', () => {
         function abortCallback (ctx) {
           if (ctx.args.originalUrl === url) {
-            ctx.abortData.abortController.abort()
+            ctx.abortController.abort()
           }
         }
 
@@ -71,7 +71,7 @@ describe('client', () => {
           url = `${httpSchema}://www.datadoghq.com`
         })
 
-        it('abortData is sent on startChannel', (done) => {
+        it('abortController is sent on startChannel', (done) => {
           http.get(url, (res) => {
             res.on('data', () => {
             })
@@ -83,7 +83,7 @@ describe('client', () => {
           sinon.assert.called(startChannelCb)
           const ctx = getContextFromStubByUrl(url, startChannelCb)
           assert.isNotNull(ctx)
-          assert.instanceOf(ctx.abortData.abortController, AbortController)
+          assert.instanceOf(ctx.abortController, AbortController)
         })
 
         it('Request is aborted with default error', (done) => {
@@ -95,7 +95,7 @@ describe('client', () => {
           cr.on('error', (e) => {
             try {
               assert.instanceOf(e, Error)
-              assert.strictEqual(e.message, 'Aborted')
+              assert.strictEqual(e.message, 'This operation was aborted')
               done()
             } catch (e) {
               done(e)
@@ -109,8 +109,7 @@ describe('client', () => {
 
           startChannelCb.callsFake((ctx) => {
             if (ctx.args.originalUrl === url) {
-              ctx.abortData.abortController.abort()
-              ctx.abortData.error = new CustomError('Custom error')
+              ctx.abortController.abort(new CustomError('Custom error'))
             }
           })
 
