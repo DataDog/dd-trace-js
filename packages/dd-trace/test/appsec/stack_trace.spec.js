@@ -241,6 +241,51 @@ describe('Stack trace reporter', () => {
         assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
       })
 
+      it('limit frames to max depth with filtered frames', () => {
+        const rootSpan = {}
+        const stackId = 'test_stack_id'
+        const maxDepth = 5
+        const callSiteListWithLibraryFrames = [
+          {
+            getFileName: () => path.join(__dirname, `firstFrame`),
+            getLineNumber: () => 314,
+            getColumnNumber: () => 271,
+            getFunctionName: () => `libraryFunction`,
+            getTypeName: () => `libraryType`
+          }
+        ].concat([...Array(120).keys()].map(i => (
+          {
+            getFileName: () => `file${i}`,
+            getLineNumber: () => i,
+            getColumnNumber: () => i,
+            getFunctionName: () => `function${i}`,
+            getTypeName: () => `type${i}`
+          }
+        )).concat([
+          {
+            getFileName: () => path.join(__dirname, `lastFrame`),
+            getLineNumber: () => 271,
+            getColumnNumber: () => 314,
+            getFunctionName: () => `libraryFunction`,
+            getTypeName: () => `libraryType`
+          }
+        ]))
+        const expectedFrames = [0, 1, 2, 118, 119].map(i => (
+          {
+            id: i,
+            file: `file${i}`,
+            line: i,
+            column: i,
+            function: `function${i}`,
+            class_name: `type${i}`
+          }
+        ))
+
+        reportStackTrace(rootSpan, stackId, maxDepth, 2, () => callSiteListWithLibraryFrames)
+
+        assert.deepEqual(rootSpan.meta_struct['_dd.stack'].exploit[0].frames, expectedFrames)
+      })
+
       it('no limit if maxDepth is 0', () => {
         const rootSpan = {}
         const stackId = 'test_stack_id'

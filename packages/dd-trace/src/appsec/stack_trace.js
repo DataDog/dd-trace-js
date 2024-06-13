@@ -40,7 +40,7 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
   const indexedFrames = []
   for (let i = 0; i < Math.min(filteredFrames.length, maxCallSite); i++) {
     const index = i < half ? i : i + filteredFrames.length - maxCallSite
-    const callSite = callSiteList[index]
+    const callSite = filteredFrames[index]
     indexedFrames.push({
       id: index,
       file: callSite.getFileName(),
