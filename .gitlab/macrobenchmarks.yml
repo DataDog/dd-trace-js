@@ -21,19 +21,19 @@
   variables:
     FF_USE_LEGACY_KUBERNETES_EXECUTION_STRATEGY: "true"
 
-    K6_OPTIONS_WARMUP_RATE: 300
+    K6_OPTIONS_WARMUP_RATE: 500
     K6_OPTIONS_WARMUP_DURATION: 1m
     K6_OPTIONS_WARMUP_GRACEFUL_STOP: 10s
     K6_OPTIONS_WARMUP_PRE_ALLOCATED_VUS: 4
     K6_OPTIONS_WARMUP_MAX_VUS: 4
 
-    K6_OPTIONS_NORMAL_OPERATION_RATE: 200
+    K6_OPTIONS_NORMAL_OPERATION_RATE: 300
     K6_OPTIONS_NORMAL_OPERATION_DURATION: 10m
     K6_OPTIONS_NORMAL_OPERATION_GRACEFUL_STOP: 10s
     K6_OPTIONS_NORMAL_OPERATION_PRE_ALLOCATED_VUS: 4
     K6_OPTIONS_NORMAL_OPERATION_MAX_VUS: 4
 
-    K6_OPTIONS_HIGH_LOAD_RATE: 500
+    K6_OPTIONS_HIGH_LOAD_RATE: 700
     K6_OPTIONS_HIGH_LOAD_DURATION: 3m
     K6_OPTIONS_HIGH_LOAD_GRACEFUL_STOP: 10s
     K6_OPTIONS_HIGH_LOAD_PRE_ALLOCATED_VUS: 4
@@ -45,6 +45,16 @@
   # By marking the benchmarks as allow_failure, this should go away. (This workaround should be removed once the
   # benchmarks get changed to run on every PR)
   allow_failure: true
+
+  # Retry on Gitlab internal system failures
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - data_integrity_failure
+      - runner_system_failure
+      - scheduler_failure
+      - api_failure
 
 baseline-1:
   extends: .macrobenchmarks
