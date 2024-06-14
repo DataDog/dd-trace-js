@@ -70,7 +70,7 @@ services:
     ports:
       - "11211:11211"
   cassandra:
-    image: cassandra:2.0.14
+    image: cassandra:3-focal
     ports:
       - "127.0.0.1:9042:9042"
   limitd:
