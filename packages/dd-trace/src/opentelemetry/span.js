@@ -20,6 +20,20 @@ function hrTimeToMilliseconds (time) {
   return time[0] * 1e3 + time[1] / 1e6
 }
 
+function isTimeInput (startTime) {
+  if (typeof startTime === 'number') {
+    return true
+  }
+  if (startTime instanceof Date) {
+    return true
+  }
+  if (Array.isArray(startTime) && startTime.length === 2 &&
+      typeof startTime[0] === 'number' && typeof startTime[1] === 'number') {
+    return true
+  }
+  return false
+}
+
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
   [api.SpanKind.SERVER]: kinds.SERVER,
@@ -179,17 +193,20 @@ class Span {
   }
 
   setAttribute (key, value) {
+    if (key === 'http.response.status_code') {
+      this._ddSpan.setTag('http.status_code', value.toString())
+    }
+
     this._ddSpan.setTag(key, value)
     return this
   }
 
   setAttributes (attributes) {
-    this._ddSpan.addTags(attributes)
-    return this
-  }
+    if ('http.response.status_code' in attributes) {
+      attributes['http.status_code'] = attributes['http.response.status_code'].toString()
+    }
 
-  addEvent (name, attributesOrStartTime, startTime) {
-    api.diag.warn('Events not supported')
+    this._ddSpan.addTags(attributes)
     return this
   }
 
@@ -236,12 +253,29 @@ class Span {
     return this.ended === false
   }
 
-  recordException (exception) {
+  addEvent (name, attributesOrStartTime, startTime) {
+    startTime = attributesOrStartTime && isTimeInput(attributesOrStartTime) ? attributesOrStartTime : startTime
+    const hrStartTime = timeInputToHrTime(startTime || (performance.now() + timeOrigin))
+    startTime = hrTimeToMilliseconds(hrStartTime)
+
+    this._ddSpan.addEvent(name, attributesOrStartTime, startTime)
+    return this
+  }
+
+  recordException (exception, timeInput) {
+    // HACK: identifier is added so that trace.error remains unchanged after a call to otel.recordException
     this._ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
-      [ERROR_STACK]: exception.stack
+      [ERROR_STACK]: exception.stack,
+      doNotSetTraceError: true
     })
+    const attributes = {}
+    if (exception.message) attributes['exception.message'] = exception.message
+    if (exception.type) attributes['exception.type'] = exception.type
+    if (exception.escaped) attributes['exception.escaped'] = exception.escaped
+    if (exception.stack) attributes['exception.stacktrace'] = exception.stack
+    this.addEvent(exception.name, attributes, timeInput)
   }
 
   get duration () {

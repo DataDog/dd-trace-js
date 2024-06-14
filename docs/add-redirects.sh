@@ -60,6 +60,7 @@ declare -a plugins=(
   "restify"
   "router"
   "tedious"
+  "undici"
   "when"
   "winston"
 )
