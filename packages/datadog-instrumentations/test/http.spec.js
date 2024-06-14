@@ -5,10 +5,9 @@ const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 describe('client', () => {
-  let url, http, startChannelCb, finishChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
+  let url, http, startChannelCb, endChannelCb, asyncStartChannelCb, errorChannelCb
 
   const startChannel = dc.channel('apm:http:client:request:start')
-  const finishChannel = dc.channel('apm:http:client:request:finish')
   const endChannel = dc.channel('apm:http:client:request:end')
   const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
   const errorChannel = dc.channel('apm:http:client:request:error')
@@ -24,8 +23,6 @@ describe('client', () => {
   beforeEach(() => {
     startChannelCb = sinon.stub()
     startChannel.subscribe(startChannelCb)
-    finishChannelCb = sinon.stub()
-    finishChannel.subscribe(finishChannelCb)
     endChannelCb = sinon.stub()
     endChannel.subscribe(endChannelCb)
     asyncStartChannelCb = sinon.stub()
@@ -36,7 +33,6 @@ describe('client', () => {
 
   afterEach(() => {
     startChannel.unsubscribe(startChannelCb)
-    finishChannel.unsubscribe(finishChannelCb)
     endChannel.unsubscribe(endChannelCb)
     asyncStartChannel.unsubscribe(asyncStartChannelCb)
     errorChannel.unsubscribe(errorChannelCb)
@@ -95,6 +91,7 @@ describe('client', () => {
           cr.on('error', (e) => {
             try {
               assert.instanceOf(e, Error)
+
               done()
             } catch (e) {
               done(e)
@@ -103,8 +100,7 @@ describe('client', () => {
         })
 
         it('Request is aborted with custom error', (done) => {
-          class CustomError extends Error {
-          }
+          class CustomError extends Error { }
 
           startChannelCb.callsFake((ctx) => {
             if (ctx.args.originalUrl === url) {
@@ -120,6 +116,7 @@ describe('client', () => {
             try {
               assert.instanceOf(e, CustomError)
               assert.strictEqual(e.message, 'Custom error')
+
               done()
             } catch (e) {
               done(e)
@@ -138,6 +135,7 @@ describe('client', () => {
             try {
               sinon.assert.calledOnce(errorChannelCb)
               assert.instanceOf(errorChannelCb.firstCall.args[0].error, Error)
+
               done()
             } catch (e) {
               done(e)
@@ -157,6 +155,7 @@ describe('client', () => {
               sinon.assert.called(endChannelCb)
               const ctx = getContextFromStubByUrl(url, endChannelCb)
               assert.strictEqual(ctx.args.originalUrl, url)
+
               done()
             } catch (e) {
               done(e)
@@ -178,6 +177,7 @@ describe('client', () => {
                 const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
                 assert.isNull(ctx)
               }
+
               done()
             } catch (e) {
               done(e.message)
