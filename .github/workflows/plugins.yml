@@ -327,9 +327,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       cassandra:
-        image: spotify/cassandra
-        env:
-          CASSANDRA_TOKEN: '-9223372036854775808'
+        image: cassandra:2.0.14
         ports:
           - 9042:9042
     env:
