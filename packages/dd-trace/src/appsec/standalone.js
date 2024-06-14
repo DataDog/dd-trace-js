@@ -5,6 +5,7 @@ const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority'
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const { PrioritySampler, hasOwn } = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
+const TraceState = require('../opentracing/propagation/tracestate')
 const {
   APM_TRACING_ENABLED_KEY,
   APPSEC_PROPAGATION_KEY,
@@ -67,9 +68,15 @@ function onSpanStart ({ span, fields }) {
 function onSpanInject ({ spanContext, carrier }) {
   // do not inject trace and sampling if there is no appsec event
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
-    // TODO: should delete only own keys?
     for (const key in carrier) {
-      delete carrier[key]
+      const lKey = key.toLowerCase()
+      if (lKey.startsWith('x-datadog')) {
+        delete carrier[key]
+      } else if (lKey === 'tracestate') {
+        const tracestate = TraceState.fromString(carrier[key])
+        tracestate.forVendor('dd', state => state.clear())
+        carrier[key] = tracestate.toString()
+      }
     }
   }
 }

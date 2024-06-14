@@ -7,6 +7,7 @@ const DatadogSpan = require('../../src/opentracing/span')
 const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const TraceState = require('../../src/opentracing/propagation/tracestate')
 
 const startCh = channel('dd-trace:span:start')
 
@@ -19,7 +20,7 @@ describe('Appsec Standalone', () => {
       appsec: { standalone: { enabled: true } },
 
       tracePropagationStyle: {
-        inject: ['datadog'],
+        inject: ['datadog', 'tracecontext'],
         extract: ['datadog']
       }
     }
@@ -263,6 +264,30 @@ describe('Appsec Standalone', () => {
       assert.property(carrier, 'x-datadog-trace-id')
       assert.property(carrier, 'x-datadog-parent-id')
       assert.property(carrier, 'x-datadog-sampling-priority')
+    })
+
+    it('should clear tracestate datadog info', () => {
+      standalone.configure(config)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      span._spanContext._sampling = {
+        priority: USER_KEEP,
+        mechanism: SAMPLING_MECHANISM_APPSEC
+      }
+
+      const tracestate = new TraceState()
+      tracestate.set('dd', 't.tid:666b118100000000;t.dm:-1;s:1;p:73a164d716fcddff')
+      tracestate.set('other', 'id:0xC0FFEE')
+      span._spanContext._tracestate = tracestate
+
+      const carrier = {}
+      const propagator = new TextMapPropagator(config)
+      propagator.inject(span._spanContext, carrier)
+
+      assert.propertyVal(carrier, 'tracestate', 'other=id:0xC0FFEE')
     })
   })
 
