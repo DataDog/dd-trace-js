@@ -327,7 +327,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       cassandra:
-        image: cassandra:2.0.14
+        image: cassandra:2.2.4
         ports:
           - 9042:9042
     env:
