@@ -82,6 +82,10 @@ describe('RASP', () => {
 
         assert.fail('Request should have failed')
       } catch (e) {
+        if (!e.response) {
+          throw e
+        }
+
         assert.strictEqual(e.response.status, 403)
       }
     })
@@ -112,6 +116,10 @@ describe('RASP', () => {
 
     it('should not crash the app when writeEarlyHints after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-G')
+    })
+
+    it('should not crash the app when res.json after blocking', () => {
+      return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-H')
     })
   })
 })

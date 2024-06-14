@@ -87,6 +87,12 @@ app.get('/ssrf/http/unhandled-async-write-G', (req, res) => {
   })
 })
 
+app.get('/ssrf/http/unhandled-async-write-H', (req, res) => {
+  makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
+    res.json({ key: 'value' })
+  })
+})
+
 function streamFile (res) {
   const stream = fs.createReadStream(path.join(__dirname, 'streamtest.txt'), { encoding: 'utf8' })
   stream.pipe(res, { end: false })
