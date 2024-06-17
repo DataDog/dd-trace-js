@@ -129,6 +129,61 @@ withVersions('express', 'express', expressVersion => {
           })
         })
       })
+
+      describe('Test using axios', () => {
+        withVersions('express', 'axios', axiosVersion => {
+          let axiosToTest
+
+          beforeEach(() => {
+            axiosToTest = require(`../../../../versions/axios@${axiosVersion}`).get()
+          })
+
+          it('Should not detect threat', async () => {
+            app = (req, res) => {
+              axios.get(`https://${req.query.host}`)
+              res.end('end')
+            }
+
+            axios.get('/?host=www.datadoghq.com')
+
+            await agent.use((traces) => {
+              const span = getWebSpan(traces)
+              assert.notProperty(span.meta, '_dd.appsec.json')
+            })
+          })
+
+          it('Should detect threat doing a GET request', async () => {
+            app = async (req, res) => {
+              try {
+                await axiosToTest.get(`https://${req.query.host}`)
+                res.end('end')
+              } catch (e) {
+                if (e.cause.message === 'AbortError') {
+                  res.writeHead(500)
+                }
+                res.end('end')
+              }
+            }
+
+            await testBlockingRequest()
+          })
+
+          it('Should detect threat doing a POST request', async () => {
+            app = async (req, res) => {
+              try {
+                await axios.post(`https://${req.query.host}`, { key: 'value' })
+              } catch (e) {
+                if (e.cause.message === 'AbortError') {
+                  res.writeHead(500)
+                }
+                res.end('end')
+              }
+            }
+
+            await testBlockingRequest()
+          })
+        })
+      })
     })
   })
 })
