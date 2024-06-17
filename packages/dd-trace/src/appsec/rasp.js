@@ -19,7 +19,8 @@ class AbortError extends Error {
 }
 
 function handleUncaughtException (err) {
-  if (err instanceof AbortError) {
+  // err.cause to wrap the error thrown by client request
+  if (err instanceof AbortError || err.cause instanceof AbortError) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
   } else {

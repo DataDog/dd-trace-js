@@ -4,9 +4,9 @@ require('dd-trace').init()
 
 const path = require('path')
 const fs = require('fs')
-
 const http = require('https')
 const express = require('express')
+const axios = require('axios')
 
 const app = express()
 const port = process.env.APP_PORT || 3000
@@ -32,6 +32,7 @@ function makeOutgoingRequestAndCbAfterTimeout (req, res, cb) {
 app.get('/ssrf/http/unhandled-error', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res)
 })
+
 app.get('/ssrf/http/unhandled-async-write-A', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
     res.send('Late end')
@@ -91,6 +92,11 @@ app.get('/ssrf/http/unhandled-async-write-H', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res, () => {
     res.json({ key: 'value' })
   })
+})
+
+app.get('/ssrf/http/unhandled-axios', (req, res) => {
+  axios.get(`https://${req.query.host}`)
+    .then(() => res.end('end'))
 })
 
 function streamFile (res) {

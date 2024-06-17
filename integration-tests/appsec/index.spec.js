@@ -14,7 +14,7 @@ describe('RASP', () => {
   }
 
   before(async () => {
-    sandbox = await createSandbox(['express'])
+    sandbox = await createSandbox(['express', 'axios'])
     appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'appsec/rasp/index.js')
@@ -120,6 +120,10 @@ describe('RASP', () => {
 
     it('should not crash the app when res.json after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-H')
+    })
+
+    it('should not crash the when is blocked using axios', () => {
+      return testNotCrashedAfterBlocking('/ssrf/http/unhandled-axios')
     })
   })
 })
