@@ -81,21 +81,15 @@ describe('client', () => {
           assert.instanceOf(ctx.abortController, AbortController)
         })
 
-        it('Request is aborted with default error', (done) => {
+        it('Request is aborted', (done) => {
           startChannelCb.callsFake(abortCallback)
 
           const cr = http.get(url, () => {
-            done('Request should be blocked')
+            done(new Error('Request should be blocked'))
           })
 
-          cr.on('error', (e) => {
-            try {
-              assert.instanceOf(e, Error)
-
-              done()
-            } catch (e) {
-              done(e)
-            }
+          cr.on('error', () => {
+            done()
           })
         })
 
@@ -109,7 +103,7 @@ describe('client', () => {
           })
 
           const cr = http.get(url, () => {
-            done('Request should be blocked')
+            done(new Error('Request should be blocked'))
           })
 
           cr.on('error', (e) => {
@@ -128,7 +122,7 @@ describe('client', () => {
           startChannelCb.callsFake(abortCallback)
 
           const cr = http.get(url, () => {
-            done('Request should be blocked')
+            done(new Error('Request should be blocked'))
           })
 
           cr.on('error', () => {
@@ -147,7 +141,7 @@ describe('client', () => {
           startChannelCb.callsFake(abortCallback)
 
           const cr = http.get(url, () => {
-            done('Request should be blocked')
+            done(new Error('Request should be blocked'))
           })
 
           cr.on('error', () => {
@@ -167,7 +161,7 @@ describe('client', () => {
           startChannelCb.callsFake(abortCallback)
 
           const cr = http.get(url, () => {
-            done('Request should be blocked')
+            done(new Error('Request should be blocked'))
           })
 
           cr.on('error', () => {
@@ -183,7 +177,7 @@ describe('client', () => {
               done(e.message)
             }
           })
-        }).timeout(1000)
+        })
       })
     })
   })

@@ -90,39 +90,39 @@ describe('RASP', () => {
       }
     })
 
-    it('should not crash the app when app send data after blocking', () => {
+    it('should not crash when app send data after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-A')
     })
 
-    it('should not crash the app when app stream data after blocking', () => {
+    it('should not crash when app stream data after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-B')
     })
 
-    it('should not crash the app when setHeader, writeHead or end after blocking', () => {
+    it('should not crash when setHeader, writeHead or end after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-C')
     })
 
-    it('should not crash the app when appendHeader, flushHeaders, removeHeader after blocking', () => {
+    it('should not crash when appendHeader, flushHeaders, removeHeader after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-D')
     })
 
-    it('should not crash the app when writeContinue after blocking', () => {
+    it('should not crash when writeContinue after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-E')
     })
 
-    it('should not crash the app when writeProcessing after blocking', () => {
+    it('should not crash when writeProcessing after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-F')
     })
 
-    it('should not crash the app when writeEarlyHints after blocking', () => {
+    it('should not crash when writeEarlyHints after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-G')
     })
 
-    it('should not crash the app when res.json after blocking', () => {
+    it('should not crash when res.json after blocking', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-async-write-H')
     })
 
-    it('should not crash the when is blocked using axios', () => {
+    it('should not crash when is blocked using axios', () => {
       return testNotCrashedAfterBlocking('/ssrf/http/unhandled-axios')
     })
   })
