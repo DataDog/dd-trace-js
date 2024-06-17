@@ -219,6 +219,16 @@ class Sqs extends BaseAwsSdkPlugin {
           this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
         }
         break
+      case 'receiveMessage':
+        if (!params.MessageAttributeNames) {
+          params.MessageAttributeNames = ['_datadog']
+        } else if (
+          !params.MessageAttributeNames.includes('_datadog') &&
+          !params.MessageAttributeNames.includes('.*') &&
+          !params.MessageAttributeNames.includes('All')
+        ) {
+          params.MessageAttributeNames.push('_datadog')
+        }
     }
   }
 
