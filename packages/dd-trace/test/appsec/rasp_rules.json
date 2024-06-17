@@ -35,6 +35,9 @@
                 "address": "server.request.path_params"
               },
               {
+                "address": "server.request.headers.no_cookies"
+              },
+              {
                 "address": "grpc.server.request.message"
               },
               {

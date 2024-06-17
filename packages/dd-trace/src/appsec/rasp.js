@@ -63,12 +63,16 @@ function analyzeSsrf (ctx) {
 function handleResult (actions, req, res, abortController) {
   const blockingAction = getBlockingAction(actions)
   if (blockingAction && abortController) {
-    const abortError = new AbortError(req, res, blockingAction)
-    abortController.abort(abortError)
+    const rootSpan = web.root(req)
+    // Should block only in express
+    if (rootSpan.context()._name === 'express.request') {
+      const abortError = new AbortError(req, res, blockingAction)
+      abortController.abort(abortError)
 
-    // TODO Delete this if when support for node 16 is removed
-    if (!abortController.signal.reason) {
-      abortController.signal.reason = abortError
+      // TODO Delete this if when support for node 16 is removed
+      if (!abortController.signal.reason) {
+        abortController.signal.reason = abortError
+      }
     }
   }
 }
