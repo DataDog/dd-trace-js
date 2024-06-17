@@ -1,9 +1,10 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const web = require('./../plugins/util/web')
 const addresses = require('./addresses')
 const { httpClientRequestStart } = require('./channels')
-const web = require('../plugins/util/web')
+const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 
@@ -30,7 +31,10 @@ const RULE_TYPES = {
   SSRF: 'ssrf'
 }
 
-function enable () {
+let config
+
+function enable (_config) {
+  config = _config
   httpClientRequestStart.subscribe(analyzeSsrf)
 
   process.on('uncaughtException', handleUncaughtException)
@@ -52,15 +56,29 @@ function analyzeSsrf (ctx) {
   const persistent = {
     [addresses.HTTP_OUTGOING_URL]: url
   }
-  // TODO: Currently this is monitoring/blocking, we should
-  //     generate stack traces if SSRF attempts
-  const actions = waf.run({ persistent }, req, RULE_TYPES.SSRF)
+
+  const result = waf.run({ persistent }, req, RULE_TYPES.SSRF)
 
   const res = store?.res
-  handleResult(actions, req, res, ctx.abortController)
+  handleResult(result, req, res, ctx.abortController)
+}
+
+function getGenerateStackTraceAction (actions) {
+  return actions?.generate_stack
 }
 
 function handleResult (actions, req, res, abortController) {
+  const generateStackTraceAction = getGenerateStackTraceAction(actions)
+  if (generateStackTraceAction && config.appsec.stackTrace.enabled) {
+    const rootSpan = web.root(req)
+    reportStackTrace(
+      rootSpan,
+      generateStackTraceAction.stack_id,
+      config.appsec.stackTrace.maxDepth,
+      config.appsec.stackTrace.maxStackTraces
+    )
+  }
+
   const blockingAction = getBlockingAction(actions)
   if (blockingAction && abortController) {
     const rootSpan = web.root(req)
@@ -79,5 +97,6 @@ function handleResult (actions, req, res, abortController) {
 
 module.exports = {
   enable,
-  disable
+  disable,
+  handleResult
 }
