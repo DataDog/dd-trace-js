@@ -213,6 +213,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', true)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
@@ -257,6 +260,9 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
+      { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
+      { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
+      { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
@@ -419,8 +425,11 @@ describe('Config', () => {
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
     process.env.DD_APPSEC_ENABLED = 'true'
+    process.env.DD_APPSEC_MAX_STACK_TRACES = '5'
+    process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '42'
     process.env.DD_APPSEC_RASP_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
+    process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'false'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
     process.env.DD_APPSEC_WAF_TIMEOUT = '42'
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '.*'
@@ -510,6 +519,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 42)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 5)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
@@ -549,6 +561,9 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },
       { name: 'appsec.rasp.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
+      { name: 'appsec.stackTrace.enabled', value: false, origin: 'env_var' },
+      { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
+      { name: 'appsec.stackTrace.maxStackTraces', value: '5', origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
@@ -1006,8 +1021,11 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_APPSEC_ENABLED = 'false'
+    process.env.DD_APPSEC_MAX_STACK_TRACES = '11'
+    process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '11'
     process.env.DD_APPSEC_RASP_ENABLED = 'true'
     process.env.DD_APPSEC_RULES = RECOMMENDED_JSON_PATH
+    process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'true'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = 11
     process.env.DD_APPSEC_WAF_TIMEOUT = 11
     process.env.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP = '^$'
@@ -1089,6 +1107,11 @@ describe('Config', () => {
         },
         rasp: {
           enabled: false
+        },
+        stackTrace: {
+          enabled: false,
+          maxDepth: 42,
+          maxStackTraces: 5
         }
       },
       remoteConfig: {
@@ -1131,6 +1154,9 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
+    expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 42)
+    expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 5)
     expect(config).to.have.nested.property('appsec.wafTimeout', 42)
     expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex', '.*')
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex', '.*')
@@ -1217,6 +1243,11 @@ describe('Config', () => {
       },
       rasp: {
         enabled: false
+      },
+      stackTrace: {
+        enabled: true,
+        maxStackTraces: 2,
+        maxDepth: 32
       }
     })
   })
