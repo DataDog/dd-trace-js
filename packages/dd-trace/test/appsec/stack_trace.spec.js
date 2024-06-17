@@ -29,7 +29,14 @@ describe('Stack trace reporter', () => {
               getFunctionName: () => `function${i}`
             }
           ))
-        )
+        ).concat([
+          {
+            getFileName: () => null,
+            getLineNumber: () => null,
+            getColumnNumber: () => null,
+            getFunctionName: () => null
+          }
+        ])
 
       const expectedFrames = [...Array(10).keys()].map(i => (
         {
@@ -39,6 +46,14 @@ describe('Stack trace reporter', () => {
           function: `function${i}`
         }
       ))
+        .concat([
+          {
+            file: null,
+            line: null,
+            column: null,
+            function: null
+          }
+        ])
 
       const filteredFrames = filterOutFramesFromLibrary(callSiteList).map(frame => (
         {
