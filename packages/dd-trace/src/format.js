@@ -53,6 +53,7 @@ function formatSpan (span) {
     resource: String(spanContext._name),
     error: 0,
     meta: {},
+    meta_struct: span.meta_struct,
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
