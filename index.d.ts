@@ -700,6 +700,25 @@ declare namespace tracer {
          * @default false
          */
         enabled?: boolean
+      },
+      /**
+       * Configuration for stack trace reporting
+       */
+      stackTrace?: {
+        /** Whether to enable stack trace reporting.
+         * @default true
+         */
+        enabled?: boolean,
+
+        /** Specifies the maximum number of stack traces to be reported.
+         * @default 2
+         */
+        maxStackTraces?: number,
+
+        /** Specifies the maximum depth of a stack trace to be reported.
+         * @default 32
+         */
+        maxDepth?: number,
       }
     };
 
