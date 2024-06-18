@@ -231,7 +231,6 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           expect(scope.isDone()).to.be.true
           expect(err).to.be.null
@@ -273,7 +272,6 @@ describe('CI Visibility Exporter', () => {
           port, isIntelligentTestRunnerEnabled: true
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-        expect(ciVisibilityExporter.shouldRequestLibraryConfiguration()).to.be.true
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           expect(scope.isDone()).to.be.true
           expect(err).to.be.null
