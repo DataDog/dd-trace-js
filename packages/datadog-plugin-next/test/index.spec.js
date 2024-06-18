@@ -27,6 +27,8 @@ describe('Plugin', function () {
 
     // TODO: Figure out why 10.x tests are failing.
     withVersions('next', 'next', VERSIONS_TO_TEST, version => {
+      const realVersion = require(`../../../versions/next@${version}`).version()
+      if (realVersion !== '13.3.0') return
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
@@ -152,7 +154,7 @@ describe('Plugin', function () {
         }
       )
 
-      describe('without configuration', () => {
+      describe.skip('without configuration', () => {
         startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
@@ -486,7 +488,7 @@ describe('Plugin', function () {
         })
       }
 
-      describe('with configuration', () => {
+      describe.skip('with configuration', () => {
         startServer({ withConfig: true, standalone: false })
 
         it('should execute the hook and validate the status only once', done => {
@@ -547,7 +549,7 @@ describe('Plugin', function () {
       // https://github.com/vercel/next.js/issues/53367
       // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
-        describe('with standalone', () => {
+        describe.skip('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
           // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`

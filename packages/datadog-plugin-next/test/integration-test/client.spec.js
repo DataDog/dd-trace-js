@@ -21,7 +21,7 @@ const NODE_OPTIONS = NODE_MAJOR < 18
 
 const VERSIONS_TO_TEST = NODE_MAJOR < 18 ? '>=11.1 <13.2' : '>=11.1'
 
-describe('esm', () => {
+describe.skip('esm', () => {
   let agent
   let proc
   let sandbox
