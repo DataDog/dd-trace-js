@@ -174,12 +174,14 @@ describe('Span', () => {
       operationName: 'operation'
     }
 
-    span = new Span(tracer, processor, prioritySampler, fields)
+    try {
+      span = new Span(tracer, processor, prioritySampler, fields)
 
-    expect(onSpan).to.have.been.calledOnce
-    expect(onSpan.firstCall.args[0]).to.deep.equal({ span, fields })
-
-    startCh.unsubscribe(onSpan)
+      expect(onSpan).to.have.been.calledOnce
+      expect(onSpan.firstCall.args[0]).to.deep.equal({ span, fields })
+    } finally {
+      startCh.unsubscribe(onSpan)
+    }
   })
 
   describe('tracer', () => {
