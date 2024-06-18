@@ -7,7 +7,7 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const childProcess = require('child_process')
-const { fork } = childProcess
+const { fork, spawn, execSync } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
 const fs = require('fs/promises')
@@ -163,8 +163,17 @@ class FakeAgent extends EventEmitter {
   }
 }
 
+let nodeBinary = process.argv[0]
+
 async function runAndCheckOutput (filename, cwd, expectedOut) {
-  const proc = fork(filename, { cwd, stdio: 'pipe' })
+  const oldOpts = process.env.NODE_OPTIONS
+  delete process.env.NODE_OPTIONS
+  const nodeVersion = nodeBinary === process.argv[0]
+    ? process.versions.node
+    : execSync(`${nodeBinary} -p process.versions.node`).toString().trim()
+  process.env.NODE_OPTIONS = oldOpts
+
+  const proc = spawn(nodeBinary, [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -186,7 +195,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     }
     assert.strictEqual(out, expectedOut)
   }
-  return pid
+  return [pid, nodeVersion]
 }
 
 // This is set by the useSandbox function
@@ -196,7 +205,7 @@ let sandbox
 async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
+  const [pid, nodeVersion] = await runAndCheckOutput(filename, cwd, expectedOut)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
@@ -242,9 +251,9 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   function meta (pid) {
     return {
       language_name: 'nodejs',
-      language_version: process.env.FAKE_VERSION || process.versions.node,
+      language_version: nodeVersion,
       runtime_name: 'nodejs',
-      runtime_version: process.env.FAKE_VERSION || process.versions.node,
+      runtime_version: nodeVersion,
       tracer_version: require('../package.json').version,
       pid: Number(pid)
     }
@@ -296,7 +305,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   await fs.mkdir(folder)
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
-  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
+  await exec(`npm install ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -475,6 +484,15 @@ function sandboxCwd () {
   return sandbox.folder
 }
 
+function useSandboxedNode () {
+  before(() => {
+    nodeBinary = path.join(sandbox.folder, 'node_modules/.bin/node')
+  })
+  after(() => {
+    nodeBinary = process.argv[0]
+  })
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -488,5 +506,6 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
+  useSandboxedNode
 }

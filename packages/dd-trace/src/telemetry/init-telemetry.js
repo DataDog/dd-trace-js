@@ -3,6 +3,7 @@
 const fs = require('fs')
 const { spawn } = require('child_process')
 const tracerVersion = require('../../../../package.json').version
+const log = require('../log')
 
 module.exports = sendTelemetry
 
@@ -58,6 +59,17 @@ function sendTelemetry (name, tags = []) {
   }
   const proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
     stdio: 'pipe'
+  })
+  proc.on('error', () => {
+    log.error('Failed to spawn telemetry forwarder')
+  })
+  proc.on('exit', (code) => {
+    if (code !== 0) {
+      log.error(`Telemetry forwarder exited with code ${code}`)
+    }
+  })
+  proc.stdin.on('error', () => {
+    log.error('Failed to write telemetry data to telemetry forwarder')
   })
   proc.stdin.end(JSON.stringify({ metadata, points }))
 }

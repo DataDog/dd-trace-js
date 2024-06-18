@@ -1,7 +1,8 @@
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
-  useSandbox
+  useSandbox,
+  useSandboxedNode
 } = require('./helpers')
 const path = require('path')
 
@@ -12,6 +13,10 @@ const DD_TRACE_DEBUG = 'true'
 const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime', '']
 const telemetryForced = ['complete', 'injection_forced:true']
 const telemetryGood = ['complete', 'injection_forced:false']
+
+// Node.js versions prior to 16 aren't installable with `npm install node`, but
+// this is early enough to test the version check.
+const oldNodeVersion = '16.20.2'
 
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   const doTest = (file, ...args) => testFile(file, ...args)
@@ -58,7 +63,7 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 
 function testRuntimeVersionChecks (arg, filename) {
   context('runtime version check', () => {
-    const NODE_OPTIONS = `--require ${path.join(__dirname, 'init', 'setversion.js')} --${arg} dd-trace/${filename}`
+    const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const doTest = (...args) => testFile('init/trace.js', ...args)
     const doTestForced = async (...args) => {
       Object.assign(process.env, { DD_INJECT_FORCE })
@@ -70,7 +75,8 @@ function testRuntimeVersionChecks (arg, filename) {
     }
 
     context('when node version is less than engines field', () => {
-      useEnv({ FAKE_VERSION: '3.0.0', NODE_OPTIONS })
+      useSandboxedNode()
+      useEnv({ NODE_OPTIONS })
 
       it('should initialize the tracer, if no DD_INJECTION_ENABLED', () =>
         doTest('true\n'))
@@ -86,12 +92,12 @@ function testRuntimeVersionChecks (arg, filename) {
 
           it('should not initialize the tracer', () =>
             doTest(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime nodejs 3.0.0, Supported runtimes: nodejs >=18.
+Found incompatible runtime nodejs ${oldNodeVersion}, Supported runtimes: nodejs >=18.
 false
 `, ...telemetryAbort))
           it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime nodejs 3.0.0, Supported runtimes: nodejs >=18.
+Found incompatible runtime nodejs ${oldNodeVersion}, Supported runtimes: nodejs >=18.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
@@ -100,7 +106,7 @@ true
       })
     })
     context('when node version is more than engines field', () => {
-      useEnv({ FAKE_VERSION: '50000.0.0', NODE_OPTIONS })
+      useEnv({ NODE_OPTIONS })
 
       it('should initialize the tracer, if no DD_INJECTION_ENABLED', () => doTest('true\n'))
       context('with DD_INJECTION_ENABLED', () => {
@@ -125,25 +131,23 @@ true
 }
 
 describe('init.js', () => {
-  useSandbox()
+  useSandbox([`node@${oldNodeVersion}`])
 
   testInjectionScenarios('require', 'init.js', false)
   testRuntimeVersionChecks('require', 'init.js')
 })
 
 describe('initialize.mjs', () => {
-  useSandbox()
+  useSandbox([`node@${oldNodeVersion}`])
 
   context('as --loader', () => {
     testInjectionScenarios('loader', 'initialize.mjs', true)
-    // TODO uncomment next line and fix this before enabling ESM in SSI
-    // testRuntimeVersionChecks('loader', 'initialize.mjs')
+    testRuntimeVersionChecks('loader', 'initialize.mjs')
   })
   if (Number(process.versions.node.split('.')[0]) >= 18) {
     context('as --import', () => {
       testInjectionScenarios('import', 'initialize.mjs', true)
-      // TODO uncomment next line and fix this before enabling ESM in SSI
-      // testRuntimeVersionChecks('loader', 'initialize.mjs')
+      testRuntimeVersionChecks('loader', 'initialize.mjs')
     })
   }
 })
