@@ -1,0 +1,12 @@
+name: Commit Checks
+on:
+  pull_request:
+
+jobs:
+  no-merge-commits-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: greenled/no-merge-commits-check@v1.0.1
