@@ -27,7 +27,7 @@ function getCallSiteList (maxDepth = 100) {
 }
 
 function filterOutFramesFromLibrary (callSiteList) {
-  return callSiteList.filter(callSite => !callSite.getFileName()?.includes(ddBasePath))
+  return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
 function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
