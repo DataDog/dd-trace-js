@@ -119,6 +119,11 @@ tracer.init({
     },
     rasp: {
       enabled: true
+    },
+    stackTrace: {
+      enabled: true,
+      maxStackTraces: 5,
+      maxDepth: 42
     }
   }
 });
