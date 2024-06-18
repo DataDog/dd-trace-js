@@ -111,18 +111,18 @@ addHook({
     })
 
     // TODO: probably no need to flush so often - maybe we can use the test suite finish
-    shimmer.wrap(vitestPackage.VitestTestRunner.prototype, 'onAfterRunFiles', onAfterRunFiles => async function () {
-      let onFinish = null
-      const onFinishPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
+    // shimmer.wrap(vitestPackage.VitestTestRunner.prototype, 'onAfterRunFiles', onAfterRunFiles => async function () {
+    //   let onFinish = null
+    //   const onFinishPromise = new Promise(resolve => {
+    //     onFinish = resolve
+    //   })
 
-      onAfterRunFilesCh.publish(onFinish)
+    //   onAfterRunFilesCh.publish(onFinish)
 
-      await onFinishPromise
+    //   await onFinishPromise
 
-      return await onAfterRunFiles.apply(this, arguments)
-    })
+    //   return await onAfterRunFiles.apply(this, arguments)
+    // })
   }
   return vitestPackage
 })
@@ -144,9 +144,20 @@ addHook({
         testSuiteStartCh.publish(testPath[0])
       })
       const startTestsResponse = await startTests.apply(this, arguments)
-      asyncResource.runInAsyncScope(() => {
-        testSuiteFinishCh.publish(startTestsResponse[0].result.state)
+
+      let onFinish = null
+      const onFinishPromise = new Promise(resolve => {
+        onFinish = resolve
       })
+
+      asyncResource.runInAsyncScope(() => {
+        testSuiteFinishCh.publish({ status: startTestsResponse[0].result.state, onFinish })
+      })
+
+      console.log('waiting flush')
+      await onFinishPromise
+      console.log('flushed')
+
       return startTestsResponse
     })
 
@@ -164,11 +175,80 @@ addHook({
   return vitestPackage
 })
 
-addHook({
-  name: '@vitest',
-  versions: ['>=0.0.0']
-}, vitestPackage => {
-  debugger
-  console.log('@vitest', { isMainThread })
-  return vitestPackage
-})
+let privateSet
+
+const isPrivateTools = (tinypoolPackage) => {
+  return tinypoolPackage.__privateGet
+}
+
+const isTinyPoolClass = (tinypoolPackage) => {
+  return tinypoolPackage.name === 'Tinypool'
+}
+
+const isThreadPool = (value) => {
+  return value.constructor.name === 'ThreadPool'
+}
+
+let threadPool
+
+// MAYBE NOT NEEDED IF I CAN PASS SESSION AND MODULE ID TO THE WORKERS
+// addHook({
+//   name: 'tinypool',
+//   versions: ['>=0.0.0']
+// }, tinypoolPackage => {
+//   debugger
+//   if (isPrivateTools(tinypoolPackage)) {
+//     // maybe get private set??
+//     const oldPrivateSet = tinypoolPackage.__privateSet
+
+//     tinypoolPackage.__privateSet = function (obj, member, value, setter) {
+//       if (isThreadPool(value)) {
+//         threadPool = value
+//         for (const worker of threadPool.workers.readyItems.values()) {
+//           debugger
+//           const oldWorkerMessage = worker.onMessage
+//           worker.onMessage = function (message) {
+//             debugger
+//             // we have to stop our message from being handled
+//             if (message.type === 'ci:vitest:worker:ready') {
+//               return
+//             }
+//             return oldWorkerMessage.apply(this, arguments)
+//           }
+//           const oldMessageHandler = worker.worker.thread._events.message
+
+//           worker.worker.thread.removeListener('message', oldMessageHandler)
+
+//           worker.worker.thread.on('message', function (message) {
+//             debugger
+//             // we have to stop our message from being handled
+//             if (message.type === 'ci:vitest:worker:ready') {
+//               return
+//             }
+//             return oldMessageHandler.apply(this, arguments)
+//           })
+
+//           // debugger
+//           // worker.worker.thread._events.message = function (message) {
+//           //   debugger
+//           //   // we have to stop our message from being handled
+//           //   if (message.type === 'ci:vitest:worker:ready') {
+//           //     return
+//           //   }
+//           //   return oldMessageHandler.apply(this, arguments)
+//           // }
+//         }
+//       }
+//       return oldPrivateSet.apply(this, arguments)
+//     }
+//   }
+//   if (isTinyPoolClass(tinypoolPackage)) {
+//     shimmer.wrap(tinypoolPackage.prototype, 'run', run => async function (task) {
+//       debugger
+//       const res = await run.apply(this, arguments)
+//       debugger
+//       return res
+//     })
+//   }
+//   return tinypoolPackage
+// })

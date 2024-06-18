@@ -37,6 +37,11 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test-suite:start', (testSuiteAbsolutePath) => {
+      const testSessionSpanContext = this.tracer.extract('text_map', {
+        'x-datadog-trace-id': process.env.DD_CIVISIBILITY_TEST_SESSION_ID,
+        'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
+      })
+
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSuiteMetadata = getTestSuiteCommonTags(
         this.command,
@@ -44,8 +49,8 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         'vitest'
       )
-      const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
-        childOf: this.testModuleSpan,
+      const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
+        childOf: testSessionSpanContext,
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
@@ -57,18 +62,19 @@ class VitestPlugin extends CiPlugin {
       this.testSuiteSpan = testSuiteSpan
     })
 
-    this.addSub('ci:vitest:test-suite:finish', status => {
+    this.addSub('ci:vitest:test-suite:finish', ({ status, onFinish }) => {
       const store = storage.getStore()
       if (store && store.span) {
         const span = store.span
         span.setTag(TEST_STATUS, status)
         span.finish()
+        finishAllTraceSpans(span)
       }
+      this.tracer._exporter.flush(onFinish)
     })
 
-    // TODO: do we need to flush?
+    // TODO: do we need to flush? - probably not because it's just two spans in the main process
     this.addSub('ci:vitest:session:finish', (status) => {
-      console.log('session finish!', status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.finish()
@@ -76,9 +82,10 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
     })
 
-    this.addSub('ci:vitest:run-files', onFinish => {
-      this.tracer._exporter.flush(onFinish)
-    })
+    // this.addSub('ci:vitest:run-files', onFinish => {
+    //   console.log('flushing in run files')
+    //   this.tracer._exporter.flush(onFinish)
+    // })
   }
 }
 
