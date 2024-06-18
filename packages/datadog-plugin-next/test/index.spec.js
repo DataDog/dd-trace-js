@@ -70,15 +70,6 @@ describe('Plugin', function () {
           }
 
           server.stdout.on('data', waitForStarted)
-          // server.stdout.once('data', () => {
-            // first log outputted isn't always the server started log
-            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/next-server/server/config-utils.ts#L39
-            // these are webpack related logs that run during execution time and not build
-
-            // additionally, next.js sets timeouts in 10.x when displaying extra logs
-            // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/server/next.ts#L132-L133
-          //   setTimeout(done, 700) // relatively high timeout chosen to be safe
-          // })
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
@@ -162,7 +153,7 @@ describe('Plugin', function () {
         }
       )
 
-      describe.skip('without configuration', () => {
+      describe('without configuration', () => {
         startServer({ withConfig: false, standalone: false })
 
         describe('for api routes', () => {
@@ -496,7 +487,7 @@ describe('Plugin', function () {
         })
       }
 
-      describe.skip('with configuration', () => {
+      describe('with configuration', () => {
         startServer({ withConfig: true, standalone: false })
 
         it('should execute the hook and validate the status only once', done => {
@@ -557,7 +548,7 @@ describe('Plugin', function () {
       // https://github.com/vercel/next.js/issues/53367
       // TODO investigate this further - traces appear in the UI for a small test app
       if (satisfiesStandalone(pkg.version) && !satisfies(pkg.version, '13.4.13 - 13.4.18')) {
-        describe.skip('with standalone', () => {
+        describe('with standalone', () => {
           startServer({ withConfig: false, standalone: true })
 
           // testing basic instrumentation between api, pages, static files since standalone still uses `next-server`
