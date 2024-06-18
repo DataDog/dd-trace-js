@@ -62,15 +62,23 @@ describe('Plugin', function () {
           })
 
           server.once('error', done)
-          server.stdout.once('data', () => {
+          function waitForStarted (chunk) {
+            if (chunk.toString().includes(`port: ${port}`)) {
+              server.stdout.off('data', waitForStarted)
+              done()
+            }
+          }
+
+          server.stdout.on('data', waitForStarted)
+          // server.stdout.once('data', () => {
             // first log outputted isn't always the server started log
             // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/next-server/server/config-utils.ts#L39
             // these are webpack related logs that run during execution time and not build
 
             // additionally, next.js sets timeouts in 10.x when displaying extra logs
             // https://github.com/vercel/next.js/blob/v10.2.0/packages/next/server/next.ts#L132-L133
-            setTimeout(done, 700) // relatively high timeout chosen to be safe
-          })
+          //   setTimeout(done, 700) // relatively high timeout chosen to be safe
+          // })
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
