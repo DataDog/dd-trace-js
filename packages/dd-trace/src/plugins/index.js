@@ -57,6 +57,7 @@ module.exports = {
   get vitest () { return require('../../../datadog-plugin-vitest/src') },
   get '@vitest' () { return require('../../../datadog-plugin-vitest/src') },
   get '@vitest/runner' () { return require('../../../datadog-plugin-vitest/src') },
+  get tinypool () { return require('../../../datadog-plugin-vitest/src') },
   get workerpool () { return require('../../../datadog-plugin-mocha/src') },
   get moleculer () { return require('../../../datadog-plugin-moleculer/src') },
   get mongodb () { return require('../../../datadog-plugin-mongodb-core/src') },

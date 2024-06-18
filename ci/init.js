@@ -1,10 +1,14 @@
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
 const { isTrue } = require('../packages/dd-trace/src/util')
+const { isMainThread, parentPort } = require('node:worker_threads')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
 const isCucumberWorker = !!process.env.CUCUMBER_WORKER_ID
 const isMochaWorker = !!process.env.MOCHA_WORKER_ID
+// eslint-disable-next-line
+// https://github.com/vitest-dev/vitest/blob/f969fb0f9f0247a7daa2afee8f70de25ea5e123f/packages/vitest/src/node/pool.ts#L110-L111
+const isVitestWorker = !isMainThread && process.env.VITEST === 'true' && process.env.TEST === 'true'
 
 const options = {
   startupLogs: false,
@@ -49,6 +53,12 @@ if (isMochaWorker) {
   options.experimental = {
     exporter: 'mocha_worker'
   }
+}
+
+if (isVitestWorker) {
+  // if (parentPort?.postMessage) {
+  //   parentPort.postMessage({ type: 'ci:vitest:worker:ready' })
+  // }
 }
 
 if (shouldInit) {

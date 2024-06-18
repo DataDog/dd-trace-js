@@ -74,6 +74,7 @@ module.exports = {
   vitest: () => require('../vitest'),
   '@vitest': () => require('../vitest'),
   '@vitest/runner': () => require('../vitest'),
+  tinypool: () => require('../vitest'),
   workerpool: () => require('../mocha'),
   moleculer: () => require('../moleculer'),
   mongodb: () => require('../mongodb'),
