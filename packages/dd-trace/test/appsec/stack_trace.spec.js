@@ -9,7 +9,7 @@ describe('Stack trace reporter', () => {
   describe('frame filtering', () => {
     it('should filer out frames from library', () => {
       const callSiteList =
-        [...Array(10).keys()].map(i => (
+         Array(10).fill().map((_,i) => (
           {
             getFileName: () => path.join(__dirname, `file${i}`),
             getLineNumber: () => i,
@@ -19,7 +19,7 @@ describe('Stack trace reporter', () => {
           }
         )
         ).concat(
-          [...Array(10).keys()].map(i => (
+           Array(10).fill().map((_,i) => (
             {
               getFileName: () => `file${i}`,
               getLineNumber: () => i,
@@ -38,7 +38,7 @@ describe('Stack trace reporter', () => {
           }
         ])
 
-      const expectedFrames = [...Array(10).keys()].map(i => (
+      const expectedFrames =  Array(10).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
@@ -70,7 +70,7 @@ describe('Stack trace reporter', () => {
   })
 
   describe('report stack traces', () => {
-    const callSiteList = [...Array(20).keys()].map(i => (
+    const callSiteList =  Array(20).fill().map((_,i) => (
       {
         getFileName: () => `file${i}`,
         getLineNumber: () => i,
@@ -95,7 +95,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames = [...Array(20).keys()].map(i => (
+      const expectedFrames =  Array(20).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
@@ -121,7 +121,7 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames = [...Array(20).keys()].map(i => (
+      const expectedFrames =  Array(20).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
@@ -151,7 +151,7 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames = [...Array(20).keys()].map(i => (
+      const expectedFrames =  Array(20).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
@@ -225,17 +225,22 @@ describe('Stack trace reporter', () => {
     })
 
     it('should not report stackTraces if callSiteList is undefined', () => {
-      const rootSpan = {}
+      const rootSpan = {
+        meta_struct: {
+          another_tag: []
+        }
+      }
       const stackId = 'test_stack_id'
       const maxDepth = 32
       const maxStackTraces = 2
       reportStackTrace(rootSpan, stackId, maxDepth, maxStackTraces, () => undefined)
-      assert.deepEqual(rootSpan, {})
+      assert.property(rootSpan.meta_struct, 'another_tag')
+      assert.notProperty(rootSpan.meta_struct, '_dd.stack')
     })
   })
 
   describe('limit stack traces frames', () => {
-    const callSiteList = [...Array(120).keys()].map(i => (
+    const callSiteList =  Array(120).fill().map((_,i) => (
       {
         getFileName: () => `file${i}`,
         getLineNumber: () => i,
@@ -277,7 +282,7 @@ describe('Stack trace reporter', () => {
           getFunctionName: () => 'libraryFunction',
           getTypeName: () => 'libraryType'
         }
-      ].concat([...Array(120).keys()].map(i => (
+      ].concat( Array(120).fill().map((_,i) => (
         {
           getFileName: () => `file${i}`,
           getLineNumber: () => i,
@@ -314,7 +319,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 0
-      const expectedFrames = [...Array(120).keys()].map(i => (
+      const expectedFrames =  Array(120).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
@@ -334,7 +339,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = -1
-      const expectedFrames = [...Array(120).keys()].map(i => (
+      const expectedFrames =  Array(120).fill().map((_,i) => (
         {
           id: i,
           file: `file${i}`,
