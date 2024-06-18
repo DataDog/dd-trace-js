@@ -232,10 +232,8 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
           assert.strictEqual(payload.length, 5)
 
-          const fetchReq = payload[4][0]
           const downReq = payload[3][0]
-          assert.strictEqual(downReq.parent_id.toString(), '0')
-          assert.notStrictEqual(fetchReq.trace_id.toString(), downReq.trace_id.toString())
+          assert.notProperty(downReq.meta, '_dd.p.other')
         })
       })
 
@@ -248,10 +246,8 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
           assert.strictEqual(payload.length, 5)
 
-          const fetchReq = payload[4][0]
           const downReq = payload[3][0]
-          assert.notStrictEqual(downReq.parent_id.toString(), '0')
-          assert.strictEqual(fetchReq.trace_id.toString(), downReq.trace_id.toString())
+          assert.property(downReq.meta, '_dd.p.other')
         })
       })
     })

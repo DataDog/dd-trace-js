@@ -62,7 +62,11 @@ app.get('/propagation-with-event', async (req, res) => {
   const port = server.address().port
   const url = `http://localhost:${port}/down`
 
-  const resFetch = await fetch(url)
+  const resFetch = await fetch(url, {
+    headers: {
+      'x-datadog-tags': '_dd.p.other=1'
+    }
+  })
   await resFetch.text()
 
   res.status(200).send('propagation-with-event')
@@ -72,7 +76,11 @@ app.get('/propagation-without-event', async (req, res) => {
   const port = server.address().port
   const url = `http://localhost:${port}/down`
 
-  const resFetch = await fetch(url)
+  const resFetch = await fetch(url, {
+    headers: {
+      'x-datadog-tags': '_dd.p.other=1'
+    }
+  })
   await resFetch.text()
 
   res.status(200).send('propagation-without-event')
