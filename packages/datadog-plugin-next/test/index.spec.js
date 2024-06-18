@@ -62,7 +62,8 @@ describe('Plugin', function () {
           server.once('error', done)
 
           function waitUntilServerStarted (chunk) {
-            if (chunk.toString().includes(`port: ${port}`)) {
+            const chunkString = chunk.toString()
+            if (chunkString?.includes(port) || chunkString?.includes('Ready ')) {
               server.stdout.off('data', waitUntilServerStarted)
               done()
             }
