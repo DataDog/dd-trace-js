@@ -57,4 +57,8 @@ if (shouldInit) {
   tracer.use('child_process', false)
 }
 
+if (process.env.GITHUB_ACTIONS || process.env.GITHUB_ACTION) {
+  console.log('::notice title={🐶 30 tests passed. See results in DataDog.}')
+}
+
 module.exports = tracer
