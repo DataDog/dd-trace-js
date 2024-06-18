@@ -62,14 +62,15 @@ describe('Plugin', function () {
           })
 
           server.once('error', done)
-          function waitForStarted (chunk) {
+
+          function waitUntilServerStarted (chunk) {
             if (chunk.toString().includes(`port: ${port}`)) {
-              server.stdout.off('data', waitForStarted)
+              server.stdout.off('data', waitUntilServerStarted)
               done()
             }
           }
+          server.stdout.on('data', waitUntilServerStarted)
 
-          server.stdout.on('data', waitForStarted)
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
         })
