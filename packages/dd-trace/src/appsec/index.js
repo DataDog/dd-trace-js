@@ -12,7 +12,8 @@ const {
   queryParser,
   nextBodyParsed,
   nextQueryParsed,
-  responseBody
+  responseBody,
+  responseWriteHead
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -39,7 +40,7 @@ function enable (_config) {
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {
-      rasp.enable()
+      rasp.enable(_config)
     }
 
     setTemplates(_config)
@@ -60,6 +61,7 @@ function enable (_config) {
     queryParser.subscribe(onRequestQueryParsed)
     cookieParser.subscribe(onRequestCookieParser)
     responseBody.subscribe(onResponseBody)
+    responseWriteHead.subscribe(onResponseWriteHead)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -110,14 +112,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
 }
 
 function incomingHttpEndTranslator ({ req, res }) {
-  // TODO: this doesn't support headers sent with res.writeHead()
-  const responseHeaders = Object.assign({}, res.getHeaders())
-  delete responseHeaders['set-cookie']
-
-  const persistent = {
-    [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + res.statusCode,
-    [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
-  }
+  const persistent = {}
 
   // we need to keep this to support other body parsers
   // TODO: no need to analyze it if it was already done by the body-parser hook
@@ -139,7 +134,9 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
-  waf.run({ persistent }, req)
+  if (Object.keys(persistent).length) {
+    waf.run({ persistent }, req)
+  }
 
   waf.disposeContext(req)
 
@@ -225,12 +222,48 @@ function onPassportVerify ({ credentials, user }) {
   passportTrackEvent(credentials, user, rootSpan, config.appsec.eventTracking.mode)
 }
 
+const responseAnalyzedSet = new WeakSet()
+const responseBlockedSet = new WeakSet()
+
+function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  // avoid "write after end" error
+  if (responseBlockedSet.has(res)) {
+    abortController?.abort()
+    return
+  }
+
+  // avoid double waf call
+  if (responseAnalyzedSet.has(res)) {
+    return
+  }
+
+  const rootSpan = web.root(req)
+  if (!rootSpan) return
+
+  responseHeaders = Object.assign({}, responseHeaders)
+  delete responseHeaders['set-cookie']
+
+  const results = waf.run({
+    persistent: {
+      [addresses.HTTP_INCOMING_RESPONSE_CODE]: '' + statusCode,
+      [addresses.HTTP_INCOMING_RESPONSE_HEADERS]: responseHeaders
+    }
+  }, req)
+
+  responseAnalyzedSet.add(res)
+
+  handleResults(results, req, res, rootSpan, abortController)
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
   const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
     block(req, res, rootSpan, abortController, blockingAction)
+    if (!abortController.signal || abortController.signal.aborted) {
+      responseBlockedSet.add(res)
+    }
   }
 }
 
@@ -256,6 +289,7 @@ function disable () {
   if (cookieParser.hasSubscribers) cookieParser.unsubscribe(onRequestCookieParser)
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
+  if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
 }
 
 module.exports = {
