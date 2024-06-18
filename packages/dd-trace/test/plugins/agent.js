@@ -190,6 +190,8 @@ function runCallback (callback, options, handlers) {
   const timeout = setTimeout(() => {
     if (error) {
       deferred.reject(error)
+    } else {
+      deferred.reject(new Error('traces not found'))
     }
   }, timeoutMs)
 
