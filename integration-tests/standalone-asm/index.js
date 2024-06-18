@@ -26,7 +26,8 @@ if (process.env.AGENT_URL) {
 }
 
 if (process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
-  options.experimental.appsec.standalone.enabled = process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED === 'true'
+  options.experimental.appsec.standalone.enabled = process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED === 'true' ||
+    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED === '1'
 }
 
 const tracer = require('dd-trace')
@@ -59,7 +60,7 @@ app.get('/vulnerableReadFile', (req, res) => {
 app.get('/propagation-with-event', async (req, res) => {
   tracer.appsec.trackCustomEvent('custom-event')
 
-  const port = server.address().port
+  const port = req.query.port || server.address().port
   const url = `http://localhost:${port}/down`
 
   const resFetch = await fetch(url, {
@@ -73,7 +74,7 @@ app.get('/propagation-with-event', async (req, res) => {
 })
 
 app.get('/propagation-without-event', async (req, res) => {
-  const port = server.address().port
+  const port = req.query.port || server.address().port
   const url = `http://localhost:${port}/down`
 
   const resFetch = await fetch(url, {
@@ -90,7 +91,21 @@ app.get('/down', async (req, res) => {
   res.status(200).send('down')
 })
 
+app.get('/propagation-after-drop-and-call-sdk', async (req, res) => {
+  const span = tracer.scope().active()
+  span?.setTag('manual.drop', 'true')
+
+  const port = req.query.port
+
+  const url = `http://localhost:${port}/sdk`
+
+  const resFetch = await fetch(url)
+  const sdkRes = await resFetch.text()
+
+  res.status(200).send(`drop-and-call-sdk ${sdkRes}`)
+})
+
 const server = http.createServer(app).listen(0, () => {
   const port = server.address().port
-  process.send({ port })
+  process.send?.({ port })
 })

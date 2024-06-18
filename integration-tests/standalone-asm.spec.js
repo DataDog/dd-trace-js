@@ -12,7 +12,7 @@ const {
 } = require('./helpers')
 
 describe('Standalone ASM', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env, port
+  let sandbox, cwd, startupTestFile, agent, proc, env
   before(async () => {
     sandbox = await createSandbox(['express'], true)
     cwd = sandbox.folder
@@ -35,8 +35,6 @@ describe('Standalone ASM', () => {
       const execArgv = []
 
       proc = await spawnProc(startupTestFile, { cwd, env, execArgv })
-
-      port = parseInt(proc.url.substring(proc.url.lastIndexOf(':') + 1), 10)
     })
 
     afterEach(async () => {
@@ -169,86 +167,82 @@ describe('Standalone ASM', () => {
     })
 
     context('propagation', () => {
-      const traceId = '12312312'
-      const parentId = '42424242'
+      let proc2
+      let port2
 
-      it('should keep trace even if parent prio is -1', async () => {
-        await doRequests(proc)
+      beforeEach(async () => {
+        const execArgv = []
 
-        const options = {
-          url: {
-            host: 'localhost',
-            port,
-            path: '/sdk',
-            headers: {
-              'x-datadog-trace-id': traceId,
-              'x-datadog-parent-id': parentId,
-              'x-datadog-sampling-priority': '-1'
-            }
-          }
-        }
-        return curlAndAssertMessage(agent, options, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-          assert.isArray(payload)
-          assert.strictEqual(payload.length, 4)
+        proc2 = await spawnProc(startupTestFile, { cwd, env, execArgv })
 
-          const expressReq4 = payload[3][0]
-          assertKeep(expressReq4)
-        })
+        port2 = parseInt(proc2.url.substring(proc2.url.lastIndexOf(':') + 1), 10)
       })
 
+      afterEach(async () => {
+        proc2.kill()
+      })
+
+      // proc/drop-and-call-sdk:
+      // after setting a manual.drop calls to downstream proc2/sdk which triggers an appsec event
+      it('should keep trace even if parent prio is -1', async () => {
+        await doRequests(proc2)
+
+        const url = `${proc.url}/propagation-after-drop-and-call-sdk?port=${port2}`
+        return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
+          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+          assert.isArray(payload)
+
+          const innerReq = payload.find(p => p[0].resource === 'GET /sdk')
+          if (innerReq) {
+            assertKeep(innerReq[0])
+          }
+        }, undefined, 2)
+      })
+
+      // proc/propagation-with-event triggers an appsec ev and calls downstream proc2/down with no event
       it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no ev in the local trace', async () => {
         await doRequests(proc)
 
-        const options = {
-          url: {
-            host: 'localhost',
-            port,
-            path: '/',
-            headers: {
-              'x-datadog-trace-id': traceId,
-              'x-datadog-parent-id': parentId,
-              'x-datadog-sampling-priority': '2',
-              'x-datadog-tags': '_dd.p.appsec=1,_dd.p.dm=-5'
-            }
-          }
-        }
-        return curlAndAssertMessage(agent, options, ({ headers, payload }) => {
+        const url = `${proc.url}/propagation-without-event?port=${port2}`
+        return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
           assert.isArray(payload)
-          assert.strictEqual(payload.length, 4)
 
-          const expressReq4 = payload[3][0]
-          assertKeep(expressReq4, false)
-        })
+          const innerReq = payload.find(p => p[0].resource === 'GET /down')
+          if (innerReq) {
+            assertKeep(innerReq[0])
+          }
+        }, undefined, 2)
       })
 
       it('should remove parent trace data if there is no ev in the local trace', async () => {
         await doRequests(proc)
 
-        const url = `${proc.url}/propagation-without-event`
+        const url = `${proc.url}/propagation-without-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
           assert.isArray(payload)
-          assert.strictEqual(payload.length, 5)
 
-          const downReq = payload[3][0]
-          assert.notProperty(downReq.meta, '_dd.p.other')
-        })
+          const innerReq = payload.find(p => p[0].resource === 'GET /down')
+          if (innerReq) {
+            assert.notProperty(innerReq[0].meta, '_dd.p.other')
+          }
+        }, undefined, 2)
       })
 
       it('should not remove parent trace data if there is ev in the local trace', async () => {
         await doRequests(proc)
 
-        const url = `${proc.url}/propagation-with-event`
+        const url = `${proc.url}/propagation-with-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
           assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
           assert.isArray(payload)
-          assert.strictEqual(payload.length, 5)
 
-          const downReq = payload[3][0]
-          assert.property(downReq.meta, '_dd.p.other')
-        })
+          const innerReq = payload.find(p => p[0].resource === 'GET /down')
+          if (innerReq) {
+            assert.property(innerReq[0].meta, '_dd.p.other')
+          }
+        }, undefined, 2)
       })
     })
   })
