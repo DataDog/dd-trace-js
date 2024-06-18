@@ -59,7 +59,7 @@ function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSite
     // Since some frames will be discarded because they come from tracer codebase, a buffer is added
     // to the limit in order to get as close as `maxDepth` number of frames.
     if (maxDepth < 1) maxDepth = Infinity
-    const callSiteList = callSiteListGetter(maxDepth  + LIBRARY_FRAMES_BUFFER)
+    const callSiteList = callSiteListGetter(maxDepth + LIBRARY_FRAMES_BUFFER)
     if (!Array.isArray(callSiteList)) return
 
     if (!rootSpan.meta_struct) {

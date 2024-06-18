@@ -9,7 +9,7 @@ describe('Stack trace reporter', () => {
   describe('frame filtering', () => {
     it('should filer out frames from library', () => {
       const callSiteList =
-         Array(10).fill().map((_,i) => (
+        Array(10).fill().map((_, i) => (
           {
             getFileName: () => path.join(__dirname, `file${i}`),
             getLineNumber: () => i,
@@ -17,9 +17,8 @@ describe('Stack trace reporter', () => {
             getFunctionName: () => `libraryFunction${i}`,
             getTypeName: () => `LibraryClass${i}`
           }
-        )
-        ).concat(
-           Array(10).fill().map((_,i) => (
+        )).concat(
+          Array(10).fill().map((_, i) => (
             {
               getFileName: () => `file${i}`,
               getLineNumber: () => i,
@@ -38,7 +37,7 @@ describe('Stack trace reporter', () => {
           }
         ])
 
-      const expectedFrames =  Array(10).fill().map((_,i) => (
+      const expectedFrames = Array(10).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
@@ -70,7 +69,7 @@ describe('Stack trace reporter', () => {
   })
 
   describe('report stack traces', () => {
-    const callSiteList =  Array(20).fill().map((_,i) => (
+    const callSiteList = Array(20).fill().map((_, i) => (
       {
         getFileName: () => `file${i}`,
         getLineNumber: () => i,
@@ -95,7 +94,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames =  Array(20).fill().map((_,i) => (
+      const expectedFrames = Array(20).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
@@ -121,7 +120,7 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames =  Array(20).fill().map((_,i) => (
+      const expectedFrames = Array(20).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
@@ -151,7 +150,7 @@ describe('Stack trace reporter', () => {
       }
       const stackId = 'test_stack_id'
       const maxDepth = 32
-      const expectedFrames =  Array(20).fill().map((_,i) => (
+      const expectedFrames = Array(20).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
@@ -240,7 +239,7 @@ describe('Stack trace reporter', () => {
   })
 
   describe('limit stack traces frames', () => {
-    const callSiteList =  Array(120).fill().map((_,i) => (
+    const callSiteList = Array(120).fill().map((_, i) => (
       {
         getFileName: () => `file${i}`,
         getLineNumber: () => i,
@@ -282,7 +281,7 @@ describe('Stack trace reporter', () => {
           getFunctionName: () => 'libraryFunction',
           getTypeName: () => 'libraryType'
         }
-      ].concat( Array(120).fill().map((_,i) => (
+      ].concat(Array(120).fill().map((_, i) => (
         {
           getFileName: () => `file${i}`,
           getLineNumber: () => i,
@@ -319,7 +318,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = 0
-      const expectedFrames =  Array(120).fill().map((_,i) => (
+      const expectedFrames = Array(120).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
@@ -339,7 +338,7 @@ describe('Stack trace reporter', () => {
       const rootSpan = {}
       const stackId = 'test_stack_id'
       const maxDepth = -1
-      const expectedFrames =  Array(120).fill().map((_,i) => (
+      const expectedFrames = Array(120).fill().map((_, i) => (
         {
           id: i,
           file: `file${i}`,
