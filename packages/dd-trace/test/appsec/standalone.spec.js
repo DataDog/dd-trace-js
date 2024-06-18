@@ -4,12 +4,19 @@ const { channel } = require('dc-polyfill')
 const { assert } = require('chai')
 const standalone = require('../../src/appsec/standalone')
 const DatadogSpan = require('../../src/opentracing/span')
-const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_APPSEC } = require('../../src/constants')
+const {
+  APM_TRACING_ENABLED_KEY,
+  APPSEC_PROPAGATION_KEY,
+  SAMPLING_MECHANISM_APPSEC,
+  DECISION_MAKER_KEY
+} = require('../../src/constants')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
 
 const startCh = channel('dd-trace:span:start')
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
 
 describe('Appsec Standalone', () => {
   let config
@@ -35,16 +42,26 @@ describe('Appsec Standalone', () => {
   describe('configure', () => {
     let startChSubscribe
     let startChUnsubscribe
+    let injectChSubscribe
+    let injectChUnsubscribe
+    let extractChSubscribe
+    let extractChUnsubscribe
 
     beforeEach(() => {
       startChSubscribe = sinon.stub(startCh, 'subscribe')
       startChUnsubscribe = sinon.stub(startCh, 'unsubscribe')
+      injectChSubscribe = sinon.stub(injectCh, 'subscribe')
+      injectChUnsubscribe = sinon.stub(injectCh, 'unsubscribe')
+      extractChSubscribe = sinon.stub(extractCh, 'subscribe')
+      extractChUnsubscribe = sinon.stub(extractCh, 'unsubscribe')
     })
 
     it('should subscribe to start span if standalone enabled', () => {
       standalone.configure(config)
 
       sinon.assert.calledOnce(startChSubscribe)
+      sinon.assert.calledOnce(injectChSubscribe)
+      sinon.assert.calledOnce(extractChSubscribe)
     })
 
     it('should not subscribe to start span if standalone disabled', () => {
@@ -53,6 +70,8 @@ describe('Appsec Standalone', () => {
       standalone.configure(config)
 
       sinon.assert.calledOnce(startChUnsubscribe)
+      sinon.assert.calledOnce(injectChUnsubscribe)
+      sinon.assert.calledOnce(extractChUnsubscribe)
     })
 
     it('should subscribe only once', () => {
@@ -149,6 +168,22 @@ describe('Appsec Standalone', () => {
       assert.isUndefined(spanContext._sampling.priority)
     })
 
+    it('should reset dm if _dd.p.appsec not present', () => {
+      standalone.configure(config)
+
+      const carrier = {
+        'x-datadog-trace-id': 123123,
+        'x-datadog-parent-id': 345345,
+        'x-datadog-sampling-priority': 2,
+        'x-datadog-tags': '_dd.p.dm=-4'
+      }
+
+      const propagator = new TextMapPropagator(config)
+      const spanContext = propagator.extract(carrier)
+
+      assert.notProperty(spanContext._trace.tags, DECISION_MAKER_KEY)
+    })
+
     it('should keep priority if _dd.p.appsec is present', () => {
       standalone.configure(config)
 
@@ -156,13 +191,14 @@ describe('Appsec Standalone', () => {
         'x-datadog-trace-id': 123123,
         'x-datadog-parent-id': 345345,
         'x-datadog-sampling-priority': 2,
-        'x-datadog-tags': '_dd.p.appsec=1'
+        'x-datadog-tags': '_dd.p.appsec=1,_dd.p.dm=-5'
       }
 
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
       assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-5')
     })
 
     it('should set USER_KEEP priority if _dd.p.appsec=1 is present', () => {
