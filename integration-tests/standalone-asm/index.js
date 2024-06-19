@@ -25,9 +25,9 @@ if (process.env.AGENT_URL) {
   options.url = process.env.AGENT_URL
 }
 
-if (process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
-  options.experimental.appsec.standalone.enabled = process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED === 'true' ||
-    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED === '1'
+const standalone = process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
+if (standalone) {
+  options.experimental.appsec.standalone.enabled = standalone === 'true' || standalone === '1'
 }
 
 const tracer = require('dd-trace')
@@ -37,7 +37,7 @@ const http = require('http')
 const express = require('express')
 const app = express()
 
-const { readFile } = require('./readFile')
+const { readFile } = require('./iast-vulnerable-readFile')
 
 app.get('/', (req, res) => {
   res.status(200).send('hello world')

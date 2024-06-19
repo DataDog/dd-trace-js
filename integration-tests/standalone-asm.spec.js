@@ -61,7 +61,7 @@ describe('Standalone ASM', () => {
       assert.notProperty(metrics, '_dd.p.appsec')
     }
 
-    async function doRequests (procOrUrl, number = 3) {
+    async function doWarmupRequests (procOrUrl, number = 3) {
       for (let i = number; i > 0; i--) {
         await curl(procOrUrl)
       }
@@ -86,7 +86,7 @@ describe('Standalone ASM', () => {
       // 1st req kept because waf init
       // 2nd req kept because it's the first one hitting RateLimiter
       // next in the first minute are dropped
-      await doRequests(proc)
+      await doWarmupRequests(proc)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
         assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
@@ -112,7 +112,7 @@ describe('Standalone ASM', () => {
     })
 
     it('should keep attack requests', async () => {
-      await doRequests(proc)
+      await doWarmupRequests(proc)
 
       const urlAttack = proc.url + '?query=1 or 1=1'
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
@@ -125,7 +125,7 @@ describe('Standalone ASM', () => {
     })
 
     it('should keep sdk events', async () => {
-      await doRequests(proc)
+      await doWarmupRequests(proc)
 
       const url = proc.url + '/login?user=test'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -138,7 +138,7 @@ describe('Standalone ASM', () => {
     })
 
     it('should keep custom sdk events', async () => {
-      await doRequests(proc)
+      await doWarmupRequests(proc)
 
       const url = proc.url + '/sdk'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -151,7 +151,7 @@ describe('Standalone ASM', () => {
     })
 
     it('should keep iast events', async () => {
-      await doRequests(proc)
+      await doWarmupRequests(proc)
 
       const url = proc.url + '/vulnerableReadFile?filename=./readFile.js'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -184,8 +184,8 @@ describe('Standalone ASM', () => {
 
       // proc/drop-and-call-sdk:
       // after setting a manual.drop calls to downstream proc2/sdk which triggers an appsec event
-      it('should keep trace even if parent prio is -1', async () => {
-        await doRequests(proc2)
+      it('should keep trace even if parent prio is -1 but there is an event in the local trace', async () => {
+        await doWarmupRequests(proc2)
 
         const url = `${proc.url}/propagation-after-drop-and-call-sdk?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -193,15 +193,14 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /sdk')
-          if (innerReq) {
-            assertKeep(innerReq[0])
-          }
-        }, undefined, 2)
+          assert.notStrictEqual(innerReq, undefined)
+          assertKeep(innerReq[0])
+        }, undefined, undefined, true)
       })
 
       // proc/propagation-with-event triggers an appsec ev and calls downstream proc2/down with no event
       it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no ev in the local trace', async () => {
-        await doRequests(proc)
+        await doWarmupRequests(proc)
 
         const url = `${proc.url}/propagation-without-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -209,14 +208,13 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
-          if (innerReq) {
-            assertKeep(innerReq[0])
-          }
-        }, undefined, 2)
+          assert.notStrictEqual(innerReq, undefined)
+          assertKeep(innerReq[0])
+        }, undefined, undefined, true)
       })
 
       it('should remove parent trace data if there is no ev in the local trace', async () => {
-        await doRequests(proc)
+        await doWarmupRequests(proc)
 
         const url = `${proc.url}/propagation-without-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -224,14 +222,13 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
-          if (innerReq) {
-            assert.notProperty(innerReq[0].meta, '_dd.p.other')
-          }
-        }, undefined, 2)
+          assert.notStrictEqual(innerReq, undefined)
+          assert.notProperty(innerReq[0].meta, '_dd.p.other')
+        }, undefined, undefined, true)
       })
 
       it('should not remove parent trace data if there is ev in the local trace', async () => {
-        await doRequests(proc)
+        await doWarmupRequests(proc)
 
         const url = `${proc.url}/propagation-with-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
@@ -239,10 +236,9 @@ describe('Standalone ASM', () => {
           assert.isArray(payload)
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
-          if (innerReq) {
-            assert.property(innerReq[0].meta, '_dd.p.other')
-          }
-        }, undefined, 2)
+          assert.notStrictEqual(innerReq, undefined)
+          assert.property(innerReq[0].meta, '_dd.p.other')
+        }, undefined, undefined, true)
       })
     })
   })
