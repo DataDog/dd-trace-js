@@ -15,6 +15,7 @@ const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
+const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
   constructor (provider) {
@@ -180,6 +181,7 @@ class Tracer extends NoopProxy {
       if (!this._tracingInitialized) {
         this._tracer = new DatadogTracer(config)
         this.appsec = new AppsecSdk(this._tracer, config)
+        appsecStandalone.configure(config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
