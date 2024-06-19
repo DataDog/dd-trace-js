@@ -8,9 +8,6 @@ const dc = require('dc-polyfill')
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
   addHook((name, namespace) => {
-    // if (name.includes('/vitest/') || name.includes('@vitest')) {
-    //   debugger
-    // }
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish({
         filename: name,

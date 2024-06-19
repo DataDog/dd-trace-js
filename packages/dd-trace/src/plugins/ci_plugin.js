@@ -92,8 +92,11 @@ module.exports = class CiPlugin extends Plugin {
         }
       })
       // only for vitest
-      process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
-      process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+      // These are added for the worker threads to use
+      if (this.constructor.id === 'vitest') {
+        process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
+        process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+      }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
     })

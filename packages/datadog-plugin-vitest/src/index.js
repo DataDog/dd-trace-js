@@ -81,11 +81,6 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
     })
-
-    // this.addSub('ci:vitest:run-files', onFinish => {
-    //   console.log('flushing in run files')
-    //   this.tracer._exporter.flush(onFinish)
-    // })
   }
 }
 
