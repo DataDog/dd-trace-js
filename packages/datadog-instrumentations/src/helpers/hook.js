@@ -31,7 +31,7 @@ function Hook (modules, onrequire) {
   this._ritmHook = ritm(modules, {}, safeHook)
   this._iitmHook = iitm(modules, {}, (moduleExports, moduleName, moduleBaseDir) => {
     // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
-    // modules and not ESM. In the meantime, all thpe modules we instrument are
+    // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
     // `default` anyway.
     if (moduleExports && moduleExports.default) {
