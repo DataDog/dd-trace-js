@@ -14,6 +14,7 @@ describe('track_event', () => {
     let getRootSpan
     let setUserTags
     let trackUserLoginSuccessEvent, trackUserLoginFailureEvent, trackCustomEvent, trackEvent
+    let sample
 
     beforeEach(() => {
       log = {
@@ -28,6 +29,8 @@ describe('track_event', () => {
 
       setUserTags = sinon.stub()
 
+      sample = sinon.stub()
+
       const trackEvents = proxyquire('../../../src/appsec/sdk/track_event', {
         '../../log': log,
         './utils': {
@@ -35,6 +38,9 @@ describe('track_event', () => {
         },
         './set_user': {
           setUserTags
+        },
+        '../standalone': {
+          sample
         }
       })
 
@@ -248,6 +254,16 @@ describe('track_event', () => {
           'appsec.events.event.metaKey1': 'metaValue1',
           'appsec.events.event.metakey2': 'metaValue2'
         })
+      })
+
+      it('should call standalone sample', () => {
+        trackEvent('event', undefined, 'trackEvent', rootSpan, undefined)
+
+        expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+          'appsec.events.event.track': 'true',
+          'manual.keep': 'true'
+        })
+        expect(sample).to.have.been.calledOnceWithExactly(rootSpan)
       })
     })
   })
