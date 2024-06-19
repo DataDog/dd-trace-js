@@ -227,6 +227,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 0.1)
     expect(config).to.have.nested.property('appsec.sca.enabled', null)
+    expect(config).to.have.nested.property('appsec.standalone.enabled', undefined)
     expect(config).to.have.nested.property('remoteConfig.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 5)
     expect(config).to.have.nested.property('iast.enabled', false)
@@ -260,6 +261,7 @@ describe('Config', () => {
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
+      { name: 'appsec.standalone.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
@@ -439,6 +441,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = BLOCKED_TEMPLATE_GRAPHQL_PATH
     process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = 'extended'
     process.env.DD_APPSEC_SCA_ENABLED = true
+    process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = 'true'
     process.env.DD_REMOTE_CONFIGURATION_ENABLED = 'false'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
     process.env.DD_IAST_ENABLED = 'true'
@@ -533,6 +536,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.apiSecurity.enabled', true)
     expect(config).to.have.nested.property('appsec.apiSecurity.requestSampling', 1)
     expect(config).to.have.nested.property('appsec.sca.enabled', true)
+    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.enabled', false)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
@@ -565,6 +569,7 @@ describe('Config', () => {
       { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
       { name: 'appsec.stackTrace.maxStackTraces', value: '5', origin: 'env_var' },
       { name: 'appsec.sca.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.standalone.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
@@ -747,6 +752,11 @@ describe('Config', () => {
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
           redactionValuePattern: 'REDACTION_VALUE_PATTERN',
           telemetryVerbosity: 'DEBUG'
+        },
+        appsec: {
+          standalone: {
+            enabled: true
+          }
         }
       },
       appsec: false,
@@ -795,6 +805,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', false)
+    expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
     expect(config).to.have.nested.property('iast.enabled', true)
     expect(config).to.have.nested.property('iast.requestSampling', 50)
@@ -830,6 +841,7 @@ describe('Config', () => {
 
     expect(updateConfig.getCall(0).args[0]).to.deep.include.members([
       { name: 'appsec.enabled', value: false, origin: 'code' },
+      { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
@@ -1243,6 +1255,9 @@ describe('Config', () => {
       },
       rasp: {
         enabled: false
+      },
+      standalone: {
+        enabled: undefined
       },
       stackTrace: {
         enabled: true,
