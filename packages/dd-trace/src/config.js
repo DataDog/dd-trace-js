@@ -18,6 +18,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -117,6 +118,17 @@ function validateNamingVersion (versionString) {
     return defaultNamingVersion
   }
   return versionString
+}
+
+/**
+ * Given a string of comma-separated paths, return the array of paths.
+ *
+ * @param {string} input
+ * @returns {[string]}
+ */
+function splitJSONPathRules (input) {
+  if (input === 'all') return []
+  return input.split(',')
 }
 
 // Shallow clone with property name remapping
@@ -288,6 +300,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     const sampler = {
       spanSamplingRules: coalesce(
         options.spanSamplingRules,
@@ -337,6 +369,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!(DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING),
+      responsesEnabled: !!(DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING),
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()
