@@ -6,12 +6,12 @@ const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
-
 const { channel } = require('dc-polyfill')
-const injectCh = channel('dd-trace:span:inject')
-const extractCh = channel('dd-trace:span:extract')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
