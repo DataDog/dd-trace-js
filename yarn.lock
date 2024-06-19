@@ -2824,10 +2824,9 @@ import-fresh@^3.0.0, import-fresh@^3.2.1:
     parent-module "^1.0.0"
     resolve-from "^4.0.0"
 
-import-in-the-middle@^1.7.4:
-  version "1.7.4"
-  resolved "https://registry.yarnpkg.com/import-in-the-middle/-/import-in-the-middle-1.7.4.tgz#508da6e91cfa84f210dcdb6c0a91ab0c9e8b3ebc"
-  integrity sha512-Lk+qzWmiQuRPPulGQeK5qq0v32k2bHnWrRPFgqyvhw7Kkov5L6MOLOIU3pcWeujc9W4q54Cp3Q2WV16eQkc7Bg==
+"import-in-the-middle@https://github.com/DataDog/import-in-the-middle#dbaca128f6eb517d71bcf7e6b6b45f21a07128a4":
+  version "1.8.1"
+  resolved "https://github.com/DataDog/import-in-the-middle#dbaca128f6eb517d71bcf7e6b6b45f21a07128a4"
   dependencies:
     acorn "^8.8.2"
     acorn-import-attributes "^1.9.5"

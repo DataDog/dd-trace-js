@@ -28,13 +28,24 @@ const isVitestPlugin = (vitestPackage) => {
 }
 
 // --- do I need to specify a file? That's problematic because they contain a hash
+
+// vitestPackage.s only works for 1.1.0 - it doesn't for 1.6.0
 addHook({
   name: 'vitest',
-  versions: ['>=0.0.0']
+  versions: ['>=1.1.0 <1.6.0']
 }, (vitestPackage, frameworkVersion) => {
+  debugger
   if (isVitestPlugin(vitestPackage)) {
+    //
+    console.log('is S still s???????', vitestPackage)
     // TODO: will the "s" (minified version) be the same in future versions?
     shimmer.wrap(vitestPackage, 's', startVitest => async function () {
+      let onFinish
+
+      const flushPromise = new Promise(resolve => {
+        onFinish = resolve
+      })
+
       sessionAsyncResource.runInAsyncScope(() => {
         // TODO: change command to proper command
         testSessionStartCh.publish({ command: 'vitest run', frameworkVersion })
@@ -43,8 +54,11 @@ addHook({
 
       sessionAsyncResource.runInAsyncScope(() => {
         // TODO: get proper status
-        testSessionFinishCh.publish('pass')
+        testSessionFinishCh.publish({ status: 'pass', onFinish })
       })
+
+      await flushPromise
+
       return res
     })
   }
@@ -55,6 +69,7 @@ addHook({
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       taskToAsync.set(task, asyncResource)
 
+      // TODO: task.name is just the name of the test() block: include parent describes
       asyncResource.runInAsyncScope(() => {
         testStartCh.publish({ testName: task.name, testSuiteAbsolutePath: task.suite.file.filepath })
       })

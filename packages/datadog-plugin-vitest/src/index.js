@@ -70,16 +70,18 @@ class VitestPlugin extends CiPlugin {
         span.finish()
         finishAllTraceSpans(span)
       }
+      // TODO: too frequent - how to decrease frequency?
       this.tracer._exporter.flush(onFinish)
     })
 
-    // TODO: do we need to flush? - probably not because it's just two spans in the main process
-    this.addSub('ci:vitest:session:finish', (status) => {
+    this.addSub('ci:vitest:session:finish', ({ status, onFinish }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
+      // apparently this is indeed needed
+      this.tracer._exporter.flush(onFinish)
     })
   }
 }
