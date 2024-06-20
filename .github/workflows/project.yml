@@ -96,6 +96,23 @@ jobs:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
 
+  integration-vitest:
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+      - run: yarn test:integration:vitest
+        env:
+          NODE_OPTIONS: '-r ./ci/init'
+
   lint:
     runs-on: ubuntu-latest
     steps:

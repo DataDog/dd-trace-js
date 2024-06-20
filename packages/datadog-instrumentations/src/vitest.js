@@ -99,7 +99,7 @@ addHook({
         const failedSuites = this.state.getFailedFilepaths()
         let error
         if (failedSuites.length) {
-          error = new Error(`${failedSuites.length} test suites failed.`)
+          error = new Error(`Test suites failed: ${failedSuites.length}.`)
         }
 
         sessionAsyncResource.runInAsyncScope(() => {

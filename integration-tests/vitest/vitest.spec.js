@@ -24,7 +24,6 @@ versions.forEach((version) => {
 
     before(async function () {
       sandbox = await createSandbox([`vitest@${version}`], true)
-      // debugger
       cwd = sandbox.folder
     })
 
@@ -44,7 +43,6 @@ versions.forEach((version) => {
 
     it('can run and report tests', (done) => {
       receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-        debugger
         const events = payloads.flatMap(({ payload }) => payload.events)
 
         const testSessionEvent = events.find(event => event.type === 'test_session_end')
@@ -69,7 +67,7 @@ versions.forEach((version) => {
         )
         assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
 
-        const failedTest = testSuiteEvents.find(
+        const failedTest = testEvents.find(
           ({ content: { resource } }) =>
             resource === 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report failed test'
         )
@@ -79,13 +77,15 @@ versions.forEach((version) => {
         const passedTests = testEvents.filter(testEvent => testEvent.content.meta[TEST_STATUS] === 'pass')
 
         assert.includeMembers(passedTests.map(test => test.content.resource), [
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more',
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more',
           'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report more',
           'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report passed test',
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more'
+          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report more'
         ])
 
-        // TODO: just check pass
         assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
           'pass',
           'pass',
@@ -96,7 +96,8 @@ versions.forEach((version) => {
           'pass',
           'fail'
         ])
-      }, 25000).then(() => done()).catch(done)
+        // TODO: check error messages
+      }).then(() => done()).catch(done)
 
       childProcess = exec(
         './node_modules/.bin/vitest run',
@@ -110,9 +111,6 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
-
-      childProcess.stdout.pipe(process.stdout)
-      childProcess.stderr.pipe(process.stderr)
     })
   })
 })
