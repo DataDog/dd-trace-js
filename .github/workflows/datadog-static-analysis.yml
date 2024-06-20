@@ -1,5 +1,10 @@
 name: Datadog Static Analysis
 
+on:
+  pull_request:
+  push:
+    branches: [master]
+
 jobs:
   static-analysis:
     runs-on: ubuntu-latest
