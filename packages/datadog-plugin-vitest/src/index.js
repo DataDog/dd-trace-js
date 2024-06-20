@@ -106,13 +106,16 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:session:finish', ({ status, onFinish }) => {
+    this.addSub('ci:vitest:session:finish', ({ status, onFinish, error }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
       finishAllTraceSpans(this.testSessionSpan)
-      // apparently this is indeed needed
       this.tracer._exporter.flush(onFinish)
     })
   }

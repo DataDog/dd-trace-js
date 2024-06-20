@@ -96,8 +96,18 @@ addHook({
         const flushPromise = new Promise(resolve => {
           onFinish = resolve
         })
+        const failedSuites = this.state.getFailedFilepaths()
+        let error
+        if (failedSuites.length) {
+          error = new Error(`${failedSuites.length} test suites failed.`)
+        }
+
         sessionAsyncResource.runInAsyncScope(() => {
-          testSessionFinishCh.publish({ status: getSessionStatus(this.state), onFinish })
+          testSessionFinishCh.publish({
+            status: getSessionStatus(this.state),
+            onFinish,
+            error
+          })
         })
 
         await flushPromise
