@@ -9,6 +9,7 @@ describe('reporter', () => {
   let span
   let web
   let telemetry
+  let sample
 
   beforeEach(() => {
     span = {
@@ -32,9 +33,14 @@ describe('reporter', () => {
       getRequestMetrics: sinon.stub()
     }
 
+    sample = sinon.stub()
+
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry
+      './telemetry': telemetry,
+      './standalone': {
+        sample
+      }
     })
   })
 
@@ -288,6 +294,27 @@ describe('reporter', () => {
         'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
+    })
+
+    it('should call standalone sample', () => {
+      span.context()._tags = { '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}' }
+
+      const result = Reporter.reportAttack('[{"rule":{}},{"rule":{},"rule_matches":[{}]}]')
+      expect(result).to.not.be.false
+      expect(web.root).to.have.been.calledOnceWith(req)
+
+      expect(span.addTags).to.have.been.calledOnceWithExactly({
+        'http.request.headers.host': 'localhost',
+        'http.request.headers.user-agent': 'arachni',
+        'appsec.event': 'true',
+        'manual.keep': 'true',
+        '_dd.origin': 'appsec',
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
+        'http.useragent': 'arachni',
+        'network.client.ip': '8.8.8.8'
+      })
+
+      expect(sample).to.have.been.calledOnceWithExactly(span)
     })
   })
 
