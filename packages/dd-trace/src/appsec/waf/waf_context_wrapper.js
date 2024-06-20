@@ -19,7 +19,7 @@ class WAFContextWrapper {
     this.addressesToSkip = new Set()
   }
 
-  run ({ persistent, ephemeral }) {
+  run ({ persistent, ephemeral }, raspRuleType) {
     const payload = {}
     let payloadHasData = false
     const inputs = {}
@@ -72,7 +72,7 @@ class WAFContextWrapper {
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      })
+      }, raspRuleType)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))

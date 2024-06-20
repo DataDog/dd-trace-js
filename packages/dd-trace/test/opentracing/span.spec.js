@@ -5,6 +5,9 @@ require('../setup/tap')
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
+const { channel } = require('dc-polyfill')
+const startCh = channel('dd-trace:span:start')
+
 describe('Span', () => {
   let Span
   let span
@@ -161,6 +164,24 @@ describe('Span', () => {
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._trace.tags).to.have.property('_dd.p.tid')
     expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
+  })
+
+  it('should be published via dd-trace:span:start channel', () => {
+    const onSpan = sinon.stub()
+    startCh.subscribe(onSpan)
+
+    const fields = {
+      operationName: 'operation'
+    }
+
+    try {
+      span = new Span(tracer, processor, prioritySampler, fields)
+
+      expect(onSpan).to.have.been.calledOnce
+      expect(onSpan.firstCall.args[0]).to.deep.equal({ span, fields })
+    } finally {
+      startCh.unsubscribe(onSpan)
+    }
   })
 
   describe('tracer', () => {

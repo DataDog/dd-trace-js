@@ -40,7 +40,7 @@ function enable (_config) {
     graphql.enable()
 
     if (_config.appsec.rasp.enabled) {
-      rasp.enable()
+      rasp.enable(_config)
     }
 
     setTemplates(_config)

@@ -5,11 +5,13 @@ stages:
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
   - manual_images
+  - macrobenchmarks
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/single-step-instrumentation-tests.yml"
+  - local: ".gitlab/macrobenchmarks.yml"
 
 variables:
 

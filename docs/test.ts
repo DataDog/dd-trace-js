@@ -119,6 +119,11 @@ tracer.init({
     },
     rasp: {
       enabled: true
+    },
+    stackTrace: {
+      enabled: true,
+      maxStackTraces: 5,
+      maxDepth: 42
     }
   }
 });
@@ -134,6 +139,11 @@ tracer.init({
       redactionEnabled: true,
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })

@@ -1,5 +1,5 @@
 variables:
-  BASE_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
@@ -10,7 +10,7 @@ variables:
   stage: benchmarks
   when: on_success
   tags: ["runner:apm-k8s-tweaked-metal"]
-  image: $BASE_CI_IMAGE
+  image: $MICROBENCHMARKS_CI_IMAGE
   interruptible: true
   timeout: 15m
   script:
@@ -31,7 +31,7 @@ benchmarks-pr-comment:
   stage: benchmarks-pr-comment
   when: on_success
   tags: ["arch:amd64"]
-  image: $BASE_CI_IMAGE
+  image: $MICROBENCHMARKS_CI_IMAGE
   script:
     - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
     - bp-runner bp-runner.pr-comment.yml --debug
@@ -44,7 +44,7 @@ check-big-regressions:
   stage: benchmarks-pr-comment
   when: on_success
   tags: ["arch:amd64"]
-  image: $BASE_CI_IMAGE
+  image: $MICROBENCHMARKS_CI_IMAGE
   script:
     - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
     - bp-runner bp-runner.fail-on-regression.yml --debug
