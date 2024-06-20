@@ -9,6 +9,11 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
+// Milliseconds that we subtract from the error test duration
+// so that they do not overlap with the following test
+// This is because there's some loss of resolution.
+const MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION = 5
+
 class VitestPlugin extends CiPlugin {
   static get id () {
     return 'vitest'
@@ -32,6 +37,23 @@ class VitestPlugin extends CiPlugin {
         span.setTag(TEST_STATUS, status)
 
         span.finish()
+        finishAllTraceSpans(span)
+      }
+    })
+
+    this.addSub('ci:vitest:test:error', ({ duration, errors }) => {
+      const store = storage.getStore()
+      const span = store?.span
+
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+
+        if (errors.length) {
+          // TODO: what to do with multiple errors?
+          const [error] = errors
+          span.setTag('error', error)
+        }
+        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
         finishAllTraceSpans(span)
       }
     })
@@ -64,14 +86,24 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:test-suite:finish', ({ status, onFinish }) => {
       const store = storage.getStore()
-      if (store && store.span) {
-        const span = store.span
+      const span = store?.span
+      if (span) {
         span.setTag(TEST_STATUS, status)
         span.finish()
         finishAllTraceSpans(span)
       }
-      // TODO: too frequent - how to decrease frequency?
+      // TODO: too frequent flush - find for method in worker to decrease frequency
       this.tracer._exporter.flush(onFinish)
+    })
+
+    this.addSub('ci:vitest:test-suite:error', ({ errors }) => {
+      const store = storage.getStore()
+      const span = store?.span
+      if (span) {
+        // TODO: what to do with multiple errors?
+        const [error] = errors
+        span.setTag('error', error)
+      }
     })
 
     this.addSub('ci:vitest:session:finish', ({ status, onFinish }) => {

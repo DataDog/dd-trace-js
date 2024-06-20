@@ -15,9 +15,8 @@ const {
   TEST_TYPE
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-// should probably work with 1.6.0
-// tested with 1.1.0
-const versions = ['1.1.0'] // only one I've tested so far
+// tested with 1.6.0
+const versions = ['latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -54,33 +53,50 @@ versions.forEach((version) => {
         const testEvents = events.filter(event => event.type === 'test')
 
         assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
-        assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'pass')
+        assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
         assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
-        assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'pass')
+        assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
         assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
         assert.equal(testModuleEvent.content.meta[TEST_TYPE], 'test')
 
-        assert.includeMembers(testSuiteEvents.map(suite => suite.content.resource), [
-          'test_suite.ci-visibility/vitest-tests/test-visibility-test.mjs',
-          'test_suite.ci-visibility/vitest-tests/test-visibility-test-2.mjs'
-        ])
+        const passedSuite = testSuiteEvents.find(
+          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-passed-suite.mjs'
+        )
+        assert.equal(passedSuite.content.meta[TEST_STATUS], 'pass')
 
-        // TODO: just check pass
-        assert.includeMembers(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-          'pass',
-        ])
+        const failedSuite = testSuiteEvents.find(
+          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-suite.mjs'
+        )
+        assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
 
+        const failedTest = testSuiteEvents.find(
+          ({ content: { resource } }) =>
+            resource === 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report failed test'
+        )
 
-        assert.includeMembers(testEvents.map(test => test.content.resource), [
-          'ci-visibility/vitest-tests/test-visibility-test.mjs.can report tests',
-          'ci-visibility/vitest-tests/test-visibility-test-2.mjs.can report tests 2',
+        assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
+
+        const passedTests = testEvents.filter(testEvent => testEvent.content.meta[TEST_STATUS] === 'pass')
+
+        assert.includeMembers(passedTests.map(test => test.content.resource), [
+          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report more',
+          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report passed test',
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
+          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more'
         ])
 
         // TODO: just check pass
         assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
           'pass',
+          'pass',
+          'pass',
+          'pass',
+          'pass',
+          'pass',
+          'pass',
+          'fail'
         ])
-      }).then(() => done()).catch(done)
+      }, 25000).then(() => done()).catch(done)
 
       childProcess = exec(
         './node_modules/.bin/vitest run',
@@ -89,7 +105,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             // maybe only in node@20
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more stuff
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more stuff
           },
           stdio: 'pipe'
         }
