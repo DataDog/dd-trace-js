@@ -96,9 +96,6 @@ function sample (span) {
     spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: ask. can we reset here sampling like this?
-    // all spans in the trace are sharing the parent sampling object so...
-    // should we get prio from StandAloneAsmPrioritySampler._getPriorityFromTags?
-    // but then we should set dm too...
     if (spanContext._sampling?.priority < AUTO_KEEP) {
       resetSampling(spanContext)
     }
