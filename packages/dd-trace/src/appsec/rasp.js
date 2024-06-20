@@ -18,13 +18,16 @@ class AbortError extends Error {
   }
 }
 
-function handleUncaughtException (err) {
-  // err.cause to wrap the error thrown by client request
+function handleUncaughtExceptionMonitor (err, origin) {
   if (err instanceof AbortError || err.cause instanceof AbortError) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
-  } else {
-    throw err
+
+    if (!process.hasUncaughtExceptionCaptureCallback()) {
+      process.setUncaughtExceptionCaptureCallback(() => {
+        process.setUncaughtExceptionCaptureCallback(null)
+      })
+    }
   }
 }
 
@@ -32,19 +35,20 @@ const RULE_TYPES = {
   SSRF: 'ssrf'
 }
 
-let config
+let config, abortOnUncaughtException
 
 function enable (_config) {
   config = _config
   httpClientRequestStart.subscribe(analyzeSsrf)
 
-  process.on('uncaughtException', handleUncaughtException)
+  process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
+  abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
 }
 
 function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
 
-  process.off('uncaughtException', handleUncaughtException)
+  process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
 
 function analyzeSsrf (ctx) {
@@ -84,11 +88,11 @@ function handleResult (actions, req, res, abortController) {
   if (blockingAction && abortController) {
     const rootSpan = web.root(req)
     // Should block only in express
-    if (rootSpan.context()._name === 'express.request') {
+    if (rootSpan.context()._name === 'express.request' && !abortOnUncaughtException) {
       const abortError = new AbortError(req, res, blockingAction)
       abortController.abort(abortError)
 
-      // TODO Delete this if when support for node 16 is removed
+      // TODO Delete this when support for node 16 is removed
       if (!abortController.signal.reason) {
         abortController.signal.reason = abortError
       }

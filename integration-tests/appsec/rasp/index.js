@@ -29,6 +29,52 @@ function makeOutgoingRequestAndCbAfterTimeout (req, res, cb) {
   })
 }
 
+function streamFile (res) {
+  const stream = fs.createReadStream(path.join(__dirname, 'streamtest.txt'), { encoding: 'utf8' })
+  stream.pipe(res, { end: false })
+  stream.on('end', () => res.end('end'))
+}
+
+function httpGetPromise (host) {
+  return new Promise((resolve, reject) => {
+    const clientRequest = http.get(`https://${host}`, () => {
+      resolve()
+    })
+    clientRequest.on('error', reject)
+  })
+}
+
+app.get('/crash', () => {
+  process.nextTick(() => {
+    throw new Error('Crash')
+  })
+})
+
+app.get('/crash-and-recovery-A', (req, res) => {
+  process.setUncaughtExceptionCaptureCallback(() => {
+    res.writeHead(500)
+    res.end('error')
+    process.setUncaughtExceptionCaptureCallback(null)
+  })
+  process.nextTick(() => {
+    throw new Error('Crash')
+  })
+})
+
+app.get('/crash-and-recovery-B', (req, res) => {
+  function exceptionHandler () {
+    // console.log('ey - error 500')
+    res.writeHead(500)
+    res.end('error')
+    process.off('uncaughtException', exceptionHandler)
+  }
+  process.on('uncaughtException', exceptionHandler)
+
+  process.nextTick(() => {
+    throw new Error('Crash')
+  })
+})
+
 app.get('/ssrf/http/unhandled-error', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res)
 })
@@ -99,11 +145,10 @@ app.get('/ssrf/http/unhandled-axios', (req, res) => {
     .then(() => res.end('end'))
 })
 
-function streamFile (res) {
-  const stream = fs.createReadStream(path.join(__dirname, 'streamtest.txt'), { encoding: 'utf8' })
-  stream.pipe(res, { end: false })
-  stream.on('end', () => res.end('end'))
-}
+app.get('/ssrf/http/unhandled-promise', (req, res) => {
+  httpGetPromise(req.query.host)
+    .then(() => res.end('end'))
+})
 
 app.listen(port, () => {
   process.send({ port })
