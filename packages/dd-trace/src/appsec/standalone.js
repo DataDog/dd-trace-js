@@ -121,9 +121,9 @@ function configure (config) {
 
     prioritySampler = new StandAloneAsmPrioritySampler(config.env)
   } else {
-    startCh.unsubscribe(onSpanStart)
-    injectCh.unsubscribe(onSpanInject)
-    extractCh.unsubscribe(onSpanExtract)
+    if (startCh.hasSubscribers) startCh.unsubscribe(onSpanStart)
+    if (injectCh.hasSubscribers) injectCh.unsubscribe(onSpanInject)
+    if (extractCh.hasSubscribers) extractCh.unsubscribe(onSpanExtract)
   }
 
   return prioritySampler
