@@ -70,9 +70,7 @@ class PrioritySampler {
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
-      if (!context._sampling.mechanism) {
-        context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
-      }
+      context._sampling.mechanism ??= SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
       context._sampling.priority = this._getPriorityFromAuto(root)
     } else {
