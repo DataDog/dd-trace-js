@@ -7,6 +7,9 @@ const { httpClientRequestStart } = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
+const { channel } = require('dc-polyfill')
+
+const startSetUncaughtExceptionCaptureCallback = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
 
 class AbortError extends Error {
   constructor (req, res, blockingAction) {
@@ -18,8 +21,12 @@ class AbortError extends Error {
   }
 }
 
+function isAbortError (err) {
+  return err instanceof AbortError || err.cause instanceof AbortError
+}
+
 function handleUncaughtExceptionMonitor (err, origin) {
-  if (err instanceof AbortError || err.cause instanceof AbortError) {
+  if (isAbortError(err)) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
 
@@ -37,12 +44,59 @@ const RULE_TYPES = {
 
 let config, abortOnUncaughtException
 
+let previousCallback, userDefinedCallback
+
 function enable (_config) {
   config = _config
   httpClientRequestStart.subscribe(analyzeSsrf)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
+
+  if (abortOnUncaughtException) {
+    process.on('unhandledRejection', function (err) {
+      if (isAbortError(err)) {
+        const { req, res, blockingAction } = err
+        block(req, res, web.root(req), null, blockingAction)
+      } else {
+        const listeners = process.listeners('unhandledRejection')
+        // do not force crash if there are more listeners
+        if (listeners.length === 1) {
+          // TODO check the --unhandled-rejections flag
+          throw err
+        }
+      }
+    })
+
+    let appsecCallbackSetted = false
+    startSetUncaughtExceptionCaptureCallback.subscribe(({ currentCallback, newCallback, abortController }) => {
+      previousCallback = currentCallback
+      if (appsecCallbackSetted) {
+        userDefinedCallback = newCallback
+        abortController.abort()
+      }
+    })
+
+    if (process.hasUncaughtExceptionCaptureCallback()) {
+      process.setUncaughtExceptionCaptureCallback(null)
+      userDefinedCallback = previousCallback
+    }
+
+    const exceptionCaptureCallback = function (err) {
+      if (!isAbortError(err)) {
+        if (userDefinedCallback) {
+          userDefinedCallback(err)
+        } else {
+          process.setUncaughtExceptionCaptureCallback(null)
+
+          throw err // app will crash by customer app reasons
+        }
+      }
+    }
+
+    process.setUncaughtExceptionCaptureCallback(exceptionCaptureCallback)
+    appsecCallbackSetted = true
+  }
 }
 
 function disable () {
@@ -88,7 +142,7 @@ function handleResult (actions, req, res, abortController) {
   if (blockingAction && abortController) {
     const rootSpan = web.root(req)
     // Should block only in express
-    if (rootSpan.context()._name === 'express.request' && !abortOnUncaughtException) {
+    if (rootSpan.context()._name === 'express.request') {
       const abortError = new AbortError(req, res, blockingAction)
       abortController.abort(abortError)
 

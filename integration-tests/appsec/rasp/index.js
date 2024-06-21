@@ -50,6 +50,12 @@ app.get('/crash', () => {
   })
 })
 
+app.get('/crash-promise', () => {
+  process.nextTick(() => {
+    Promise.reject(new Error('Crash'))
+  })
+})
+
 app.get('/crash-and-recovery-A', (req, res) => {
   process.setUncaughtExceptionCaptureCallback(() => {
     res.writeHead(500)
