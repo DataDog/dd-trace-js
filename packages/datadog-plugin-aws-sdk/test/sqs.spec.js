@@ -408,6 +408,25 @@ describe('Plugin', () => {
           })
         })
 
+        it('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
+          async (done) => {
+            await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }).promise()
+            await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
+
+            let consumeSpanMeta = {}
+            agent.use(traces => {
+              const span = traces[0][0]
+
+              if (span.name === 'aws.response') {
+                consumeSpanMeta = span.meta
+              }
+
+              expect(consumeSpanMeta).to.include({
+                'pathway.hash': expectedConsumerHash
+              })
+            }).then(done, done)
+          })
+
         it('Should emit DSM stats to the agent when sending a message', done => {
           agent.expectPipelineStats(dsmStats => {
             let statsPointsReceived = 0
