@@ -7,7 +7,8 @@ const shimmer = require('../../datadog-shimmer')
 // needs creating a fake file node_modules/vitest/dist/@vitest/spy
 // TODO: why?
 const testStartCh = channel('ci:vitest:test:start')
-const testFinishCh = channel('ci:vitest:test:finish')
+const testFinishTimeCh = channel('ci:vitest:test:finish-time')
+const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -153,11 +154,12 @@ addHook({
       async function (task, { retry: retryCount }) {
         const result = await onAfterTryTask.apply(this, arguments)
 
-        const testStatus = getVitestTestStatus(task, retryCount)
+        const status = getVitestTestStatus(task, retryCount)
         const asyncResource = taskToAsync.get(task)
 
+        // We don't finish here because the test might fail in a later hook
         asyncResource.runInAsyncScope(() => {
-          testFinishCh.publish(testStatus)
+          testFinishTimeCh.publish({ status, task })
         })
         return result
       })
@@ -187,25 +189,30 @@ addHook({
       })
 
       const testTasks = getTypeTasks(startTestsResponse[0].tasks)
-      // we don't use getVitestTestStatus here because every hook call has finished, so it's already set
-      // unlike on onAfterTryTask
-      const failedTests = testTasks.filter(task => task.result?.state === 'fail')
 
-      // Errored tests do not go through onAfterTryTask, so we need to handle them here
-      failedTests.forEach(failedTask => {
-        const testAsyncResource = taskToAsync.get(failedTask)
-        const { result: { duration, errors } } = failedTask
-        let testError
+      testTasks.forEach(task => {
+        const testAsyncResource = taskToAsync.get(task)
+        const { result: { state, duration, errors } } = task
 
-        if (errors?.length) {
-          testError = errors[0]
-        }
+        // what about 'skip'??
+        if (state === 'pass') {
+          testAsyncResource.runInAsyncScope(() => {
+            testPassCh.publish({ task })
+          })
+        } else if (state === 'fail') {
+          // If it's failing, we have no accurate finish time, so we have to use `duration`
+          let testError
 
-        testAsyncResource.runInAsyncScope(() => {
-          testErrorCh.publish({ duration, error: testError })
-        })
-        if (errors?.length) {
-          testSuiteError = testError // we store the error to bubble it up to the suite
+          if (errors?.length) {
+            testError = errors[0]
+          }
+
+          testAsyncResource.runInAsyncScope(() => {
+            testErrorCh.publish({ duration, error: testError })
+          })
+          if (errors?.length) {
+            testSuiteError = testError // we store the error to bubble it up to the suite
+          }
         }
       })
 

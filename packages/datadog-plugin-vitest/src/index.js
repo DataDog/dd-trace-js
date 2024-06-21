@@ -21,6 +21,9 @@ class VitestPlugin extends CiPlugin {
 
   constructor (...args) {
     super(...args)
+
+    this.taskToFinishTime = new WeakMap()
+
     this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
@@ -29,14 +32,25 @@ class VitestPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
-    this.addSub('ci:vitest:test:finish', (status) => {
+    // If there's a hook error, this is called AND THEN test:error - which will not work
+    this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
+      const store = storage.getStore()
+      const span = store?.span
+
+      // we store the finish time
+      if (span) {
+        span.setTag(TEST_STATUS, status)
+        this.taskToFinishTime.set(task, span._getTime())
+      }
+    })
+
+    this.addSub('ci:vitest:test:pass', ({ task }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
-        span.setTag(TEST_STATUS, status)
-
-        span.finish()
+        span.setTag(TEST_STATUS, 'pass')
+        span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
       }
     })
