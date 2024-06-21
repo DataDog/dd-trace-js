@@ -90,7 +90,7 @@ function onSpanExtract ({ spanContext }) {
   } else if (spanContext._sampling.priority !== USER_KEEP) {
     spanContext._sampling.priority = USER_KEEP
   }
-}
+  if (enabled && spanContext?._trace?.tags) {
 
 function sample (span) {
   const spanContext = span.context?.()
