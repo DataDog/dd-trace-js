@@ -62,14 +62,13 @@ app.get('/vulnerableHash', (req, res) => {
 app.get('/propagation-with-event', async (req, res) => {
   tracer.appsec.trackCustomEvent('custom-event')
 
+  const span = tracer.scope().active()
+  span.context()._trace.tags['_dd.p.other'] = '1'
+
   const port = req.query.port || server.address().port
   const url = `http://localhost:${port}/down`
 
-  const resFetch = await fetch(url, {
-    headers: {
-      'x-datadog-tags': '_dd.p.other=1'
-    }
-  })
+  const resFetch = await fetch(url)
   await resFetch.text()
 
   res.status(200).send('propagation-with-event')
@@ -79,11 +78,10 @@ app.get('/propagation-without-event', async (req, res) => {
   const port = req.query.port || server.address().port
   const url = `http://localhost:${port}/down`
 
-  const resFetch = await fetch(url, {
-    headers: {
-      'x-datadog-tags': '_dd.p.other=1'
-    }
-  })
+  const span = tracer.scope().active()
+  span.context()._trace.tags['_dd.p.other'] = '1'
+
+  const resFetch = await fetch(url)
   await resFetch.text()
 
   res.status(200).send('propagation-without-event')
