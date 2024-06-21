@@ -37,7 +37,8 @@ const http = require('http')
 const express = require('express')
 const app = express()
 
-const { readFile } = require('./iast-vulnerable-readFile')
+const valueToHash = 'iast-showcase-demo'
+const crypto = require('crypto')
 
 app.get('/', (req, res) => {
   res.status(200).send('hello world')
@@ -53,8 +54,9 @@ app.get('/sdk', (req, res) => {
   res.status(200).send('sdk')
 })
 
-app.get('/vulnerableReadFile', (req, res) => {
-  res.status(200).send(readFile(req.query.filename))
+app.get('/vulnerableHash', (req, res) => {
+  const result = crypto.createHash('sha1').update(valueToHash).digest('hex')
+  res.status(200).send(result)
 })
 
 app.get('/propagation-with-event', async (req, res) => {

@@ -153,7 +153,7 @@ describe('Standalone ASM', () => {
     it('should keep iast events', async () => {
       await doWarmupRequests(proc)
 
-      const url = proc.url + '/vulnerableReadFile?filename=./readFile.js'
+      const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
         assert.isArray(payload)
@@ -260,7 +260,7 @@ describe('Standalone ASM', () => {
     })
 
     it('should not add standalone related tags in iast events', () => {
-      const url = proc.url + '/vulnerableReadFile?filename=./readFile.js'
+      const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
         assert.notProperty(headers, 'datadog-client-computed-stats')
         assert.isArray(payload)
@@ -271,7 +271,7 @@ describe('Standalone ASM', () => {
         assert.strictEqual(payload[0].length, 5)
 
         const { meta, metrics } = payload[0][0]
-        assert.property(meta, '_dd.iast.json') // PATH_TRAVERSAL and XCONTENTTYPE_HEADER_MISSING reported
+        assert.property(meta, '_dd.iast.json') // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
 
         assert.notProperty(meta, '_dd.p.appsec')
         assert.notProperty(metrics, '_dd.apm.enabled')
