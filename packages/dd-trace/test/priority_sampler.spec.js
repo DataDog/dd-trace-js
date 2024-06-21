@@ -76,7 +76,7 @@ describe('PrioritySampler', () => {
     PrioritySampler = proxyquire('../src/priority_sampler', {
       './sampler': Sampler,
       './sampling_rule': SamplingRule
-    }).PrioritySampler
+    })
 
     prioritySampler = new PrioritySampler('test')
   })

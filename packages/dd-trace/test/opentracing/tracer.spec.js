@@ -40,9 +40,7 @@ describe('Tracer', () => {
     prioritySampler = {
       sample: sinon.stub()
     }
-    PrioritySampler = {
-      PrioritySampler: sinon.stub().returns(prioritySampler)
-    }
+    PrioritySampler = sinon.stub().returns(prioritySampler)
 
     agentExporter = {
       export: sinon.spy()

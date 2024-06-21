@@ -3,7 +3,7 @@
 const os = require('os')
 const Span = require('./span')
 const SpanProcessor = require('../span_processor')
-const { PrioritySampler } = require('../priority_sampler')
+const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')

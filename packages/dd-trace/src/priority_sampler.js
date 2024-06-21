@@ -4,6 +4,7 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
+const { hasOwn } = require('./util')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -202,8 +203,4 @@ class PrioritySampler {
   }
 }
 
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
-}
-
-module.exports = { PrioritySampler, hasOwn }
+module.exports = PrioritySampler

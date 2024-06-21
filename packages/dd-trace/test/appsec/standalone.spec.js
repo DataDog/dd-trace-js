@@ -69,9 +69,12 @@ describe('Appsec Standalone', () => {
 
       standalone.configure(config)
 
-      sinon.assert.calledOnce(startChUnsubscribe)
-      sinon.assert.calledOnce(injectChUnsubscribe)
-      sinon.assert.calledOnce(extractChUnsubscribe)
+      sinon.assert.notCalled(startChSubscribe)
+      sinon.assert.notCalled(injectChSubscribe)
+      sinon.assert.notCalled(extractChSubscribe)
+      sinon.assert.notCalled(startChUnsubscribe)
+      sinon.assert.notCalled(injectChUnsubscribe)
+      sinon.assert.notCalled(extractChUnsubscribe)
     })
 
     it('should subscribe only once', () => {

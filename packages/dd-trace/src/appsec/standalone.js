@@ -3,9 +3,11 @@
 const { channel } = require('dc-polyfill')
 const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
-const { PrioritySampler, hasOwn } = require('../priority_sampler')
+const PrioritySampler = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
 const TraceState = require('../opentracing/propagation/tracestate')
+const { hasOwn } = require('../util')
+
 const {
   APM_TRACING_ENABLED_KEY,
   APPSEC_PROPAGATION_KEY,
@@ -81,7 +83,7 @@ function onSpanInject ({ spanContext, carrier }) {
   }
 }
 
-function onSpanExtract ({ spanContext, carrier }) {
+function onSpanExtract ({ spanContext }) {
   // reset upstream priority if _dd.p.appsec is not found
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
     resetSampling(spanContext)
