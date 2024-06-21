@@ -90,11 +90,11 @@ function onSpanExtract ({ spanContext }) {
   } else if (spanContext._sampling.priority !== USER_KEEP) {
     spanContext._sampling.priority = USER_KEEP
   }
-  if (enabled && spanContext?._trace?.tags) {
+}
 
 function sample (span) {
   const spanContext = span.context?.()
-  if (enabled && spanContext._trace?.tags) {
+  if (enabled && spanContext?._trace?.tags) {
     spanContext._trace.tags[APPSEC_PROPAGATION_KEY] = '1'
 
     // TODO: ask. can we reset here sampling like this?

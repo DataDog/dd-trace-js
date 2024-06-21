@@ -13,8 +13,9 @@ const {
 
 describe('Standalone ASM', () => {
   let sandbox, cwd, startupTestFile, agent, proc, env
+
   before(async () => {
-    sandbox = await createSandbox(['express'], true)
+    sandbox = await createSandbox(['express'])
     cwd = sandbox.folder
     startupTestFile = path.join(cwd, 'standalone-asm/index.js')
   })
@@ -23,7 +24,7 @@ describe('Standalone ASM', () => {
     await sandbox.remove()
   })
 
-  context('enabled', () => {
+  describe('enabled', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
 
@@ -166,7 +167,7 @@ describe('Standalone ASM', () => {
       })
     })
 
-    context('propagation', () => {
+    describe('propagation', () => {
       let proc2
       let port2
 
@@ -243,7 +244,7 @@ describe('Standalone ASM', () => {
     })
   })
 
-  context('disabled', () => {
+  describe('disabled', () => {
     beforeEach(async () => {
       agent = await new FakeAgent().start()
 
