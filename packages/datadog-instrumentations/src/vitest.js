@@ -56,14 +56,14 @@ function getVitestTestStatus (test, retryCount) {
   return 'fail'
 }
 
-function getTestTasks (fileTasks) {
-  const testTasks = []
+function getTypeTasks (fileTasks, type = 'test') {
+  const typeTasks = []
 
   function getTasks (tasks) {
     for (const task of tasks) {
-      if (task.type === 'test') {
-        testTasks.push(task)
-      } else {
+      if (task.type === type) {
+        typeTasks.push(task)
+      } else if (task.tasks) {
         getTasks(task.tasks)
       }
     }
@@ -71,7 +71,21 @@ function getTestTasks (fileTasks) {
 
   getTasks(fileTasks)
 
-  return testTasks
+  return typeTasks
+}
+
+function getTestName (task) {
+  let testName = ''
+  let currentTask = task
+
+  while (currentTask.suite) {
+    if (currentTask.name) {
+      testName = `${currentTask.name} ${testName}`
+    }
+    currentTask = currentTask.suite
+  }
+
+  return testName
 }
 
 // Can't specify file because compiled vitest includes hashes in their files
@@ -127,9 +141,8 @@ addHook({
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       taskToAsync.set(task, asyncResource)
 
-      // TODO: task.name is just the name of the test() block: include parent describes
       asyncResource.runInAsyncScope(() => {
-        testStartCh.publish({ testName: task.name, testSuiteAbsolutePath: task.suite.file.filepath })
+        testStartCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
       })
       return onBeforeTryTask.apply(this, arguments)
     })
@@ -160,6 +173,8 @@ addHook({
 }, vitestPackage => {
   if (vitestPackage.startTests) {
     shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
+      let testSuiteError = null
+
       const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
       testSuiteAsyncResource.runInAsyncScope(() => {
         testSuiteStartCh.publish(testPath[0])
@@ -171,27 +186,49 @@ addHook({
         onFinish = resolve
       })
 
-      const testTasks = getTestTasks(startTestsResponse[0].tasks)
+      const testTasks = getTypeTasks(startTestsResponse[0].tasks)
       // we don't use getVitestTestStatus here because every hook call has finished, so it's already set
       // unlike on onAfterTryTask
-      const failedTests = testTasks.filter(task => task.result.state === 'fail')
+      const failedTests = testTasks.filter(task => task.result?.state === 'fail')
 
+      // Errored tests do not go through onAfterTryTask, so we need to handle them here
       failedTests.forEach(failedTask => {
         const testAsyncResource = taskToAsync.get(failedTask)
         const { result: { duration, errors } } = failedTask
+        let testError
+
+        if (errors?.length) {
+          testError = errors[0]
+        }
+
         testAsyncResource.runInAsyncScope(() => {
-          // we need to manually finish them here because they won't be finished by onAfterTryTask
-          testErrorCh.publish({ duration, errors })
+          testErrorCh.publish({ duration, error: testError })
         })
-        if (errors.length) {
-          testSuiteAsyncResource.runInAsyncScope(() => {
-            testSuiteErrorCh.publish({ errors })
-          })
+        if (errors?.length) {
+          testSuiteError = testError // we store the error to bubble it up to the suite
         }
       })
 
+      const testSuiteResult = startTestsResponse[0].result
+
+      if (testSuiteResult.errors?.length) { // Errors from root level hooks
+        testSuiteError = testSuiteResult.errors[0]
+      } else if (testSuiteResult.state === 'fail') { // Errors from `describe` level hooks
+        const suiteTasks = getTypeTasks(startTestsResponse[0].tasks, 'suite')
+        const failedSuites = suiteTasks.filter(task => task.result?.state === 'fail')
+        if (failedSuites.length && failedSuites[0].result?.errors?.length) {
+          testSuiteError = failedSuites[0].result.errors[0]
+        }
+      }
+
+      if (testSuiteError) {
+        testSuiteAsyncResource.runInAsyncScope(() => {
+          testSuiteErrorCh.publish({ error: testSuiteError })
+        })
+      }
+
       testSuiteAsyncResource.runInAsyncScope(() => {
-        testSuiteFinishCh.publish({ status: startTestsResponse[0].result.state, onFinish })
+        testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish })
       })
 
       // TODO: fix too frequent flushes

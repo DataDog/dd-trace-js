@@ -41,16 +41,14 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:test:error', ({ duration, errors }) => {
+    this.addSub('ci:vitest:test:error', ({ duration, error }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
 
-        if (errors.length) {
-          // TODO: what to do with multiple errors?
-          const [error] = errors
+        if (error) {
           span.setTag('error', error)
         }
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
@@ -96,13 +94,12 @@ class VitestPlugin extends CiPlugin {
       this.tracer._exporter.flush(onFinish)
     })
 
-    this.addSub('ci:vitest:test-suite:error', ({ errors }) => {
+    this.addSub('ci:vitest:test-suite:error', ({ error }) => {
       const store = storage.getStore()
       const span = store?.span
-      if (span) {
-        // TODO: what to do with multiple errors?
-        const [error] = errors
+      if (span && error) {
         span.setTag('error', error)
+        span.setTag(TEST_STATUS, 'fail')
       }
     })
 
