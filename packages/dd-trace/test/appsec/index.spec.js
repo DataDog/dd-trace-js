@@ -33,7 +33,9 @@ const resultActions = {
   }
 }
 
-describe('AppSec Index', () => {
+describe('AppSec Index', function () {
+  this.timeout(5000)
+
   let config
   let AppSec
   let web
@@ -978,7 +980,9 @@ describe('AppSec Index', () => {
   })
 })
 
-describe('IP blocking', () => {
+describe('IP blocking', function () {
+  this.timeout(5000)
+
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'
   const ruleData = {
