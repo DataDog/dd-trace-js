@@ -37,6 +37,40 @@ class FakeAgent extends EventEmitter {
         payload: msgpack.decode(req.body, { codec })
       })
     })
+    app.put('/v0.5/traces', (req, res) => {
+      if (req.body.length === 0) return res.status(200).send()
+      res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+      const [strings, traces] = msgpack.decode(req.body, { codec })
+      this.emit('message', {
+        headers: req.headers,
+        payload: traces.map(trace => {
+          return trace.map(span => {
+            const meta = {}
+            const metrics = {}
+
+            Object.keys(span[9]).forEach(key => { meta[strings[key]] = strings[span[9][key]] })
+            Object.keys(span[10]).forEach(key => { metrics[strings[key]] = span[10][key] })
+
+            span = {
+              service: strings[span[0]],
+              name: strings[span[1]],
+              resource: strings[span[2]],
+              trace_id: span[3],
+              span_id: span[4],
+              parent_id: span[5],
+              start: span[6],
+              duration: span[7],
+              error: span[8],
+              meta,
+              metrics,
+              type: strings[span[11]]
+            }
+
+            return span
+          })
+        })
+      })
+    })
     app.post('/profiling/v1/input', upload.any(), (req, res) => {
       res.status(200).send()
       this.emit('message', {

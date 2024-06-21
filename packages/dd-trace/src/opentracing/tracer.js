@@ -54,7 +54,7 @@ class DatadogTracer {
       'service.name': this._service
     }
 
-    const span = new Span(this, this._processor, this._prioritySampler, {
+    const span = this._initSpan(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
       parent,
       tags,
@@ -93,6 +93,14 @@ class DatadogTracer {
       runtimeMetrics.increment('datadog.tracer.node.extract.errors', true)
       return null
     }
+  }
+
+  _initSpan (...args) {
+    return new Span(...args)
+  }
+
+  _setUrl (url) {
+    this._exporter.setUrl(url)
   }
 }
 
