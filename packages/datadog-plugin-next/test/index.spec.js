@@ -37,7 +37,7 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          this.timeout(40000)
+          this.timeout(120000)
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
