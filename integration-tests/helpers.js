@@ -7,10 +7,10 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const childProcess = require('child_process')
-const { fork, spawn, execSync } = childProcess
+const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const fs = require('fs/promises')
+const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const rimraf = promisify(require('rimraf'))
@@ -163,17 +163,8 @@ class FakeAgent extends EventEmitter {
   }
 }
 
-let nodeBinary = process.argv[0]
-
 async function runAndCheckOutput (filename, cwd, expectedOut) {
-  const oldOpts = process.env.NODE_OPTIONS
-  delete process.env.NODE_OPTIONS
-  const nodeVersion = nodeBinary === process.argv[0]
-    ? process.versions.node
-    : execSync(`${nodeBinary} -p process.versions.node`).toString().trim()
-  process.env.NODE_OPTIONS = oldOpts
-
-  const proc = spawn(nodeBinary, [filename], { cwd, stdio: 'pipe' })
+  const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.on('error', reject)
@@ -181,6 +172,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     proc.stdout.on('data', data => {
       out = Buffer.concat([out, data])
     })
+    proc.stderr.pipe(process.stdout)
     proc.on('exit', () => resolve(out.toString('utf8')))
     setTimeout(() => {
       if (proc.exitCode === null) proc.kill()
@@ -195,7 +187,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut) {
     }
     assert.strictEqual(out, expectedOut)
   }
-  return [pid, nodeVersion]
+  return pid
 }
 
 // This is set by the useSandbox function
@@ -205,7 +197,7 @@ let sandbox
 async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
   const cwd = sandbox.folder
   const cleanup = telemetryForwarder(expectedTelemetryPoints)
-  const [pid, nodeVersion] = await runAndCheckOutput(filename, cwd, expectedOut)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
   const msgs = await cleanup()
   if (expectedTelemetryPoints.length === 0) {
     // assert no telemetry sent
@@ -251,9 +243,9 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   function meta (pid) {
     return {
       language_name: 'nodejs',
-      language_version: nodeVersion,
+      language_version: process.versions.node,
       runtime_name: 'nodejs',
-      runtime_version: nodeVersion,
+      runtime_version: process.versions.node,
       tracer_version: require('../package.json').version,
       pid: Number(pid)
     }
@@ -303,9 +295,9 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
-  await fs.mkdir(folder)
+  fs.mkdirSync(folder)
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
-  await exec(`npm install ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
+  await exec(`yarn add ${allDependencies.join(' ')} --ignore-engines`, { cwd: folder, env: restOfEnv })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -327,7 +319,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
-    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
@@ -356,10 +348,10 @@ function telemetryForwarder (expectedTelemetryPoints) {
     return cleanup()
   }
 
-  const cleanup = async function () {
+  const cleanup = function () {
     let msgs
     try {
-      msgs = (await fs.readFile(process.env.FORWARDER_OUT, 'utf8')).trim().split('\n')
+      msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
     } catch (e) {
       if (expectedTelemetryPoints.length && e.code === 'ENOENT' && retries < 10) {
         return tryAgain()
@@ -382,7 +374,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
       }
       msgs[i] = [telemetryType, parsed]
     }
-    await fs.unlink(process.env.FORWARDER_OUT)
+    fs.unlinkSync(process.env.FORWARDER_OUT)
     delete process.env.FORWARDER_OUT
     delete process.env.DD_TELEMETRY_FORWARDER_PATH
     return msgs
@@ -484,15 +476,6 @@ function sandboxCwd () {
   return sandbox.folder
 }
 
-function useSandboxedNode () {
-  before(() => {
-    nodeBinary = path.join(sandbox.folder, 'node_modules/.bin/node')
-  })
-  after(() => {
-    nodeBinary = process.argv[0]
-  })
-}
-
 module.exports = {
   FakeAgent,
   spawnProc,
@@ -506,6 +489,5 @@ module.exports = {
   spawnPluginIntegrationTestProc,
   useEnv,
   useSandbox,
-  sandboxCwd,
-  useSandboxedNode
+  sandboxCwd
 }

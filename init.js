@@ -3,15 +3,25 @@
 const path = require('path')
 const Module = require('module')
 const telemetry = require('./packages/dd-trace/src/telemetry/init-telemetry')
-const Config = require('./packages/dd-trace/src/config')
-const log = require('./packages/dd-trace/src/log')
+const semver = require('semver')
 
-// eslint-disable-next-line no-new
-new Config() // we need this to initialize the logger
+function isTrue (envVar) {
+  return ['1', 'true', 'True'].includes(envVar)
+}
+
+// eslint-disable-next-line no-console
+let log = { info: isTrue(process.env.DD_TRACE_DEBUG) ? console.log : () => {} }
+if (semver.satisfies(process.versions.node, '>=16')) {
+  const Config = require('./packages/dd-trace/src/config')
+  log = require('./packages/dd-trace/src/log')
+
+  // eslint-disable-next-line no-new
+  new Config() // we need this to initialize the logger
+}
 
 let initBailout = false
 let clobberBailout = false
-const forced = ['1', 'true', 'True'].includes(process.env.DD_INJECT_FORCE)
+const forced = isTrue(process.env.DD_INJECT_FORCE)
 
 if (process.env.DD_INJECTION_ENABLED) {
   // If we're running via single-step install, and we're not in the app's
@@ -36,7 +46,6 @@ if (process.env.DD_INJECTION_ENABLED) {
   if (!clobberBailout) {
     const { engines } = require('./package.json')
     const version = process.versions.node
-    const semver = require('semver')
     if (!semver.satisfies(version, engines.node)) {
       initBailout = true
       telemetry([
