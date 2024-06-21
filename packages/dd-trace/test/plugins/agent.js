@@ -4,7 +4,6 @@ const http = require('http')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const getPort = require('get-port')
 const express = require('express')
 const path = require('path')
 const ritm = require('../../src/ritm')
@@ -270,8 +269,6 @@ module.exports = {
       res.status(200).send()
     })
 
-    const port = await getPort()
-
     const server = this.server = http.createServer(agent)
     const emit = server.emit
 
@@ -283,7 +280,11 @@ module.exports = {
     server.on('connection', socket => sockets.push(socket))
 
     const promise = new Promise((resolve, reject) => {
-      listener = server.listen(port, () => resolve())
+      listener = server.listen(0, () => {
+        const port = listener.address().port
+        tracer.setUrl(`http://127.0.0.1:${port}`)
+        resolve()
+      })
     })
 
     pluginName = [].concat(pluginName)
@@ -298,12 +299,9 @@ module.exports = {
     tracer.init(Object.assign({}, {
       service: 'test',
       env: 'tester',
-      port,
       flushInterval: 0,
       plugins: false
     }, tracerConfig))
-
-    tracer.setUrl(`http://127.0.0.1:${port}`)
 
     for (let i = 0, l = pluginName.length; i < l; i++) {
       tracer.use(pluginName[i], config[i])
