@@ -282,7 +282,21 @@ module.exports = {
     const promise = new Promise((resolve, reject) => {
       listener = server.listen(0, () => {
         const port = listener.address().port
+
+        tracer.init(Object.assign({}, {
+          service: 'test',
+          env: 'tester',
+          port,
+          flushInterval: 0,
+          plugins: false
+        }, tracerConfig))
+
         tracer.setUrl(`http://127.0.0.1:${port}`)
+
+        for (let i = 0, l = pluginName.length; i < l; i++) {
+          tracer.use(pluginName[i], config[i])
+        }
+
         resolve()
       })
     })
@@ -295,17 +309,6 @@ module.exports = {
       tracer = null
       dsmStats = []
     })
-
-    tracer.init(Object.assign({}, {
-      service: 'test',
-      env: 'tester',
-      flushInterval: 0,
-      plugins: false
-    }, tracerConfig))
-
-    for (let i = 0, l = pluginName.length; i < l; i++) {
-      tracer.use(pluginName[i], config[i])
-    }
 
     return promise
   },
