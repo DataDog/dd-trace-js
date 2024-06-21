@@ -52,7 +52,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
-          request.operation, response, span || null, { streamName }
+          request.operation, request.params, response, span || null, { streamName }
         )
       }
     })
