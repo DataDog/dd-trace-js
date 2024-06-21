@@ -47,6 +47,7 @@ describe('Exporter', () => {
     const stats = { enabled: false }
     const appsec = { standalone: { enabled: true } }
     exporter = new Exporter({ url, flushInterval, stats, appsec }, prioritySampler)
+
     expect(Writer).to.have.been.calledWithMatch({
       headers: {
         'Datadog-Client-Computed-Stats': 'yes'
