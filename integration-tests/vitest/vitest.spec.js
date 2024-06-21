@@ -67,35 +67,45 @@ versions.forEach((version) => {
         )
         assert.equal(failedSuite.content.meta[TEST_STATUS], 'fail')
 
-        const failedTest = testEvents.find(
-          ({ content: { resource } }) =>
-            resource === 'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report failed test'
+        const failedSuiteHooks = testSuiteEvents.find(
+          suite => suite.content.resource === 'test_suite.ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs'
+        )
+        assert.equal(failedSuiteHooks.content.meta[TEST_STATUS], 'fail')
+
+        assert.includeMembers(testEvents.map(test => test.content.resource),
+          [
+            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+            '.test-visibility-failed-suite-first-describe can report failed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+            '.test-visibility-failed-suite-first-describe can report more ',
+            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+            '.test-visibility-failed-suite-second-describe can report passed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+            '.test-visibility-failed-suite-second-describe can report more ',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test ',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more ',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test ',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more '
+          ]
         )
 
-        assert.equal(failedTest.content.meta[TEST_STATUS], 'fail')
+        const failedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'fail')
 
-        const passedTests = testEvents.filter(testEvent => testEvent.content.meta[TEST_STATUS] === 'pass')
-
-        assert.includeMembers(passedTests.map(test => test.content.resource), [
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more',
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report passed test',
-          'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.can report more',
-          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report more',
-          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report passed test',
-          'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs.can report more'
-        ])
-
-        assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-          'pass',
-          'pass',
-          'pass',
-          'pass',
-          'pass',
-          'pass',
-          'pass',
-          'fail'
-        ])
+        assert.includeMembers(
+          failedTests.map(test => test.content.resource),
+          [
+            'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
+            '.test-visibility-failed-suite-first-describe can report failed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test ',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more '
+          ]
+        )
         // TODO: check error messages
       }).then(() => done()).catch(done)
 
