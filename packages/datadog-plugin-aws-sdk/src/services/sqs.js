@@ -23,7 +23,7 @@ class Sqs extends BaseAwsSdkPlugin {
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
-      let parsedMessageAttributes
+      let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
         obj.needsFinish = true
         const options = {
@@ -39,8 +39,9 @@ class Sqs extends BaseAwsSdkPlugin {
         this.enter(span, store)
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
+
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, parsedMessageAttributes || null
+        request.operation, request.params, response, span || null, { parsedMessageAttributes }
       )
     })
 
