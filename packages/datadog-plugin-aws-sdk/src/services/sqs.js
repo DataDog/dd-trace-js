@@ -165,7 +165,8 @@ class Sqs extends BaseAwsSdkPlugin {
     }
   }
 
-  responseExtractDSMContext (operation, params, response, span, parsedAttributes) {
+  responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
+    let { parsedAttributes } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
     if (!response || !response.Messages || !response.Messages[0]) return
@@ -188,7 +189,7 @@ class Sqs extends BaseAwsSdkPlugin {
             // SQS to SQS
           }
         }
-        if (message.MessageAttributes && message.MessageAttributes._datadog) {
+        if (!parsedAttributes && message.MessageAttributes && message.MessageAttributes._datadog) {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
@@ -217,6 +218,17 @@ class Sqs extends BaseAwsSdkPlugin {
       case 'sendMessageBatch':
         for (let i = 0; i < params.Entries.length; i++) {
           this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
+        }
+        break
+      case 'receiveMessage':
+        if (!params.MessageAttributeNames) {
+          params.MessageAttributeNames = ['_datadog']
+        } else if (
+          !params.MessageAttributeNames.includes('_datadog') &&
+          !params.MessageAttributeNames.includes('.*') &&
+          !params.MessageAttributeNames.includes('All')
+        ) {
+          params.MessageAttributeNames.push('_datadog')
         }
         break
     }
