@@ -107,7 +107,6 @@ describe('Tracer', () => {
     const sampler = {}
     tracer = new Tracer(config, sampler)
 
-    expect(AgentExporter).to.have.been.called
     expect(AgentExporter).to.have.been.calledWith(config, sampler)
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, sampler, config)
   })
