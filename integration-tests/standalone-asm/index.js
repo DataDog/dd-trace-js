@@ -8,11 +8,6 @@ const options = {
     iast: {
       enabled: true,
       requestSampling: 100
-    },
-    appsec: {
-      standalone: {
-        enabled: false
-      }
     }
   }
 }
@@ -23,11 +18,6 @@ if (process.env.AGENT_PORT) {
 
 if (process.env.AGENT_URL) {
   options.url = process.env.AGENT_URL
-}
-
-const standalone = process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
-if (standalone) {
-  options.experimental.appsec.standalone.enabled = standalone === 'true' || standalone === '1'
 }
 
 const tracer = require('dd-trace')
