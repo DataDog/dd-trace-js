@@ -42,7 +42,7 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
 
       return new Promise(resolve => {
         app.listen({ port: config.port }, (data) => {
-          config.port = app.listener.address().port
+          config.port = app.server.address().port
           resolve()
         })
       })
