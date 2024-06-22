@@ -26,7 +26,7 @@ jobs:
 
 
   system-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-16-cores
     needs:
       - get-essential-scenarios
     strategy:
