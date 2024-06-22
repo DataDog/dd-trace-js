@@ -171,7 +171,9 @@ describe('Path params sourcing with express', () => {
 
       app.use('/:parameterParent', nestedRouter)
 
-      appListener = app.listen(0, 'localhost', port => {
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
         axios
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
@@ -189,7 +191,9 @@ describe('Path params sourcing with express', () => {
       app.param('parameter1', checkParamIsTaintedAndNext)
       app.param('parameter2', checkParamIsTaintedAndNext)
 
-      appListener = app.listen(0, 'localhost', port => {
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
         axios
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
@@ -211,7 +215,9 @@ describe('Path params sourcing with express', () => {
       app.param('parameter1')
       app.param('parameter2')
 
-      appListener = app.listen(0, 'localhost', port => {
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
         axios
           .get(`http://localhost:${port}/tainted1/tainted2`)
           .then(() => done())
