@@ -1,5 +1,6 @@
 'use strict'
 
+const http = require('http')
 const agent = require('../plugins/agent')
 const {
   schema,
@@ -27,7 +28,17 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
     })
 
     before(async () => {
-      app = fastify()
+      let appListener
+
+      const serverFactory = (handler, opts) => {
+        appListener = http.createServer((req, res) => {
+          handler(req, res)
+        })
+
+        return appListener
+      }
+
+      app = fastify({ serverFactory })
 
       const typeDefs = gql(schema)
 
@@ -41,8 +52,8 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
       app.register(server.createHandler())
 
       return new Promise(resolve => {
-        const server = app.listen({ port: config.port }, (data) => {
-          config.port = server.address().port
+        app.listen({ port: config.port }, (data) => {
+          config.port = appListener.address().port
           resolve()
         })
       })
