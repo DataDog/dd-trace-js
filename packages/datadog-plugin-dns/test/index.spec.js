@@ -136,7 +136,7 @@ describe('Plugin', () => {
         dns.resolve('lvh.me', err => err && done(err))
       })
 
-      it('should instrument resolve shorthands', function (done) {
+      it('should instrument resolve shorthands', done => {
         agent
           .use(traces => {
             expect(traces[0][0]).to.deep.include({
