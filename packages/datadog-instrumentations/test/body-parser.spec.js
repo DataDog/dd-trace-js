@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -22,11 +21,9 @@ withVersions('body-parser', 'body-parser', version => {
         middlewareProcessBodyStub()
         res.end('DONE')
       })
-      getPort().then(newPort => {
-        port = newPort
-        server = app.listen(port, () => {
-          done()
-        })
+      server = app.listen(0, () => {
+        port = server.address().port
+        done()
       })
     })
     beforeEach(async () => {
