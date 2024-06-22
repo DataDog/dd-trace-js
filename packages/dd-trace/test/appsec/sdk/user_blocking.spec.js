@@ -5,7 +5,6 @@ const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
-const getPort = require('get-port')
 const axios = require('axios')
 const path = require('path')
 const waf = require('../../../src/appsec/waf')
@@ -166,7 +165,6 @@ describe('user_blocking', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -174,7 +172,10 @@ describe('user_blocking', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
 
       appsec.enable(config)
     })
