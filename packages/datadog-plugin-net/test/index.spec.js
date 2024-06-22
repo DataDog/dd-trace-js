@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const dns = require('dns')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -36,11 +35,7 @@ describe('Plugin', () => {
             tracer = require('../../dd-trace')
             parent = tracer.startSpan('parent')
             parent.finish()
-
-            return getPort()
           }).then(_port => {
-            port = _port
-
             return new Promise(resolve => setImmediate(resolve))
           })
       })
@@ -49,7 +44,10 @@ describe('Plugin', () => {
         tcp = new net.Server(socket => {
           socket.write('')
         })
-        tcp.listen(port, () => done())
+        tcp.listen(0, () => {
+          port = tcp.address().port
+          done()
+        })
       })
 
       beforeEach(done => {
