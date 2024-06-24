@@ -295,13 +295,10 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
 
