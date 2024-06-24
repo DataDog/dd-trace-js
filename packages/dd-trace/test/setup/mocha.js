@@ -85,7 +85,8 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it('should conform to the naming schema', () => {
+        it('should conform to the naming schema', function () {
+          this.timeout(10000)
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {

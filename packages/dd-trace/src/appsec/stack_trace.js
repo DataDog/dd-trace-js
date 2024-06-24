@@ -27,19 +27,17 @@ function getCallSiteList (maxDepth = 100) {
 }
 
 function filterOutFramesFromLibrary (callSiteList) {
-  return callSiteList.filter(callSite => !callSite.getFileName()?.includes(ddBasePath))
+  return callSiteList.filter(callSite => !callSite.getFileName()?.startsWith(ddBasePath))
 }
 
 function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
-  const maxCallSite = maxDepth < 1 ? Infinity : maxDepth
-
   const filteredFrames = filterOutFramesFromLibrary(callSiteList)
 
-  const half = filteredFrames.length > maxCallSite ? Math.round(maxCallSite / 2) : Infinity
+  const half = filteredFrames.length > maxDepth ? Math.round(maxDepth / 2) : Infinity
 
   const indexedFrames = []
-  for (let i = 0; i < Math.min(filteredFrames.length, maxCallSite); i++) {
-    const index = i < half ? i : i + filteredFrames.length - maxCallSite
+  for (let i = 0; i < Math.min(filteredFrames.length, maxDepth); i++) {
+    const index = i < half ? i : i + filteredFrames.length - maxDepth
     const callSite = filteredFrames[index]
     indexedFrames.push({
       id: index,
@@ -57,23 +55,25 @@ function getFramesForMetaStruct (callSiteList, maxDepth = 32) {
 function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSiteListGetter = getCallSiteList) {
   if (!rootSpan) return
 
-  if (!rootSpan.meta_struct) {
-    rootSpan.meta_struct = {}
-  }
-
-  if (!rootSpan.meta_struct['_dd.stack']) {
-    rootSpan.meta_struct['_dd.stack'] = {}
-  }
-
-  if (!rootSpan.meta_struct['_dd.stack'].exploit) {
-    rootSpan.meta_struct['_dd.stack'].exploit = []
-  }
-
-  if (maxStackTraces < 1 || rootSpan.meta_struct['_dd.stack'].exploit.length < maxStackTraces) {
+  if (maxStackTraces < 1 || (rootSpan.meta_struct?.['_dd.stack']?.exploit?.length ?? 0) < maxStackTraces) {
     // Since some frames will be discarded because they come from tracer codebase, a buffer is added
     // to the limit in order to get as close as `maxDepth` number of frames.
-    const stackTraceLimit = maxDepth < 1 ? Infinity : maxDepth + LIBRARY_FRAMES_BUFFER
-    const callSiteList = callSiteListGetter(stackTraceLimit)
+    if (maxDepth < 1) maxDepth = Infinity
+    const callSiteList = callSiteListGetter(maxDepth + LIBRARY_FRAMES_BUFFER)
+    if (!Array.isArray(callSiteList)) return
+
+    if (!rootSpan.meta_struct) {
+      rootSpan.meta_struct = {}
+    }
+
+    if (!rootSpan.meta_struct['_dd.stack']) {
+      rootSpan.meta_struct['_dd.stack'] = {}
+    }
+
+    if (!rootSpan.meta_struct['_dd.stack'].exploit) {
+      rootSpan.meta_struct['_dd.stack'].exploit = []
+    }
+
     const frames = getFramesForMetaStruct(callSiteList, maxDepth)
 
     rootSpan.meta_struct['_dd.stack'].exploit.push({
@@ -86,6 +86,5 @@ function reportStackTrace (rootSpan, stackId, maxDepth, maxStackTraces, callSite
 
 module.exports = {
   getCallSiteList,
-  filterOutFramesFromLibrary,
   reportStackTrace
 }

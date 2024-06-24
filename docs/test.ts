@@ -139,6 +139,11 @@ tracer.init({
       redactionEnabled: true,
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })

@@ -8,6 +8,8 @@ const Config = require('../../src/config')
 const path = require('path')
 const { assert } = require('chai')
 
+function noop () {}
+
 describe('RASP', () => {
   function getWebSpan (traces) {
     for (const trace of traces) {
@@ -86,7 +88,8 @@ describe('RASP', () => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', noop)
               res.end('end')
             }
 
