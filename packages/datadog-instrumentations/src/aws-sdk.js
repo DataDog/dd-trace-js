@@ -20,7 +20,8 @@ function wrapRequest (send) {
 
     return innerAr.runInAsyncScope(() => {
       this.on('complete', innerAr.bind(response => {
-        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response })
+        const cbExists = typeof cb === 'function'
+        channel(`apm:aws:request:complete:${channelSuffix}`).publish({ response, cbExists })
       }))
 
       startCh.publish({
