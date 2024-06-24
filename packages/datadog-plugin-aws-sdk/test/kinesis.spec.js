@@ -95,13 +95,13 @@ describe('Kinesis', function () {
         helpers.putTestRecords(kinesis, streamName, (err, data) => {
           if (err) return done(err)
 
-          helpers.getTestRecord(kinesis, streamName, data, (err, data) => {
+          helpers.getTestRecord(kinesis, streamName, data.Records[0], (err, data) => {
             if (err) return done(err)
 
             for (const record in data.Records) {
-              const data = Buffer.from(record.Data).toString()
-              expect(data).to.have.property('_datadog')
-              expect(data._datadog).to.have.property('x-datadog-trace-id')
+              const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
+              expect(recordData).to.have.property('_datadog')
+              expect(recordData._datadog).to.have.property('x-datadog-trace-id')
             }
 
             done()

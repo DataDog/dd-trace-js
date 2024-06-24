@@ -8,7 +8,6 @@ const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
 describe('Sns', function () {
-  this.timeout(0)
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
