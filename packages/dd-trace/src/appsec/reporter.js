@@ -27,7 +27,7 @@ const contentHeaderList = [
   'content-language'
 ]
 
-const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+const EVENT_HEADERS_MAP = mapHeaderAndTags([
   ...ipHeaderList,
   'forwarded',
   'via',
@@ -49,7 +49,7 @@ const identificationHeaders = [
 ]
 
 // these request headers are always collected - it breaks the expected spec orders
-const MANDATORY_REQUEST_HEADERS_MAP = mapHeaderAndTags([
+const REQUEST_HEADERS_MAP = mapHeaderAndTags([
   'content-type',
   'user-agent',
   'accept',
@@ -200,7 +200,7 @@ function finishRequest (req, res) {
   incrementWafRequestsMetric(req)
 
   // collect some headers even when no attack is detected
-  const mandatoryTags = filterHeaders(req.headers, MANDATORY_REQUEST_HEADERS_MAP)
+  const mandatoryTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
   const ua = mandatoryTags['http.request.headers.user-agent']
   if (ua) {
     mandatoryTags['http.useragent'] = ua
@@ -208,10 +208,10 @@ function finishRequest (req, res) {
   rootSpan.addTags(mandatoryTags)
 
   const tags = rootSpan.context()._tags
-  if (!shouldTrackHeaders(tags)) return
+  if (!shouldCollectEventHeaders(tags)) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
-  Object.assign(newTags, filterHeaders(req.headers, REQUEST_HEADERS_MAP))
+  Object.assign(newTags, filterHeaders(req.headers, EVENT_HEADERS_MAP))
 
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
@@ -220,7 +220,7 @@ function finishRequest (req, res) {
   rootSpan.addTags(newTags)
 }
 
-function shouldTrackHeaders (tags) {
+function shouldCollectEventHeaders (tags) {
   if (tags['appsec.event'] === 'true') {
     return true
   }
