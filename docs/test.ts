@@ -363,6 +363,8 @@ tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
 tracer.use('undici');
+tracer.use('vitest');
+tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
 
 tracer.use('express', false)
