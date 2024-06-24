@@ -1279,7 +1279,9 @@ describe('Plugin', () => {
             res.status(200).send('hi')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1292,13 +1294,11 @@ describe('Plugin', () => {
               done()
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/does-not-exist`, {
-                  validateStatus: status => status === 404
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/does-not-exist`, {
+                validateStatus: status => status === 404
+              })
+              .catch(done)
           })
         })
 
