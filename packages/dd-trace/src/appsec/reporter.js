@@ -220,7 +220,7 @@ function finishRequest (req, res) {
   rootSpan.addTags(newTags)
 }
 
-function shouldCollectEventHeaders (tags) {
+function shouldCollectEventHeaders (tags = {}) {
   if (tags['appsec.event'] === 'true') {
     return true
   }
