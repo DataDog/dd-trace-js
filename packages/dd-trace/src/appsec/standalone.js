@@ -68,6 +68,8 @@ function onSpanStart ({ span, fields }) {
 }
 
 function onSpanInject ({ spanContext, carrier }) {
+  if (!spanContext?._trace?.tags || !carrier) return
+
   // do not inject trace and sampling if there is no appsec event
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
     for (const key in carrier) {
@@ -83,7 +85,9 @@ function onSpanInject ({ spanContext, carrier }) {
   }
 }
 
-function onSpanExtract ({ spanContext }) {
+function onSpanExtract ({ spanContext = {} }) {
+  if (!spanContext._trace?.tags || !spanContext._sampling) return
+
   // reset upstream priority if _dd.p.appsec is not found
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
     resetSampling(spanContext)
