@@ -29,9 +29,16 @@ const telemetryCounters = {
 function getCounter (event, ddVar, otelVar) {
   const counters = telemetryCounters[event]
   const tags = []
-
-  if (ddVar) tags.push(ddVar)
-  if (otelVar) tags.push(otelVar)
+  const ddVarPrefix = 'config.datadog:'
+  const otelVarPrefix = 'config.opentelemetry:'
+  if (ddVar) {
+    ddVar = ddVarPrefix + ddVar
+    tags.push(ddVar)
+  }
+  if (otelVar) {
+    otelVar = otelVarPrefix + otelVar
+    tags.push(otelVar)
+  }
 
   if (!(otelVar in counters)) counters[otelVar] = {}
 

@@ -96,7 +96,6 @@ describe('opentelemetry', () => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
-
       assert.strictEqual(metrics.namespace, 'tracers')
 
       const otelHiding = metrics.series.filter(({ metric }) => metric === 'otel.env.hiding')
@@ -148,43 +147,44 @@ describe('opentelemetry', () => {
       assert.strictEqual(otelInvalid.length, 0)
 
       assert.deepStrictEqual(otelHiding[0].tags, [
-        'DD_TRACE_LOG_LEVEL', 'OTEL_LOG_LEVEL',
+        'config.datadog:DD_TRACE_LOG_LEVEL', 'config.opentelemetry:OTEL_LOG_LEVEL',
         `version:${process.version}`
       ])
       assert.deepStrictEqual(otelHiding[1].tags, [
-        'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS',
+        'config.datadog:DD_TRACE_PROPAGATION_STYLE', 'config.opentelemetry:OTEL_PROPAGATORS',
         `version:${process.version}`
       ])
       assert.deepStrictEqual(otelHiding[2].tags, [
-        'DD_SERVICE', 'OTEL_SERVICE_NAME',
+        'config.datadog:DD_SERVICE', 'config.opentelemetry:OTEL_SERVICE_NAME',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[3].tags, [
-        'DD_TRACE_SAMPLE_RATE', 'OTEL_TRACES_SAMPLER', `version:${process.version}`
+        'config.datadog:DD_TRACE_SAMPLE_RATE', 'config.opentelemetry:OTEL_TRACES_SAMPLER', `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[4].tags, [
-        'DD_TRACE_SAMPLE_RATE', 'OTEL_TRACES_SAMPLER_ARG', `version:${process.version}`
+        'config.datadog:DD_TRACE_SAMPLE_RATE', 'config.opentelemetry:OTEL_TRACES_SAMPLER_ARG',
+        `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[5].tags, [
-        'DD_TRACE_ENABLED', 'OTEL_TRACES_EXPORTER',
+        'config.datadog:DD_TRACE_ENABLED', 'config.opentelemetry:OTEL_TRACES_EXPORTER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[6].tags, [
-        'DD_RUNTIME_METRICS_ENABLED', 'OTEL_METRICS_EXPORTER',
+        'config.datadog:DD_RUNTIME_METRICS_ENABLED', 'config.opentelemetry:OTEL_METRICS_EXPORTER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[7].tags, [
-        'DD_TAGS', 'OTEL_RESOURCE_ATTRIBUTES',
+        'config.datadog:DD_TAGS', 'config.opentelemetry:OTEL_RESOURCE_ATTRIBUTES',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelHiding[8].tags, [
-        'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED',
+        'config.datadog:DD_TRACE_OTEL_ENABLED', 'config.opentelemetry:OTEL_SDK_DISABLED',
         `version:${process.version}`
       ])
 
@@ -229,50 +229,50 @@ describe('opentelemetry', () => {
       assert.strictEqual(otelInvalid.length, 8)
 
       assert.deepStrictEqual(otelHiding[0].tags, [
-        'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED',
+        'config.datadog:DD_TRACE_OTEL_ENABLED', 'config.opentelemetry:OTEL_SDK_DISABLED',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[0].tags, [
-        'DD_TRACE_LOG_LEVEL', 'OTEL_LOG_LEVEL',
+        'config.datadog:DD_TRACE_LOG_LEVEL', 'config.opentelemetry:OTEL_LOG_LEVEL',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[1].tags, [
-        'DD_TRACE_SAMPLE_RATE',
-        'OTEL_TRACES_SAMPLER',
+        'config.datadog:DD_TRACE_SAMPLE_RATE',
+        'config.opentelemetry:OTEL_TRACES_SAMPLER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[2].tags, [
-        'DD_TRACE_SAMPLE_RATE',
-        'OTEL_TRACES_SAMPLER_ARG',
+        'config.datadog:DD_TRACE_SAMPLE_RATE',
+        'config.opentelemetry:OTEL_TRACES_SAMPLER_ARG',
         `version:${process.version}`
       ])
       assert.deepStrictEqual(otelInvalid[3].tags, [
-        'DD_TRACE_ENABLED', 'OTEL_TRACES_EXPORTER',
+        'config.datadog:DD_TRACE_ENABLED', 'config.opentelemetry:OTEL_TRACES_EXPORTER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[4].tags, [
-        'DD_RUNTIME_METRICS_ENABLED',
-        'OTEL_METRICS_EXPORTER',
+        'config.datadog:DD_RUNTIME_METRICS_ENABLED',
+        'config.opentelemetry:OTEL_METRICS_EXPORTER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[5].tags, [
-        'DD_TRACE_OTEL_ENABLED', 'OTEL_SDK_DISABLED',
+        'config.datadog:DD_TRACE_OTEL_ENABLED', 'config.opentelemetry:OTEL_SDK_DISABLED',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[6].tags, [
-        'OTEL_LOGS_EXPORTER',
+        'config.opentelemetry:OTEL_LOGS_EXPORTER',
         `version:${process.version}`
       ])
 
       assert.deepStrictEqual(otelInvalid[7].tags, [
-        'DD_TRACE_PROPAGATION_STYLE',
-        'OTEL_PROPAGATORS',
+        'config.datadog:DD_TRACE_PROPAGATION_STYLE',
+        'config.opentelemetry:OTEL_PROPAGATORS',
         `version:${process.version}`
       ])
 
