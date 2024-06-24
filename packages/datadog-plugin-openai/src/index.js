@@ -15,13 +15,16 @@ const RE_TAB = /\t/g
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
-let encodingForModel
-try {
-  // eslint-disable-next-line import/no-extraneous-dependencies
-  encodingForModel = require('tiktoken').encoding_for_model
-} catch {
-  // we will use token count estimations in this case
+function safeRequire (module) {
+  try {
+    // eslint-disable-next-line import/no-extraneous-dependencies
+    return require(module)
+  } catch {
+    return null
+  }
 }
+
+const encodingForModel = safeRequire('tiktoken')?.encodingForModel
 
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
