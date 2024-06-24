@@ -32,5 +32,7 @@ module.exports = {
   PEER_SERVICE_SOURCE_KEY: '_dd.peer.service.source',
   PEER_SERVICE_REMAP_KEY: '_dd.peer.service.remapped_from',
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
-  SCI_COMMIT_SHA: '_dd.git.commit.sha'
+  SCI_COMMIT_SHA: '_dd.git.commit.sha',
+  APM_TRACING_ENABLED_KEY: '_dd.apm.enabled',
+  APPSEC_PROPAGATION_KEY: '_dd.p.appsec'
 }
