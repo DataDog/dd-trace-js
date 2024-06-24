@@ -65,7 +65,8 @@ withVersions('express', 'express', expressVersion => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
+              const cr = require(protocol).get(`${protocol}://${req.query.host}`)
+              cr.on('error', function () {})
               res.end('end')
             }
 
