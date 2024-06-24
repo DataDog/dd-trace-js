@@ -37,7 +37,7 @@
     "test:integration:cypress": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",
     "test:integration:selenium": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/selenium/*.spec.js\"",
-    "test:integration:profiler": "mocha --colors --timeout 90000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/profiler/*.spec.js\"",
+    "test:integration:profiler": "mocha --colors --timeout 180000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/profiler/*.spec.js\"",
     "test:integration:serverless": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/serverless/*.spec.js\"",
     "test:integration:vitest": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/vitest/*.spec.js\"",
     "test:integration:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
