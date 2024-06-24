@@ -24,7 +24,7 @@ function safeRequire (module) {
   }
 }
 
-const encodingForModel = safeRequire('tiktoken')?.encodingForModel
+const encodingForModel = safeRequire('tiktoken')?.encoding_for_model
 
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
