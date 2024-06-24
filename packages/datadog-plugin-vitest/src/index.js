@@ -40,12 +40,12 @@ class VitestPlugin extends CiPlugin {
       this.enter(span, store)
     })
 
-    // If there's a hook error, this is called AND THEN test:error - which will not work
     this.addSub('ci:vitest:test:finish-time', ({ status, task }) => {
       const store = storage.getStore()
       const span = store?.span
 
-      // we store the finish time
+      // we store the finish time to finish at a later hook
+      // this is because the test might fail at a `afterEach` hook
       if (span) {
         span.setTag(TEST_STATUS, status)
         this.taskToFinishTime.set(task, span._getTime())
