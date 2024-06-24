@@ -10,6 +10,7 @@ const testStartCh = channel('ci:vitest:test:start')
 const testFinishTimeCh = channel('ci:vitest:test:finish-time')
 const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
+const testSkipCh = channel('ci:vitest:test:skip')
 
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
 const testSuiteFinishCh = channel('ci:vitest:test-suite:finish')
@@ -76,10 +77,10 @@ function getTypeTasks (fileTasks, type = 'test') {
 }
 
 function getTestName (task) {
-  let testName = ''
-  let currentTask = task
+  let testName = task.name
+  let currentTask = task.suite
 
-  while (currentTask.suite) {
+  while (currentTask) {
     if (currentTask.name) {
       testName = `${currentTask.name} ${testName}`
     }
@@ -136,8 +137,7 @@ addHook({
 
   if (isVitestTestRunner(vitestPackage)) {
     const { VitestTestRunner } = vitestPackage
-    // test start
-    // TODO: add test for beforeEach / afterEach and before/after hooks: they're likely tasks too
+    // test start (only tests that are not marked as skip or todo)
     shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task) {
       const asyncResource = new AsyncResource('bound-anonymous-fn')
       taskToAsync.set(task, asyncResource)
@@ -148,8 +148,7 @@ addHook({
       return onBeforeTryTask.apply(this, arguments)
     })
 
-    // test finish
-    // TODO: add test for beforeEach / afterEach and before/after hooks: they're likely tasks too
+    // test finish (only passed tests)
     shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
       async function (task, { retry: retryCount }) {
         const result = await onAfterTryTask.apply(this, arguments)
@@ -192,27 +191,33 @@ addHook({
 
       testTasks.forEach(task => {
         const testAsyncResource = taskToAsync.get(task)
-        const { result: { state, duration, errors } } = task
+        const { result } = task
 
-        // what about 'skip'??
-        if (state === 'pass') {
-          testAsyncResource.runInAsyncScope(() => {
-            testPassCh.publish({ task })
-          })
-        } else if (state === 'fail') {
-          // If it's failing, we have no accurate finish time, so we have to use `duration`
-          let testError
+        if (result) {
+          const { state, duration, errors } = result
+          if (state === 'skip') { // programmatic skip
+            testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+          } else if (state === 'pass') {
+            testAsyncResource.runInAsyncScope(() => {
+              testPassCh.publish({ task })
+            })
+          } else if (state === 'fail') {
+            // If it's failing, we have no accurate finish time, so we have to use `duration`
+            let testError
 
-          if (errors?.length) {
-            testError = errors[0]
+            if (errors?.length) {
+              testError = errors[0]
+            }
+
+            testAsyncResource.runInAsyncScope(() => {
+              testErrorCh.publish({ duration, error: testError })
+            })
+            if (errors?.length) {
+              testSuiteError = testError // we store the error to bubble it up to the suite
+            }
           }
-
-          testAsyncResource.runInAsyncScope(() => {
-            testErrorCh.publish({ duration, error: testError })
-          })
-          if (errors?.length) {
-            testSuiteError = testError // we store the error to bubble it up to the suite
-          }
+        } else { // test.skip or test.todo
+          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
         }
       })
 

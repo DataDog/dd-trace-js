@@ -75,21 +75,23 @@ versions.forEach((version) => {
         assert.includeMembers(testEvents.map(test => test.content.resource),
           [
             'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test ',
+            '.test-visibility-failed-suite-first-describe can report failed test',
             'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report more ',
+            '.test-visibility-failed-suite-first-describe can report more',
             'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report passed test ',
+            '.test-visibility-failed-suite-second-describe can report passed test',
             'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-second-describe can report more ',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test ',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more ',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test ',
-            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more '
+            '.test-visibility-failed-suite-second-describe can report more',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report passed test',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.context can report more',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report passed test',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can report more',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
           ]
         )
 
@@ -99,11 +101,22 @@ versions.forEach((version) => {
           failedTests.map(test => test.content.resource),
           [
             'ci-visibility/vitest-tests/test-visibility-failed-suite.mjs' +
-            '.test-visibility-failed-suite-first-describe can report failed test ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test ',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more '
+            '.test-visibility-failed-suite-first-describe can report failed test',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
+          ]
+        )
+
+        const skippedTests = testEvents.filter(test => test.content.meta[TEST_STATUS] === 'skip')
+
+        assert.includeMembers(
+          skippedTests.map(test => test.content.resource),
+          [
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
           ]
         )
         // TODO: check error messages
@@ -116,11 +129,14 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             // maybe only in node@20
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more stuff
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
           },
           stdio: 'pipe'
         }
       )
+
+      childProcess.stderr.pipe(process.stderr)
+      childProcess.stdout.pipe(process.stdout)
     })
   })
 })

@@ -78,6 +78,19 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
+    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath }) => {
+      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      this.startTestSpan(
+        testName,
+        testSuite,
+        this.testSuiteSpan,
+        {
+          [TEST_SOURCE_FILE]: testSuite,
+          [TEST_STATUS]: 'skip'
+        }
+      ).finish()
+    })
+
     this.addSub('ci:vitest:test-suite:start', (testSuiteAbsolutePath) => {
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': process.env.DD_CIVISIBILITY_TEST_SESSION_ID,
