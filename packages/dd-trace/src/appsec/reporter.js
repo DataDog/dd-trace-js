@@ -216,6 +216,7 @@ function finishRequest (req, res) {
   if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
   }
+
   rootSpan.addTags(newTags)
 }
 
