@@ -218,7 +218,7 @@ class Sqs extends BaseAwsSdkPlugin {
         break
       case 'sendMessageBatch':
         for (let i = 0; i < params.Entries.length; i++) {
-          this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
+          this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0 || this.config.batchPropagationEnabled)
         }
         break
       case 'receiveMessage':

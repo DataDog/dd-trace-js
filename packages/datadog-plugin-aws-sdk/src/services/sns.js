@@ -59,7 +59,9 @@ class Sns extends BaseAwsSdkPlugin {
         break
       case 'publishBatch':
         for (let i = 0; i < params.PublishBatchRequestEntries.length; i++) {
-          this.injectToMessage(span, params.PublishBatchRequestEntries[i], params.TopicArn, i === 0)
+          this.injectToMessage(
+            span, params.PublishBatchRequestEntries[i], params.TopicArn, i === 0 || this.config.batchPropagationEnabled
+          )
         }
         break
     }

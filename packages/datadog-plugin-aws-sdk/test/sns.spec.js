@@ -25,7 +25,8 @@ describe('Sns', () => {
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
-    const assertPropagation = done => {
+    const assertPropagation = (done, childSpans = 1) => {
+      let childSpansFound = 0
       agent.use(traces => {
         const span = traces[0][0]
 
@@ -37,6 +38,8 @@ describe('Sns', () => {
 
         expect(parentId).to.not.equal('0')
         expect(parentId).to.equal(spanId)
+        childSpansFound += 1
+        expect(childSpansFound).to.equal(childSpans)
       }).then(done, done)
     }
 
@@ -85,7 +88,7 @@ describe('Sns', () => {
         parentId = '0'
         spanId = '0'
 
-        return agent.load('aws-sdk', { sns: { dsmEnabled: false } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       before(done => {
@@ -166,6 +169,24 @@ describe('Sns', () => {
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
                 { Id: '2', Message: 'message 2' }
+              ]
+            }, e => e && done(e))
+          })
+        })
+
+        it('injects trace context to each message SNS publishBatch with batch propagation enabled', done => {
+          assertPropagation(done, 3)
+
+          sns.subscribe(subParams, (err, data) => {
+            if (err) return done(err)
+
+            sqs.receiveMessage(receiveParams, e => e && done(e))
+            sns.publishBatch({
+              TopicArn,
+              PublishBatchRequestEntries: [
+                { Id: '1', Message: 'message 1' },
+                { Id: '2', Message: 'message 2' },
+                { Id: '3', Message: 'message 3' }
               ]
             }, e => e && done(e))
           })

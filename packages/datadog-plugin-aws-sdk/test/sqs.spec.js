@@ -39,7 +39,9 @@ describe('Plugin', () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
 
-          return agent.load('aws-sdk', { sqs: { dsmEnabled: false } }, { dsmEnabled: true })
+          return agent.load(
+            'aws-sdk', { sqs: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true }
+          )
         })
 
         before(done => {
@@ -146,6 +148,61 @@ describe('Plugin', () => {
               if (err) return done(err)
             })
           })
+        })
+
+        it('should propagate the tracing context from the producer to the consumer in batch operations', (done) => {
+          let parentId
+          let traceId
+
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(span.resource.startsWith('sendMessageBatch')).to.equal(true)
+            expect(span.meta).to.include({
+              queuename: 'SQS_QUEUE_NAME'
+            })
+
+            parentId = span.span_id.toString()
+            traceId = span.trace_id.toString()
+          })
+
+          let batchChildSpans = 0
+          agent.use(traces => {
+            const span = traces[0][0]
+
+            expect(parentId).to.be.a('string')
+            expect(span.parent_id.toString()).to.equal(parentId)
+            expect(span.trace_id.toString()).to.equal(traceId)
+            batchChildSpans += 1
+            expect(batchChildSpans).to.equal(2)
+          }).then(done, done)
+
+          sqs.sendMessageBatch(
+            {
+              Entries: [
+                {
+                  Id: '1',
+                  MessageBody: 'test batch propagation 1'
+                },
+                {
+                  Id: '2',
+                  MessageBody: 'test batch propagation 2'
+                },
+                {
+                  Id: '3',
+                  MessageBody: 'test batch propagation 3'
+                }
+              ],
+              QueueUrl
+            }, (err) => {
+              if (err) return done(err)
+
+              sqs.receiveMessage({
+                QueueUrl
+              }, (err) => {
+                if (err) return done(err)
+              })
+            })
         })
 
         it('should run the consumer in the context of its span', (done) => {

@@ -1223,6 +1223,13 @@ declare namespace tracer {
       splitByAwsService?: boolean;
 
       /**
+       * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
+       * behavior is to inject the first message in batch send operations.
+       * @default false
+       */
+      batchPropagationEnabled?: boolean;
+
+      /**
        * Hooks to run before spans are finished.
        */
       hooks?: {
