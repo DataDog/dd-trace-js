@@ -8,6 +8,8 @@ const Config = require('../../src/config')
 const path = require('path')
 const { assert } = require('chai')
 
+function noop () {}
+
 withVersions('express', 'express', expressVersion => {
   describe('RASP', () => {
     let app, server, port, axios
@@ -65,8 +67,8 @@ withVersions('express', 'express', expressVersion => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              const cr = require(protocol).get(`${protocol}://${req.query.host}`)
-              cr.on('error', function () {})
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', noop)
               res.end('end')
             }
 
@@ -81,7 +83,8 @@ withVersions('express', 'express', expressVersion => {
 
           it('Should detect threat doing a GET request', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', noop)
               res.end('end')
             }
 
@@ -102,6 +105,7 @@ withVersions('express', 'express', expressVersion => {
             app = (req, res) => {
               const clientRequest = require(protocol)
                 .request(`${protocol}://${req.query.host}`, { method: 'POST' })
+              clientRequest.on('error', noop)
               clientRequest.write('dummy_post_data')
               clientRequest.end()
               res.end('end')
