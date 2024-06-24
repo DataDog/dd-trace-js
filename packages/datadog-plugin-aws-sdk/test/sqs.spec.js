@@ -23,6 +23,7 @@ const queueOptionsDsm = getQueueParams(queueNameDSM)
 
 describe('Plugin', () => {
   describe('aws-sdk (sqs)', function () {
+    this.timeout(10000)
     setup()
 
     withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -38,6 +39,7 @@ describe('Plugin', () => {
         before(() => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')
+          tracer.use('aws-sdk', { sqs: { batchPropagationEnabled: true } })
 
           return agent.load(
             'aws-sdk', { sqs: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true }
@@ -174,8 +176,8 @@ describe('Plugin', () => {
             expect(span.parent_id.toString()).to.equal(parentId)
             expect(span.trace_id.toString()).to.equal(traceId)
             batchChildSpans += 1
-            expect(batchChildSpans).to.equal(2)
-          }).then(done, done)
+            expect(batchChildSpans).to.equal(3)
+          }, { timeoutMs: 2000 }).then(done, done)
 
           sqs.sendMessageBatch(
             {
@@ -197,11 +199,24 @@ describe('Plugin', () => {
             }, (err) => {
               if (err) return done(err)
 
-              sqs.receiveMessage({
-                QueueUrl
-              }, (err) => {
-                if (err) return done(err)
-              })
+              function receiveMessage () {
+                sqs.receiveMessage({
+                  QueueUrl,
+                  MaxNumberOfMessages: 1
+                }, (err, data) => {
+                  if (err) return done(err)
+
+                  for (const message in data.Messages) {
+                    const recordData = data.Messages[message].MessageAttributes
+                    expect(recordData).to.have.property('_datadog')
+                    const traceContext = JSON.parse(recordData._datadog.StringValue)
+                    expect(traceContext).to.have.property('x-datadog-trace-id')
+                  }
+                })
+              }
+              receiveMessage()
+              receiveMessage()
+              receiveMessage()
             })
         })
 
