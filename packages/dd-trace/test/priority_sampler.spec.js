@@ -9,6 +9,8 @@ const {
   SAMPLING_MECHANISM_AGENT,
   SAMPLING_MECHANISM_RULE,
   SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_REMOTE_USER,
+  SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY
 } = require('../src/constants')
 
@@ -200,6 +202,30 @@ describe('PrioritySampler', () => {
 
       expect(context._sampling).to.have.property('priority', USER_KEEP)
       expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_RULE)
+    })
+
+    it('should support a customer-defined remote configuration sampling', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 1, service: 'test', resource: /res.*/, provenance: 'customer' }
+        ]
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_KEEP)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_REMOTE_USER)
+    })
+
+    it('should support a dynamic remote configuration sampling', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [
+          { sampleRate: 0, service: 'test', resource: /res.*/, provenance: 'dynamic' }
+        ]
+      })
+      prioritySampler.sample(context)
+
+      expect(context._sampling).to.have.property('priority', USER_REJECT)
+      expect(context._sampling.mechanism).to.equal(SAMPLING_MECHANISM_REMOTE_DYNAMIC)
     })
 
     it('should validate JSON rule into an array', () => {

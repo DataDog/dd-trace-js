@@ -116,6 +116,14 @@ tracer.init({
     apiSecurity: {
       enabled: true,
       requestSampling: 1.0
+    },
+    rasp: {
+      enabled: true
+    },
+    stackTrace: {
+      enabled: true,
+      maxStackTraces: 5,
+      maxDepth: 42
     }
   }
 });
@@ -131,6 +139,11 @@ tracer.init({
       redactionEnabled: true,
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })
@@ -349,6 +362,7 @@ tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
+tracer.use('undici');
 tracer.use('winston');
 
 tracer.use('express', false)

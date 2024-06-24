@@ -15,6 +15,8 @@ module.exports = {
   SAMPLING_MECHANISM_MANUAL: 4,
   SAMPLING_MECHANISM_APPSEC: 5,
   SAMPLING_MECHANISM_SPAN: 8,
+  SAMPLING_MECHANISM_REMOTE_USER: 11,
+  SAMPLING_MECHANISM_REMOTE_DYNAMIC: 12,
   SPAN_SAMPLING_MECHANISM: '_dd.span_sampling.mechanism',
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
@@ -30,5 +32,7 @@ module.exports = {
   PEER_SERVICE_SOURCE_KEY: '_dd.peer.service.source',
   PEER_SERVICE_REMAP_KEY: '_dd.peer.service.remapped_from',
   SCI_REPOSITORY_URL: '_dd.git.repository_url',
-  SCI_COMMIT_SHA: '_dd.git.commit.sha'
+  SCI_COMMIT_SHA: '_dd.git.commit.sha',
+  APM_TRACING_ENABLED_KEY: '_dd.apm.enabled',
+  APPSEC_PROPAGATION_KEY: '_dd.p.appsec'
 }

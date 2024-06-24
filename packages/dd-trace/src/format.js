@@ -34,6 +34,7 @@ function format (span) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
+  extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
   extractChunkTags(formatted, span)
   extractTags(formatted, span)
@@ -52,6 +53,7 @@ function formatSpan (span) {
     resource: String(spanContext._name),
     error: 0,
     meta: {},
+    meta_struct: span.meta_struct,
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
@@ -86,6 +88,22 @@ function extractSpanLinks (trace, span) {
     }
   }
   if (links.length > 0) { trace.meta['_dd.span_links'] = JSON.stringify(links) }
+}
+
+function extractSpanEvents (trace, span) {
+  const events = []
+  if (span._events) {
+    for (const event of span._events) {
+      const formattedEvent = {
+        name: event.name,
+        time_unix_nano: Math.round(event.startTime * 1e6),
+        attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
+      }
+
+      events.push(formattedEvent)
+    }
+  }
+  if (events.length > 0) { trace.meta.events = JSON.stringify(events) }
 }
 
 function extractTags (trace, span) {
@@ -134,7 +152,10 @@ function extractTags (trace, span) {
       case ERROR_STACK:
         // HACK: remove when implemented in the backend
         if (context._name !== 'fs.operation') {
-          trace.error = 1
+          // HACK: to ensure otel.recordException does not influence trace.error
+          if (tags.setTraceError) {
+            trace.error = 1
+          }
         } else {
           break
         }
@@ -142,7 +163,6 @@ function extractTags (trace, span) {
         addTag(trace.meta, trace.metrics, tag, tags[tag])
     }
   }
-
   setSingleSpanIngestionTags(trace, context._spanSampling)
 
   addTag(trace.meta, trace.metrics, 'language', 'javascript')

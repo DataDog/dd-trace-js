@@ -110,7 +110,7 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
     }
   })
 
-  await processExitPromise(proc, 5000)
+  await processExitPromise(proc, 30000)
   const procEnd = BigInt(Date.now() * 1000000)
 
   const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
@@ -171,7 +171,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 5000
+  const timeout = 30000
 
   before(async () => {
     sandbox = await createSandbox()
@@ -201,7 +201,7 @@ describe('profiler', () => {
         }
       })
 
-      await processExitPromise(proc, 5000)
+      await processExitPromise(proc, 30000)
       const procEnd = BigInt(Date.now() * 1000000)
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
@@ -500,53 +500,65 @@ describe('profiler', () => {
 
     describe('does not trigger for', () => {
       it('a short-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor([], false)
+        return heuristicsDoesNotTriggerFor([], false, false)
       })
 
       it('a short-lived app that creates a span', () => {
-        return heuristicsDoesNotTriggerFor(['create-span'], true)
+        return heuristicsDoesNotTriggerFor(['create-span'], true, false)
       })
 
       it('a long-lived app that creates no spans', () => {
-        return heuristicsDoesNotTriggerFor(['long-lived'], false)
+        return heuristicsDoesNotTriggerFor(['long-lived'], false, false)
+      })
+
+      it('a short-lived app that creates no spans with the auto env var', () => {
+        return heuristicsDoesNotTriggerFor([], false, true)
+      })
+
+      it('a short-lived app that creates a span with the auto env var', () => {
+        return heuristicsDoesNotTriggerFor(['create-span'], true, true)
+      })
+
+      it('a long-lived app that creates no spans with the auto env var', () => {
+        return heuristicsDoesNotTriggerFor(['long-lived'], false, true)
       })
     })
 
     it('triggers for long-lived span-creating app', () => {
-      return checkProfiles(agent,
-        forkSsi(['create-span', 'long-lived']),
-        timeout,
-        DEFAULT_PROFILE_TYPES,
-        false,
-        // Will receive 2 messages: first one is for the trace, second one is for the profile. We
-        // only need the assertions in checkProfiles to succeed for the one with the profile.
-        2)
+      return heuristicsTrigger(false)
+    })
+
+    it('triggers for long-lived span-creating app with the auto env var', () => {
+      return heuristicsTrigger(true)
     })
   })
 
-  function forkSsi (args) {
+  function forkSsi (args, whichEnv) {
+    const profilerEnablingEnv = whichEnv ? { DD_PROFILING_ENABLED: 'auto' } : { DD_INJECTION_ENABLED: 'profiler' }
     return fork(ssiTestFile, args, {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_INJECTION_ENABLED: 'profiler',
-        DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300'
+        DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300',
+        ...profilerEnablingEnv
       }
     })
   }
 
-  function heuristicsDoesNotTriggerFor (args, allowTraceMessage) {
-    proc = fork(ssiTestFile, args, {
-      cwd,
-      env: {
-        DD_TRACE_AGENT_PORT: agent.port,
-        DD_INJECTION_ENABLED: 'profiler',
-        DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300'
-      }
-    })
+  function heuristicsTrigger (whichEnv) {
+    return checkProfiles(agent,
+      forkSsi(['create-span', 'long-lived'], whichEnv),
+      timeout,
+      DEFAULT_PROFILE_TYPES,
+      false,
+      // Will receive 2 messages: first one is for the trace, second one is for the profile. We
+      // only need the assertions in checkProfiles to succeed for the one with the profile.
+      2)
+  }
 
+  function heuristicsDoesNotTriggerFor (args, allowTraceMessage, whichEnv) {
     return Promise.all([
-      processExitPromise(proc, timeout, false),
+      processExitPromise(forkSsi(args, whichEnv), timeout, false),
       expectTimeout(expectProfileMessagePromise(agent, 1500), allowTraceMessage)
     ])
   }

@@ -7,11 +7,14 @@ const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const {
   incrementWafInitMetric,
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
   getRequestMetrics
 } = require('./telemetry')
 const zlib = require('zlib')
+const { MANUAL_KEEP } = require('../../../../ext/tags')
+const standalone = require('./standalone')
 
 // default limiter, configurable with setRateLimit()
 let limiter = new Limiter(100)
@@ -87,12 +90,12 @@ function reportWafInit (wafVersion, rulesVersion, diagnosticsRules = {}) {
     metricsQueue.set('_dd.appsec.event_rules.errors', JSON.stringify(diagnosticsRules.errors))
   }
 
-  metricsQueue.set('manual.keep', 'true')
+  metricsQueue.set(MANUAL_KEEP, 'true')
 
   incrementWafInitMetric(wafVersion, rulesVersion)
 }
 
-function reportMetrics (metrics) {
+function reportMetrics (metrics, raspRuleType) {
   const store = storage.getStore()
   const rootSpan = store?.req && web.root(store.req)
   if (!rootSpan) return
@@ -100,8 +103,11 @@ function reportMetrics (metrics) {
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
   }
-
-  updateWafRequestsMetricTags(metrics, store.req)
+  if (raspRuleType) {
+    updateRaspRequestsMetricTags(metrics, store.req, raspRuleType)
+  } else {
+    updateWafRequestsMetricTags(metrics, store.req)
+  }
 }
 
 function reportAttack (attackData) {
@@ -117,7 +123,9 @@ function reportAttack (attackData) {
   newTags['appsec.event'] = 'true'
 
   if (limiter.isAllowed()) {
-    newTags['manual.keep'] = 'true' // TODO: figure out how to keep appsec traces with sampling revamp
+    newTags[MANUAL_KEEP] = 'true'
+
+    standalone.sample(rootSpan)
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -168,6 +176,8 @@ function finishRequest (req, res) {
   if (metricsQueue.size) {
     rootSpan.addTags(Object.fromEntries(metricsQueue))
 
+    standalone.sample(rootSpan)
+
     metricsQueue.clear()
   }
 
@@ -178,6 +188,18 @@ function finishRequest (req, res) {
 
   if (metrics?.durationExt) {
     rootSpan.setTag('_dd.appsec.waf.duration_ext', metrics.durationExt)
+  }
+
+  if (metrics?.raspDuration) {
+    rootSpan.setTag('_dd.appsec.rasp.duration', metrics.raspDuration)
+  }
+
+  if (metrics?.raspDurationExt) {
+    rootSpan.setTag('_dd.appsec.rasp.duration_ext', metrics.raspDurationExt)
+  }
+
+  if (metrics?.raspEvalCount) {
+    rootSpan.setTag('_dd.appsec.rasp.rule.eval', metrics.raspEvalCount)
   }
 
   incrementWafRequestsMetric(req)

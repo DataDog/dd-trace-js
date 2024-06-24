@@ -197,6 +197,7 @@ interface Plugins {
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
+  "undici": tracer.plugins.undici;
   "winston": tracer.plugins.winston;
 }
 
@@ -555,6 +556,19 @@ declare namespace tracer {
          */
         redactionValuePattern?: string
       }
+
+      appsec?: {
+        /**
+         * Configuration of Standalone ASM mode
+         */
+        standalone?: {
+          /**
+           * Whether to enable Standalone ASM.
+           * @default false
+           */
+          enabled?: boolean
+        }
+      }
     };
 
     /**
@@ -690,6 +704,34 @@ declare namespace tracer {
          * @default 0.1
          */
         requestSampling?: number
+      },
+      /**
+       * Configuration for RASP
+       */
+      rasp?: {
+        /** Whether to enable RASP.
+         * @default false
+         */
+        enabled?: boolean
+      },
+      /**
+       * Configuration for stack trace reporting
+       */
+      stackTrace?: {
+        /** Whether to enable stack trace reporting.
+         * @default true
+         */
+        enabled?: boolean,
+
+        /** Specifies the maximum number of stack traces to be reported.
+         * @default 2
+         */
+        maxStackTraces?: number,
+
+        /** Specifies the maximum depth of a stack trace to be reported.
+         * @default 32
+         */
+        maxDepth?: number,
       }
     };
 
@@ -1790,6 +1832,12 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [undici](https://github.com/nodejs/undici) module.
+     */
+    interface undici extends HttpClient {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
