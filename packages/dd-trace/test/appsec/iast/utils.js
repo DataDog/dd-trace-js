@@ -4,7 +4,6 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const getPort = require('get-port')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
 const iast = require('../../../src/appsec/iast')
@@ -16,12 +15,6 @@ function testInRequest (app, tests) {
   let listener
   let appListener
   const config = {}
-
-  beforeEach(() => {
-    return getPort().then(newPort => {
-      config.port = newPort
-    })
-  })
 
   beforeEach(() => {
     listener = (req, res) => {
@@ -48,7 +41,10 @@ function testInRequest (app, tests) {
   beforeEach(done => {
     const server = new http.Server(listener)
     appListener = server
-      .listen(config.port, 'localhost', () => done())
+      .listen(0, 'localhost', () => {
+        config.port = appListener.address().port
+        done()
+      })
   })
 
   afterEach(() => {
@@ -220,12 +216,6 @@ function prepareTestServerForIast (description, tests, iastConfig) {
     let app
 
     before(() => {
-      return getPort().then(newPort => {
-        config.port = newPort
-      })
-    })
-
-    before(() => {
       listener = (req, res) => {
         endResponse(res, app && app(req, res))
       }
@@ -241,7 +231,10 @@ function prepareTestServerForIast (description, tests, iastConfig) {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(config.port, 'localhost', () => done())
+        .listen(0, 'localhost', () => {
+          config.port = appListener.address().port
+          done()
+        })
     })
 
     beforeEachIastTest(iastConfig)
@@ -311,11 +304,10 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
       }
 
       expressApp.all('/', listener)
-      getPort().then(newPort => {
-        config.port = newPort
-        server = expressApp.listen(newPort, () => {
-          done()
-        })
+
+      server = expressApp.listen(0, () => {
+        config.port = server.address().port
+        done()
       })
     })
 
