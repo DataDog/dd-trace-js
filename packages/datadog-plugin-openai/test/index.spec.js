@@ -715,7 +715,7 @@ describe('Plugin', () => {
         })
 
         if (semver.satisfies(realVersion, '<4.0.0')) {
-        // `edits.create` was deprecated and removed after 4.0.0
+          // `edits.create` was deprecated and removed after 4.0.0
           it('makes a successful call', async () => {
             const checkTraces = agent
               .use(traces => {
@@ -1124,11 +1124,11 @@ describe('Plugin', () => {
             const result = await openai.downloadFile('file-t3k1gVSQDHrfZnPckzftlZ4A')
 
             /**
-           * TODO: Seems like an OpenAI library bug?
-           * downloading single line JSONL file results in the JSON being converted into an object.
-           * downloading multi-line JSONL file then provides a basic string.
-           * This suggests the library is doing `try { return JSON.parse(x) } catch { return x }`
-           */
+             * TODO: Seems like an OpenAI library bug?
+             * downloading single line JSONL file results in the JSON being converted into an object.
+             * downloading multi-line JSONL file then provides a basic string.
+             * This suggests the library is doing `try { return JSON.parse(x) } catch { return x }`
+             */
             expect(result.data[0]).to.eql('{') // raw JSONL file
           }
 
@@ -2655,9 +2655,9 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                semver.satisfies(realVersion, '>=4.0.0')
-                  ? 'sampled chat.completions.create'
-                  : 'sampled createChatCompletion',
+                  semver.satisfies(realVersion, '>=4.0.0')
+                    ? 'sampled chat.completions.create'
+                    : 'sampled createChatCompletion',
               messages: [
                 {
                   role: 'user',
@@ -2809,9 +2809,9 @@ describe('Plugin', () => {
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
               message:
-                semver.satisfies(realVersion, '>=4.0.0')
-                  ? 'sampled chat.completions.create'
-                  : 'sampled createChatCompletion',
+                  semver.satisfies(realVersion, '>=4.0.0')
+                    ? 'sampled chat.completions.create'
+                    : 'sampled createChatCompletion',
               messages: [
                 {
                   role: 'user',
@@ -3088,13 +3088,11 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('openai.response.choices.0.message.content',
                   'Hello! How can I assist you today?')
 
-                // token metrics - these should be estimated counts
                 expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.not.have.property('openai.response.usage.prompt_tokens_estimated')
                 expect(span.metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.not.have.property('openai.response.usage.completion_tokens_estimated')
                 expect(span.metrics).to.have.property('openai.response.usage.total_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
               })
 
             const stream = await openai.chat.completions.create({
@@ -3193,7 +3191,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('openai.response.choices.1.message.role', 'assistant')
                 expect(span.meta).to.have.property('openai.response.choices.1.message.content',
                   'I\'m just a computer program so I don\'t have feelings, ' +
-                  'but I\'m here and ready to help you with anything you need. How can I assis...'
+                    'but I\'m here and ready to help you with anything you need. How can I assis...'
                 )
 
                 // message 2
@@ -3202,7 +3200,7 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('openai.response.choices.2.message.role', 'assistant')
                 expect(span.meta).to.have.property('openai.response.choices.2.message.content',
                   'I\'m just a computer program, so I don\'t have feelings like humans do. ' +
-                  'I\'m here and ready to assist you with any questions or tas...'
+                    'I\'m here and ready to assist you with any questions or tas...'
                 )
               })
 
@@ -3289,23 +3287,21 @@ describe('Plugin', () => {
                 expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(span.meta).to.have.property('openai.request.method', 'POST')
                 expect(span.meta).to.have.property('openai.request.endpoint', '/v1/completions')
-                expect(span.meta).to.have.property('openai.request.model', 'gpt-4o')
+                expect(span.meta).to.have.property('openai.request.model', 'text-davinci-002')
                 expect(span.meta).to.have.property('openai.request.prompt', 'Hello, OpenAI!')
                 expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'stop')
                 expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
                 expect(span.meta).to.have.property('openai.response.choices.0.text', ' this is a test.')
 
-                // token metrics - these should be estimated counts
                 expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.not.have.property('openai.response.usage.prompt_tokens_estimated')
                 expect(span.metrics).to.have.property('openai.response.usage.completion_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
+                expect(span.metrics).to.not.have.property('openai.response.usage.completion_tokens_estimated')
                 expect(span.metrics).to.have.property('openai.response.usage.total_tokens')
-                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens_estimated', 1)
               })
 
             const stream = await openai.completions.create({
-              model: 'gpt-4o',
+              model: 'text-davinci-002',
               prompt: 'Hello, OpenAI!',
               temperature: 0.5,
               stream: true
