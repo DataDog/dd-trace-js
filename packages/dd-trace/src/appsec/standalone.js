@@ -10,9 +10,7 @@ const { hasOwn } = require('../util')
 
 const {
   APM_TRACING_ENABLED_KEY,
-  APPSEC_PROPAGATION_KEY,
-  SAMPLING_MECHANISM_APPSEC,
-  DECISION_MAKER_KEY
+  APPSEC_PROPAGATION_KEY
 } = require('../constants')
 
 const startCh = channel('dd-trace:span:start')
@@ -39,15 +37,12 @@ class StandAloneAsmPrioritySampler extends PrioritySampler {
       tags[MANUAL_KEEP] !== false &&
       hasOwn(context._trace.tags, APPSEC_PROPAGATION_KEY)
     ) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_APPSEC
       return USER_KEEP
     }
   }
 
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
-
-    context._sampling.mechanism = SAMPLING_MECHANISM_APPSEC
 
     if (hasOwn(context._trace.tags, APPSEC_PROPAGATION_KEY)) {
       return USER_KEEP
@@ -90,7 +85,7 @@ function onSpanExtract ({ spanContext = {} }) {
 
   // reset upstream priority if _dd.p.appsec is not found
   if (!hasOwn(spanContext._trace.tags, APPSEC_PROPAGATION_KEY)) {
-    resetSampling(spanContext)
+    spanContext._sampling.priority = undefined
   } else if (spanContext._sampling.priority !== USER_KEEP) {
     spanContext._sampling.priority = USER_KEEP
   }
@@ -103,14 +98,9 @@ function sample (span) {
 
     // TODO: ask. can we reset here sampling like this?
     if (spanContext._sampling?.priority < AUTO_KEEP) {
-      resetSampling(spanContext)
+      spanContext._sampling.priority = undefined
     }
   }
-}
-
-function resetSampling (spanContext) {
-  spanContext._sampling.priority = undefined
-  delete spanContext._trace.tags[DECISION_MAKER_KEY]
 }
 
 function configure (config) {

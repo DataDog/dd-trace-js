@@ -183,7 +183,7 @@ describe('Appsec Standalone', () => {
       assert.isUndefined(spanContext._sampling.priority)
     })
 
-    it('should reset dm if _dd.p.appsec not present', () => {
+    it('should not reset dm if _dd.p.appsec not present', () => {
       standalone.configure(config)
 
       const carrier = {
@@ -196,7 +196,7 @@ describe('Appsec Standalone', () => {
       const propagator = new TextMapPropagator(config)
       const spanContext = propagator.extract(carrier)
 
-      assert.notProperty(spanContext._trace.tags, DECISION_MAKER_KEY)
+      assert.propertyVal(spanContext._trace.tags, DECISION_MAKER_KEY, '-4')
     })
 
     it('should keep priority if _dd.p.appsec is present', () => {
@@ -376,7 +376,6 @@ describe('Appsec Standalone', () => {
       it('should keep the trace if manual.keep and _dd.p.appsec are present', () => {
         context._trace.tags[APPSEC_PROPAGATION_KEY] = 1
         assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), USER_KEEP)
-        assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
       })
 
       it('should return undefined if manual.keep or _dd.p.appsec are not present', () => {
@@ -393,7 +392,6 @@ describe('Appsec Standalone', () => {
         const clock = sinon.useFakeTimers(new Date())
 
         assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
-        assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
 
         assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_REJECT)
 
