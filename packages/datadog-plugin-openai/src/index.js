@@ -7,6 +7,7 @@ const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
+const { estimateTokens } = require('./token-estimator')
 
 // String#replaceAll unavailable on Node.js@v14 (dd-trace@<=v3)
 const RE_NEWLINE = /\n/g
@@ -15,13 +16,16 @@ const RE_TAB = /\t/g
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
-let encodingForModel
-try {
-  // eslint-disable-next-line import/no-extraneous-dependencies
-  encodingForModel = require('tiktoken').encoding_for_model
-} catch {
-  // we will use token count estimations in this case
+function safeRequire (path) {
+  try {
+    // eslint-disable-next-line import/no-extraneous-dependencies
+    return require(path)
+  } catch {
+    return null
+  }
 }
+
+const encodingForModel = safeRequire('tiktoken')?.encoding_for_model
 
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
@@ -380,25 +384,6 @@ function countTokens (content, model) {
     tokens: estimateTokens(content),
     estimated: true
   }
-}
-
-// If model is unavailable or tiktoken is not imported, then provide a very rough estimate of the number of tokens
-// Approximate using the following assumptions:
-//    * English text
-//    * 1 token ~= 4 chars
-//    * 1 token ~= ¾ words
-function estimateTokens (content) {
-  let estimatedTokens = 0
-  if (typeof content === 'string') {
-    const estimation1 = content.length / 4
-
-    const matches = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/g)
-    const estimation2 = matches ? matches.length * 0.75 : 0 // in the case of an empty string
-    estimatedTokens = Math.round((1.5 * estimation1 + 0.5 * estimation2) / 2)
-  } else if (Array.isArray(content) && typeof content[0] === 'number') {
-    estimatedTokens = content.length
-  }
-  return estimatedTokens
 }
 
 function createEditRequestExtraction (tags, payload, store) {
