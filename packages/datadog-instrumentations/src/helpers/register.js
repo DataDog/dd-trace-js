@@ -37,8 +37,6 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
-const isWildCard = (name) => name.includes('*')
-
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
