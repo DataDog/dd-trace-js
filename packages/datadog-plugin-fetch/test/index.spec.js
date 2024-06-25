@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
@@ -21,9 +20,9 @@ describe('Plugin', () => {
   let appListener
 
   describe('fetch', () => {
-    function server (app, port, listener) {
+    function server (app, listener) {
       const server = require('http').createServer(app)
-      server.listen(port, 'localhost', listener)
+      server.listen(0, 'localhost', () => listener(server.address().port))
       return server
     }
 
@@ -54,10 +53,8 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            appListener = server(app, port, () => {
-              fetch(`http://localhost:${port}/user`)
-            })
+          appListener = server(app, port => {
+            fetch(`http://localhost:${port}/user`)
           })
         },
         rawExpectedSchema.client
@@ -68,7 +65,7 @@ describe('Plugin', () => {
         app.get('/user', (req, res) => {
           res.status(200).send()
         })
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -84,9 +81,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`)
-          })
+          fetch(`http://localhost:${port}/user`)
         })
       })
 
@@ -95,7 +90,7 @@ describe('Plugin', () => {
         app.post('/user', (req, res) => {
           res.status(200).send()
         })
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -111,9 +106,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(new URL(`http://localhost:${port}/user`), { method: 'POST' })
-          })
+          fetch(new URL(`http://localhost:${port}/user`), { method: 'POST' })
         })
       })
 
@@ -122,7 +115,7 @@ describe('Plugin', () => {
         app.get('/user', (req, res) => {
           res.status(200).send()
         })
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -138,9 +131,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(new globalThis.Request(`http://localhost:${port}/user`))
-          })
+          fetch(new globalThis.Request(`http://localhost:${port}/user`))
         })
       })
 
@@ -149,15 +140,13 @@ describe('Plugin', () => {
         app.get('/user', (req, res) => {
           res.status(200).send()
         })
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(new globalThis.Request(`http://localhost:${port}/user`))
-              .then(res => {
-                expect(res).to.have.property('status', 200)
-                done()
-              })
-              .catch(done)
-          })
+        appListener = server(app, port => {
+          fetch(new globalThis.Request(`http://localhost:${port}/user`))
+            .then(res => {
+              expect(res).to.have.property('status', 200)
+              done()
+            })
+            .catch(done)
         })
       })
 
@@ -168,7 +157,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -177,9 +166,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user?foo=bar`)
-          })
+          fetch(`http://localhost:${port}/user?foo=bar`)
         })
       })
 
@@ -193,7 +180,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -201,9 +188,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user?foo=bar`)
-          })
+          fetch(`http://localhost:${port}/user?foo=bar`)
         })
       })
 
@@ -218,7 +203,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('http.status_code', '200')
@@ -226,9 +211,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user?foo=bar`, { headers: { foo: 'bar' } })
-          })
+          fetch(`http://localhost:${port}/user?foo=bar`, { headers: { foo: 'bar' } })
         })
       })
 
@@ -248,13 +231,11 @@ describe('Plugin', () => {
           }
         })
 
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/`, {
-              headers: {
-                Authorization: 'AWS4-HMAC-SHA256 ...'
-              }
-            })
+        appListener = server(app, port => {
+          fetch(`http://localhost:${port}/`, {
+            headers: {
+              Authorization: 'AWS4-HMAC-SHA256 ...'
+            }
           })
         })
       })
@@ -275,13 +256,11 @@ describe('Plugin', () => {
           }
         })
 
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/`, {
-              headers: {
-                Authorization: ['AWS4-HMAC-SHA256 ...']
-              }
-            })
+        appListener = server(app, port => {
+          fetch(`http://localhost:${port}/`, {
+            headers: {
+              Authorization: ['AWS4-HMAC-SHA256 ...']
+            }
           })
         })
       })
@@ -302,13 +281,11 @@ describe('Plugin', () => {
           }
         })
 
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/`, {
-              headers: {
-                'X-Amz-Signature': 'abc123'
-              }
-            })
+        appListener = server(app, port => {
+          fetch(`http://localhost:${port}/`, {
+            headers: {
+              'X-Amz-Signature': 'abc123'
+            }
           })
         })
       })
@@ -329,30 +306,26 @@ describe('Plugin', () => {
           }
         })
 
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/?X-Amz-Signature=abc123`)
-          })
+        appListener = server(app, port => {
+          fetch(`http://localhost:${port}/?X-Amz-Signature=abc123`)
         })
       })
 
       it('should handle connection errors', done => {
-        getPort().then(port => {
-          let error
+        let error
 
-          agent
-            .use(traces => {
-              expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-              expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
-              expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-              expect(traces[0][0].meta).to.have.property('component', 'fetch')
-            })
-            .then(done)
-            .catch(done)
-
-          fetch(`http://localhost:${port}/user`).catch(err => {
-            error = err
+        agent
+          .use(traces => {
+            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
+            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message || error.code)
+            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
+            expect(traces[0][0].meta).to.have.property('component', 'fetch')
           })
+          .then(done)
+          .catch(done)
+
+        fetch('http://localhost:7357/user').catch(err => {
+          error = err
         })
       })
 
@@ -363,7 +336,7 @@ describe('Plugin', () => {
           res.status(500).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
@@ -371,9 +344,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`)
-          })
+          fetch(`http://localhost:${port}/user`)
         })
       })
 
@@ -384,7 +355,7 @@ describe('Plugin', () => {
           res.status(400).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
@@ -392,9 +363,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`)
-          })
+          fetch(`http://localhost:${port}/user`)
         })
       })
 
@@ -403,7 +372,7 @@ describe('Plugin', () => {
 
         app.get('/user', (req, res) => {})
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 0)
@@ -412,15 +381,13 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            const controller = new AbortController()
+          const controller = new AbortController()
 
-            fetch(`http://localhost:${port}/user`, {
-              signal: controller.signal
-            }).catch(e => {})
+          fetch(`http://localhost:${port}/user`, {
+            signal: controller.signal
+          }).catch(e => {})
 
-            controller.abort()
-          })
+          controller.abort()
         })
       })
 
@@ -431,7 +398,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', SERVICE_NAME)
@@ -439,15 +406,13 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            const controller = new AbortController()
+          const controller = new AbortController()
 
-            fetch(`http://localhost:${port}/user`, {
-              signal: controller.signal
-            }).catch(e => {})
+          fetch(`http://localhost:${port}/user`, {
+            signal: controller.signal
+          }).catch(e => {})
 
-            controller.abort()
-          })
+          controller.abort()
         })
       })
 
@@ -458,7 +423,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           const timer = setTimeout(done, 100)
 
           agent
@@ -467,15 +432,13 @@ describe('Plugin', () => {
               clearTimeout(timer)
             })
 
-          appListener = server(app, port, () => {
-            const store = storage.getStore()
+          const store = storage.getStore()
 
-            storage.enterWith({ noop: true })
+          storage.enterWith({ noop: true })
 
-            fetch(`http://localhost:${port}/user`).catch(() => {})
+          fetch(`http://localhost:${port}/user`).catch(() => {})
 
-            storage.enterWith(store)
-          })
+          storage.enterWith(store)
         })
       })
     })
@@ -502,7 +465,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', 'custom')
@@ -510,9 +473,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/user`).catch(() => {})
         })
       })
     })
@@ -539,7 +500,7 @@ describe('Plugin', () => {
           res.status(500).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('error', 1)
@@ -547,9 +508,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/user`).catch(() => {})
         })
       })
     })
@@ -576,7 +535,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0]).to.have.property('service', `localhost:${port}`)
@@ -584,9 +543,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/user`).catch(() => {})
         })
       })
     })
@@ -614,7 +571,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               const meta = traces[0][0].meta
@@ -625,13 +582,11 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`, {
-              headers: {
-                'x-baz': 'qux'
-              }
-            }).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/user`, {
+            headers: {
+              'x-baz': 'qux'
+            }
+          }).catch(() => {})
         })
       })
     })
@@ -662,7 +617,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           agent
             .use(traces => {
               expect(traces[0][0].meta).to.have.property('foo', '/foo')
@@ -670,9 +625,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/user`).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/user`).catch(() => {})
         })
       })
     })
@@ -708,10 +661,8 @@ describe('Plugin', () => {
           }
         })
 
-        getPort().then(port => {
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/users`).catch(() => {})
-          })
+        appListener = server(app, port => {
+          fetch(`http://localhost:${port}/users`).catch(() => {})
         })
       })
     })
@@ -738,7 +689,7 @@ describe('Plugin', () => {
           res.status(200).send()
         })
 
-        getPort().then(port => {
+        appListener = server(app, port => {
           const timer = setTimeout(done, 100)
 
           agent
@@ -748,9 +699,7 @@ describe('Plugin', () => {
             })
             .catch(done)
 
-          appListener = server(app, port, () => {
-            fetch(`http://localhost:${port}/users`).catch(() => {})
-          })
+          fetch(`http://localhost:${port}/users`).catch(() => {})
         })
       })
     })
