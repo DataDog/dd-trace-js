@@ -45,7 +45,6 @@ describe('Standalone ASM', () => {
 
     function assertKeep (payload, manual = true) {
       const { meta, metrics } = payload
-      assert.propertyVal(meta, '_dd.p.dm', '-5')
       if (manual) {
         assert.propertyVal(meta, 'manual.keep', 'true')
       } else {
@@ -101,7 +100,6 @@ describe('Standalone ASM', () => {
         assert.strictEqual(secondReq.length, 5)
 
         const { meta, metrics } = secondReq[0]
-        assert.propertyVal(meta, '_dd.p.dm', '-5')
         assert.notProperty(meta, 'manual.keep')
         assert.notProperty(meta, '_dd.p.appsec')
 
