@@ -118,7 +118,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
-  file: 'dist/vendor/index.*'
+  filePattern: 'dist/vendor/index.*'
 }, (vitestPackage) => {
   // there are multiple index* files so we have to check the exported values
   if (!isReporterPackage(vitestPackage)) {
@@ -160,7 +160,7 @@ addHook({
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
-  file: 'dist/vendor/cac.*'
+  filePattern: 'dist/vendor/cac.*'
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
     sessionAsyncResource.runInAsyncScope(() => {

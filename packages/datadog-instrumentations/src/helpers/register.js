@@ -59,8 +59,12 @@ for (const packageName of names) {
       return moduleExports
     }
 
-    for (const { name, file, versions, hook } of instrumentations[packageName]) {
+    for (const { name, file, versions, hook, filePattern } of instrumentations[packageName]) {
+      let fullFilePattern = filePattern
       const fullFilename = filename(name, file)
+      if (fullFilePattern) {
+        fullFilePattern = filename(name, fullFilePattern)
+      }
 
       // Create a WeakMap associated with the hook function so that patches on the same moduleExport only happens once
       // for example by instrumenting both dns and node:dns double the spans would be created
@@ -68,11 +72,15 @@ for (const packageName of names) {
       if (!hook[HOOK_SYMBOL]) {
         hook[HOOK_SYMBOL] = new WeakMap()
       }
+      let matchesFile = false
 
-      // Some libraries include a hash in their filenames when installed,
-      // so our instrumentation has to include a * to match them for more than a single version.
-      const matchesFile = moduleName === fullFilename ||
-        (isWildCard(fullFilename) && moduleName.includes(fullFilename.replace('*', '')))
+      matchesFile = moduleName === fullFilename
+
+      if (fullFilePattern) {
+        // Some libraries include a hash in their filenames when installed,
+        // so our instrumentation has to include a '.*' to match them for more than a single version.
+        matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
+      }
 
       if (matchesFile) {
         const version = moduleVersion || getVersion(moduleBaseDir)
