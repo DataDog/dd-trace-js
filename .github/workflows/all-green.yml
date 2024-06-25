@@ -12,5 +12,6 @@ jobs:
     steps:
       - uses: wechuli/allcheckspassed@v1
         with:
-          retries: 20 # once per minute, some checks take up to 15 min
+          retries: 20 # ~3 times per minute, some checks take up to 5 min
+          polling_interval: '0.3'
           checks_exclude: devflow.*
