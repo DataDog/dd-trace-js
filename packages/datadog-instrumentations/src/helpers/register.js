@@ -35,6 +35,8 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
+const isWildCard = (name) => name.includes('*')
+
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
@@ -59,7 +61,12 @@ for (const packageName of names) {
         hook[HOOK_SYMBOL] = new WeakMap()
       }
 
-      if (moduleName === fullFilename) {
+      // Some libraries include a hash in their filenames when installed,
+      // so our instrumentation has to include a * to match them for more than a single version.
+      const matchesFile = moduleName === fullFilename ||
+        (isWildCard(fullFilename) && moduleName.includes(fullFilename.replace('*', '')))
+
+      if (matchesFile) {
         const version = moduleVersion || getVersion(moduleBaseDir)
 
         if (matchVersion(version, versions)) {

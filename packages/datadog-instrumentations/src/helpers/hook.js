@@ -20,8 +20,7 @@ function Hook (modules, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(v => v)
     const filename = path.join(...parts)
 
-    // this does not seem to work with IITM: the same file seems to import different stuff
-    // if (this._patched[filename]) return moduleExports
+    if (this._patched[filename]) return moduleExports
 
     this._patched[filename] = true
 
@@ -29,7 +28,7 @@ function Hook (modules, onrequire) {
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, {}, (moduleExports, moduleName, moduleBaseDir) => {
+  this._iitmHook = iitm(modules, { internals: true }, (moduleExports, moduleName, moduleBaseDir) => {
     // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to

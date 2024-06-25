@@ -134,9 +134,6 @@ versions.forEach((version) => {
           stdio: 'pipe'
         }
       )
-
-      childProcess.stderr.pipe(process.stderr)
-      childProcess.stdout.pipe(process.stdout)
     })
   })
 })
