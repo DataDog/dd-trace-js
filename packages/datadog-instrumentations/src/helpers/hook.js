@@ -14,6 +14,11 @@ const ritm = require('../../../dd-trace/src/ritm')
 function Hook (modules, hookOptions, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, hookOptions, onrequire)
 
+  if (typeof hookOptions === 'function') {
+    onrequire = hookOptions
+    hookOptions = {}
+  }
+
   this._patched = Object.create(null)
 
   const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
