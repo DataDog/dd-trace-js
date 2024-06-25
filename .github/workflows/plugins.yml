@@ -365,7 +365,7 @@ jobs:
   couchbase:
     strategy:
       matrix:
-        range: ['2', '3', '>=4']
+        range: ['^2.6.12', '^3.0.7', '>=4']
     runs-on: ubuntu-latest
     services:
       couchbase:
