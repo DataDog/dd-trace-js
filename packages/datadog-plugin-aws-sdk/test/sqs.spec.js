@@ -3,6 +3,7 @@
 const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
+const semver = require('semver')
 const { rawExpectedSchema } = require('./sqs-naming')
 
 const queueName = 'SQS_QUEUE_NAME'
@@ -407,6 +408,34 @@ describe('Plugin', () => {
             })
           })
         })
+
+        if (sqsClientName === 'aws-sdk' && semver.intersects(version, '>=2.3')) {
+          it('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
+            async () => {
+              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
+              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
+
+              let consumeSpanMeta = {}
+              return new Promise((resolve, reject) => {
+                agent.use(traces => {
+                  const span = traces[0][0]
+
+                  if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
+                    consumeSpanMeta = span.meta
+                  }
+
+                  try {
+                    expect(consumeSpanMeta).to.include({
+                      'pathway.hash': expectedConsumerHash
+                    })
+                    resolve()
+                  } catch (error) {
+                    reject(error)
+                  }
+                })
+              })
+            })
+        }
 
         it('Should emit DSM stats to the agent when sending a message', done => {
           agent.expectPipelineStats(dsmStats => {

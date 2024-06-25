@@ -1,6 +1,5 @@
 'use strict'
 
-const getPort = require('get-port')
 const path = require('path')
 const agent = require('../../../../plugins/agent')
 const {
@@ -31,9 +30,9 @@ withVersions('apollo-server', '@apollo/server', apolloServerVersion => {
       resolvers
     })
 
-    config.port = await getPort()
+    const { url } = await startStandaloneServer(server, { listen: { port: config.port } })
 
-    await startStandaloneServer(server, { listen: { port: config.port } })
+    config.port = new URL(url).port
   })
 
   after(async () => {
