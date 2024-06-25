@@ -22,12 +22,13 @@ describe('client', () => {
 
   beforeEach(() => {
     startChannelCb = sinon.stub()
-    startChannel.subscribe(startChannelCb)
     endChannelCb = sinon.stub()
-    endChannel.subscribe(endChannelCb)
     asyncStartChannelCb = sinon.stub()
-    asyncStartChannel.subscribe(asyncStartChannelCb)
     errorChannelCb = sinon.stub()
+
+    startChannel.subscribe(startChannelCb)
+    endChannel.subscribe(endChannelCb)
+    asyncStartChannel.subscribe(asyncStartChannelCb)
     errorChannel.subscribe(errorChannelCb)
   })
 

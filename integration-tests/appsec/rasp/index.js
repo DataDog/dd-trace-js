@@ -52,8 +52,10 @@ app.get('/crash-and-recovery-A', (req, res) => {
   process.setUncaughtExceptionCaptureCallback(() => {
     res.writeHead(500)
     res.end('error')
+
     process.setUncaughtExceptionCaptureCallback(null)
   })
+
   process.nextTick(() => {
     throw new Error('Crash')
   })
@@ -61,11 +63,12 @@ app.get('/crash-and-recovery-A', (req, res) => {
 
 app.get('/crash-and-recovery-B', (req, res) => {
   function exceptionHandler () {
-    // console.log('ey - error 500')
     res.writeHead(500)
     res.end('error')
+
     process.off('uncaughtException', exceptionHandler)
   }
+
   process.on('uncaughtException', exceptionHandler)
 
   process.nextTick(() => {
@@ -80,7 +83,7 @@ app.get('/ssrf/http/manual-blocking', (req, res) => {
 
   clientRequest.on('error', (err) => {
     if (err.name === 'AbortError') {
-      res.writeHead(403)
+      res.writeHead(418)
       res.end('aborted')
     } else {
       res.writeHead(500)

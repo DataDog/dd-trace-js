@@ -173,7 +173,7 @@ describe('RASP', () => {
           it('Should detect threat doing a POST request', async () => {
             app = async (req, res) => {
               try {
-                await axios.post(`https://${req.query.host}`, { key: 'value' })
+                await axiosToTest.post(`https://${req.query.host}`, { key: 'value' })
               } catch (e) {
                 if (e.cause.message === 'AbortError') {
                   res.writeHead(500)
@@ -241,8 +241,13 @@ describe('RASP', () => {
         })
 
         clientRequest.on('error', (e) => {
-          res.writeHead(500)
-          res.end('error')
+          if (e.name !== 'AbortError') {
+            res.writeHead(200)
+            res.end('not-blocking-error')
+          } else {
+            res.writeHead(500)
+            res.end('unexpected-blocking-error')
+          }
         })
       }
 

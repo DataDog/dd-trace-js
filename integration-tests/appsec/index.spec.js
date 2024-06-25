@@ -166,7 +166,7 @@ describe('RASP', () => {
 
       it('should block manually', async () => {
         let response
-        const raspDetectedPromise = assertRaspDetected()
+
         try {
           response = await axios.get('/ssrf/http/manual-blocking?host=ifconfig.pro')
 
@@ -177,8 +177,8 @@ describe('RASP', () => {
           }
           response = e.response
         }
-        assert.strictEqual(response.status, 403)
-        await raspDetectedPromise
+        assert.strictEqual(response.status, 418)
+        await assertRaspDetected()
       })
 
       it('should block when error is unhandled', async () => {
@@ -254,7 +254,9 @@ describe('RASP', () => {
           response = e.response
         }
 
-        assert.notEqual(response.status, 403) // 200 or 500 expected
+        // not blocked
+        assert.notEqual(response.status, 418)
+        assert.notEqual(response.status, 403)
         await assertRaspDetected()
       })
     })
