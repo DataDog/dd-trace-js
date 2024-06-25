@@ -2,7 +2,6 @@
 
 const { assert } = require('chai')
 const axios = require('axios')
-const getPort = require('get-port')
 const path = require('path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
@@ -28,11 +27,9 @@ withVersions('cookie-parser', 'cookie-parser', version => {
         res.end('DONE')
       })
 
-      getPort().then(newPort => {
-        port = newPort
-        server = app.listen(port, () => {
-          done()
-        })
+      server = app.listen(port, () => {
+        port = server.address().port
+        done()
       })
     })
 

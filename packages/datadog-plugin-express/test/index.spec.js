@@ -114,6 +114,7 @@ describe('Plugin', () => {
                 expect(spans[0].meta).to.have.property('http.url', `http://localhost:${port}/user`)
                 expect(spans[0].meta).to.have.property('http.method', 'GET')
                 expect(spans[0].meta).to.have.property('http.status_code', '200')
+                expect(spans[0].meta).to.have.property('http.route', '/user')
               })
               .then(done)
               .catch(done)
@@ -1264,6 +1265,40 @@ describe('Plugin', () => {
             appListener = app.listen(port, 'localhost', () => {
               axios
                 .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
+        })
+
+        it('should handle 404 errors', done => {
+          const app = express()
+
+          app.use((req, res, next) => {
+            next()
+          })
+
+          app.get('/does-exist', (req, res) => {
+            res.status(200).send('hi')
+          })
+
+          getPort().then(port => {
+            agent.use(traces => {
+              const spans = sort(traces[0])
+
+              expect(spans[0]).to.have.property('error', 0)
+              expect(spans[0]).to.have.property('resource', 'GET')
+              expect(spans[0].meta).to.have.property('http.status_code', '404')
+              expect(spans[0].meta).to.have.property('component', 'express')
+              expect(spans[0].meta).to.not.have.property('http.route')
+
+              done()
+            })
+
+            appListener = app.listen(port, 'localhost', () => {
+              axios
+                .get(`http://localhost:${port}/does-not-exist`, {
+                  validateStatus: status => status === 404
+                })
                 .catch(done)
             })
           })

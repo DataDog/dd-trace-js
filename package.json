@@ -89,7 +89,7 @@
     "koalas": "^1.0.2",
     "limiter": "1.1.5",
     "lodash.sortby": "^4.7.0",
-    "lru-cache": "^7.14.0",
+    "lru-cache": "^10.2.2",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
     "opentracing": ">=0.12.1",
