@@ -1,6 +1,8 @@
 'use strict'
-
-require('dd-trace').init()
+const tracer = require('dd-trace')
+tracer.init({
+  flushInterval: 0
+})
 
 const path = require('path')
 const fs = require('fs')
@@ -10,10 +12,6 @@ const axios = require('axios')
 
 const app = express()
 const port = process.env.APP_PORT || 3000
-
-app.get('/ping', (req, res) => {
-  res.end('pong')
-})
 
 function makeOutgoingRequestAndCbAfterTimeout (req, res, cb) {
   let finished = false
@@ -72,6 +70,22 @@ app.get('/crash-and-recovery-B', (req, res) => {
 
   process.nextTick(() => {
     throw new Error('Crash')
+  })
+})
+
+app.get('/ssrf/http/manual-blocking', (req, res) => {
+  const clientRequest = http.get(`https://${req.query.host}`, () => {
+    res.send('end')
+  })
+
+  clientRequest.on('error', (err) => {
+    if (err.name === 'AbortError') {
+      res.writeHead(403)
+      res.end('aborted')
+    } else {
+      res.writeHead(500)
+      res.end('error')
+    }
   })
 })
 

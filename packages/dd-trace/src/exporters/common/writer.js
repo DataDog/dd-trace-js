@@ -17,7 +17,6 @@ class Writer {
       done()
     } else if (count > 0) {
       const payload = this._encoder.makePayload()
-
       this._sendPayload(payload, count, done)
     } else {
       done()
