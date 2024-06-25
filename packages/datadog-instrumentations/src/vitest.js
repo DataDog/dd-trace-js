@@ -156,7 +156,6 @@ addHook({
   return vitestPackage
 })
 
-
 // Can't specify file because compiled vitest includes hashes in their files
 addHook({
   name: 'vitest',

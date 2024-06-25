@@ -21,6 +21,8 @@ const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
 
+const esmFirstLibraries = new Set(['vitest', '@vitest/runner'])
+
 const loadChannel = channel('dd-trace:instrumentation:load')
 
 // Globals
@@ -41,7 +43,13 @@ const isWildCard = (name) => name.includes('*')
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
 
-  Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  const hookOptions = {}
+
+  if (esmFirstLibraries.has(packageName)) {
+    hookOptions.internals = true
+  }
+
+  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`

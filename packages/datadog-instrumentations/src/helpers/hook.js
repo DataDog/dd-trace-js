@@ -11,8 +11,8 @@ const ritm = require('../../../dd-trace/src/ritm')
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
  */
-function Hook (modules, onrequire) {
-  if (!(this instanceof Hook)) return new Hook(modules, onrequire)
+function Hook (modules, hookOptions, onrequire) {
+  if (!(this instanceof Hook)) return new Hook(modules, hookOptions, onrequire)
 
   this._patched = Object.create(null)
 
@@ -28,7 +28,7 @@ function Hook (modules, onrequire) {
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, { internals: true }, (moduleExports, moduleName, moduleBaseDir) => {
+  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     // TODO: Move this logic to import-in-the-middle and only do it for CommonJS
     // modules and not ESM. In the meantime, all the modules we instrument are
     // CommonJS modules for which the default export is always moved to
