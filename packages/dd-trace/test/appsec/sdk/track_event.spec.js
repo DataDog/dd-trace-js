@@ -2,7 +2,6 @@
 
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
-const getPort = require('get-port')
 const axios = require('axios')
 const tracer = require('../../../../../index')
 
@@ -281,7 +280,6 @@ describe('track_event', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -289,7 +287,10 @@ describe('track_event', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
     })
 
     after(() => {

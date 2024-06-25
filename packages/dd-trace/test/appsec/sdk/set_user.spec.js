@@ -3,7 +3,6 @@
 const proxyquire = require('proxyquire')
 const agent = require('../../plugins/agent')
 const tracer = require('../../../../../index')
-const getPort = require('get-port')
 const axios = require('axios')
 
 describe('set_user', () => {
@@ -83,7 +82,6 @@ describe('set_user', () => {
     }
 
     before(async () => {
-      port = await getPort()
       await agent.load('http')
       http = require('http')
     })
@@ -91,7 +89,10 @@ describe('set_user', () => {
     before(done => {
       const server = new http.Server(listener)
       appListener = server
-        .listen(port, 'localhost', () => done())
+        .listen(port, 'localhost', () => {
+          port = appListener.address().port
+          done()
+        })
     })
 
     after(() => {

@@ -2,7 +2,6 @@
 
 const Axios = require('axios')
 const agent = require('../plugins/agent')
-const getPort = require('get-port')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const path = require('path')
@@ -23,7 +22,7 @@ describe('RASP', () => {
   }
 
   withVersions('express', 'express', expressVersion => {
-    let app, server, port, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['express', 'http'], { client: false })
@@ -45,14 +44,12 @@ describe('RASP', () => {
         }
       }))
 
-      getPort().then(newPort => {
-        port = newPort
+      server = expressApp.listen(0, () => {
+        const port = server.address().port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
-        server = expressApp.listen(port, () => {
-          done()
-        })
+        done()
       })
     })
 
@@ -216,13 +213,13 @@ describe('RASP', () => {
         }
       }))
 
-      getPort().then(newPort => {
+      server.listen(0, () => {
+        const port = server.address().port
         axios = Axios.create({
-          baseURL: `http://localhost:${newPort}`
+          baseURL: `http://localhost:${port}`
         })
-        server.listen(newPort, () => {
-          done()
-        })
+
+        done()
       })
     })
 

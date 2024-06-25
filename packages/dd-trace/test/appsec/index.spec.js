@@ -20,7 +20,6 @@ const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
-const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
@@ -1029,11 +1028,6 @@ describe('IP blocking', function () {
 
   let http, appListener, port
   before(() => {
-    return getPort().then(newPort => {
-      port = newPort
-    })
-  })
-  before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
@@ -1045,7 +1039,10 @@ describe('IP blocking', function () {
       res.end(JSON.stringify({ message: 'OK' }))
     })
     appListener = server
-      .listen(port, 'localhost', () => done())
+      .listen(0, 'localhost', () => {
+        port = appListener.address().port
+        done()
+      })
   })
 
   beforeEach(() => {
