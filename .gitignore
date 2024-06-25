@@ -108,6 +108,7 @@ typings/
 
 .next
 package-lock.json
+deno.lock
 out
 versions
 build
