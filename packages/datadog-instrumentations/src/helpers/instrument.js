@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const semver = require('semver')
 const instrumentations = require('./instrumentations')
+const esmInstrumentations = require('./esm-instrumentations')
 const { AsyncResource } = require('async_hooks')
 
 const channelMap = {}
@@ -30,6 +31,26 @@ exports.addHook = function addHook ({ name, versions, file }, hook) {
       instrumentations[val] = []
     }
     instrumentations[val].push({ name: val, versions, file, hook })
+  }
+}
+
+/**
+ * @param {string} args.name module name
+ * @param {string[]} args.versions array of semver range strings
+ * @param {string} args.file path to file within package to instrument. It can contain wildcards
+ * @param {string} args.hookOptions options passed to the hook
+ * @param Function hook
+ */
+exports.addHookWithOptions = function ({ name, versions, file }, hook) {
+  if (typeof name === 'string') {
+    name = [name]
+  }
+
+  for (const val of name) {
+    if (!esmInstrumentations[val]) {
+      esmInstrumentations[val] = []
+    }
+    esmInstrumentations[val].push({ name: val, versions, file, hook })
   }
 }
 

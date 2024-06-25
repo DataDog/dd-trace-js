@@ -14,14 +14,15 @@ const {
 } = process.env
 
 const hooks = require('./hooks')
+const esmHooks = require('./esm-hooks')
 const instrumentations = require('./instrumentations')
+const esmInstrumentations = require('./esm-instrumentations')
 const names = Object.keys(hooks)
+const esmNames = Object.keys(esmHooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = new Set(
   DD_TRACE_DISABLED_INSTRUMENTATIONS ? DD_TRACE_DISABLED_INSTRUMENTATIONS.split(',') : []
 )
-
-const esmFirstLibraries = new Set(['vitest', '@vitest/runner'])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -43,13 +44,7 @@ const isWildCard = (name) => name.includes('*')
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
 
-  const hookOptions = {}
-
-  if (esmFirstLibraries.has(packageName)) {
-    hookOptions.internals = true
-  }
-
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+  Hook([packageName], (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
     moduleName = moduleName.replace(pathSepExpr, '/')
 
     // This executes the integration file thus adding its entries to `instrumentations`
@@ -98,6 +93,61 @@ for (const packageName of names) {
     }
 
     return moduleExports
+  })
+}
+
+for (const packageName of esmNames) {
+  if (disabledInstrumentations.has(packageName)) continue
+
+  Hook([packageName], { internals: true }, (moduleExports, moduleName, moduleBaseDir, moduleVersion) => {
+    debugger
+    moduleName = moduleName.replace(pathSepExpr, '/')
+
+    // This executes the integration file thus adding its entries to `esmInstrumentations`
+    esmHooks[packageName]()
+
+    if (!esmInstrumentations[packageName]) {
+      return moduleExports
+    }
+
+    for (const { name, file, versions, hook } of esmInstrumentations[packageName]) {
+      const fullFilename = filename(name, file)
+
+      // Create a WeakMap associated with the hook function so that patches on the same moduleExport only happens once
+      // for example by instrumenting both dns and node:dns double the spans would be created
+      // since they both patch the same moduleExport, this WeakMap is used to mitigate that
+      if (!hook[HOOK_SYMBOL]) {
+        hook[HOOK_SYMBOL] = new WeakMap()
+      }
+
+      // Some libraries include a hash in their filenames when installed,
+      // so our instrumentation has to include a * to match them for more than a single version.
+      const matchesFile = moduleName === fullFilename ||
+        (isWildCard(fullFilename) && moduleName.includes(fullFilename.replace('*', '')))
+
+      if (matchesFile) {
+        const version = moduleVersion || getVersion(moduleBaseDir)
+
+        if (matchVersion(version, versions)) {
+          // Check if the hook already has a set moduleExport
+          if (hook[HOOK_SYMBOL].has(moduleExports)) {
+            return moduleExports
+          }
+
+          try {
+            loadChannel.publish({ name, version, file })
+            // Send the name and version of the module back to the callback because now addHook
+            // takes in an array of names so by passing the name the callback will know which module name is being used
+            moduleExports = hook(moduleExports, version, name)
+            // Set the moduleExports in the hooks weakmap
+            hook[HOOK_SYMBOL].set(moduleExports, name)
+          } catch (e) {
+            log.error(e)
+          }
+        }
+      }
+    }
+
   })
 }
 

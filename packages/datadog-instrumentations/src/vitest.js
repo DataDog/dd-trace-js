@@ -1,4 +1,4 @@
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHookWithOptions, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 // test hooks
@@ -80,7 +80,7 @@ function getTestName (task) {
   return testName
 }
 
-addHook({
+addHookWithOptions({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/runners.js'
@@ -115,7 +115,7 @@ addHook({
   return vitestPackage
 })
 
-addHook({
+addHookWithOptions({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/vendor/index.*'
@@ -157,7 +157,7 @@ addHook({
 })
 
 // Can't specify file because compiled vitest includes hashes in their files
-addHook({
+addHookWithOptions({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/vendor/cac.*'
@@ -175,7 +175,7 @@ addHook({
 
 // test suite start and finish
 // only relevant for workers
-addHook({
+addHookWithOptions({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
