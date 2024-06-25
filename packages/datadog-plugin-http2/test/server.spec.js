@@ -1,7 +1,6 @@
 'use strict'
 
 const { EventEmitter } = require('events')
-const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { rawExpectedSchema } = require('./naming')
 
@@ -63,12 +62,6 @@ describe('Plugin', () => {
         }
       })
 
-      beforeEach(() => {
-        return getPort().then(newPort => {
-          port = newPort
-        })
-      })
-
       afterEach(() => {
         appListener && appListener.close()
         app = null
@@ -96,7 +89,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = http2.createServer(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         it('should send traces to agent', (done) => {
