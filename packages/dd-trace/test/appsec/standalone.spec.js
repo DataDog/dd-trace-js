@@ -400,18 +400,35 @@ describe('Appsec Standalone', () => {
     let prioritySampler
     let tags
     let context
+    let root
 
     beforeEach(() => {
       tags = { 'manual.keep': 'true' }
       prioritySampler = new standalone.StandAloneAsmPrioritySampler('test')
 
+      root = {}
       context = {
         _sampling: {},
         _trace: {
-          tags: {}
+          tags: {},
+          started: [root]
         }
       }
       sinon.stub(prioritySampler, '_getContext').returns(context)
+    })
+
+    describe('sample', () => {
+      it('should provide the context when invoking _getPriorityFromTags', () => {
+        const span = new DatadogSpan(tracer, processor, prioritySampler, {
+          operationName: 'operation'
+        })
+
+        const _getPriorityFromTags = sinon.stub(prioritySampler, '_getPriorityFromTags')
+
+        prioritySampler.sample(span, false)
+
+        sinon.assert.calledWithExactly(_getPriorityFromTags, context._tags, context)
+      })
     })
 
     describe('_getPriorityFromTags', () => {
