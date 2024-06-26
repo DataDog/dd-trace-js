@@ -1,7 +1,6 @@
 'use strict'
 
 const { assert } = require('chai')
-const getPort = require('get-port')
 const agent = require('../plugins/agent')
 const Axios = require('axios')
 const appsec = require('../../src/appsec')
@@ -17,8 +16,6 @@ describe('HTTP Response Blocking', () => {
   let axios
 
   before(async () => {
-    const port = await getPort()
-
     await agent.load('http')
 
     const http = require('http')
@@ -38,15 +35,19 @@ describe('HTTP Response Blocking', () => {
     })
 
     await new Promise((resolve, reject) => {
-      server.listen(port, 'localhost')
-        .once('listening', resolve)
+      server.listen(0, 'localhost')
+        .once('listening', (...args) => {
+          const port = server.address().port
+
+          axios = Axios.create(({
+            baseURL: `http://localhost:${port}`,
+            validateStatus: null
+          }))
+
+          resolve(...args)
+        })
         .once('error', reject)
     })
-
-    axios = Axios.create(({
-      baseURL: `http://localhost:${port}`,
-      validateStatus: null
-    }))
 
     appsec.enable(new Config({
       appsec: {
