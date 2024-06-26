@@ -780,25 +780,26 @@ function truncateText (text) {
   return text
 }
 
-function tagChatCompletionRequestContent (content, contentIdx, tags) {
-  if (typeof content === 'string') {
-    tags[`openai.request.messages.${contentIdx}.content`] = content
-  } else if (Array.isArray(content)) {
+function tagChatCompletionRequestContent (contents, messageIdx, tags) {
+  if (typeof contents === 'string') {
+    tags[`openai.request.messages.${messageIdx}.content`] = contents
+  } else if (Array.isArray(contents)) {
     // content can also be an array of objects
     // which represent text input or image url
-    for (const idx in content) {
-      const c = content[idx]
-      const type = c.type
-      tags[`openai.request.messages.${contentIdx}.content.${idx}.type`] = c.type
+    for (const contentIdx in contents) {
+      const content = contents[contentIdx]
+      const type = content.type
+      tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
       if (type === 'text') {
-        tags[`openai.request.messages.${contentIdx}.content.${idx}.text`] = truncateText(c.text)
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = truncateText(content.text)
       } else if (type === 'image_url') {
-        tags[`openai.request.messages.${contentIdx}.content.${idx}.image_url.url`] = truncateText(c.image_url.url)
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
+          truncateText(content.image_url.url)
       }
-      // unsupported type otherwise
+      // unsupported type otherwise, won't be tagged
     }
   }
-  // unsupported type otherwise
+  // unsupported type otherwise, won't be tagged
 }
 
 // The server almost always responds with JSON
