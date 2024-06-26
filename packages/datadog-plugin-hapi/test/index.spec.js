@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -47,15 +46,13 @@ describe('Plugin', () => {
 
       if (semver.intersects(version, '>=17')) {
         beforeEach(() => {
-          return getPort()
-            .then(_port => {
-              port = _port
-              server = Hapi.server({
-                address: 'localhost',
-                port
-              })
-              return server.start()
-            })
+          server = Hapi.server({
+            address: 'localhost',
+            port: 0
+          })
+          return server.start().then(() => {
+            port = server.listener.address().port
+          })
         })
 
         afterEach(() => {
@@ -63,19 +60,19 @@ describe('Plugin', () => {
         })
       } else {
         beforeEach(done => {
-          getPort()
-            .then(_port => {
-              port = _port
+          if (Hapi.Server.prototype.connection) {
+            server = new Hapi.Server()
+            server.connection({ address: 'localhost', port })
+          } else {
+            server = new Hapi.Server('localhost', port)
+          }
 
-              if (Hapi.Server.prototype.connection) {
-                server = new Hapi.Server()
-                server.connection({ address: 'localhost', port })
-              } else {
-                server = new Hapi.Server('localhost', port)
-              }
-
-              server.start(done)
-            })
+          server.start(err => {
+            if (!err) {
+              port = server.listener.address().port
+            }
+            done(err)
+          })
         })
 
         afterEach(done => {

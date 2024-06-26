@@ -2,7 +2,6 @@
 
 const path = require('path')
 const axios = require('axios')
-const getPort = require('get-port')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
@@ -69,11 +68,9 @@ describe('sequelize', () => {
             res.json(users)
           })
 
-          getPort().then(newPort => {
-            port = newPort
-            server = app.listen(newPort, () => {
-              done()
-            })
+          server = app.listen(0, () => {
+            port = server.address().port
+            done()
           })
         })
 

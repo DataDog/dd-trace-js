@@ -1,7 +1,6 @@
 'use strict'
 
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const agent = require('../../../../plugins/agent')
 const Config = require('../../../../../src/config')
@@ -59,13 +58,13 @@ describe('URI sourcing with express', () => {
         res.status(200).send()
       })
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/path/vulnerable`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/path/vulnerable`)
+          .then(() => done())
+          .catch(done)
       })
     })
   })
@@ -137,13 +136,13 @@ describe('Path params sourcing with express', () => {
         res.status(200).send()
       })
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
@@ -172,13 +171,13 @@ describe('Path params sourcing with express', () => {
 
       app.use('/:parameterParent', nestedRouter)
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
@@ -192,13 +191,13 @@ describe('Path params sourcing with express', () => {
       app.param('parameter1', checkParamIsTaintedAndNext)
       app.param('parameter2', checkParamIsTaintedAndNext)
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
 
@@ -216,13 +215,13 @@ describe('Path params sourcing with express', () => {
       app.param('parameter1')
       app.param('parameter2')
 
-      getPort().then(port => {
-        appListener = app.listen(port, 'localhost', () => {
-          axios
-            .get(`http://localhost:${port}/tainted1/tainted2`)
-            .then(() => done())
-            .catch(done)
-        })
+      appListener = app.listen(0, 'localhost', () => {
+        const port = appListener.address().port
+
+        axios
+          .get(`http://localhost:${port}/tainted1/tainted2`)
+          .then(() => done())
+          .catch(done)
       })
     })
   })

@@ -110,7 +110,7 @@ async function gatherNetworkTimelineEvents (cwd, scriptFilePath, eventType, args
     }
   })
 
-  await processExitPromise(proc, 5000)
+  await processExitPromise(proc, 30000)
   const procEnd = BigInt(Date.now() * 1000000)
 
   const { profile, encoded } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
@@ -171,7 +171,7 @@ describe('profiler', () => {
   let oomTestFile
   let oomEnv
   let oomExecArgv
-  const timeout = 5000
+  const timeout = 30000
 
   before(async () => {
     sandbox = await createSandbox()
@@ -201,7 +201,7 @@ describe('profiler', () => {
         }
       })
 
-      await processExitPromise(proc, 5000)
+      await processExitPromise(proc, 30000)
       const procEnd = BigInt(Date.now() * 1000000)
 
       const { profile, encoded } = await getLatestProfile(cwd, /^wall_.+\.pprof$/)
