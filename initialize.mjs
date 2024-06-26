@@ -44,9 +44,12 @@ export async function getSource (...args) {
 }
 
 if (isMainThread) {
-  await import('./init.js')
-  const { register } = await import('node:module')
-  if (register) {
-    register('./loader-hook.mjs', import.meta.url)
-  }
+  // Need this IIFE for versions of Node.js without top-level await.
+  (async () => {
+    await import('./init.js')
+    const { register } = await import('node:module')
+    if (register) {
+      register('./loader-hook.mjs', import.meta.url)
+    }
+  })()
 }
