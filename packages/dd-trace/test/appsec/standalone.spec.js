@@ -10,7 +10,7 @@ const {
   SAMPLING_MECHANISM_APPSEC,
   DECISION_MAKER_KEY
 } = require('../../src/constants')
-const { USER_KEEP, AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
+const { USER_KEEP, AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
 
@@ -95,6 +95,48 @@ describe('Appsec Standalone', () => {
       const prioritySampler = standalone.configure(config)
 
       assert.instanceOf(prioritySampler, standalone.StandAloneAsmPrioritySampler)
+    })
+  })
+
+  describe('sample', () => {
+    it('should add _dd.p.appsec tag if enabled', () => {
+      standalone.configure(config)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      standalone.sample(span)
+
+      assert.propertyVal(span.context()._trace.tags, APPSEC_PROPAGATION_KEY, '1')
+    })
+
+    it('should reset priority', () => {
+      standalone.configure(config)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      span.context()._sampling.priority = USER_REJECT
+
+      standalone.sample(span)
+
+      assert.strictEqual(span.context()._sampling.priority, undefined)
+    })
+
+    it('should not add _dd.p.appsec tag if disabled', () => {
+      delete config.appsec.standalone
+
+      standalone.configure(config)
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation'
+      })
+
+      standalone.sample(span)
+
+      assert.notProperty(span.context()._trace.tags, APPSEC_PROPAGATION_KEY)
     })
   })
 
