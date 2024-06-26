@@ -108,7 +108,7 @@ withVersions('express', 'express', expressVersion => {
               res.end('end')
             }
 
-            axios.get('/?host=ifconfig.pro')
+            axios.get('/?host=localhost/ifconfig.pro')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)
