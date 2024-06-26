@@ -2,8 +2,26 @@
 
 const path = require('path')
 const Module = require('module')
+const telemetry = require('./packages/dd-trace/src/telemetry/init-telemetry')
+const semver = require('semver')
+
+function isTrue (envVar) {
+  return ['1', 'true', 'True'].includes(envVar)
+}
+
+// eslint-disable-next-line no-console
+let log = { info: isTrue(process.env.DD_TRACE_DEBUG) ? console.log : () => {} }
+if (semver.satisfies(process.versions.node, '>=16')) {
+  const Config = require('./packages/dd-trace/src/config')
+  log = require('./packages/dd-trace/src/log')
+
+  // eslint-disable-next-line no-new
+  new Config() // we need this to initialize the logger
+}
 
 let initBailout = false
+let clobberBailout = false
+const forced = isTrue(process.env.DD_INJECT_FORCE)
 
 if (process.env.DD_INJECTION_ENABLED) {
   // If we're running via single-step install, and we're not in the app's
@@ -19,13 +37,34 @@ if (process.env.DD_INJECTION_ENABLED) {
   if (resolvedInApp) {
     const ourselves = path.join(__dirname, 'index.js')
     if (ourselves !== resolvedInApp) {
+      clobberBailout = true
+    }
+  }
+
+  // If we're running via single-step install, and the runtime doesn't match
+  // the engines field in package.json, then we should not initialize the tracer.
+  if (!clobberBailout) {
+    const { engines } = require('./package.json')
+    const version = process.versions.node
+    if (!semver.satisfies(version, engines.node)) {
       initBailout = true
+      telemetry([
+        { name: 'abort', tags: ['reason:incompatible_runtime'] },
+        { name: 'abort.runtime', tags: [] }
+      ])
+      log.info('Aborting application instrumentation due to incompatible_runtime.')
+      log.info(`Found incompatible runtime nodejs ${version}, Supported runtimes: nodejs ${engines.node}.`)
+      if (forced) {
+        log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
+      }
     }
   }
 }
 
-if (!initBailout) {
+if (!clobberBailout && (!initBailout || forced)) {
   const tracer = require('.')
   tracer.init()
   module.exports = tracer
+  telemetry('complete', [`injection_forced:${forced && initBailout ? 'true' : 'false'}`])
+  log.info('Application instrumentation bootstrapping complete')
 }
