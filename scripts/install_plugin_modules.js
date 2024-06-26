@@ -80,7 +80,7 @@ async function assertVersions () {
 }
 
 async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE
+  const versions = process.env.PACKAGE_VERSION_RANGE && !external
     ? [process.env.PACKAGE_VERSION_RANGE]
     : [].concat(instrumentation.versions || [])
 
