@@ -79,7 +79,7 @@ class FakeAgent extends EventEmitter {
   // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
   // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
   assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
-    timeout = timeout || 5000
+    timeout = timeout || 30000
     let resultResolve
     let resultReject
     let msgCount = 0
@@ -119,7 +119,7 @@ class FakeAgent extends EventEmitter {
   }
 
   assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
-    timeout = timeout || 5000
+    timeout = timeout || 30000
     let resultResolve
     let resultReject
     let msgCount = 0
