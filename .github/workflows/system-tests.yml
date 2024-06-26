@@ -84,7 +84,7 @@ jobs:
           path: artifact.tar.gz
 
   parametric:
-    uses: DataDog/system-tests/.github/workflows/run-parametric.yml
+    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
     secrets: inherit
     with:
       library: nodejs
