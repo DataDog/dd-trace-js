@@ -354,6 +354,9 @@ jobs:
       - uses: codecov/codecov-action@v2
 
   couchbase:
+    strategy:
+      matrix:
+        range: ['^2.6.12', '^3.0.7', '>=4.2.0']
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -364,6 +367,7 @@ jobs:
     env:
       PLUGINS: couchbase
       SERVICES: couchbase
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
