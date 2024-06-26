@@ -92,3 +92,4 @@ jobs:
       scenarios: PARAMETRIC
       library: nodejs
       binaries_artifact: system_tests_binaries
+      _experimental_parametric_job_count: 8
