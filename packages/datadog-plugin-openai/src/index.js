@@ -309,6 +309,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendLog (methodName, span, tags, store, error) {
+    if (!store) return
     if (!Object.keys(store).length) return
     if (!this.sampler.isSampled()) return
 
@@ -403,7 +404,7 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
-    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tagChatCompletionRequestContent(message.content, i, tags)
     tags[`openai.request.messages.${i}.role`] = message.role
     tags[`openai.request.messages.${i}.name`] = message.name
     tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
@@ -692,7 +693,7 @@ function commonCreateResponseExtraction (tags, body, store, methodName) {
   for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
     const choice = body.choices[choiceIdx]
 
-    // logprobs can be nullm and we still want to tag it as 'returned' even when set to 'null'
+    // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
     const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
@@ -766,6 +767,7 @@ function truncateApiKey (apiKey) {
  */
 function truncateText (text) {
   if (!text) return
+  if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 
   text = text
     .replace(RE_NEWLINE, '\\n')
@@ -776,6 +778,27 @@ function truncateText (text) {
   }
 
   return text
+}
+
+function tagChatCompletionRequestContent (content, contentIdx, tags) {
+  if (typeof content === 'string') {
+    tags[`openai.request.messages.${contentIdx}.content`] = content
+  } else if (Array.isArray(content)) {
+    // content can also be an array of objects
+    // which represent text input or image url
+    for (const idx in content) {
+      const c = content[idx]
+      const type = c.type
+      tags[`openai.request.messages.${contentIdx}.content.${idx}.type`] = c.type
+      if (type === 'text') {
+        tags[`openai.request.messages.${contentIdx}.content.${idx}.text`] = truncateText(c.text)
+      } else if (type === 'image_url') {
+        tags[`openai.request.messages.${contentIdx}.content.${idx}.image_url.url`] = truncateText(c.image_url.url)
+      }
+      // unsupported type otherwise
+    }
+  }
+  // unsupported type otherwise
 }
 
 // The server almost always responds with JSON
