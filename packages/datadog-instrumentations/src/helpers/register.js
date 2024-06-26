@@ -7,6 +7,7 @@ const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
 const checkRequireCache = require('../check_require_cache')
+const telemetry = require('../../../dd-trace/src/telemetry/init-telemetry')
 
 const {
   DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
@@ -35,6 +36,8 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
+const seenCombo = new Set()
+
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
@@ -49,6 +52,7 @@ for (const packageName of names) {
       return moduleExports
     }
 
+    const namesAndSuccesses = {}
     for (const { name, file, versions, hook } of instrumentations[packageName]) {
       const fullFilename = filename(name, file)
 
@@ -61,10 +65,17 @@ for (const packageName of names) {
 
       if (moduleName === fullFilename) {
         const version = moduleVersion || getVersion(moduleBaseDir)
+        if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
+          namesAndSuccesses[name] = {
+            success: false,
+            version
+          }
+        }
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
+            namesAndSuccesses[name].success = true
             return moduleExports
           }
 
@@ -76,9 +87,27 @@ for (const packageName of names) {
             // Set the moduleExports in the hooks weakmap
             hook[HOOK_SYMBOL].set(moduleExports, name)
           } catch (e) {
-            log.error(e)
+            log.info('Error during ddtrace instrumentation of application, aborting.')
+            log.info(e)
+            telemetry('error', [
+              `error_type:${e.constructor.name}`,
+              `integration:${name}`,
+              `integration_version:${version}`
+            ])
           }
+          namesAndSuccesses[name].success = true
         }
+      }
+    }
+    for (const name of Object.keys(namesAndSuccesses)) {
+      const { success, version } = namesAndSuccesses[name]
+      if (!success && !seenCombo.has(`${name}@${version}`)) {
+        telemetry('abort.integration', [
+          `integration:${name}`,
+          `integration_version:${version}`
+        ])
+        log.info(`Found incompatible integration version: ${name}@${version}`)
+        seenCombo.add(`${name}@${version}`)
       }
     }
 
