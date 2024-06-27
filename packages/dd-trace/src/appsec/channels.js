@@ -1,7 +1,6 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const { channel } = require('dc-polyfill')
 
 // TODO: use TBD naming convention
 module.exports = {

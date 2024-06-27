@@ -7,7 +7,6 @@ const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart } = req
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
-const { channel } = require('dc-polyfill')
 
 class AbortError extends Error {
   constructor (req, res, blockingAction) {
