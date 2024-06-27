@@ -225,9 +225,6 @@ describe('reporter', () => {
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -267,12 +264,9 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -285,13 +279,10 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
     })
@@ -304,13 +295,10 @@ describe('reporter', () => {
       expect(web.root).to.have.been.calledOnceWith(req)
 
       expect(span.addTags).to.have.been.calledOnceWithExactly({
-        'http.request.headers.host': 'localhost',
-        'http.request.headers.user-agent': 'arachni',
         'appsec.event': 'true',
         'manual.keep': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'http.useragent': 'arachni',
         'network.client.ip': '8.8.8.8'
       })
 
@@ -365,6 +353,33 @@ describe('reporter', () => {
   describe('finishRequest', () => {
     let wafContext
 
+    const requestHeadersToTrackOnEvent = [
+      'x-forwarded-for',
+      'x-real-ip',
+      'true-client-ip',
+      'x-client-ip',
+      'x-forwarded',
+      'forwarded-for',
+      'x-cluster-client-ip',
+      'fastly-client-ip',
+      'cf-connecting-ip',
+      'cf-connecting-ipv6',
+      'forwarded',
+      'via',
+      'content-length',
+      'content-encoding',
+      'content-language',
+      'host',
+      'accept-encoding',
+      'accept-language'
+    ]
+    const requestHeadersAndValuesToTrackOnEvent = {}
+    const expectedRequestTagsToTrackOnEvent = {}
+    requestHeadersToTrackOnEvent.forEach((header, index) => {
+      requestHeadersAndValuesToTrackOnEvent[header] = `val-${index}`
+      expectedRequestTagsToTrackOnEvent[`http.request.headers.${header}`] = `val-${index}`
+    })
+
     beforeEach(() => {
       wafContext = {
         dispose: sinon.stub()
@@ -398,7 +413,7 @@ describe('reporter', () => {
       expect(Reporter.metricsQueue).to.be.empty
     })
 
-    it('should only add identification headers when no attack was previously found', () => {
+    it('should only add mandatory headers when no attack or event was previously found', () => {
       const req = {
         headers: {
           'not-included': 'hello',
@@ -409,7 +424,10 @@ describe('reporter', () => {
           'x-appgw-trace-id': 'e',
           'x-sigsci-requestid': 'f',
           'x-sigsci-tags': 'g',
-          'akamai-user-risk': 'h'
+          'akamai-user-risk': 'h',
+          'content-type': 'i',
+          accept: 'j',
+          'user-agent': 'k'
         }
       }
 
@@ -423,7 +441,11 @@ describe('reporter', () => {
         'http.request.headers.x-appgw-trace-id': 'e',
         'http.request.headers.x-sigsci-requestid': 'f',
         'http.request.headers.x-sigsci-tags': 'g',
-        'http.request.headers.akamai-user-risk': 'h'
+        'http.request.headers.akamai-user-risk': 'h',
+        'http.request.headers.content-type': 'i',
+        'http.request.headers.accept': 'j',
+        'http.request.headers.user-agent': 'k',
+        'http.useragent': 'k'
       })
     })
 
@@ -482,6 +504,108 @@ describe('reporter', () => {
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42'
       })
+    })
+
+    it('should add http request data inside request span when appsec.event is true', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+      span.context()._tags['appsec.event'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user login success is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.success.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user login failure is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.users.login.failure.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
+    })
+
+    it('should add http request data inside request span when user custom event is tracked', () => {
+      const req = {
+        headers: {
+          'user-agent': 'arachni',
+          ...requestHeadersAndValuesToTrackOnEvent
+        }
+      }
+      const res = {
+        getHeaders: () => {
+          return {}
+        }
+      }
+
+      span.context()
+        ._tags['appsec.events.custon.event.track'] = 'true'
+
+      Reporter.finishRequest(req, res)
+
+      expect(span.addTags).to.have.been.calledWithExactly({
+        'http.request.headers.user-agent': 'arachni',
+        'http.useragent': 'arachni'
+      })
+
+      expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
     })
 
     it('should call incrementWafRequestsMetric', () => {
