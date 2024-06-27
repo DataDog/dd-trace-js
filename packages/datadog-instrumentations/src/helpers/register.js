@@ -27,6 +27,9 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
+if (!disabledInstrumentations.has('process')) {
+  require('../process')
+}
 
 const HOOK_SYMBOL = Symbol('hookExportsMap')
 

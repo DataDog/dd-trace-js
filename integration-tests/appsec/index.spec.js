@@ -70,7 +70,7 @@ describe('RASP', () => {
       }
 
       try {
-        await axios.get(`${path}?host=ifconfig.pro`)
+        await axios.get(`${path}?host=localhost/ifconfig.pro`)
 
         assert.fail('Request should have failed')
       } catch (e) {
@@ -151,7 +151,6 @@ describe('RASP', () => {
 
           assert.fail('Request should have failed')
         } catch (e) {
-          // console.log(e)
           return new Promise((resolve, reject) => {
             setTimeout(() => {
               if (hasOutput) {
@@ -168,7 +167,7 @@ describe('RASP', () => {
         let response
 
         try {
-          response = await axios.get('/ssrf/http/manual-blocking?host=ifconfig.pro')
+          response = await axios.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
 
           assert.fail('Request should have failed')
         } catch (e) {
@@ -183,7 +182,7 @@ describe('RASP', () => {
 
       it('should block when error is unhandled', async () => {
         try {
-          await axios.get('/ssrf/http/unhandled-error?host=ifconfig.pro')
+          await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
 
           assert.fail('Request should have failed')
         } catch (e) {
@@ -193,6 +192,35 @@ describe('RASP', () => {
 
           assert.strictEqual(e.response.status, 403)
           await assertRaspDetected()
+        }
+      })
+
+      it('should not execute custom uncaughtExceptionCaptureCallback', async () => {
+        let hasOutput = false
+        try {
+          stdioHandler = () => {
+            hasOutput = true
+          }
+
+          await axios.get('/ssrf/http/custom-uncaught-exception-capture-callback?host=localhost/ifconfig.pro')
+
+          assert.fail('Request should have failed')
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+
+          assert.strictEqual(e.response.status, 403)
+          await assertRaspDetected()
+          return new Promise((resolve, reject) => {
+            setTimeout(() => {
+              if (hasOutput) {
+                reject(new Error('uncaughtExceptionCaptureCallback executed'))
+              } else {
+                resolve()
+              }
+            }, 10)
+          })
         }
       })
 
@@ -246,7 +274,7 @@ describe('RASP', () => {
         let response
 
         try {
-          response = await axios.get('/ssrf/http/manual-blocking?host=ifconfig.pro')
+          response = await axios.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
         } catch (e) {
           if (!e.response) {
             throw e

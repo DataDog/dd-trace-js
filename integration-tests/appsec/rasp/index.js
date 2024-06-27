@@ -92,6 +92,19 @@ app.get('/ssrf/http/manual-blocking', (req, res) => {
   })
 })
 
+app.get('/ssrf/http/custom-uncaught-exception-capture-callback', (req, res) => {
+  process.setUncaughtExceptionCaptureCallback(() => {
+    // wanted a log to force error when on tests
+    // eslint-disable-next-line no-console
+    console.log('Custom uncaught exception capture callback')
+    res.writeHead(500)
+    res.end('error')
+  })
+
+  http.get(`https://${req.query.host}`, () => {
+    res.send('end')
+  })
+})
 app.get('/ssrf/http/unhandled-error', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res)
 })

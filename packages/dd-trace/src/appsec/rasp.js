@@ -7,7 +7,8 @@ const { httpClientRequestStart } = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
-
+const { channel } = require('dc-polyfill')
+const setUncaughtExceptionCaptureCallbackStart = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
 class AbortError extends Error {
   constructor (req, res, blockingAction) {
     super('AbortError')
@@ -18,7 +19,7 @@ class AbortError extends Error {
   }
 }
 
-function handleUncaughtExceptionMonitor (err, origin) {
+function handleUncaughtExceptionMonitor (err) {
   if (err instanceof AbortError || err.cause instanceof AbortError) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
@@ -27,6 +28,30 @@ function handleUncaughtExceptionMonitor (err, origin) {
       process.setUncaughtExceptionCaptureCallback(() => {
         process.setUncaughtExceptionCaptureCallback(null)
       })
+    } else {
+      let previousCb
+      const cb = ({ currentCallback, abortController }) => {
+        setUncaughtExceptionCaptureCallbackStart.unsubscribe(cb)
+        if (!currentCallback) {
+          abortController.abort()
+          return
+        }
+
+        previousCb = currentCallback
+      }
+
+      setUncaughtExceptionCaptureCallbackStart.subscribe(cb)
+
+      process.setUncaughtExceptionCaptureCallback(null)
+
+      // For some reason, previous callback was defiend before the instrumentation
+      // We can not restore it, so we let the app decide
+      if (previousCb) {
+        process.setUncaughtExceptionCaptureCallback(() => {
+          process.setUncaughtExceptionCaptureCallback(null)
+          process.setUncaughtExceptionCaptureCallback(previousCb)
+        })
+      }
     }
   }
 }
