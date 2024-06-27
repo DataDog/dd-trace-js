@@ -3,12 +3,11 @@
 const { storage } = require('../../../datadog-core')
 const web = require('./../plugins/util/web')
 const addresses = require('./addresses')
-const { httpClientRequestStart } = require('./channels')
+const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart } = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const { channel } = require('dc-polyfill')
-const setUncaughtExceptionCaptureCallbackStart = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
 
 class AbortError extends Error {
   constructor (req, res, blockingAction) {

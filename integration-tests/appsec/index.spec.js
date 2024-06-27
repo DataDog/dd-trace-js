@@ -53,7 +53,7 @@ describe('RASP', () => {
     })
   }
 
-  async function assertRaspDetected () {
+  async function assertExploitDetected () {
     await agent.assertMessageReceived(({ headers, payload }) => {
       assert.property(payload[0][0].meta, '_dd.appsec.json')
       assert.include(payload[0][0].meta['_dd.appsec.json'], '"test-rule-id-2"')
@@ -79,7 +79,7 @@ describe('RASP', () => {
         }
 
         assert.strictEqual(e.response.status, 403)
-        await assertRaspDetected()
+        await assertExploitDetected()
       }
 
       return new Promise((resolve, reject) => {
@@ -109,7 +109,7 @@ describe('RASP', () => {
         }
 
         assert.strictEqual(e.response.status, 403)
-        await assertRaspDetected()
+        await assertExploitDetected()
 
         return new Promise((resolve, reject) => {
           setTimeout(() => {
@@ -142,6 +142,7 @@ describe('RASP', () => {
           }, 50)
         })
       }
+
       assert.fail('Request should have failed')
     }
 
@@ -207,7 +208,7 @@ describe('RASP', () => {
           }
           response = e.response
           assert.strictEqual(response.status, 418)
-          return await assertRaspDetected()
+          return await assertExploitDetected()
         }
 
         assert.fail('Request should have failed')
@@ -224,7 +225,7 @@ describe('RASP', () => {
           }
           response = e.response
           assert.strictEqual(response.status, 403)
-          return await assertRaspDetected()
+          return await assertExploitDetected()
         }
 
         assert.fail('Request should have failed')
@@ -249,7 +250,7 @@ describe('RASP', () => {
           }
 
           assert.strictEqual(e.response.status, 403)
-          return await assertRaspDetected()
+          return await assertExploitDetected()
         }
 
         assert.fail('Request should have failed')
@@ -334,7 +335,7 @@ describe('RASP', () => {
         // not blocked
         assert.notEqual(response.status, 418)
         assert.notEqual(response.status, 403)
-        await assertRaspDetected()
+        await assertExploitDetected()
       })
     })
   })
