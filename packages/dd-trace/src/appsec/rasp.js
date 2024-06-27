@@ -9,6 +9,7 @@ const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const { channel } = require('dc-polyfill')
 const setUncaughtExceptionCaptureCallbackStart = channel('datadog:process:setUncaughtExceptionCaptureCallback:start')
+
 class AbortError extends Error {
   constructor (req, res, blockingAction) {
     super('AbortError')
@@ -19,16 +20,48 @@ class AbortError extends Error {
   }
 }
 
+const RULE_TYPES = {
+  SSRF: 'ssrf'
+}
+
+let config, abortOnUncaughtException
+
+function removeAllListeners (emitter, event) {
+  const listeners = emitter.listeners(event)
+  emitter.removeAllListeners(event)
+
+  let cleaned = false
+  return function () {
+    if (cleaned === true) {
+      return
+    }
+    cleaned = true
+
+    for (let i = 0; i < listeners.length; ++i) {
+      emitter.on(event, listeners[i])
+    }
+  }
+}
+
 function handleUncaughtExceptionMonitor (err) {
   if (err instanceof AbortError || err.cause instanceof AbortError) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
 
     if (!process.hasUncaughtExceptionCaptureCallback()) {
-      process.setUncaughtExceptionCaptureCallback(() => {
-        process.setUncaughtExceptionCaptureCallback(null)
+      const cleanUp = removeAllListeners(process, 'uncaughtException')
+      const handler = () => {
+        process.removeListener('uncaughtException', handler)
+      }
+
+      setTimeout(() => {
+        process.removeListener('uncaughtException', handler)
+        cleanUp()
       })
+
+      process.on('uncaughtException', handler)
     } else {
+      // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
       let previousCb
       const cb = ({ currentCallback, abortController }) => {
         setUncaughtExceptionCaptureCallbackStart.unsubscribe(cb)
@@ -55,12 +88,6 @@ function handleUncaughtExceptionMonitor (err) {
     }
   }
 }
-
-const RULE_TYPES = {
-  SSRF: 'ssrf'
-}
-
-let config, abortOnUncaughtException
 
 function enable (_config) {
   config = _config

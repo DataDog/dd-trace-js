@@ -93,28 +93,61 @@ describe('RASP', () => {
       })
     }
 
-    describe('ssrf', () => {
-      it('should crash when error is not an AbortError', async () => {
-        let hasOutput = false
+    async function testCustomErrorHandlerIsNotExecuted (path) {
+      let hasOutput = false
+      try {
         stdioHandler = () => {
           hasOutput = true
         }
 
-        try {
-          await axios.get('/crash')
+        await axios.get(`${path}?host=localhost/ifconfig.pro`)
 
-          assert.fail('Request should have failed')
-        } catch (e) {
-          return new Promise((resolve, reject) => {
-            setTimeout(() => {
-              if (hasOutput) {
-                resolve()
-              } else {
-                reject(new Error('Output expected after crash'))
-              }
-            }, 50)
-          })
+        assert.fail('Request should have failed')
+      } catch (e) {
+        if (!e.response) {
+          throw e
         }
+
+        assert.strictEqual(e.response.status, 403)
+        await assertRaspDetected()
+
+        return new Promise((resolve, reject) => {
+          setTimeout(() => {
+            if (hasOutput) {
+              reject(new Error('uncaughtExceptionCaptureCallback executed'))
+            } else {
+              resolve()
+            }
+          }, 10)
+        })
+      }
+    }
+
+    async function testAppCrashesAsExpected () {
+      let hasOutput = false
+      stdioHandler = () => {
+        hasOutput = true
+      }
+
+      try {
+        await axios.get('/crash')
+      } catch (e) {
+        return new Promise((resolve, reject) => {
+          setTimeout(() => {
+            if (hasOutput) {
+              resolve()
+            } else {
+              reject(new Error('Output expected after crash'))
+            }
+          }, 50)
+        })
+      }
+      assert.fail('Request should have failed')
+    }
+
+    describe('ssrf', () => {
+      it('should crash when error is not an AbortError', async () => {
+        await testAppCrashesAsExpected()
       })
 
       it('should not crash when customer has his own setUncaughtExceptionCaptureCallback', async () => {
@@ -125,8 +158,6 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-A')
-
-          assert.fail('Request should have failed')
         } catch (e) {
           return new Promise((resolve, reject) => {
             setTimeout(() => {
@@ -138,6 +169,8 @@ describe('RASP', () => {
             }, 50)
           })
         }
+
+        assert.fail('Request should have failed')
       })
 
       it('should not crash when customer has his own uncaughtException', async () => {
@@ -148,8 +181,6 @@ describe('RASP', () => {
 
         try {
           await axios.get('/crash-and-recovery-B')
-
-          assert.fail('Request should have failed')
         } catch (e) {
           return new Promise((resolve, reject) => {
             setTimeout(() => {
@@ -161,6 +192,8 @@ describe('RASP', () => {
             }, 50)
           })
         }
+
+        assert.fail('Request should have failed')
       })
 
       it('should block manually', async () => {
@@ -168,60 +201,76 @@ describe('RASP', () => {
 
         try {
           response = await axios.get('/ssrf/http/manual-blocking?host=localhost/ifconfig.pro')
-
-          assert.fail('Request should have failed')
         } catch (e) {
           if (!e.response) {
             throw e
           }
           response = e.response
+          assert.strictEqual(response.status, 418)
+          return await assertRaspDetected()
         }
-        assert.strictEqual(response.status, 418)
-        await assertRaspDetected()
+
+        assert.fail('Request should have failed')
+      })
+
+      it('should block in a domain', async () => {
+        let response
+
+        try {
+          response = await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
+        } catch (e) {
+          if (!e.response) {
+            throw e
+          }
+          response = e.response
+          assert.strictEqual(response.status, 403)
+          return await assertRaspDetected()
+        }
+
+        assert.fail('Request should have failed')
+      })
+
+      it('should crash as expected after block in domain request', async () => {
+        try {
+          await axios.get('/ssrf/http/should-block-in-domain?host=localhost/ifconfig.pro')
+        } catch (e) {
+          return await testAppCrashesAsExpected()
+        }
+
+        assert.fail('Request should have failed')
       })
 
       it('should block when error is unhandled', async () => {
         try {
           await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
-
-          assert.fail('Request should have failed')
         } catch (e) {
           if (!e.response) {
             throw e
           }
 
           assert.strictEqual(e.response.status, 403)
-          await assertRaspDetected()
+          return await assertRaspDetected()
         }
+
+        assert.fail('Request should have failed')
       })
 
-      it('should not execute custom uncaughtExceptionCaptureCallback', async () => {
-        let hasOutput = false
+      it('should crash as expected after a requiest block when error is unhandled', async () => {
         try {
-          stdioHandler = () => {
-            hasOutput = true
-          }
-
-          await axios.get('/ssrf/http/custom-uncaught-exception-capture-callback?host=localhost/ifconfig.pro')
-
-          assert.fail('Request should have failed')
+          await axios.get('/ssrf/http/unhandled-error?host=localhost/ifconfig.pro')
         } catch (e) {
-          if (!e.response) {
-            throw e
-          }
-
-          assert.strictEqual(e.response.status, 403)
-          await assertRaspDetected()
-          return new Promise((resolve, reject) => {
-            setTimeout(() => {
-              if (hasOutput) {
-                reject(new Error('uncaughtExceptionCaptureCallback executed'))
-              } else {
-                resolve()
-              }
-            }, 10)
-          })
+          return await testAppCrashesAsExpected()
         }
+
+        assert.fail('Request should have failed')
+      })
+
+      it('should not execute custom uncaughtExceptionCaptureCallback when it is blocked', async () => {
+        return testCustomErrorHandlerIsNotExecuted('/ssrf/http/custom-uncaught-exception-capture-callback')
+      })
+
+      it('should not execute custom uncaughtException listener', async () => {
+        return testCustomErrorHandlerIsNotExecuted('/ssrf/http/custom-uncaughtException-listener')
       })
 
       it('should not crash when app send data after blocking', () => {

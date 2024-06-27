@@ -105,6 +105,30 @@ app.get('/ssrf/http/custom-uncaught-exception-capture-callback', (req, res) => {
     res.send('end')
   })
 })
+
+app.get('/ssrf/http/should-block-in-domain', (req, res) => {
+  const d = require('node:domain').create()
+  d.run(() => {
+    http.get(`https://${req.query.host}`, () => {
+      res.send('end')
+    })
+  })
+})
+
+app.get('/ssrf/http/custom-uncaughtException-listener', (req, res) => {
+  process.on('uncaughtException', () => {
+    // wanted a log to force error when on tests
+    // eslint-disable-next-line no-console
+    console.log('Custom uncaught exception capture callback')
+    res.writeHead(500)
+    res.end('error')
+  })
+
+  http.get(`https://${req.query.host}`, () => {
+    res.send('end')
+  })
+})
+
 app.get('/ssrf/http/unhandled-error', (req, res) => {
   makeOutgoingRequestAndCbAfterTimeout(req, res)
 })
