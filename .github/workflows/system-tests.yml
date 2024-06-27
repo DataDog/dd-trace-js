@@ -86,9 +86,10 @@ jobs:
   parametric:
     needs:
       - build-artifacts
-    uses:  DataDog/system-tests/.github/workflows/system-tests.yml@main
+    uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
     secrets: inherit
     with:
-      scenarios: PARAMETRIC
       library: nodejs
       binaries_artifact: system_tests_binaries
+      _experimental_job_count: 8
+      _experimental_job_matrix: '[1,2,3,4,5,6,7,8]'
