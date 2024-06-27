@@ -330,9 +330,22 @@ function countPromptTokens (methodName, payload, model) {
     const messages = payload.messages
     for (const message of messages) {
       const content = message.content
-      const { tokens, estimated } = countTokens(content, model)
-      promptTokens += tokens
-      promptEstimated = estimated
+      if (typeof content === 'string') {
+        const { tokens, estimated } = countTokens(content, model)
+        promptTokens += tokens
+        promptEstimated = estimated
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c.type === 'text') {
+            const { tokens, estimated } = countTokens(c.text, model)
+            promptTokens += tokens
+            promptEstimated = estimated
+          }
+          // unsupported token computation for image_url
+          // as even though URL is a string, its true token count
+          // is based on the image itself, something onerous to do client-side
+        }
+      }
     }
   } else if (methodName === 'completions.create') {
     let prompt = payload.prompt

@@ -3323,6 +3323,54 @@ describe('Plugin', () => {
             expect(metricStub).to.have.been.calledWith('openai.tokens.total', 16, 'd', expectedTags)
           })
 
+          it('makes a successful chat completion call without image_url usage computed', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.simple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                // we shouldn't be trying to capture the image_url tokens
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens', 1)
+              })
+
+            const stream = await openai.chat.completions.create({
+              stream: 1,
+              model: 'gpt-4o',
+              messages: [
+                {
+                  role: 'user',
+                  name: 'hunter2',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'One' // one token, for ease of testing
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: 'dummy/url/peanut_food.png'
+                      }
+                    }
+                  ]
+                }
+              ]
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+            }
+
+            await checkTraces
+          })
+
           it('makes a successful completion call', async () => {
             nock('https://api.openai.com:443')
               .post('/v1/completions')
