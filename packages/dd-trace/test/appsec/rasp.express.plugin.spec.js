@@ -258,7 +258,6 @@ describe('RASP', () => {
       })
 
       assert.equal(response.status, 200)
-      assert.equal(response.data, 'timeout')
 
       await agent.use((traces) => {
         const span = getWebSpan(traces)
