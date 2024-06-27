@@ -309,6 +309,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendLog (methodName, span, tags, store, error) {
+    if (!store) return
     if (!Object.keys(store).length) return
     if (!this.sampler.isSampled()) return
 
@@ -329,9 +330,22 @@ function countPromptTokens (methodName, payload, model) {
     const messages = payload.messages
     for (const message of messages) {
       const content = message.content
-      const { tokens, estimated } = countTokens(content, model)
-      promptTokens += tokens
-      promptEstimated = estimated
+      if (typeof content === 'string') {
+        const { tokens, estimated } = countTokens(content, model)
+        promptTokens += tokens
+        promptEstimated = estimated
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c.type === 'text') {
+            const { tokens, estimated } = countTokens(c.text, model)
+            promptTokens += tokens
+            promptEstimated = estimated
+          }
+          // unsupported token computation for image_url
+          // as even though URL is a string, its true token count
+          // is based on the image itself, something onerous to do client-side
+        }
+      }
     }
   } else if (methodName === 'completions.create') {
     let prompt = payload.prompt
@@ -403,7 +417,7 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
-    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tagChatCompletionRequestContent(message.content, i, tags)
     tags[`openai.request.messages.${i}.role`] = message.role
     tags[`openai.request.messages.${i}.name`] = message.name
     tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
@@ -692,7 +706,7 @@ function commonCreateResponseExtraction (tags, body, store, methodName) {
   for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
     const choice = body.choices[choiceIdx]
 
-    // logprobs can be nullm and we still want to tag it as 'returned' even when set to 'null'
+    // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
     const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
@@ -766,6 +780,7 @@ function truncateApiKey (apiKey) {
  */
 function truncateText (text) {
   if (!text) return
+  if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 
   text = text
     .replace(RE_NEWLINE, '\\n')
@@ -776,6 +791,28 @@ function truncateText (text) {
   }
 
   return text
+}
+
+function tagChatCompletionRequestContent (contents, messageIdx, tags) {
+  if (typeof contents === 'string') {
+    tags[`openai.request.messages.${messageIdx}.content`] = contents
+  } else if (Array.isArray(contents)) {
+    // content can also be an array of objects
+    // which represent text input or image url
+    for (const contentIdx in contents) {
+      const content = contents[contentIdx]
+      const type = content.type
+      tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
+      if (type === 'text') {
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = truncateText(content.text)
+      } else if (type === 'image_url') {
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
+          truncateText(content.image_url.url)
+      }
+      // unsupported type otherwise, won't be tagged
+    }
+  }
+  // unsupported type otherwise, won't be tagged
 }
 
 // The server almost always responds with JSON
