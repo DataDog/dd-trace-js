@@ -29,19 +29,17 @@ const contentHeaderList = [
   'content-language'
 ]
 
-const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+const EVENT_HEADERS_MAP = mapHeaderAndTags([
   ...ipHeaderList,
   'forwarded',
   'via',
   ...contentHeaderList,
   'host',
-  'user-agent',
-  'accept',
   'accept-encoding',
   'accept-language'
 ], 'http.request.headers.')
 
-const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
+const identificationHeaders = [
   'x-amzn-trace-id',
   'cloudfront-viewer-ja3-fingerprint',
   'cf-ray',
@@ -50,6 +48,14 @@ const IDENTIFICATION_HEADERS_MAP = mapHeaderAndTags([
   'x-sigsci-requestid',
   'x-sigsci-tags',
   'akamai-user-risk'
+]
+
+// these request headers are always collected - it breaks the expected spec orders
+const REQUEST_HEADERS_MAP = mapHeaderAndTags([
+  'content-type',
+  'user-agent',
+  'accept',
+  ...identificationHeaders
 ], 'http.request.headers.')
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(contentHeaderList, 'http.response.headers.')
@@ -118,9 +124,9 @@ function reportAttack (attackData) {
 
   const currentTags = rootSpan.context()._tags
 
-  const newTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
-
-  newTags['appsec.event'] = 'true'
+  const newTags = {
+    'appsec.event': 'true'
+  }
 
   if (limiter.isAllowed()) {
     newTags[MANUAL_KEEP] = 'true'
@@ -140,11 +146,6 @@ function reportAttack (attackData) {
     newTags['_dd.appsec.json'] = currentJson.slice(0, -2) + ',' + attackData.slice(1) + '}'
   } else {
     newTags['_dd.appsec.json'] = '{"triggers":' + attackData + '}'
-  }
-
-  const ua = newTags['http.request.headers.user-agent']
-  if (ua) {
-    newTags['http.useragent'] = ua
   }
 
   newTags['network.client.ip'] = req.socket.remoteAddress
@@ -205,17 +206,38 @@ function finishRequest (req, res) {
   incrementWafRequestsMetric(req)
 
   // collect some headers even when no attack is detected
-  rootSpan.addTags(filterHeaders(req.headers, IDENTIFICATION_HEADERS_MAP))
+  const mandatoryTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
+  const ua = mandatoryTags['http.request.headers.user-agent']
+  if (ua) {
+    mandatoryTags['http.useragent'] = ua
+  }
+  rootSpan.addTags(mandatoryTags)
 
-  if (!rootSpan.context()._tags['appsec.event']) return
+  const tags = rootSpan.context()._tags
+  if (!shouldCollectEventHeaders(tags)) return
 
   const newTags = filterHeaders(res.getHeaders(), RESPONSE_HEADERS_MAP)
+  Object.assign(newTags, filterHeaders(req.headers, EVENT_HEADERS_MAP))
 
-  if (req.route && typeof req.route.path === 'string') {
+  if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
     newTags['http.endpoint'] = req.route.path
   }
 
   rootSpan.addTags(newTags)
+}
+
+function shouldCollectEventHeaders (tags = {}) {
+  if (tags['appsec.event'] === 'true') {
+    return true
+  }
+
+  for (const tagName of Object.keys(tags)) {
+    if (tagName.startsWith('appsec.events.')) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function setRateLimit (rateLimit) {
