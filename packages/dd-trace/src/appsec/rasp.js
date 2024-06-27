@@ -44,7 +44,7 @@ function handleUncaughtExceptionMonitor (err) {
 
       process.setUncaughtExceptionCaptureCallback(null)
 
-      // For some reason, previous callback was defiend before the instrumentation
+      // For some reason, previous callback was defined before the instrumentation
       // We can not restore it, so we let the app decide
       if (previousCb) {
         process.setUncaughtExceptionCaptureCallback(() => {
