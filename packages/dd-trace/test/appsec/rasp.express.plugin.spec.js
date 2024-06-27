@@ -63,22 +63,22 @@ describe('RASP', () => {
       async function testBlockingRequest () {
         try {
           await axios.get('/?host=localhost/ifconfig.pro')
-          assert.fail('Request should be blocked')
         } catch (e) {
           if (!e.response) {
             throw e
           }
+          return await agent.use((traces) => {
+            const span = getWebSpan(traces)
+            assert.property(span.meta, '_dd.appsec.json')
+            assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
+            assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+            assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+            assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+            assert.property(span.meta_struct, '_dd.stack')
+          })
         }
 
-        await agent.use((traces) => {
-          const span = getWebSpan(traces)
-          assert.property(span.meta, '_dd.appsec.json')
-          assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
-          assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-          assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-          assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-          assert.property(span.meta_struct, '_dd.stack')
-        })
+        assert.fail('Request should be blocked')
       }
 
       ['http', 'https'].forEach(protocol => {
