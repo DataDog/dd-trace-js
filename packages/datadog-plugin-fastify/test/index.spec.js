@@ -2,7 +2,6 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
-const getPort = require('get-port')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -48,7 +47,9 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -66,11 +67,9 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen({ host, port }, () => {
-                axios
-                  .get(`http://localhost:${port}/user`)
-                  .catch(done)
-              })
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
             })
           })
 
@@ -83,7 +82,9 @@ describe('Plugin', () => {
               }
             })
 
-            getPort().then(port => {
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -101,11 +102,9 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen({ host, port }, () => {
-                axios
-                  .get(`http://localhost:${port}/user/123`)
-                  .catch(done)
-              })
+              axios
+                .get(`http://localhost:${port}/user/123`)
+                .catch(done)
             })
           })
 
@@ -117,7 +116,9 @@ describe('Plugin', () => {
                 }
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -135,11 +136,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user/123`)
-                    .catch(done)
-                })
+                axios
+                  .get(`http://localhost:${port}/user/123`)
+                  .catch(done)
               })
             })
           }
@@ -155,12 +154,12 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.get(`http://localhost:${port}/user`)
-                  .then(() => done())
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.get(`http://localhost:${port}/user`)
+                .then(() => done())
+                .catch(done)
             })
           })
 
@@ -172,12 +171,12 @@ describe('Plugin', () => {
 
             app.get('/user', (request, reply) => reply.send())
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.get(`http://localhost:${port}/user`)
-                  .then(() => done())
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.get(`http://localhost:${port}/user`)
+                .then(() => done())
+                .catch(done)
             })
           })
 
@@ -187,12 +186,12 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
-                  .then(() => done())
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
+                .then(() => done())
+                .catch(done)
             })
           })
 
@@ -211,12 +210,12 @@ describe('Plugin', () => {
               }
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
-                  .then(() => done())
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
+                .then(() => done())
+                .catch(done)
             })
           })
 
@@ -248,12 +247,12 @@ describe('Plugin', () => {
               }
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
-                  .then(() => done())
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.post(`http://localhost:${port}/user`, { foo: 'bar' })
+                .then(() => done())
+                .catch(done)
             })
           })
 
@@ -264,7 +263,9 @@ describe('Plugin', () => {
               reply.send(error = new Error('boom'))
             })
 
-            getPort().then(port => {
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -279,11 +280,9 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen({ host, port }, () => {
-                axios
-                  .get(`http://localhost:${port}/user`)
-                  .catch(() => {})
-              })
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(() => {})
             })
           })
 
@@ -295,11 +294,11 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, async () => {
-                await axios.get(`http://localhost:${port}/user`)
-                done()
-              })
+            app.listen({ host, port: 0 }, async () => {
+              const port = app.server.address().port
+
+              await axios.get(`http://localhost:${port}/user`)
+              done()
             })
           })
 
@@ -324,11 +323,11 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
-              app.listen({ host, port }, () => {
-                axios.get(`http://localhost:${port}/user`)
-                  .catch(done)
-              })
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              axios.get(`http://localhost:${port}/user`)
+                .catch(done)
             })
           })
 
@@ -343,7 +342,9 @@ describe('Plugin', () => {
               reply.send()
             })
 
-            getPort().then(port => {
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
               agent
                 .use(traces => {
                   const spans = traces[0]
@@ -359,11 +360,9 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              app.listen({ host, port }, () => {
-                axios
-                  .get(`http://localhost:${port}/user`)
-                  .catch(() => {})
-              })
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(() => {})
             })
           })
 
@@ -376,7 +375,9 @@ describe('Plugin', () => {
                 reply.send()
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -389,11 +390,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(() => {})
-                })
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
               })
             })
           }
@@ -407,7 +406,9 @@ describe('Plugin', () => {
                 return Promise.reject(error = new Error('boom'))
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -422,11 +423,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(() => {})
-                })
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
               })
             })
 
@@ -442,7 +441,9 @@ describe('Plugin', () => {
                 throw (error = new Error('boom'))
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -458,11 +459,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(() => {})
-                })
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
               })
             })
 
@@ -476,7 +475,9 @@ describe('Plugin', () => {
                 throw new Error('boom')
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -492,11 +493,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(() => {})
-                })
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
               })
             })
           }
@@ -515,7 +514,9 @@ describe('Plugin', () => {
                 reply.send()
               })
 
-              getPort().then(port => {
+              app.listen({ host, port: 0 }, () => {
+                const port = app.server.address().port
+
                 agent
                   .use(traces => {
                     const spans = traces[0]
@@ -531,11 +532,9 @@ describe('Plugin', () => {
                   .then(done)
                   .catch(done)
 
-                app.listen({ host, port }, () => {
-                  axios
-                    .get(`http://localhost:${port}/user`)
-                    .catch(() => {})
-                })
+                axios
+                  .get(`http://localhost:${port}/user`)
+                  .catch(() => {})
               })
             })
           }

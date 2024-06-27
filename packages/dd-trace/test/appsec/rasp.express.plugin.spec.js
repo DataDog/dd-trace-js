@@ -62,7 +62,7 @@ describe('RASP', () => {
     describe('ssrf', () => {
       async function testBlockingRequest () {
         try {
-          await axios.get('/?host=ifconfig.pro')
+          await axios.get('/?host=localhost/ifconfig.pro')
           assert.fail('Request should be blocked')
         } catch (e) {
           if (!e.response) {
@@ -253,7 +253,7 @@ describe('RASP', () => {
 
       const response = await axios.get('/', {
         headers: {
-          host: 'ifconfig.pro'
+          host: 'localhost/ifconfig.pro'
         }
       })
 

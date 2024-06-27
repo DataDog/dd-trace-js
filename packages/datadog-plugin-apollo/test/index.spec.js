@@ -5,7 +5,6 @@ const agent = require('../../dd-trace/test/plugins/agent.js')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
 const axios = require('axios')
-const getPort = require('get-port')
 
 const accounts = require('./fixtures.js')
 
@@ -86,13 +85,15 @@ describe('Plugin', () => {
             gateway: setupGateway(),
             subscriptions: false // Disable subscriptions (not supported with Apollo Gateway)
           })
-          getPort().then(newPort => {
-            port = newPort
-            startStandaloneServer(server, {
-              listen: { port }
-            }).then(() => {})
-          })
 
+          return startStandaloneServer(server, {
+            listen: { port: 0 }
+          }).then(({ url }) => {
+            port = new URL(url).port
+          })
+        })
+
+        before(() => {
           return agent.load('apollo')
         })
 
