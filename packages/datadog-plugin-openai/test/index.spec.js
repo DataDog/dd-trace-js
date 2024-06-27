@@ -2703,6 +2703,62 @@ describe('Plugin', () => {
 
             await checkTraces
           })
+
+          it('should tag image_url', async () => {
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+                // image_url is only relevant on request/input, output has the same shape as a normal chat completion
+                expect(span.meta).to.have.property('openai.request.messages.0.content.0.type', 'text')
+                expect(span.meta).to.have.property(
+                  'openai.request.messages.0.content.0.text', 'I\'m allergic to peanuts. Should I avoid this food?'
+                )
+                expect(span.meta).to.have.property('openai.request.messages.0.content.1.type', 'image_url')
+                expect(span.meta).to.have.property(
+                  'openai.request.messages.0.content.1.image_url.url', 'dummy/url/peanut_food.png'
+                )
+              })
+
+            const params = {
+              model: 'gpt-4-visual-preview',
+              messages: [
+                {
+                  role: 'user',
+                  name: 'hunter2',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'I\'m allergic to peanuts. Should I avoid this food?'
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: 'dummy/url/peanut_food.png'
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+
+            if (semver.satisfies(realVersion, '>=4.0.0')) {
+              const result = await openai.chat.completions.create(params)
+
+              expect(result.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
+              expect(result.choices[0].message.role).to.eql('assistant')
+              expect(result.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
+              expect(result.choices[0].finish_reason).to.eql('length')
+            } else {
+              const result = await openai.createChatCompletion(params)
+
+              expect(result.data.id).to.eql('chatcmpl-7GaWqyMTD9BLmkmy8SxyjUGX3KSRN')
+              expect(result.data.choices[0].message.role).to.eql('assistant')
+              expect(result.data.choices[0].message.content).to.eql('In that case, it\'s best to avoid peanut')
+              expect(result.data.choices[0].finish_reason).to.eql('length')
+            }
+
+            await checkTraces
+          })
         })
 
         describe('create chat completion with tools', () => {
@@ -3265,6 +3321,54 @@ describe('Plugin', () => {
             expect(metricStub).to.have.been.calledWith('openai.tokens.prompt', 11, 'd', expectedTags)
             expect(metricStub).to.have.been.calledWith('openai.tokens.completion', 5, 'd', expectedTags)
             expect(metricStub).to.have.been.calledWith('openai.tokens.total', 16, 'd', expectedTags)
+          })
+
+          it('makes a successful chat completion call without image_url usage computed', async () => {
+            nock('https://api.openai.com:443')
+              .post('/v1/chat/completions')
+              .reply(200, function () {
+                return fs.createReadStream(Path.join(__dirname, 'streamed-responses/chat.completions.simple.txt'))
+              }, {
+                'Content-Type': 'text/plain',
+                'openai-organization': 'kill-9'
+              })
+
+            const checkTraces = agent
+              .use(traces => {
+                const span = traces[0][0]
+
+                // we shouldn't be trying to capture the image_url tokens
+                expect(span.metrics).to.have.property('openai.response.usage.prompt_tokens', 1)
+              })
+
+            const stream = await openai.chat.completions.create({
+              stream: 1,
+              model: 'gpt-4o',
+              messages: [
+                {
+                  role: 'user',
+                  name: 'hunter2',
+                  content: [
+                    {
+                      type: 'text',
+                      text: 'One' // one token, for ease of testing
+                    },
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: 'dummy/url/peanut_food.png'
+                      }
+                    }
+                  ]
+                }
+              ]
+            })
+
+            for await (const part of stream) {
+              expect(part).to.have.property('choices')
+            }
+
+            await checkTraces
           })
 
           it('makes a successful completion call', async () => {
