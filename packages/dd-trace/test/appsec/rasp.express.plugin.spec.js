@@ -142,7 +142,7 @@ describe('RASP', () => {
 
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              axios.get(`https://${req.query.host}`)
+              axiosToTest.get(`https://${req.query.host}`)
               res.end('end')
             }
 
