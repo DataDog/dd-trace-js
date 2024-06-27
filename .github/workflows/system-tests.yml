@@ -84,6 +84,8 @@ jobs:
           path: artifact.tar.gz
 
   parametric:
+    needs:
+      - build-artifacts
     uses: DataDog/system-tests/.github/workflows/run-parametric.yml@main
     secrets: inherit
     with:
