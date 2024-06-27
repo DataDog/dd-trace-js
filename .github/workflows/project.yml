@@ -30,6 +30,20 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
+  # We'll run these separately for earlier (i.e. unsupported) versions
+  integration-guardrails:
+    strategy:
+      matrix:
+        version: [12, 14, 16]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn install --ignore-engines
+      - run: node node_modules/.bin/mocha --colors --timeout 30000 -r packages/dd-trace/test/setup/core.js integration-tests/init.spec.js
+
   integration-ci:
     strategy:
       matrix:

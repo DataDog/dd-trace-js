@@ -89,7 +89,7 @@
     "koalas": "^1.0.2",
     "limiter": "1.1.5",
     "lodash.sortby": "^4.7.0",
-    "lru-cache": "^10.2.2",
+    "lru-cache": "^7.14.0",
     "module-details-from-path": "^1.0.3",
     "msgpack-lite": "^0.1.26",
     "opentracing": ">=0.12.1",
@@ -137,6 +137,7 @@
     "sinon": "^15.2.0",
     "sinon-chai": "^3.7.0",
     "tap": "^16.3.7",
-    "tape": "^5.6.5"
+    "tape": "^5.6.5",
+    "tiktoken": "^1.0.15"
   }
 }

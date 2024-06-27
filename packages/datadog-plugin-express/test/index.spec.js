@@ -2,7 +2,6 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 const axios = require('axios')
-const getPort = require('get-port')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const plugin = require('../src')
@@ -45,7 +44,8 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
             const timer = setTimeout(done, 100)
 
             agent.use(() => {
@@ -53,11 +53,9 @@ describe('Plugin', () => {
               done(new Error('Agent received an unexpected trace.'))
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -70,13 +68,13 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .then(() => done())
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .then(() => done())
+              .catch(done)
           })
         })
       })
@@ -101,7 +99,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -119,11 +119,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -137,7 +135,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -154,11 +154,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -174,7 +172,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -191,11 +191,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -210,7 +208,9 @@ describe('Plugin', () => {
           app.use(function named (req, res, next) { next() })
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -246,11 +246,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -272,7 +270,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -287,11 +287,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/1`)
+              .catch(done)
           })
         })
 
@@ -317,7 +315,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -331,11 +331,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user/1`)
+              .catch(done)
           })
         })
 
@@ -349,7 +347,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -359,11 +359,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -377,7 +375,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -387,11 +387,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -411,7 +409,9 @@ describe('Plugin', () => {
           app.use('/foo/bar', (req, res, next) => next())
           app.use('/foo', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -421,11 +421,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
+              .catch(done)
           })
         })
 
@@ -439,7 +437,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -449,11 +449,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -468,7 +466,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -478,11 +478,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -496,7 +494,9 @@ describe('Plugin', () => {
 
           app.use('/parent', childApp)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -508,11 +508,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/parent/child`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/parent/child`)
+              .catch(done)
           })
         })
 
@@ -535,12 +533,12 @@ describe('Plugin', () => {
             done()
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/1`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/app/user/1`)
+              .catch(done)
           })
         })
 
@@ -564,7 +562,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -574,11 +574,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/123`)
+              .catch(done)
           })
         })
 
@@ -596,7 +594,9 @@ describe('Plugin', () => {
 
           app.use('/app', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -606,11 +606,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app/user/123`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app/user/123`)
+              .catch(done)
           })
         })
 
@@ -625,7 +623,9 @@ describe('Plugin', () => {
             res.status(200).send(error.message)
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -635,11 +635,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
           })
         })
 
@@ -660,7 +658,9 @@ describe('Plugin', () => {
           app.use('/v1', routerA)
           app.use('/v1', routerB)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -670,11 +670,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/v1/a`)
-                .catch(() => {})
-            })
+            axios
+              .get(`http://localhost:${port}/v1/a`)
+              .catch(() => {})
           })
         })
 
@@ -690,7 +688,9 @@ describe('Plugin', () => {
             res.status(200).send(req.body)
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -700,11 +700,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
           })
         })
 
@@ -726,7 +724,9 @@ describe('Plugin', () => {
             res.status(200).send('')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -736,11 +736,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
+              .catch(done)
           })
         })
 
@@ -762,7 +760,9 @@ describe('Plugin', () => {
             res.status(200).send('')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -772,11 +772,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
+              .catch(done)
           })
         })
 
@@ -800,7 +798,9 @@ describe('Plugin', () => {
             res.status(200).send('')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -810,11 +810,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/foo/bar`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/foo/bar`)
+              .catch(done)
           })
         })
 
@@ -831,7 +829,9 @@ describe('Plugin', () => {
 
           app.use('/v1', router)
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -841,11 +841,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/v1/a`)
-                .catch(() => {})
-            })
+            axios
+              .get(`http://localhost:${port}/v1/a`)
+              .catch(() => {})
           })
         })
 
@@ -874,12 +872,12 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
           })
         })
 
@@ -888,7 +886,9 @@ describe('Plugin', () => {
 
           app.use((req, res, next) => res.status(200).send())
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -898,11 +898,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/app`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/app`)
+              .catch(done)
           })
         })
 
@@ -928,11 +926,11 @@ describe('Plugin', () => {
             }
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -958,11 +956,11 @@ describe('Plugin', () => {
             }
           )
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -980,7 +978,9 @@ describe('Plugin', () => {
           app.use('/app', router)
           app.use('/bar', (req, res, next) => next())
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -990,10 +990,8 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/app/user/123`)
-                .catch(done)
-            })
+            axios.get(`http://localhost:${port}/app/user/123`)
+              .catch(done)
           })
         })
 
@@ -1004,7 +1002,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1014,17 +1014,15 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  headers: {
-                    'x-datadog-trace-id': '1234',
-                    'x-datadog-parent-id': '5678',
-                    'ot-baggage-foo': 'bar'
-                  }
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                headers: {
+                  'x-datadog-trace-id': '1234',
+                  'x-datadog-parent-id': '5678',
+                  'ot-baggage-foo': 'bar'
+                }
+              })
+              .catch(done)
           })
         })
 
@@ -1039,7 +1037,9 @@ describe('Plugin', () => {
             res.status(500).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1051,13 +1051,11 @@ describe('Plugin', () => {
               done()
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1073,7 +1071,9 @@ describe('Plugin', () => {
             throw new Error('boom')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1085,13 +1085,11 @@ describe('Plugin', () => {
               done()
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
+              .catch(done)
           })
         })
 
@@ -1101,7 +1099,9 @@ describe('Plugin', () => {
 
           app.use(() => { throw error })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1116,13 +1116,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1134,7 +1132,9 @@ describe('Plugin', () => {
           // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1153,13 +1153,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1171,7 +1169,9 @@ describe('Plugin', () => {
           // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1190,13 +1190,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1207,7 +1205,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1218,11 +1218,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -1261,12 +1259,12 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -1281,7 +1279,9 @@ describe('Plugin', () => {
             res.status(200).send('hi')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1294,13 +1294,11 @@ describe('Plugin', () => {
               done()
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/does-not-exist`, {
-                  validateStatus: status => status === 404
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/does-not-exist`, {
+                validateStatus: status => status === 404
+              })
+              .catch(done)
           })
         })
 
@@ -1320,7 +1318,9 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
               agent
                 .use(traces => {
                   const spans = sort(traces[0])
@@ -1337,10 +1337,8 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              appListener = app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/dd`)
-                  .catch(done)
-              })
+              axios.get(`http://localhost:${port}/dd`)
+                .catch(done)
             })
           })
 
@@ -1355,7 +1353,9 @@ describe('Plugin', () => {
               res.status(200).send()
             })
 
-            getPort().then(port => {
+            appListener = app.listen(0, 'localhost', () => {
+              const port = appListener.address().port
+
               agent
                 .use(traces => {
                   const spans = sort(traces[0])
@@ -1367,10 +1367,8 @@ describe('Plugin', () => {
                 .then(done)
                 .catch(done)
 
-              appListener = app.listen(port, 'localhost', () => {
-                axios.get(`http://localhost:${port}/dd`)
-                  .catch(done)
-              })
+              axios.get(`http://localhost:${port}/dd`)
+                .catch(done)
             })
           })
         })
@@ -1401,7 +1399,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1411,11 +1411,9 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -1426,7 +1424,9 @@ describe('Plugin', () => {
             res.status(400).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1436,13 +1436,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
+              .catch(done)
           })
         })
 
@@ -1453,7 +1451,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1463,13 +1463,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  headers: { 'User-Agent': 'test' }
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                headers: { 'User-Agent': 'test' }
+              })
+              .catch(done)
           })
         })
 
@@ -1480,7 +1478,8 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
             const spy = sinon.spy()
 
             agent
@@ -1496,11 +1495,9 @@ describe('Plugin', () => {
               }
             }, 100)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/health`)
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/health`)
+              .catch(done)
           })
         })
       })
@@ -1540,11 +1537,11 @@ describe('Plugin', () => {
             }
           })
 
-          getPort().then(port => {
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -1559,7 +1556,9 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1570,10 +1569,8 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios.get(`http://localhost:${port}/user`)
-                .catch(done)
-            })
+            axios.get(`http://localhost:${port}/user`)
+              .catch(done)
           })
         })
 
@@ -1588,7 +1585,9 @@ describe('Plugin', () => {
             res.status(500).send()
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent.use(traces => {
               const spans = sort(traces[0])
 
@@ -1600,13 +1599,11 @@ describe('Plugin', () => {
               done()
             })
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1622,7 +1619,9 @@ describe('Plugin', () => {
             throw new Error('boom')
           })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1635,13 +1634,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 400
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 400
+              })
+              .catch(done)
           })
         })
 
@@ -1653,7 +1650,9 @@ describe('Plugin', () => {
           // eslint-disable-next-line n/handle-callback-err
           app.use((error, req, res, next) => res.status(500).send())
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1667,13 +1666,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
 
@@ -1683,7 +1680,9 @@ describe('Plugin', () => {
 
           app.use(() => { throw error })
 
-          getPort().then(port => {
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
             agent
               .use(traces => {
                 const spans = sort(traces[0])
@@ -1698,13 +1697,11 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            appListener = app.listen(port, 'localhost', () => {
-              axios
-                .get(`http://localhost:${port}/user`, {
-                  validateStatus: status => status === 500
-                })
-                .catch(done)
-            })
+            axios
+              .get(`http://localhost:${port}/user`, {
+                validateStatus: status => status === 500
+              })
+              .catch(done)
           })
         })
       })

@@ -7,7 +7,6 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const axios = require('axios')
 const http = require('http')
-const getPort = require('get-port')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
 
@@ -231,12 +230,14 @@ describe('Plugin', () => {
                 const yoga = graphqlYoga.createYoga({ schema })
 
                 server = http.createServer(yoga)
-
-                getPort().then(newPort => {
-                  port = newPort
-                  server.listen(port)
-                })
               })
+          })
+
+          before(done => {
+            server.listen(0, () => {
+              port = server.address().port
+              done()
+            })
           })
 
           after(() => {
