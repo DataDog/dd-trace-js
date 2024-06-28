@@ -33,6 +33,7 @@
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
     "test:integration": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/*.spec.js\"",
+    "test:integration:appsec": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/appsec/*.spec.js\"",
     "test:integration:cucumber": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",
