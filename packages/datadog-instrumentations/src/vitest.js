@@ -88,6 +88,9 @@ addHook({
   const { VitestTestRunner } = vitestPackage
   // test start (only tests that are not marked as skip or todo)
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task) {
+    if (!testStartCh.hasSubscribers) {
+      return onBeforeTryTask.apply(this, arguments)
+    }
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     taskToAsync.set(task, asyncResource)
 
@@ -100,15 +103,21 @@ addHook({
   // test finish (only passed tests)
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterTryTask', onAfterTryTask =>
     async function (task, { retry: retryCount }) {
+      if (!testFinishTimeCh.hasSubscribers) {
+        return onAfterTryTask.apply(this, arguments)
+      }
       const result = await onAfterTryTask.apply(this, arguments)
 
       const status = getVitestTestStatus(task, retryCount)
       const asyncResource = taskToAsync.get(task)
 
-      // We don't finish here because the test might fail in a later hook
-      asyncResource.runInAsyncScope(() => {
-        testFinishTimeCh.publish({ status, task })
-      })
+      if (asyncResource) {
+        // We don't finish here because the test might fail in a later hook
+        asyncResource.runInAsyncScope(() => {
+          testFinishTimeCh.publish({ status, task })
+        })
+      }
+
       return result
     })
 
@@ -125,6 +134,9 @@ addHook({
     return vitestPackage
   }
   shimmer.wrap(vitestPackage.B.prototype, 'sort', sort => async function () {
+    if (!testSessionFinishCh.hasSubscribers) {
+      return sort.apply(this, arguments)
+    }
     shimmer.wrap(this.ctx, 'exit', exit => async function () {
       let onFinish
 
@@ -163,6 +175,9 @@ addHook({
   filePattern: 'dist/vendor/cac.*'
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
+    if (!testSessionStartCh.hasSubscribers) {
+      return oldCreateCli.apply(this, arguments)
+    }
     sessionAsyncResource.runInAsyncScope(() => {
       const processArgv = process.argv.slice(2).join(' ')
       testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
@@ -182,6 +197,9 @@ addHook({
 }, vitestPackage => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
     let testSuiteError = null
+    if (!testSuiteStartCh.hasSubscribers) {
+      return startTests.apply(this, arguments)
+    }
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
@@ -205,9 +223,11 @@ addHook({
         if (state === 'skip') { // programmatic skip
           testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
         } else if (state === 'pass') {
-          testAsyncResource.runInAsyncScope(() => {
-            testPassCh.publish({ task })
-          })
+          if (testAsyncResource) {
+            testAsyncResource.runInAsyncScope(() => {
+              testPassCh.publish({ task })
+            })
+          }
         } else if (state === 'fail') {
           // If it's failing, we have no accurate finish time, so we have to use `duration`
           let testError
@@ -216,9 +236,11 @@ addHook({
             testError = errors[0]
           }
 
-          testAsyncResource.runInAsyncScope(() => {
-            testErrorCh.publish({ duration, error: testError })
-          })
+          if (testAsyncResource) {
+            testAsyncResource.runInAsyncScope(() => {
+              testErrorCh.publish({ duration, error: testError })
+            })
+          }
           if (errors?.length) {
             testSuiteError = testError // we store the error to bubble it up to the suite
           }
