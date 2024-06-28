@@ -2,7 +2,6 @@
 
 const { exec } = require('child_process')
 
-const getPort = require('get-port')
 const { assert } = require('chai')
 
 const {
@@ -32,8 +31,7 @@ versions.forEach((version) => {
     })
 
     beforeEach(async function () {
-      const port = await getPort()
-      receiver = await new FakeCiVisIntake(port).start()
+      receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
