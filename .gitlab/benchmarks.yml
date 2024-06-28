@@ -8,6 +8,7 @@ variables:
 
 .benchmarks:
   stage: benchmarks
+  needs: [ ]
   when: on_success
   tags: ["runner:apm-k8s-tweaked-metal"]
   image: $BASE_CI_IMAGE
@@ -29,6 +30,7 @@ variables:
 
 benchmarks-pr-comment:
   stage: benchmarks-pr-comment
+  needs: [ benchmark, benchmark-serverless ]
   when: on_success
   tags: ["arch:amd64"]
   image: $BASE_CI_IMAGE
@@ -42,6 +44,7 @@ benchmarks-pr-comment:
 
 check-big-regressions:
   stage: benchmarks-pr-comment
+  needs: [ benchmark, benchmark-serverless ]
   when: on_success
   tags: ["arch:amd64"]
   image: $BASE_CI_IMAGE

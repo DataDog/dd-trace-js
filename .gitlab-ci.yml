@@ -1,10 +1,7 @@
 stages:
-  - package
-  - internal-publish
+  - shared-pipeline
   - benchmarks
   - benchmarks-pr-comment
-  - test
-  - external-publish
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/one-pipeline.yml
