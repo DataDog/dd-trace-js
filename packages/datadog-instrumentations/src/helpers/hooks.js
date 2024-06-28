@@ -23,7 +23,7 @@ module.exports = {
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@redis/client': () => require('../redis'),
   '@smithy/smithy-client': () => require('../aws-sdk'),
-  '@vitest/runner': () => require('../vitest'),
+  '@vitest/runner': { esmFirst: true, fn: () => require('../vitest') },
   aerospike: () => require('../aerospike'),
   amqp10: () => require('../amqp10'),
   amqplib: () => require('../amqplib'),
@@ -111,7 +111,7 @@ module.exports = {
   sharedb: () => require('../sharedb'),
   tedious: () => require('../tedious'),
   undici: () => require('../undici'),
-  vitest: () => require('../vitest'),
+  vitest: { esmFirst: true, fn: () => require('../vitest') },
   when: () => require('../when'),
   winston: () => require('../winston')
 }
