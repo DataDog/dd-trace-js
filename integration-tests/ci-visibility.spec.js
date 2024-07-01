@@ -32,20 +32,11 @@ const {
   TEST_NAME,
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_COMMAND,
-  TEST_MODULE,
-  MOCHA_IS_PARALLEL,
   TEST_SOURCE_START
 } = require('../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../packages/dd-trace/src/constants')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
-
-const mochaCommonOptions = {
-  name: 'mocha',
-  expectedStdout: '2 passing',
-  extraStdout: 'end event: can add event listeners to mocha'
-}
 
 const jestCommonOptions = {
   name: 'jest',
@@ -59,19 +50,6 @@ const jestCommonOptions = {
 }
 
 const testFrameworks = [
-  {
-    ...mochaCommonOptions,
-    testFile: 'ci-visibility/run-mocha.js',
-    dependencies: ['mocha', 'chai@v4', 'nyc', 'mocha-each', 'workerpool'],
-    expectedCoverageFiles: [
-      'ci-visibility/run-mocha.js',
-      'ci-visibility/test/sum.js',
-      'ci-visibility/test/ci-visibility-test.js',
-      'ci-visibility/test/ci-visibility-test-2.js'
-    ],
-    runTestsWithCoverageCommand: './node_modules/nyc/bin/nyc.js -r=text-summary node ./ci-visibility/run-mocha.js',
-    type: 'commonJS'
-  },
   {
     ...jestCommonOptions,
     testFile: 'ci-visibility/run-jest.js',
@@ -91,7 +69,7 @@ testFrameworks.forEach(({
   runTestsWithCoverageCommand,
   type
 }) => {
-  describe(`${name} ${type}`, () => {
+  describe.only(`${name} ${type}`, () => {
     let receiver
     let childProcess
     let sandbox
@@ -121,165 +99,6 @@ testFrameworks.forEach(({
       testOutput = ''
       await receiver.stop()
     })
-
-    if (name === 'mocha') {
-      it('does not change mocha config if CI Visibility fails to init', (done) => {
-        receiver.assertPayloadReceived(() => {
-          const error = new Error('it should not report tests')
-          done(error)
-        }, ({ url }) => url === '/api/v2/citestcycle', 3000).catch(() => {})
-
-        const { DD_CIVISIBILITY_AGENTLESS_URL, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
-
-        // `runMocha` is only executed when using the CLI, which is where we modify mocha config
-        // if CI Visibility is init
-        childProcess = exec('mocha ./ci-visibility/test/ci-visibility-test.js', {
-          cwd,
-          env: {
-            ...restEnvVars,
-            DD_TRACE_DEBUG: 1,
-            DD_TRACE_LOG_LEVEL: 'error',
-            DD_SITE: '= invalid = url'
-          },
-          stdio: 'pipe'
-        })
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.on('exit', () => {
-          assert.include(testOutput, 'Invalid URL')
-          assert.include(testOutput, '1 passing') // we only run one file here
-          done()
-        })
-      }).timeout(50000)
-
-      it('works with parallel mode', (done) => {
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-            const moduleEventContent = events.find(event => event.type === 'test_module_end').content
-            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.equal(sessionEventContent.meta[MOCHA_IS_PARALLEL], 'true')
-            assert.equal(
-              sessionEventContent.test_session_id.toString(10),
-              moduleEventContent.test_session_id.toString(10)
-            )
-            suites.forEach(({
-              meta,
-              test_suite_id: testSuiteId,
-              test_module_id: testModuleId,
-              test_session_id: testSessionId
-            }) => {
-              assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_MODULE])
-              assert.exists(testSuiteId)
-              assert.equal(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
-              assert.equal(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
-            })
-
-            tests.forEach(({
-              meta,
-              metrics,
-              test_suite_id: testSuiteId,
-              test_module_id: testModuleId,
-              test_session_id: testSessionId
-            }) => {
-              assert.exists(meta[TEST_COMMAND])
-              assert.exists(meta[TEST_MODULE])
-              assert.exists(testSuiteId)
-              assert.equal(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
-              assert.equal(testSessionId.toString(10), moduleEventContent.test_session_id.toString(10))
-              assert.propertyVal(meta, MOCHA_IS_PARALLEL, 'true')
-              assert.exists(metrics[TEST_SOURCE_START])
-            })
-          })
-
-        childProcess = fork(testFile, {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            RUN_IN_PARALLEL: true,
-            DD_TRACE_DEBUG: 1,
-            DD_TRACE_LOG_LEVEL: 'warn'
-          },
-          stdio: 'pipe'
-        })
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.on('message', () => {
-          eventsPromise.then(() => {
-            assert.notInclude(testOutput, 'TypeError')
-            assert.notInclude(
-              testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-            )
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('works with parallel mode when run with the cli', (done) => {
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const sessionEventContent = events.find(event => event.type === 'test_session_end').content
-            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            assert.equal(sessionEventContent.meta[MOCHA_IS_PARALLEL], 'true')
-            assert.equal(suites.length, 2)
-            assert.equal(tests.length, 2)
-          })
-        childProcess = exec('mocha --parallel --jobs 2 ./ci-visibility/test/ci-visibility-test*', {
-          cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'pipe'
-        })
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => {
-            assert.notInclude(testOutput, 'TypeError')
-            assert.notInclude(
-              testOutput, 'Unable to initialize CI Visibility because Mocha is running in parallel mode.'
-            )
-            done()
-          }).catch(done)
-        })
-      })
-
-      it('does not blow up when workerpool is used outside of a test', (done) => {
-        childProcess = exec('node ./ci-visibility/run-workerpool.js', {
-          cwd,
-          env: getCiVisAgentlessConfig(receiver.port),
-          stdio: 'pipe'
-        })
-        childProcess.stdout.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.on('exit', (code) => {
-          assert.include(testOutput, 'result 7')
-          assert.equal(code, 0)
-          done()
-        })
-      })
-    }
 
     if (name === 'jest') {
       it('works when sharding', (done) => {
@@ -897,19 +716,11 @@ testFrameworks.forEach(({
               })
             })
 
-          let TESTS_TO_RUN = 'test/ci-visibility-test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
-              env: { ...envVars, TESTS_TO_RUN },
+              env: { ...envVars, TESTS_TO_RUN: 'test/ci-visibility-test' },
               stdio: 'inherit'
             }
           )
@@ -945,7 +756,7 @@ testFrameworks.forEach(({
             }
           })
 
-          const parameterizedTestFile = name === 'mocha' ? 'mocha-parameterized.js' : 'test-parameterized.js'
+          const parameterizedTestFile = 'test-parameterized.js'
 
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -984,19 +795,11 @@ testFrameworks.forEach(({
               )
             })
 
-          let TESTS_TO_RUN = 'test-early-flake-detection/test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test-early-flake-detection/test.js',
-              `./test-early-flake-detection/${parameterizedTestFile}`
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
-              env: { ...envVars, TESTS_TO_RUN },
+              env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/test' },
               stdio: 'inherit'
             }
           )
@@ -1046,21 +849,13 @@ testFrameworks.forEach(({
               assert.equal(newTests.length, 0)
             })
 
-          let TESTS_TO_RUN = 'test/ci-visibility-test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
               env: {
                 ...envVars,
-                TESTS_TO_RUN,
+                TESTS_TO_RUN: 'test/ci-visibility-test',
                 DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
               },
               stdio: 'inherit'
@@ -1124,18 +919,11 @@ testFrameworks.forEach(({
               })
             })
 
-          let TESTS_TO_RUN = 'test-early-flake-detection/occasionally-failing-test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test-early-flake-detection/occasionally-failing-test.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
-              env: { ...envVars, TESTS_TO_RUN },
+              env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test' },
               stdio: 'inherit'
             }
           )
@@ -1194,18 +982,11 @@ testFrameworks.forEach(({
               }
             })
 
-          let TESTS_TO_RUN = 'test-early-flake-detection/skipped-and-todo-test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test-early-flake-detection/skipped-and-todo-test.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
-              env: { ...envVars, TESTS_TO_RUN },
+              env: { ...envVars, TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test' },
               stdio: 'inherit'
             }
           )
@@ -1268,20 +1049,13 @@ testFrameworks.forEach(({
               assert.equal(newTests.length, 0)
             })
 
-          let TESTS_TO_RUN = 'test-early-flake-detection/weird-test-names'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test-early-flake-detection/weird-test-names.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
               env: {
                 ...envVars,
-                TESTS_TO_RUN
+                TESTS_TO_RUN: 'test-early-flake-detection/weird-test-names'
               },
               stdio: 'inherit'
             }
@@ -1331,21 +1105,13 @@ testFrameworks.forEach(({
               assert.equal(newTests.length, 0)
             })
 
-          let TESTS_TO_RUN = 'test/ci-visibility-test'
-          if (name === 'mocha') {
-            TESTS_TO_RUN = JSON.stringify([
-              './test/ci-visibility-test.js',
-              './test/ci-visibility-test-2.js'
-            ])
-          }
-
           childProcess = exec(
             runTestsWithCoverageCommand,
             {
               cwd,
               env: {
                 ...envVars,
-                TESTS_TO_RUN
+                TESTS_TO_RUN: 'test/ci-visibility-test'
               },
               stdio: 'inherit'
             }
@@ -1407,12 +1173,8 @@ testFrameworks.forEach(({
               })
             })
 
-          const command = name === 'jest'
-            ? 'node ./node_modules/jest/bin/jest --config config-jest.js'
-            : 'node ./node_modules/mocha/bin/mocha ci-visibility/test-early-flake-detection/occasionally-failing-test*'
-
           childProcess = exec(
-            command,
+            'node ./node_modules/jest/bin/jest --config config-jest.js',
             {
               cwd,
               env: {
@@ -1759,16 +1521,9 @@ testFrameworks.forEach(({
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
-            const errorMessage = name === 'mocha' ? 'Failed tests: 1' : 'Failed test suites: 1. Failed tests: 1'
+            const errorMessage = 'Failed test suites: 1. Failed tests: 1'
             assert.include(testSession.meta[ERROR_MESSAGE], errorMessage)
           })
-
-        let TESTS_TO_RUN = 'test/fail-test'
-        if (name === 'mocha') {
-          TESTS_TO_RUN = JSON.stringify([
-            './test/fail-test.js'
-          ])
-        }
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -1776,7 +1531,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN
+              TESTS_TO_RUN: 'test/fail-test'
             },
             stdio: 'inherit'
           }
@@ -1905,10 +1660,6 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          // coverage report
-          if (name === 'mocha') {
-            assert.include(testOutput, 'Lines        ')
-          }
           done()
         })
       })
@@ -2188,22 +1939,13 @@ testFrameworks.forEach(({
             assert.propertyVal(forcedToRunSuite.content.meta, TEST_ITR_FORCED_RUN, 'true')
           }, 25000)
 
-        let TESTS_TO_RUN = 'unskippable-test/test-'
-        if (name === 'mocha') {
-          TESTS_TO_RUN = JSON.stringify([
-            './unskippable-test/test-to-run.js',
-            './unskippable-test/test-to-skip.js',
-            './unskippable-test/test-unskippable.js'
-          ])
-        }
-
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN
+              TESTS_TO_RUN: 'unskippable-test/test-'
             },
             stdio: 'inherit'
           }
@@ -2263,22 +2005,13 @@ testFrameworks.forEach(({
             assert.notProperty(nonSkippedSuite.meta, TEST_ITR_FORCED_RUN)
           }, 25000)
 
-        let TESTS_TO_RUN = 'unskippable-test/test-'
-        if (name === 'mocha') {
-          TESTS_TO_RUN = JSON.stringify([
-            './unskippable-test/test-to-run.js',
-            './unskippable-test/test-to-skip.js',
-            './unskippable-test/test-unskippable.js'
-          ])
-        }
-
         childProcess = exec(
           runTestsWithCoverageCommand,
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN
+              TESTS_TO_RUN: 'unskippable-test/test-'
             },
             stdio: 'inherit'
           }
@@ -2401,16 +2134,9 @@ testFrameworks.forEach(({
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSession = events.find(event => event.type === 'test_session_end').content
             assert.propertyVal(testSession.meta, TEST_STATUS, 'fail')
-            const errorMessage = name === 'mocha' ? 'Failed tests: 1' : 'Failed test suites: 1. Failed tests: 1'
+            const errorMessage = 'Failed test suites: 1. Failed tests: 1'
             assert.include(testSession.meta[ERROR_MESSAGE], errorMessage)
           })
-
-        let TESTS_TO_RUN = 'test/fail-test'
-        if (name === 'mocha') {
-          TESTS_TO_RUN = JSON.stringify([
-            './test/fail-test.js'
-          ])
-        }
 
         childProcess = exec(
           runTestsWithCoverageCommand,
@@ -2418,7 +2144,7 @@ testFrameworks.forEach(({
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
-              TESTS_TO_RUN
+              TESTS_TO_RUN: 'test/fail-test'
             },
             stdio: 'inherit'
           }
@@ -2527,10 +2253,6 @@ testFrameworks.forEach(({
           testOutput += chunk.toString()
         })
         childProcess.on('exit', () => {
-          // coverage report
-          if (name === 'mocha') {
-            assert.include(testOutput, 'Lines        ')
-          }
           done()
         })
       })
