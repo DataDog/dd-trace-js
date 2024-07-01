@@ -60,10 +60,7 @@ function getTopUserLandCallsite (constructorOpt) {
 }
 
 // TODO: Now sure why some paths start with "file://"
-function getRelativeFilename (filename, containsFileProtocol) {
-  if (containsFileProtocol === undefined) {
-    containsFileProtocol = filename.startsWith('file://')
-  }
+function getRelativeFilename (filename, containsFileProtocol = filename.startsWith('file://')) {
   return relative(containsFileProtocol ? 'file://' + cwd : cwd, filename)
 }
 
