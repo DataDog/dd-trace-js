@@ -77,7 +77,7 @@ app.get('/propagation-without-event', async (req, res) => {
   res.status(200).send('propagation-without-event')
 })
 
-app.get('/down', async (req, res) => {
+app.get('/down', (req, res) => {
   res.status(200).send('down')
 })
 
