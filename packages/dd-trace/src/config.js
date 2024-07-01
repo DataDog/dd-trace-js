@@ -805,7 +805,8 @@ class Config {
       options.experimental && options.experimental.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
-    this._setBoolean(opts, 'experimental.spanOriginEnabled', options.experimental && options.experimental.spanOriginEnabled)
+    this._setBoolean(opts, 'experimental.spanOriginEnabled',
+      options.experimental && options.experimental.spanOriginEnabled)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))
