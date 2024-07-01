@@ -198,6 +198,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
+  "vitest": tracer.plugins.vitest;
   "winston": tracer.plugins.winston;
 }
 
@@ -1556,7 +1557,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [jest](https://github.com/facebook/jest) module.
+     * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
 
@@ -1838,6 +1839,12 @@ declare namespace tracer {
      * [undici](https://github.com/nodejs/undici) module.
      */
     interface undici extends HttpClient {}
+
+    /**
+     * This plugin automatically instruments the
+     * [vitest](https://github.com/vitest-dev/vitest) module.
+     */
+    interface vitest extends Integration {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
