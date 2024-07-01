@@ -14,6 +14,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const spanleak = require('../spanleak')
+const { getTopUserLandCallsite, getSpanOriginTags } = require('../plugins/util/stacktrace')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -83,6 +84,8 @@ class DatadogSpan {
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
+
+    if (fields.spanOriginEnabled) this._setSpanOrigin()
 
     this._startTime = fields.startTime || this._getTime()
 
@@ -313,6 +316,11 @@ class DatadogSpan {
     spanContext._isRemote = false
 
     return spanContext
+  }
+
+  _setSpanOrigin (callsite = getTopUserLandCallsite(this.constructor)) {
+    if (!callsite) return
+    this.addTags(getSpanOriginTags(callsite))
   }
 
   _getTime () {

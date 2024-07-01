@@ -18,7 +18,6 @@ describe('Span', () => {
   let metrics
   let handle
   let id
-  let tagger
 
   beforeEach(() => {
     sinon.stub(Date, 'now').returns(1500000000000)
@@ -44,10 +43,6 @@ describe('Span', () => {
       sample: sinon.stub()
     }
 
-    tagger = {
-      add: sinon.spy()
-    }
-
     Span = proxyquire('../src/opentracing/span', {
       perf_hooks: {
         performance: {
@@ -55,7 +50,6 @@ describe('Span', () => {
         }
       },
       '../id': id,
-      '../tagger': tagger,
       '../metrics': metrics
     })
   })
@@ -164,6 +158,36 @@ describe('Span', () => {
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._trace.tags).to.have.property('_dd.p.tid')
     expect(span.context()._trace.tags['_dd.p.tid']).to.match(/^[a-f0-9]{8}0{8}$/)
+  })
+
+  it('should not add stack trace when spanOriginEnabled is not set', () => {
+    span = new Span(tracer, processor, prioritySampler, {})
+
+    expect(span.context()._tags).to.not.have.property('_dd.entry_location.file')
+    expect(span.context()._tags).to.not.have.property('_dd.entry_location.line')
+  })
+
+  it('should not add stack trace when spanOriginEnabled: false', () => {
+    span = new Span(tracer, processor, prioritySampler, {
+      spanOriginEnabled: false
+    })
+
+    expect(span.context()._tags).to.not.have.property('_dd.entry_location.file')
+    expect(span.context()._tags).to.not.have.property('_dd.entry_location.line')
+  })
+
+  it('should add stack trace when spanOriginEnabled: true', function helloWorld () {
+    span = new Span(tracer, processor, prioritySampler, {
+      spanOriginEnabled: true
+    })
+
+    expect(span.context()._tags).to.have.property('_dd.entry_location.file')
+    expect(span.context()._tags).to.have.property('_dd.entry_location.line')
+    expect(span.context()._tags).to.have.property('_dd.entry_location.method')
+    expect(span.context()._tags['_dd.entry_location.file']).to.equal('packages/dd-trace/test/opentracing/span.spec.js')
+    expect(span.context()._tags['_dd.entry_location.line']).to.be.a('number')
+    expect(span.context()._tags['_dd.entry_location.line']).to.be.gt(0)
+    expect(span.context()._tags['_dd.entry_location.method']).to.equal('helloWorld')
   })
 
   it('should be published via dd-trace:span:start channel', () => {
@@ -351,7 +375,7 @@ describe('Span', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
       span.setTag('foo', 'bar')
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, { foo: 'bar' })
+      expect(span.context()._tags).to.deep.equal({ foo: 'bar' })
     })
   })
 
@@ -365,7 +389,7 @@ describe('Span', () => {
 
       span.addTags(tags)
 
-      expect(tagger.add).to.have.been.calledWith(span.context()._tags, tags)
+      expect(span.context()._tags).to.deep.equal(tags)
     })
 
     it('should sample based on the tags', () => {

@@ -209,6 +209,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', undefined)
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('experimental.spanOriginEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
@@ -276,6 +277,7 @@ describe('Config', () => {
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
       { name: 'experimental.exporter', value: undefined, origin: 'default' },
       { name: 'experimental.runtimeId', value: false, origin: 'default' },
+      { name: 'experimental.spanOriginEnabled', value: false, origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
       { name: 'gitMetadataEnabled', value: true, origin: 'default' },
@@ -422,6 +424,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_SPAN_ORIGIN_ENABLED = 'true'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
@@ -518,6 +521,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('experimental.spanOriginEnabled', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', true)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
@@ -579,6 +583,7 @@ describe('Config', () => {
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'experimental.runtimeId', value: true, origin: 'env_var' },
+      { name: 'experimental.spanOriginEnabled', value: true, origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
       { name: 'iast.deduplicationEnabled', value: false, origin: 'env_var' },
       { name: 'iast.enabled', value: true, origin: 'env_var' },
@@ -742,6 +747,7 @@ describe('Config', () => {
         runtimeId: true,
         exporter: 'log',
         enableGetRumData: true,
+        spanOriginEnabled: false,
         iast: {
           enabled: true,
           requestSampling: 50,
@@ -804,6 +810,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', true)
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
+    expect(config).to.have.nested.property('experimental.spanOriginEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', false)
     expect(config).to.have.nested.property('appsec.standalone.enabled', true)
     expect(config).to.have.nested.property('remoteConfig.pollInterval', 42)
@@ -850,6 +857,7 @@ describe('Config', () => {
       { name: 'experimental.enableGetRumData', value: true, origin: 'code' },
       { name: 'experimental.exporter', value: 'log', origin: 'code' },
       { name: 'experimental.runtimeId', value: true, origin: 'code' },
+      { name: 'experimental.spanOriginEnabled', value: false, origin: 'code' },
       { name: 'flushInterval', value: 5000, origin: 'code' },
       { name: 'flushMinSpans', value: 500, origin: 'code' },
       { name: 'hostname', value: 'agent', origin: 'code' },
@@ -1094,6 +1102,7 @@ describe('Config', () => {
         runtimeId: false,
         exporter: 'agent',
         enableGetRumData: false,
+        spanOriginEnabled: false,
         iast: {
           enabled: true,
           redactionNamePattern: 'REDACTION_NAME_PATTERN',
@@ -1162,6 +1171,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.runtimeId', false)
     expect(config).to.have.nested.property('experimental.exporter', 'agent')
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
+    expect(config).to.have.nested.property('experimental.spanOriginEnabled', false)
     expect(config).to.have.nested.property('appsec.enabled', true)
     expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)

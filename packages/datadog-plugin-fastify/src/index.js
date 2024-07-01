@@ -10,8 +10,9 @@ class FastifyPlugin extends RouterPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:fastify:request:handle', ({ req }) => {
+    this.addSub('apm:fastify:request:handle', ({ req, tags }) => {
       this.setFramework(req, 'fastify', this.config)
+      this.setSpanOrigin(req, tags)
     })
   }
 }
