@@ -1155,6 +1155,15 @@ declare namespace tracer {
        * `variables => variables` would record all variables.
        */
       metadata?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+      
+      /**
+       * Callback function to determine if there was an error. It should take a
+       * status code as its only parameter and return `true` for success or `false`
+       * for errors.
+       *
+       * @default code => code === 0
+       */
+      validateStatus?: (code: number) => boolean;
     }
 
     /** @hidden */

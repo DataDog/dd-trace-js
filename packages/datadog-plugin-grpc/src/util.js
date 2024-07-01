@@ -58,5 +58,14 @@ module.exports = {
     }
 
     return () => ({})
+  },
+
+  getStatusValidator (config) {
+    if (typeof config.validateStatus === 'function') {
+      return config.validateStatus
+    } else if (config.hasOwnProperty('validateStatus')) {
+      log.error('Expected `validateStatus` to be a function.')
+    }
+    return code => code === 0
   }
 }

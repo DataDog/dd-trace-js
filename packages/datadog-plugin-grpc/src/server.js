@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { TEXT_MAP } = require('../../../ext/formats')
-const { addMetadataTags, getFilter, getMethodMetadata } = require('./util')
+const { addMetadataTags, getFilter, getMethodMetadata, getStatusValidator } = require('./util')
 
 class GrpcServerPlugin extends ServerPlugin {
   static get id () { return 'grpc' }
@@ -70,7 +70,10 @@ class GrpcServerPlugin extends ServerPlugin {
     if (!span) return
 
     this.addCode(span, error.code)
-    this.addError(error)
+
+    if (!this.config.validateStatus(error.code)) {
+      this.addError(error)
+    }
   }
 
   finish ({ span, code, trailer }) {
@@ -89,8 +92,9 @@ class GrpcServerPlugin extends ServerPlugin {
 
   configure (config) {
     const metadataFilter = getFilter(config, 'metadata')
+    const validateStatus = getStatusValidator(config)
 
-    return super.configure({ ...config, metadataFilter })
+    return super.configure({ ...config, metadataFilter, validateStatus })
   }
 
   addCode (span, code) {
