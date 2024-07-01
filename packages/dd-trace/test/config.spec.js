@@ -219,6 +219,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', false)
     expect(config).to.have.property('scope', undefined)
     expect(config).to.have.property('logLevel', 'debug')
+    expect(config).to.have.property('codeOriginForSpansEnabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
@@ -291,6 +292,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
       { name: 'clientIpHeader', value: null, origin: 'default' },
+      { name: 'codeOriginForSpansEnabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
       { name: 'dogstatsd.hostname', value: '127.0.0.1', origin: 'calculated' },
       { name: 'dogstatsd.port', value: '8125', origin: 'default' },
@@ -410,6 +412,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_CODE_ORIGIN_FOR_SPANS_ENABLED = 'true'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
@@ -509,6 +512,7 @@ describe('Config', () => {
     expect(config).to.have.property('clientIpHeader', 'x-true-client-ip')
     expect(config).to.have.property('runtimeMetrics', true)
     expect(config).to.have.property('reportHostname', true)
+    expect(config).to.have.property('codeOriginForSpansEnabled', true)
     expect(config).to.have.property('dynamicInstrumentationEnabled', true)
     expect(config).to.have.property('env', 'test')
     expect(config).to.have.property('sampleRate', 0.5)
@@ -604,6 +608,7 @@ describe('Config', () => {
       { name: 'appsec.wafTimeout', value: '42', origin: 'env_var' },
       { name: 'clientIpEnabled', value: true, origin: 'env_var' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'env_var' },
+      { name: 'codeOriginForSpansEnabled', value: true, origin: 'env_var' },
       { name: 'dogstatsd.hostname', value: 'dsd-agent', origin: 'env_var' },
       { name: 'dogstatsd.port', value: '5218', origin: 'env_var' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'env_var' },
@@ -733,6 +738,7 @@ describe('Config', () => {
       env: 'test',
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
+      codeOriginForSpansEnabled: false,
       sampleRate: 0.5,
       rateLimit: 1000,
       samplingRules,
@@ -820,6 +826,7 @@ describe('Config', () => {
     expect(config).to.have.property('reportHostname', true)
     expect(config).to.have.property('plugins', false)
     expect(config).to.have.property('logLevel', logLevel)
+    expect(config).to.have.property('codeOriginForSpansEnabled', false)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
@@ -874,6 +881,7 @@ describe('Config', () => {
       { name: 'appsec.standalone.enabled', value: true, origin: 'code' },
       { name: 'clientIpEnabled', value: true, origin: 'code' },
       { name: 'clientIpHeader', value: 'x-true-client-ip', origin: 'code' },
+      { name: 'codeOriginForSpansEnabled', value: false, origin: 'code' },
       { name: 'dogstatsd.hostname', value: 'agent-dsd', origin: 'code' },
       { name: 'dogstatsd.port', value: '5218', origin: 'code' },
       { name: 'dynamicInstrumentationEnabled', value: true, origin: 'code' },
@@ -1161,6 +1169,7 @@ describe('Config', () => {
       remoteConfig: {
         pollInterval: 42
       },
+      codeOriginForSpansEnabled: false,
       traceId128BitGenerationEnabled: false,
       traceId128BitLoggingEnabled: false
     })
@@ -1177,6 +1186,7 @@ describe('Config', () => {
     expect(config).to.have.property('flushMinSpans', 500)
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('version', '1.0.0')
+    expect(config).to.have.property('codeOriginForSpansEnabled', false)
     expect(config).to.have.property('dynamicInstrumentationEnabled', false)
     expect(config).to.have.property('env', 'development')
     expect(config).to.have.property('clientIpEnabled', true)
