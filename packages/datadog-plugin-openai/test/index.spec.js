@@ -270,9 +270,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0')
-              ? 'sampled completions.create'
-              : 'sampled createCompletion',
+            message: 'sampled createCompletion',
             prompt: 'Hello, \n\nFriend\t\tHi',
             choices: [
               {
@@ -397,7 +395,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -467,7 +465,7 @@ describe('Plugin', () => {
 
           expect(externalLoggerStub).to.have.been.calledWith({
             status: 'info',
-            message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled embeddings.create' : 'sampled createEmbedding',
+            message: 'sampled createEmbedding',
             input: 'Cat?'
           })
         })
@@ -751,7 +749,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0') ? 'sampled edits.create' : 'sampled createEdit',
+              message: 'sampled createEdit',
               input: 'What day of the wek is it?',
               instruction: 'Fix the spelling mistakes',
               choices: [{
@@ -2028,9 +2026,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled moderations.create'
-                : 'sampled createModeration',
+              message: 'sampled createModeration',
               input: 'I want to harm the robots'
             })
           })
@@ -2115,9 +2111,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.generate'
-                : 'sampled createImage',
+              message: 'sampled createImage',
               prompt: 'A datadog wearing headphones'
             })
           })
@@ -2154,9 +2148,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.generate'
-                : 'sampled createImage',
+              message: 'sampled createImage',
               prompt: [999, 888, 777, 666, 555]
             })
           })
@@ -2194,9 +2186,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.generate'
-                : 'sampled createImage',
+              message: 'sampled createImage',
               prompt: ['foo', 'bar']
             })
           })
@@ -2237,9 +2227,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.generate'
-                : 'sampled createImage',
+              message: 'sampled createImage',
               prompt: [[111, 222, 333], [444, 555, 666]]
             })
           })
@@ -2328,9 +2316,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.edit'
-                : 'sampled createImageEdit',
+              message: 'sampled createImageEdit',
               prompt: 'Change all red to blue',
               file: 'ntsc.png',
               mask: 'ntsc.png'
@@ -2410,9 +2396,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled images.createVariation'
-                : 'sampled createImageVariation',
+              message: 'sampled createImageVariation',
               file: 'ntsc.png'
             })
           })
@@ -2558,10 +2542,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message:
-                  semver.satisfies(realVersion, '>=4.0.0')
-                    ? 'sampled chat.completions.create'
-                    : 'sampled createChatCompletion',
+              message: 'sampled createChatCompletion',
               messages: [
                 {
                   role: 'user',
@@ -2768,10 +2749,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message:
-                  semver.satisfies(realVersion, '>=4.0.0')
-                    ? 'sampled chat.completions.create'
-                    : 'sampled createChatCompletion',
+              message: 'sampled createChatCompletion',
               messages: [
                 {
                   role: 'user',
@@ -2896,9 +2874,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled audio.transcriptions.create'
-                : 'sampled createTranscription',
+              message: 'sampled createTranscription',
               prompt: 'what does this say',
               file: 'hello-friend.m4a'
             })
@@ -2994,9 +2970,7 @@ describe('Plugin', () => {
 
             expect(externalLoggerStub).to.have.been.calledWith({
               status: 'info',
-              message: semver.satisfies(realVersion, '>=4.0.0')
-                ? 'sampled audio.translations.create'
-                : 'sampled createTranslation',
+              message: 'sampled createTranslation',
               prompt: 'greeting',
               file: 'guten-tag.m4a'
             })
