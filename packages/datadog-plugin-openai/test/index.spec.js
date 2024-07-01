@@ -187,11 +187,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'completions.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createCompletion')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'createCompletion')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/completions')
@@ -367,11 +363,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/embeddings')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -440,11 +432,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'embeddings.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'createEmbedding')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/embeddings')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -559,11 +547,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'models.list')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listModels')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'listModels')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models')
@@ -633,11 +617,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'models.retrieve')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'retrieveModel')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
@@ -831,11 +811,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.list')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listFiles')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'listFiles')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -896,11 +872,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createFile')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'createFile')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/files')
@@ -965,11 +937,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.del')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'deleteFile')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'deleteFile')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
@@ -1030,11 +998,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.retrieve')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'retrieveFile')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
@@ -1093,13 +1057,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0 <4.17.1')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.retrieveContent')
-              } else if (semver.satisfies(realVersion, '>=4.17.1')) {
-                expect(traces[0][0]).to.have.property('resource', 'files.content')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'downloadFile')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'downloadFile')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
@@ -1211,13 +1169,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.create')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.create')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'createFineTune')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'createFineTune')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -1476,13 +1428,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.retrieve')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.retrieve')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'retrieveFineTune')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG') // no name just id
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
@@ -1622,13 +1568,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.list')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.list')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'listFineTunes')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               if (semver.satisfies(realVersion, '>=4.1.0')) {
@@ -1757,13 +1697,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.listEvents')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.listEvents')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'listFineTuneEvents')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'GET')
               if (semver.satisfies(realVersion, '>=4.1.0')) {
@@ -1825,11 +1759,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'models.del')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'deleteModel')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'deleteModel')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'DELETE')
               expect(traces[0][0].meta).to.have.property('openai.request.endpoint', '/v1/models/*')
@@ -1940,13 +1870,7 @@ describe('Plugin', () => {
             .use(traces => {
               expect(traces[0][0]).to.have.property('name', 'openai.request')
               expect(traces[0][0]).to.have.property('type', 'openai')
-              if (semver.satisfies(realVersion, '>=4.1.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine_tuning.jobs.cancel')
-              } else if (semver.satisfies(realVersion, '>=4.0.0')) {
-                expect(traces[0][0]).to.have.property('resource', 'fine-tune.cancel')
-              } else {
-                expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
-              }
+              expect(traces[0][0]).to.have.property('resource', 'cancelFineTune')
               expect(traces[0][0]).to.have.property('error', 0)
               expect(traces[0][0].meta).to.have.property('openai.organization.id', 'org-COOLORG')
               expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -2052,11 +1976,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'moderations.create')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createModeration')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createModeration')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -2151,11 +2071,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'images.generate')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createImage')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createImage')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -2362,11 +2278,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'images.edit')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createImageEdit')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -2459,11 +2371,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'images.createVariation')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createImageVariation')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
                 expect(traces[0][0].meta).to.have.property('openai.request.method', 'POST')
@@ -2559,11 +2467,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'chat.completions.create')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createChatCompletion')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -2944,11 +2848,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'audio.transcriptions.create')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createTranscription')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createTranscription')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
@@ -3050,11 +2950,7 @@ describe('Plugin', () => {
               .use(traces => {
                 expect(traces[0][0]).to.have.property('name', 'openai.request')
                 expect(traces[0][0]).to.have.property('type', 'openai')
-                if (semver.satisfies(realVersion, '>=4.0.0')) {
-                  expect(traces[0][0]).to.have.property('resource', 'audio.translations.create')
-                } else {
-                  expect(traces[0][0]).to.have.property('resource', 'createTranslation')
-                }
+                expect(traces[0][0]).to.have.property('resource', 'createTranslation')
                 expect(traces[0][0]).to.have.property('error', 0)
                 expect(traces[0][0].meta).to.have.property('openai.organization.name', 'kill-9')
 
