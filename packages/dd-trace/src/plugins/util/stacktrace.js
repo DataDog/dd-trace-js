@@ -61,7 +61,7 @@ function getTopUserLandCallsite (constructorOpt) {
 
 // *.mjs paths start with the "file://" protocol because ESM supports https imports
 function getRelativeFilename (filename, containsFileProtocol = filename.startsWith('file://')) {
-  return relative(containsFileProtocol ? 'file://' + cwd : cwd, filename)
+  return relative(cwd, containsFileProtocol ? filename.substring(7) : filename)
 }
 
 // TODO: This should be somewhere else specifically related to Span Origin
