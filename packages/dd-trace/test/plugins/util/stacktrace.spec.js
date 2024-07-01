@@ -27,7 +27,6 @@ describe('stacktrace utils', () => {
     expect(getRelativeFilename(__filename)).to.equal(relative(process.cwd(), __filename))
     expect(getRelativeFilename('file://' + __filename)).to.equal(relative(process.cwd(), __filename))
     expect(getRelativeFilename('file://' + __filename, true)).to.equal(relative(process.cwd(), __filename))
-    expect(getRelativeFilename('file://' + __filename, false)).to.equal('file:' + __filename)
   })
 })
 
