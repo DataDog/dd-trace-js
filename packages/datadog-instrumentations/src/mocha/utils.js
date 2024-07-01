@@ -70,6 +70,10 @@ function isMochaRetry (test) {
   return test._currentRetry !== undefined && test._currentRetry !== 0
 }
 
+function isLastRetry (test) {
+  return test._currentRetry === test._retries
+}
+
 function getTestFullName (test) {
   return `mocha.${getTestSuitePath(test.file, process.cwd())}.${removeEfdStringFromTestName(test.fullTitle())}`
 }
@@ -84,6 +88,16 @@ function getTestStatus (test) {
   return 'pass'
 }
 
+function setTestAsyncResource (test, newAsyncResource) {
+  const asyncResourceList = getTestAsyncResource(test)
+  if (asyncResourceList) {
+    asyncResourceList.push(newAsyncResource)
+  } else {
+    testToAr.set(test.fn, [newAsyncResource])
+  }
+}
+
+// this does not work well now because there are multiple tests for the same "test" object
 function getTestAsyncResource (test) {
   if (!test.fn) {
     return testToAr.get(test)
@@ -95,10 +109,16 @@ function getTestAsyncResource (test) {
   return testToAr.get(originalFn)
 }
 
-function runnableWrapper (RunnablePackage) {
+function runnableWrapper (RunnablePackage, libraryConfig) {
   shimmer.wrap(RunnablePackage.prototype, 'run', run => function () {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
+    }
+    // TODO: this is probably called multiple times. Maybe we can just do it once
+    // where, though?
+    if (libraryConfig.isFlakyTestRetriesEnabled) {
+      // TODO: change magic number
+      this.retries(5)
     }
     const isBeforeEach = this.parent._beforeEach.includes(this)
     const isAfterEach = this.parent._afterEach.includes(this)
@@ -114,9 +134,10 @@ function runnableWrapper (RunnablePackage) {
 
     if (isTestHook || this.type === 'test') {
       const test = isTestHook ? this.ctx.currentTest : this
-      const asyncResource = getTestAsyncResource(test)
+      const asyncResourceList = getTestAsyncResource(test)
 
-      if (asyncResource) {
+      if (asyncResourceList) {
+        const asyncResource = asyncResourceList[test._currentRetry]
         // we bind the test fn to the correct async resource
         const newFn = asyncResource.bind(this.fn)
 
@@ -135,12 +156,9 @@ function runnableWrapper (RunnablePackage) {
 
 function getOnTestHandler (isMain, newTests) {
   return function (test) {
-    if (isMochaRetry(test)) {
-      return
-    }
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    testToAr.set(test.fn, asyncResource)
+    setTestAsyncResource(test, asyncResource)
 
     const {
       file: testSuiteAbsolutePath,
@@ -180,11 +198,12 @@ function getOnTestHandler (isMain, newTests) {
 
 function getOnTestEndHandler () {
   return function (test) {
-    const asyncResource = getTestAsyncResource(test)
+    const asyncResourceList = getTestAsyncResource(test)
     const status = getTestStatus(test)
 
     // if there are afterEach to be run, we don't finish the test yet
-    if (asyncResource && !test.parent._afterEach.length) {
+    if (asyncResourceList && !test.parent._afterEach.length) {
+      const asyncResource = asyncResourceList[test._currentRetry]
       asyncResource.runInAsyncScope(() => {
         testFinishCh.publish(status)
       })
@@ -197,12 +216,18 @@ function getOnHookEndHandler () {
     const test = hook.ctx.currentTest
     if (test && hook.parent._afterEach.includes(hook)) { // only if it's an afterEach
       const isLastAfterEach = hook.parent._afterEach.indexOf(hook) === hook.parent._afterEach.length - 1
+      if (test._retries > 0 && !isLastRetry(test)) {
+        return
+      }
       if (isLastAfterEach) {
         const status = getTestStatus(test)
-        const asyncResource = getTestAsyncResource(test)
-        asyncResource.runInAsyncScope(() => {
-          testFinishCh.publish(status)
-        })
+        const asyncResourceList = getTestAsyncResource(test)
+        if (asyncResourceList) {
+          const asyncResource = asyncResourceList[test._currentRetry]
+          asyncResource.runInAsyncScope(() => {
+            testFinishCh.publish(status)
+          })
+        }
       }
     }
   }
@@ -221,6 +246,7 @@ function getOnFailHandler (isMain) {
       testAsyncResource = getTestAsyncResource(test)
     }
     if (testAsyncResource) {
+      testAsyncResource = testAsyncResource[test._currentRetry]
       testAsyncResource.runInAsyncScope(() => {
         if (isHook) {
           err.message = `${testOrHook.fullTitle()}: ${err.message}`
@@ -250,6 +276,18 @@ function getOnFailHandler (isMain) {
   }
 }
 
+function getOnTestRetryHandler () {
+  return function (test) {
+    const asyncResourceList = getTestAsyncResource(test)
+    const asyncResource = asyncResourceList[test._currentRetry]
+    if (asyncResource) {
+      asyncResource.runInAsyncScope(() => {
+        testFinishCh.publish('fail')
+      })
+    }
+  }
+}
+
 function getOnPendingHandler () {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
@@ -265,7 +303,7 @@ function getOnPendingHandler () {
       testStartLine
     }
 
-    const asyncResource = getTestAsyncResource(test)
+    const [asyncResource] = getTestAsyncResource(test)
     if (asyncResource) {
       asyncResource.runInAsyncScope(() => {
         skipCh.publish(testInfo)
@@ -275,9 +313,9 @@ function getOnPendingHandler () {
       // or the parent suite is skipped
       const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
       if (test.fn) {
-        testToAr.set(test.fn, skippedTestAsyncResource)
+        testToAr.set(test.fn, [skippedTestAsyncResource])
       } else {
-        testToAr.set(test, skippedTestAsyncResource)
+        testToAr.set(test, [skippedTestAsyncResource])
       }
       skippedTestAsyncResource.runInAsyncScope(() => {
         skipCh.publish(testInfo)
@@ -299,6 +337,7 @@ module.exports = {
   testToStartLine,
   getOnTestHandler,
   getOnTestEndHandler,
+  getOnTestRetryHandler,
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
