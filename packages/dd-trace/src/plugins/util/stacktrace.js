@@ -40,7 +40,7 @@ function getUserLandCallsites (constructorOpt = getUserLandCallsites) {
     if (fullPath === null) {
       continue
     }
-    // TODO: Now sure why some paths start with "file://"
+    // *.mjs paths start with the "file://" protocol because ESM supports https imports
     const containsFileProtocol = fullPath.startsWith('file://')
     if (fullPath.startsWith(cwd, containsFileProtocol ? 7 : 0) === false) {
       continue
@@ -59,7 +59,7 @@ function getTopUserLandCallsite (constructorOpt) {
   return callsites && callsites[0]
 }
 
-// TODO: Now sure why some paths start with "file://"
+// *.mjs paths start with the "file://" protocol because ESM supports https imports
 function getRelativeFilename (filename, containsFileProtocol = filename.startsWith('file://')) {
   return relative(containsFileProtocol ? 'file://' + cwd : cwd, filename)
 }
