@@ -2,6 +2,8 @@
 
 require('../setup/tap')
 
+const { join } = require('path')
+
 const Config = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 
@@ -184,7 +186,9 @@ describe('Span', () => {
     expect(span.context()._tags).to.have.property('_dd.entry_location.file')
     expect(span.context()._tags).to.have.property('_dd.entry_location.line')
     expect(span.context()._tags).to.have.property('_dd.entry_location.method')
-    expect(span.context()._tags['_dd.entry_location.file']).to.equal('packages/dd-trace/test/opentracing/span.spec.js')
+    expect(span.context()._tags['_dd.entry_location.file']).to.equal(
+      join('packages', 'dd-trace', 'test', 'opentracing', 'span.spec.js')
+    )
     expect(span.context()._tags['_dd.entry_location.line']).to.be.a('number')
     expect(span.context()._tags['_dd.entry_location.line']).to.be.gt(0)
     expect(span.context()._tags['_dd.entry_location.method']).to.equal('helloWorld')

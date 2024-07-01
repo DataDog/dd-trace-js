@@ -1,6 +1,6 @@
 'use strict'
 
-const { relative } = require('path')
+const { relative, sep } = require('path')
 
 const cwd = process.cwd()
 
@@ -46,7 +46,7 @@ function getUserLandCallsites (constructorOpt = getUserLandCallsites) {
       continue
     }
     const relativePath = getRelativeFilename(fullPath, containsFileProtocol)
-    if (relativePath.startsWith('node_modules/') || relativePath.includes('/node_modules/')) {
+    if (relativePath.startsWith('node_modules' + sep) || relativePath.includes(sep + 'node_modules' + sep)) {
       continue
     }
 
