@@ -93,7 +93,8 @@ function getLibraryConfiguration ({
               tests_skipping: isSuitesSkippingEnabled,
               itr_enabled: isItrEnabled,
               require_git: requireGit,
-              early_flake_detection: earlyFlakeDetectionConfig
+              early_flake_detection: earlyFlakeDetectionConfig,
+              flaky_test_retries_enabled: isFlakyTestRetriesEnabled
             }
           }
         } = JSON.parse(res)
@@ -107,7 +108,8 @@ function getLibraryConfiguration ({
           earlyFlakeDetectionNumRetries:
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
           earlyFlakeDetectionFaultyThreshold:
-            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD
+            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
+          isFlakyTestRetriesEnabled
         }
 
         log.debug(() => `Remote settings: ${JSON.stringify(settings)}`)

@@ -204,8 +204,8 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:test:error', (err) => {
       const store = storage.getStore()
-      if (err && store && store.span) {
-        const span = store.span
+      const span = store?.span
+      if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
           span.setTag(TEST_STATUS, 'skip')
         } else {
