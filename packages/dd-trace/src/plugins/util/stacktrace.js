@@ -40,7 +40,7 @@ function getUserLandCallsites (constructorOpt = getUserLandCallsites) {
     if (fullPath === null) {
       continue
     }
-    // TODO: Now sure why some paths start with this
+    // TODO: Now sure why some paths start with "file://"
     const containsFileProtocol = fullPath.startsWith('file://')
     if (fullPath.startsWith(cwd, containsFileProtocol ? 7 : 0) === false) {
       continue
@@ -59,7 +59,7 @@ function getTopUserLandCallsite (constructorOpt) {
   return callsites && callsites[0]
 }
 
-// TODO: Now sure why some paths start with this
+// TODO: Now sure why some paths start with "file://"
 function getRelativeFilename (filename, containsFileProtocol) {
   if (containsFileProtocol === undefined) {
     containsFileProtocol = filename.startsWith('file://')
