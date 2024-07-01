@@ -2,9 +2,13 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { entryTag } = require('../../dd-trace/src/code_origin')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
+const codeOriginEnabledChannel = channel('datadog:code-origin-enabled')
+
+const kCodeOriginForSpansTagsSym = Symbol('kCodeOriginForSpansTagsSym')
 
 const parsingResources = new WeakMap()
 
@@ -25,6 +29,11 @@ function wrapFastify (fastify, hasParsingEvents) {
     } else {
       app.addHook('onRequest', preParsing)
       app.addHook('preHandler', preValidation)
+    }
+
+    // Hack to check if the Code Origin for Spans feature is enabled
+    if (codeOriginEnabledChannel.hasSubscribers) {
+      app.addHook('onRoute', onRoute)
     }
 
     app.addHook = wrapAddHook(app.addHook)
@@ -86,8 +95,9 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
+  const tags = getCodeOriginForSpansTags(request)
 
-  handleChannel.publish({ req, res })
+  handleChannel.publish({ req, res, tags })
 
   return done()
 }
@@ -142,12 +152,21 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
+function getCodeOriginForSpansTags (request) {
+  return request?.routeOptions?.config?.[kCodeOriginForSpansTagsSym]
+}
+
 function publishError (error, req) {
   if (error) {
     errorChannel.publish({ error, req })
   }
 
   return error
+}
+
+function onRoute (routeOptions) {
+  if (!routeOptions.config) routeOptions.config = {}
+  routeOptions.config[kCodeOriginForSpansTagsSym] = entryTag(onRoute)
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
