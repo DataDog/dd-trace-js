@@ -26,50 +26,104 @@ const telemetryCounters = {
   'otel.env.invalid': {}
 }
 
-function getCounter (event, ddVar, otelVar, otelTracesSamplerArg) {
+function getCounter (event, ddVar, otelVar) {
   const counters = telemetryCounters[event]
   const tags = []
+  const ddVarPrefix = 'config.datadog:'
+  const otelVarPrefix = 'config.opentelemetry:'
+  if (ddVar) {
+    ddVar = ddVarPrefix + ddVar
+    tags.push(ddVar)
+  }
+  if (otelVar) {
+    otelVar = otelVarPrefix + otelVar
+    tags.push(otelVar)
+  }
 
-  if (ddVar) tags.push(ddVar)
-  if (otelVar) tags.push(otelVar)
-  if (otelTracesSamplerArg) tags.push(otelTracesSamplerArg)
-
-  if (!(ddVar in counters)) counters[ddVar] = {}
+  if (!(otelVar in counters)) counters[otelVar] = {}
 
   const counter = tracerMetrics.count(event, tags)
-  counters[ddVar][otelVar] = counter
+  counters[otelVar][ddVar] = counter
   return counter
 }
 
 const otelDdEnvMapping = {
-  DD_TRACE_LOG_LEVEL: 'OTEL_LOG_LEVEL',
-  DD_TRACE_PROPAGATION_STYLE: 'OTEL_PROPAGATORS',
-  DD_SERVICE: 'OTEL_SERVICE_NAME',
-  DD_TRACE_SAMPLE_RATE: 'OTEL_TRACES_SAMPLER',
-  DD_TRACE_ENABLED: 'OTEL_TRACES_EXPORTER',
-  DD_RUNTIME_METRICS_ENABLED: 'OTEL_METRICS_EXPORTER',
-  DD_TAGS: 'OTEL_RESOURCE_ATTRIBUTES',
-  DD_TRACE_OTEL_ENABLED: 'OTEL_SDK_DISABLED'
+  OTEL_LOG_LEVEL: 'DD_TRACE_LOG_LEVEL',
+  OTEL_PROPAGATORS: 'DD_TRACE_PROPAGATION_STYLE',
+  OTEL_SERVICE_NAME: 'DD_SERVICE',
+  OTEL_TRACES_SAMPLER: 'DD_TRACE_SAMPLE_RATE',
+  OTEL_TRACES_SAMPLER_ARG: 'DD_TRACE_SAMPLE_RATE',
+  OTEL_TRACES_EXPORTER: 'DD_TRACE_ENABLED',
+  OTEL_METRICS_EXPORTER: 'DD_RUNTIME_METRICS_ENABLED',
+  OTEL_RESOURCE_ATTRIBUTES: 'DD_TAGS',
+  OTEL_SDK_DISABLED: 'DD_TRACE_OTEL_ENABLED',
+  OTEL_LOGS_EXPORTER: undefined
 }
 
-const otelInvalidEnv = ['OTEL_LOGS_EXPORTER']
+const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 
-function checkIfBothOtelAndDdEnvVarSet () {
-  for (const [ddVar, otelVar] of Object.entries(otelDdEnvMapping)) {
-    if (process.env[ddVar] && process.env[otelVar]) {
-      log.warn(`both ${ddVar} and ${otelVar} environment variables are set`)
-      getCounter('otel.env.hiding', ddVar, otelVar,
-        otelVar === 'OTEL_TRACES_SAMPLER' &&
-        process.env.OTEL_TRACES_SAMPLER_ARG
-          ? 'OTEL_TRACES_SAMPLER_ARG'
-          : undefined).inc()
+const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
+
+function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const OTEL_TRACES_SAMPLER_MAPPING = {
+    always_on: '1.0',
+    always_off: '0.0',
+    traceidratio: otelTracesSamplerArg,
+    parentbased_always_on: '1.0',
+    parentbased_always_off: '0.0',
+    parentbased_traceidratio: otelTracesSamplerArg
+  }
+  return OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler]
+}
+
+function validateOtelPropagators (propagators) {
+  if (!process.env.PROPAGATION_STYLE_EXTRACT &&
+    !process.env.PROPAGATION_STYLE_INJECT &&
+    !process.env.DD_TRACE_PROPAGATION_STYLE &&
+    process.env.OTEL_PROPAGATORS) {
+    for (const style in propagators) {
+      if (!VALID_PROPAGATION_STYLES.has(style)) {
+        log.warn('unexpected value for OTEL_PROPAGATORS environment variable')
+        getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
+      }
     }
   }
+}
 
-  for (const otelVar of otelInvalidEnv) {
-    if (process.env[otelVar]) {
-      log.warn(`${otelVar} is not supported by the Datadog SDK`)
-      getCounter('otel.env.invalid', otelVar).inc()
+function validateEnvVarType (envVar) {
+  const value = process.env[envVar]
+  switch (envVar) {
+    case 'OTEL_LOG_LEVEL':
+      return VALID_LOG_LEVELS.has(value)
+    case 'OTEL_PROPAGATORS':
+    case 'OTEL_RESOURCE_ATTRIBUTES':
+    case 'OTEL_SERVICE_NAME':
+      return typeof value === 'string'
+    case 'OTEL_TRACES_SAMPLER':
+      return getFromOtelSamplerMap(value, process.env.OTEL_TRACES_SAMPLER_ARG) !== undefined
+    case 'OTEL_TRACES_SAMPLER_ARG':
+      return !isNaN(parseFloat(value))
+    case 'OTEL_SDK_DISABLED':
+      return value.toLowerCase() === 'true' || value.toLowerCase() === 'false'
+    case 'OTEL_TRACES_EXPORTER':
+    case 'OTEL_METRICS_EXPORTER':
+    case 'OTEL_LOGS_EXPORTER':
+      return value.toLowerCase() === 'none'
+    default:
+      return false
+  }
+}
+
+function checkIfBothOtelAndDdEnvVarSet () {
+  for (const [otelEnvVar, ddEnvVar] of Object.entries(otelDdEnvMapping)) {
+    if (ddEnvVar && process.env[ddEnvVar] && process.env[otelEnvVar]) {
+      log.warn(`both ${ddEnvVar} and ${otelEnvVar} environment variables are set`)
+      getCounter('otel.env.hiding', ddEnvVar, otelEnvVar).inc()
+    }
+
+    if (process.env[otelEnvVar] && !validateEnvVarType(otelEnvVar)) {
+      log.warn(`unexpected value for ${otelEnvVar} environment variable`)
+      getCounter('otel.env.invalid', ddEnvVar, otelEnvVar).inc()
     }
   }
 }
@@ -235,6 +289,9 @@ class Config {
       options.tracePropagationStyle,
       defaultPropagationStyle
     )
+
+    validateOtelPropagators(PROPAGATION_STYLE_INJECT)
+
     const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
       process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       false
@@ -715,15 +772,8 @@ class Config {
       : undefined
     this._setBoolean(env, 'runtimeMetrics', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
-    const OTEL_TRACES_SAMPLER_MAPPING = {
-      always_on: '1.0',
-      always_off: '0.0',
-      traceidratio: OTEL_TRACES_SAMPLER_ARG,
-      parentbased_always_on: '1.0',
-      parentbased_always_off: '0.0',
-      parentbased_traceidratio: OTEL_TRACES_SAMPLER_ARG
-    }
-    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE || OTEL_TRACES_SAMPLER_MAPPING[OTEL_TRACES_SAMPLER])
+    this._setUnit(env, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
+    getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
