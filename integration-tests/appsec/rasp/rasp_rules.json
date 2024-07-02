@@ -5,7 +5,7 @@
   },
   "rules": [
     {
-      "id": "rasp-ssrf-rule-id-1",
+      "id": "test-rule-id-2",
       "name": "Server-side request forgery exploit",
       "enabled": true,
       "tags": {
@@ -35,9 +35,6 @@
                 "address": "server.request.path_params"
               },
               {
-                "address": "server.request.headers.no_cookies"
-              },
-              {
                 "address": "grpc.server.request.message"
               },
               {
@@ -59,3 +56,4 @@
     }
   ]
 }
+

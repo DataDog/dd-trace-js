@@ -55,6 +55,10 @@
   ],
   "express": [
     {
+      "name": "axios",
+      "versions": [">=1.0.0"]
+    },
+    {
       "name": "loopback",
       "versions": [">=2.38.1"]
     },
