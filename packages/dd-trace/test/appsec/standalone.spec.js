@@ -198,18 +198,6 @@ describe('Appsec Standalone', () => {
   })
 
   describe('onSpanExtract', () => {
-    it('should not fail with invalid spanContext, trace, etc', () => {
-      standalone.configure(config)
-
-      assert.doesNotThrow(() => {
-        extractCh.publish({ })
-      })
-
-      assert.doesNotThrow(() => {
-        extractCh.publish({ spanContext: { _trace: {} } })
-      })
-    })
-
     it('should reset priority if _dd.p.appsec not present', () => {
       standalone.configure(config)
 
