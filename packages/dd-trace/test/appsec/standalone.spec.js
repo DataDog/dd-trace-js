@@ -424,7 +424,7 @@ describe('Appsec Standalone', () => {
           _trace: {}
         }
 
-        const clock = sinon.useFakeTimers(new Date())
+        const clock = sinon.useFakeTimers()
 
         assert.strictEqual(prioritySampler._getPriorityFromAuto(span), AUTO_KEEP)
 
