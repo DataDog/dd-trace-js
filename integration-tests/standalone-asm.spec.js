@@ -200,23 +200,24 @@ describe('Standalone ASM', () => {
         }, undefined, undefined, true)
       })
 
-      // proc/propagation-with-event triggers an appsec ev and calls downstream proc2/down with no event
-      it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no ev in the local trace', async () => {
-        await doWarmupRequests(proc)
-        await doWarmupRequests(proc2)
+      // proc/propagation-with-event triggers an appsec event and calls downstream proc2/down with no event
+      it('should keep if parent trace is (prio:2, _dd.p.appsec:1) but there is no event in the local trace',
+        async () => {
+          await doWarmupRequests(proc)
+          await doWarmupRequests(proc2)
 
-        const url = `${proc.url}/propagation-with-event?port=${port2}`
-        return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-          assert.isArray(payload)
+          const url = `${proc.url}/propagation-with-event?port=${port2}`
+          return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
+            assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
+            assert.isArray(payload)
 
-          const innerReq = payload.find(p => p[0].resource === 'GET /down')
-          assert.notStrictEqual(innerReq, undefined)
-          assertKeep(innerReq[0], false)
-        }, undefined, undefined, true)
-      })
+            const innerReq = payload.find(p => p[0].resource === 'GET /down')
+            assert.notStrictEqual(innerReq, undefined)
+            assertKeep(innerReq[0], false)
+          }, undefined, undefined, true)
+        })
 
-      it('should remove parent trace data if there is no ev in the local trace', async () => {
+      it('should remove parent trace data if there is no event in the local trace', async () => {
         await doWarmupRequests(proc)
         await doWarmupRequests(proc2)
 
@@ -231,7 +232,7 @@ describe('Standalone ASM', () => {
         }, undefined, undefined, true)
       })
 
-      it('should not remove parent trace data if there is ev in the local trace', async () => {
+      it('should not remove parent trace data if there is event in the local trace', async () => {
         await doWarmupRequests(proc)
 
         const url = `${proc.url}/propagation-with-event?port=${port2}`

@@ -43,7 +43,7 @@ describe('Exporter', () => {
     })
   })
 
-  it('should pass computed stats header through to writer if standalone configured', () => {
+  it('should pass computed stats header through to writer if standalone appsec is enabled', () => {
     const stats = { enabled: false }
     const appsec = { standalone: { enabled: true } }
     exporter = new Exporter({ url, flushInterval, stats, appsec }, prioritySampler)

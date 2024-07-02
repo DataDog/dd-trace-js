@@ -7,12 +7,7 @@ const PrioritySampler = require('../priority_sampler')
 const RateLimiter = require('../rate_limiter')
 const TraceState = require('../opentracing/propagation/tracestate')
 const { hasOwn } = require('../util')
-
-const {
-  APM_TRACING_ENABLED_KEY,
-  APPSEC_PROPAGATION_KEY,
-  SAMPLING_MECHANISM_DEFAULT
-} = require('../constants')
+const { APM_TRACING_ENABLED_KEY, APPSEC_PROPAGATION_KEY, SAMPLING_MECHANISM_DEFAULT } = require('../constants')
 
 const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
