@@ -19,7 +19,7 @@ const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
-  constructor (config) {
+  constructor (config, prioritySampler) {
     const Exporter = getExporter(config.experimental.exporter)
 
     this._config = config
@@ -28,7 +28,7 @@ class DatadogTracer {
     this._env = config.env
     this._logInjection = config.logInjection
     this._debug = config.debug
-    this._prioritySampler = new PrioritySampler(config.env, config.sampler)
+    this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
     this._exporter = new Exporter(config, this._prioritySampler)
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
     this._url = this._exporter._url
