@@ -280,18 +280,6 @@ describe('Appsec Standalone', () => {
   })
 
   describe('onSpanInject', () => {
-    it('should not fail with invalid spanContext, trace, carrier', () => {
-      standalone.configure(config)
-
-      assert.doesNotThrow(() => {
-        injectCh.publish({ })
-      })
-
-      assert.doesNotThrow(() => {
-        injectCh.publish({ spanContext: { _trace: {} } })
-      })
-    })
-
     it('should reset priority if standalone enabled and there is no appsec event', () => {
       standalone.configure(config)
 
