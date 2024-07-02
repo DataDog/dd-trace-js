@@ -35,6 +35,8 @@
     "test:integration": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/*.spec.js\"",
     "test:integration:cucumber": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/cypress/*.spec.js\"",
+    "test:integration:jest": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/jest/*.spec.js\"",
+    "test:integration:mocha": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/mocha/*.spec.js\"",
     "test:integration:playwright": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/playwright/*.spec.js\"",
     "test:integration:selenium": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/selenium/*.spec.js\"",
     "test:integration:vitest": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/vitest/*.spec.js\"",

@@ -48,7 +48,7 @@ jobs:
     strategy:
       matrix:
         version: [18, latest]
-        framework: [cucumber, playwright, selenium]
+        framework: [cucumber, playwright, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
