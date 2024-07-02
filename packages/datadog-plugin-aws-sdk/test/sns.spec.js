@@ -7,7 +7,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { setup } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sns-naming')
 
-describe('Sns', () => {
+describe('Sns', function () {
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
@@ -25,7 +25,8 @@ describe('Sns', () => {
     const snsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sns' : 'aws-sdk'
     const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
 
-    const assertPropagation = done => {
+    let childSpansFound = 0
+    const assertPropagation = (done, childSpans = 1) => {
       agent.use(traces => {
         const span = traces[0][0]
 
@@ -37,7 +38,10 @@ describe('Sns', () => {
 
         expect(parentId).to.not.equal('0')
         expect(parentId).to.equal(spanId)
-      }).then(done, done)
+        childSpansFound += 1
+        expect(childSpansFound).to.equal(childSpans)
+        childSpansFound = 0
+      }, { timeoutMs: 10000 }).then(done, done)
     }
 
     function createResources (queueName, topicName, cb) {
@@ -85,13 +89,13 @@ describe('Sns', () => {
         parentId = '0'
         spanId = '0'
 
-        return agent.load('aws-sdk', { sns: { dsmEnabled: false } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       before(done => {
         process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { sns: { dsmEnabled: false } })
+        tracer.use('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } })
 
         createResources('TestQueue', 'TestTopic', done)
       })
@@ -166,6 +170,34 @@ describe('Sns', () => {
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
                 { Id: '2', Message: 'message 2' }
+              ]
+            }, e => e && done(e))
+          })
+        })
+
+        it('injects trace context to each message SNS publishBatch with batch propagation enabled', done => {
+          assertPropagation(done, 3)
+
+          sns.subscribe(subParams, (err, data) => {
+            if (err) return done(err)
+
+            sqs.receiveMessage(receiveParams, (err, data) => {
+              if (err) done(err)
+
+              for (const message in data.Messages) {
+                const recordData = JSON.parse(data.Messages[message].Body)
+                expect(recordData.MessageAttributes).to.have.property('_datadog')
+
+                const attributes = JSON.parse(Buffer.from(recordData.MessageAttributes._datadog.Value, 'base64'))
+                expect(attributes).to.have.property('x-datadog-trace-id')
+              }
+            })
+            sns.publishBatch({
+              TopicArn,
+              PublishBatchRequestEntries: [
+                { Id: '1', Message: 'message 1' },
+                { Id: '2', Message: 'message 2' },
+                { Id: '3', Message: 'message 3' }
               ]
             }, e => e && done(e))
           })
@@ -261,7 +293,7 @@ describe('Sns', () => {
         } catch {
           // pass
         }
-        agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
+        agent.reload('aws-sdk', { sns: { dsmEnabled: true, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       it('injects DSM pathway hash to SNS publish span', done => {
