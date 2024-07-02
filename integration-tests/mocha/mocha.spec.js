@@ -183,7 +183,6 @@ describe('mocha CommonJS', function () {
     })
   })
 
-
   const envVarSettings = ['DD_TRACING_ENABLED', 'DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {

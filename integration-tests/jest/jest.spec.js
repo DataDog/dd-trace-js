@@ -783,7 +783,6 @@ describe('jest CommonJS', () => {
       })
     })
     it('can report code coverage', (done) => {
-      let testOutput
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
       )
@@ -1666,7 +1665,10 @@ describe('jest CommonJS', () => {
         runTestsWithCoverageCommand,
         {
           cwd,
-          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test' },
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/occasionally-failing-test'
+          },
           stdio: 'inherit'
         }
       )
@@ -1723,7 +1725,10 @@ describe('jest CommonJS', () => {
         runTestsWithCoverageCommand,
         {
           cwd,
-          env: { ...getCiVisEvpProxyConfig(receiver.port), TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test' },
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/skipped-and-todo-test'
+          },
           stdio: 'inherit'
         }
       )
