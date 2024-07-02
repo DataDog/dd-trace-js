@@ -165,6 +165,7 @@ function normalizeConfig (config, serviceIdentifier) {
 
   return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
+    batchPropagationEnabled: config.batchPropagationEnabled !== false,
     hooks
   })
 }
