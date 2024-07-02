@@ -52,7 +52,7 @@ describe('Kinesis', function () {
 
     describe('no configuration', () => {
       before(() => {
-        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false } }, { dsmEnabled: true })
+        return agent.load('aws-sdk', { kinesis: { dsmEnabled: false, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
       before(done => {
@@ -85,6 +85,24 @@ describe('Kinesis', function () {
 
             expect(data).to.have.property('_datadog')
             expect(data._datadog).to.have.property('x-datadog-trace-id')
+
+            done()
+          })
+        })
+      })
+
+      it('injects trace context to each message during Kinesis putRecord and batchPropagationEnabled', done => {
+        helpers.putTestRecords(kinesis, streamName, (err, data) => {
+          if (err) return done(err)
+
+          helpers.getTestRecord(kinesis, streamName, data.Records[0], (err, data) => {
+            if (err) return done(err)
+
+            for (const record in data.Records) {
+              const recordData = JSON.parse(Buffer.from(data.Records[record].Data).toString())
+              expect(recordData).to.have.property('_datadog')
+              expect(recordData._datadog).to.have.property('x-datadog-trace-id')
+            }
 
             done()
           })
