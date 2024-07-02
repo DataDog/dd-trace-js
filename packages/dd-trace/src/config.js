@@ -455,6 +455,7 @@ class Config {
     this._setValue(defaults, 'experimental.enableGetRumData', false)
     this._setValue(defaults, 'experimental.exporter', undefined)
     this._setValue(defaults, 'experimental.runtimeId', false)
+    this._setValue(defaults, 'experimental.spanOriginEnabled', false)
     this._setValue(defaults, 'flushInterval', 2000)
     this._setValue(defaults, 'flushMinSpans', 1000)
     this._setValue(defaults, 'gitMetadataEnabled', true)
@@ -587,6 +588,7 @@ class Config {
       DD_TRACE_EXPERIMENTAL_EXPORTER,
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED,
+      DD_TRACE_EXPERIMENTAL_SPAN_ORIGIN_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_HEADER_TAGS,
@@ -653,6 +655,7 @@ class Config {
     this._setBoolean(env, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     this._setString(env, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
     this._setBoolean(env, 'experimental.runtimeId', DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED)
+    this._setBoolean(env, 'experimental.spanOriginEnabled', DD_TRACE_EXPERIMENTAL_SPAN_ORIGIN_ENABLED)
     if (AWS_LAMBDA_FUNCTION_NAME) this._setValue(env, 'flushInterval', 0)
     this._setValue(env, 'flushMinSpans', maybeInt(DD_TRACE_PARTIAL_FLUSH_MIN_SPANS))
     this._envUnprocessed.flushMinSpans = DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
@@ -802,6 +805,8 @@ class Config {
       options.experimental && options.experimental.enableGetRumData)
     this._setString(opts, 'experimental.exporter', options.experimental && options.experimental.exporter)
     this._setBoolean(opts, 'experimental.runtimeId', options.experimental && options.experimental.runtimeId)
+    this._setBoolean(opts, 'experimental.spanOriginEnabled',
+      options.experimental && options.experimental.spanOriginEnabled)
     this._setValue(opts, 'flushInterval', maybeInt(options.flushInterval))
     this._optsUnprocessed.flushInterval = options.flushInterval
     this._setValue(opts, 'flushMinSpans', maybeInt(options.flushMinSpans))

@@ -120,6 +120,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
+        spanOriginEnabled: undefined,
         integrationName: undefined,
         links: undefined
       }, true)
@@ -179,6 +180,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
+        spanOriginEnabled: undefined,
         integrationName: undefined,
         links: undefined
       })
@@ -251,6 +253,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
+        spanOriginEnabled: undefined,
         integrationName: undefined,
         links: undefined
       })
@@ -273,6 +276,7 @@ describe('Tracer', () => {
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
+        spanOriginEnabled: undefined,
         integrationName: undefined,
         links: [{ context }]
       })

@@ -15,6 +15,10 @@ class WebPlugin extends Plugin {
   setFramework (req, name, config) {
     web.setFramework(req, name, config)
   }
+
+  setSpanOrigin (req, tags) {
+    web.setSpanOrigin(req, tags)
+  }
 }
 
 module.exports = WebPlugin
