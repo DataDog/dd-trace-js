@@ -10,7 +10,8 @@ const { hasOwn } = require('../util')
 
 const {
   APM_TRACING_ENABLED_KEY,
-  APPSEC_PROPAGATION_KEY
+  APPSEC_PROPAGATION_KEY,
+  SAMPLING_MECHANISM_DEFAULT
 } = require('../constants')
 
 const startCh = channel('dd-trace:span:start')
@@ -43,6 +44,8 @@ class StandAloneAsmPrioritySampler extends PrioritySampler {
 
   _getPriorityFromAuto (span) {
     const context = this._getContext(span)
+
+    context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
 
     if (hasOwn(context._trace.tags, APPSEC_PROPAGATION_KEY)) {
       return USER_KEEP
