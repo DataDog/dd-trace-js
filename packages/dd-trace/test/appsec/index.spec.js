@@ -39,7 +39,6 @@ describe('AppSec Index', function () {
   let config
   let AppSec
   let web
-  let responseBlockedSet
   let blocking
   let passport
   let log
@@ -79,7 +78,6 @@ describe('AppSec Index', function () {
       root: sinon.stub()
     }
 
-    responseBlockedSet = new WeakSet()
     blocking = {
       setTemplates: sinon.stub()
     }
