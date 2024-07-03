@@ -65,14 +65,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: 'binaries/dd-trace-js'
+      - name: Build runner
+        uses: ./.github/actions/install_runner
       - name: Pull images
         uses: ./.github/actions/pull_images
         with:
           scenarios: '["${{ matrix.scenario }}"]'
       - name: Build weblog
         run: ./build.sh -i weblog
-      - name: Build runner
-        uses: ./.github/actions/install_runner
       - name: Build agent
         id: build-agent
         run: ./build.sh -i agent
