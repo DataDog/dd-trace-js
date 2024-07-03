@@ -60,10 +60,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: improve-integrations-scenario
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
           path: 'binaries/dd-trace-js'
+      - name: Pull images
+          uses: ./.github/actions/pull_images
+          with:
+            scenarios: '["${{ matrix.scenario }}"]'
       - name: Build weblog
         run: ./build.sh -i weblog
       - name: Build runner
