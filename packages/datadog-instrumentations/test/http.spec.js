@@ -44,13 +44,12 @@ describe('client', () => {
    * and the same stub could be called multiple times
    */
   function getContextFromStubByUrl (url, stub) {
-    for (let i = 0; i < stub.args.length; i++) {
-      const arg = stub.args[i][0]
+    for (const args of stub.args) {
+      const arg = args[0]
       if (arg.args?.originalUrl === url) {
         return arg
       }
     }
-
     return null
   }
 
