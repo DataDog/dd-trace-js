@@ -55,7 +55,7 @@ onboarding_tests:
   parallel:
       matrix:
         - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs]
-          SCENARIO: [SIMPLE_HOST_AUTO_INJECTION]
+          SCENARIO: [SIMPLE_HOST_AUTO_INJECTION_PROFILING]
         - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs-container]
           SCENARIO: [SIMPLE_CONTAINER_AUTO_INJECTION]
   script:
