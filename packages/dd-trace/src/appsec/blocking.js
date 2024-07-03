@@ -148,6 +148,10 @@ function setTemplates (config) {
   }
 }
 
+function isBlocked (res) {
+  return responseBlockedSet.has(res)
+}
+
 module.exports = {
   addSpecificEndpoint,
   block,
@@ -155,5 +159,5 @@ module.exports = {
   getBlockingData,
   getBlockingAction,
   setTemplates,
-  responseBlockedSet
+  isBlocked
 }

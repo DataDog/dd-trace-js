@@ -81,8 +81,7 @@ describe('AppSec Index', function () {
 
     responseBlockedSet = new WeakSet()
     blocking = {
-      setTemplates: sinon.stub(),
-      responseBlockedSet
+      setTemplates: sinon.stub()
     }
 
     passport = {
@@ -927,12 +926,23 @@ describe('AppSec Index', function () {
 
     describe('onResponseSetHeader', () => {
       it('should call abortController if response was already blocked', () => {
-        responseBlockedSet.add(res)
+        // First block the request
+        sinon.stub(waf, 'run').returns(resultActions)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(abortController.abort).to.have.been.calledOnce
+
+        abortController.abort.reset()
 
         responseSetHeader.publish({ res, abortController })
 
-        expect(abortController.abort).to.have.been.called
-        responseBlockedSet.delete(res)
+        expect(abortController.abort).to.have.been.calledOnce
       })
 
       it('should not call abortController if response was not blocked', () => {
