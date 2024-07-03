@@ -82,7 +82,7 @@ app.get('/ssrf/http/manual-blocking', (req, res) => {
   })
 
   clientRequest.on('error', (err) => {
-    if (err.name === 'AbortError') {
+    if (err.name === 'DatadogRaspAbortError') {
       res.writeHead(418)
       res.end('aborted')
     } else {

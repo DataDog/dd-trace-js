@@ -8,10 +8,10 @@ const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 
-class AbortError extends Error {
+class DatadogRaspAbortError extends Error {
   constructor (req, res, blockingAction) {
-    super('AbortError')
-    this.name = 'AbortError'
+    super('DatadogRaspAbortError')
+    this.name = 'DatadogRaspAbortError'
     this.req = req
     this.res = res
     this.blockingAction = blockingAction
@@ -42,7 +42,7 @@ function removeAllListeners (emitter, event) {
 }
 
 function handleUncaughtExceptionMonitor (err) {
-  if (err instanceof AbortError || err.cause instanceof AbortError) {
+  if (err instanceof DatadogRaspAbortError || err.cause instanceof DatadogRaspAbortError) {
     const { req, res, blockingAction } = err
     block(req, res, web.root(req), null, blockingAction)
 
@@ -139,7 +139,7 @@ function handleResult (actions, req, res, abortController) {
     const rootSpan = web.root(req)
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
-      const abortError = new AbortError(req, res, blockingAction)
+      const abortError = new DatadogRaspAbortError(req, res, blockingAction)
       abortController.abort(abortError)
 
       // TODO Delete this when support for node 16 is removed

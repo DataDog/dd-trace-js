@@ -103,7 +103,7 @@ describe('RASP', () => {
             app = (req, res) => {
               const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
               clientRequest.on('error', (e) => {
-                if (e.message === 'AbortError') {
+                if (e.message === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
                 res.end('end')
@@ -120,7 +120,7 @@ describe('RASP', () => {
               clientRequest.write('dummy_post_data')
               clientRequest.end()
               clientRequest.on('error', (e) => {
-                if (e.message === 'AbortError') {
+                if (e.message === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
                 res.end('end')
@@ -160,7 +160,7 @@ describe('RASP', () => {
                 await axiosToTest.get(`https://${req.query.host}`)
                 res.end('end')
               } catch (e) {
-                if (e.cause.message === 'AbortError') {
+                if (e.cause.message === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
                 res.end('end')
@@ -175,7 +175,7 @@ describe('RASP', () => {
               try {
                 await axiosToTest.post(`https://${req.query.host}`, { key: 'value' })
               } catch (e) {
-                if (e.cause.message === 'AbortError') {
+                if (e.cause.message === 'DatadogRaspAbortError') {
                   res.writeHead(500)
                 }
                 res.end('end')
@@ -241,7 +241,7 @@ describe('RASP', () => {
         })
 
         clientRequest.on('error', (e) => {
-          if (e.name !== 'AbortError') {
+          if (e.name !== 'DatadogRaspAbortError') {
             res.writeHead(200)
             res.end('not-blocking-error')
           } else {
