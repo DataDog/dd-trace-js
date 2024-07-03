@@ -66,9 +66,9 @@ jobs:
         with:
           path: 'binaries/dd-trace-js'
       - name: Pull images
-          uses: ./.github/actions/pull_images
-          with:
-            scenarios: '["${{ matrix.scenario }}"]'
+        uses: ./.github/actions/pull_images
+        with:
+          scenarios: '["${{ matrix.scenario }}"]'
       - name: Build weblog
         run: ./build.sh -i weblog
       - name: Build runner
