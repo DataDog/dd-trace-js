@@ -39,6 +39,8 @@ jobs:
       PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
       DD_TEST_AGENT_URL: http://testagent:9126
       AEROSPIKE_HOST_ADDRESS: aerospike
+      # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       # Needs to remain on v3 for now due to GLIBC version
       - uses: actions/checkout@v3
@@ -1026,6 +1028,8 @@ jobs:
       PLUGINS: oracledb
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
+      # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
