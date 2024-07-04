@@ -85,7 +85,6 @@ function wrapQuery (query) {
 
       arguments[0] = pgQuery
 
-
       const retval = query.apply(this, arguments)
       const queryQueue = this.queryQueue || this._queryQueue
       const activeQuery = this.activeQuery || this._activeQuery
@@ -142,7 +141,7 @@ function wrapPoolQuery (query) {
 
       const cb = arguments[arguments.length - 1]
 
-      if(abortController.signal.aborted) {
+      if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
         finish()
 
