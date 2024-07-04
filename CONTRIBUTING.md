@@ -95,10 +95,10 @@ $ docker-compose up -d -V --remove-orphans --force-recreate
 $ yarn services
 ```
 
-> **Note**
-> The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
-> that do not compile on ARM64 devices (for example M1/M2 Mac) - their tests
-> cannot be run locally on these devices.
+**Note**
+> The `aerospike`, `couchbase`, `grpc` and `oracledb` instrumentations rely on
+> native modules that do not compile on ARM64 devices (for example M1/M2 Mac)
+> - their tests cannot be run locally on these devices.
 
 ### Unit Tests
 
