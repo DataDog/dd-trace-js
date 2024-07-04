@@ -12,8 +12,9 @@ const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
+// Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
-const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : []
+const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
