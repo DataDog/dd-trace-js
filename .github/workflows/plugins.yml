@@ -627,6 +627,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   http:
+    strategy:
+      matrix:
+        node_version: ['18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -635,11 +638,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/${{ matrix.node_version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
