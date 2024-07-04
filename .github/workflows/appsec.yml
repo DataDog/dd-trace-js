@@ -39,7 +39,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
       - run: yarn install
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@v3
