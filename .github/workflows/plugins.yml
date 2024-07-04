@@ -226,7 +226,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node_version: ['oldest', 'latest']
+        node-version: ['18', 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -267,7 +267,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/${{ matrix.node_version }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -629,7 +631,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node_version: ['18', '20', 'latest']
+        node-version: ['18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -638,7 +640,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/${{ matrix.node_version }}
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
