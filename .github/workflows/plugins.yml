@@ -215,6 +215,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   aws-sdk:
+    strategy:
+      matrix:
+        node-version: ['18', 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -255,9 +258,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -619,6 +622,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   http:
+    strategy:
+      matrix:
+        node-version: ['16', '18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -627,13 +633,9 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/16
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/18
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/20
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
