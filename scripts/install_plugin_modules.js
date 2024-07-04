@@ -17,7 +17,6 @@ const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : 
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
-const names = []
 const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
@@ -29,15 +28,10 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
   }
 }))
 
-fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
-  .filter(file => file.endsWith('js'))
-  .forEach(file => {
-    file = file.replace('.js', '')
-
-    if (!filter || filter.includes(file)) {
-      names.push(file)
-    }
-  })
+const names = fs.readdirSync(path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
+  .filter(file => file.endsWith('.js'))
+  .map(file => file.slice(0, -3))
+  .filter(file => !filter || filter.includes(file))
 
 run()
 
