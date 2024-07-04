@@ -224,6 +224,9 @@ jobs:
       - uses: codecov/codecov-action@v3
 
   aws-sdk:
+    strategy:
+      matrix:
+        node_version: ['oldest', 'latest']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -264,9 +267,7 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - run: yarn install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/node/${{ matrix.node_version }}
       - run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
