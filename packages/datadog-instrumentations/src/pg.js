@@ -53,13 +53,13 @@ function wrapQuery (query) {
     }
 
     return asyncResource.runInAsyncScope(() => {
+      const abortController = new AbortController()
       startCh.publish({
         params: this.connectionParameters,
         query: pgQuery,
-        processId
+        processId,
+        abortController
       })
-
-      arguments[0] = pgQuery
 
       const finish = asyncResource.bind(function (error) {
         if (error) {
@@ -67,6 +67,24 @@ function wrapQuery (query) {
         }
         finishCh.publish()
       })
+
+      if (abortController.signal.aborted) {
+        const error = abortController.signal.reason || new Error('Aborted')
+
+        finish(error)
+
+        const callback = arguments[arguments.length - 1]
+        if (typeof callback === 'function') {
+          callback(error)
+
+          return
+        }
+
+        return Promise.reject(error)
+      }
+
+      arguments[0] = pgQuery
+
 
       const retval = query.apply(this, arguments)
       const queryQueue = this.queryQueue || this._queryQueue
@@ -112,8 +130,10 @@ function wrapPoolQuery (query) {
     const pgQuery = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
 
     return asyncResource.runInAsyncScope(() => {
+      const abortController = new AbortController()
       startPoolQueryCh.publish({
-        query: pgQuery
+        query: pgQuery,
+        abortController
       })
 
       const finish = asyncResource.bind(function () {
@@ -121,6 +141,20 @@ function wrapPoolQuery (query) {
       })
 
       const cb = arguments[arguments.length - 1]
+
+      if(abortController.signal.aborted) {
+        const error = abortController.signal.reason || new Error('Aborted')
+        finish()
+
+        if (typeof cb === 'function') {
+          cb(error)
+
+          return
+        }
+
+        return Promise.reject(error)
+      }
+
       if (typeof cb === 'function') {
         arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
           finish()
