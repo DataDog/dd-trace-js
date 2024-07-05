@@ -68,9 +68,11 @@ jobs:
         run: ./build.sh -i weblog
       - name: Build runner
         uses: ./.github/actions/install_runner
-      - name: Build agent
+      - name: Pull agent
         id: build-agent
-        run: ./build.sh -i agent
+        run: |
+          docker pull ghcr.io/datadog/system-tests/docker/agent:latest
+          docker tag ghcr.io/datadog/system-tests/docker/agent:latest system_tests/agent
       - name: Run scenario ${{ matrix.scenario }}
         run: ./run.sh ${{ matrix.scenario }}
       - name: Compress artifact
