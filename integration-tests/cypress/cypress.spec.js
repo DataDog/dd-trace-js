@@ -39,7 +39,7 @@ const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 
-const moduleType = [
+const moduleTypes = [
   {
     type: 'commonJS',
     testCommand: function commandWithSuffic (version) {
@@ -51,9 +51,9 @@ const moduleType = [
     type: 'esm',
     testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
   }
-]
+].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
-moduleType.forEach(({
+moduleTypes.forEach(({
   type,
   testCommand
 }) => {
