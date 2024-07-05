@@ -255,6 +255,14 @@ describe('SpanStatsProcessor', () => {
     expect(processor.tags).to.deep.equal(config.tags)
   })
 
+  it('should construct a disabled instance if appsec standalone is enabled', () => {
+    const standaloneConfig = { appsec: { standalone: { enabled: true } }, ...config }
+    const processor = new SpanStatsProcessor(standaloneConfig)
+
+    expect(processor.enabled).to.be.false
+    expect(processor.timer).to.be.undefined
+  })
+
   it('should track span stats', () => {
     expect(processor.buckets.size).to.equal(0)
     for (let i = 0; i < n; i++) {
