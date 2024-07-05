@@ -84,13 +84,7 @@ function Hook (modules, options, onrequire) {
       }
 
       if (cacheController.useProxy) {
-        const mod = this
-        const proxy = new Proxy(cache[filename].exports, {
-          get (target, key) {
-            return key === '__getCallerModule' ? () => mod : bind(target[key], proxy)
-          }
-        })
-        return proxy
+        return getProxy(cache[filename].exports, this)
       } else {
         return cache[filename].exports
       }
@@ -202,9 +196,23 @@ Hook.prototype.unhook = function () {
   }
 }
 
-function bind (target, proxy) {
-  // TODO: return a Proxy for objects?
-  if (typeof target !== 'function') return target
+function bindOrProxy (target, proxy, mod) {
+  if (typeof target === 'object') {
+    return getProxy(target, mod)
+  } else if (typeof target === 'function') {
+    return target.bind(proxy)
+  }
 
-  return target.bind(proxy)
+  return target
+}
+
+function getProxy (target, mod) {
+  if (!target) return target
+
+  const proxy = new Proxy(target, {
+    get (target, key) {
+      return key === '__getCallerModule' ? () => mod : bindOrProxy(target[key], proxy, mod)
+    }
+  })
+  return proxy
 }
