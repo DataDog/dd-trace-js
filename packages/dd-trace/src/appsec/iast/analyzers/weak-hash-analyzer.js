@@ -36,13 +36,7 @@ class WeakHashAnalyzer extends Analyzer {
   }
 
   onConfigure () {
-    this.useModuleProxyFor('crypto')
-
-    this.addSub('datadog:crypto:hashing:start', ({ algorithm, caller }) => {
-      if (caller) {
-        this.analyze(algorithm)
-      }
-    })
+    this.addSub('datadog:crypto:hashing:start', ({ algorithm }) => this.analyze(algorithm))
   }
 
   _isVulnerable (algorithm) {
