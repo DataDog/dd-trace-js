@@ -204,7 +204,7 @@ Hook.prototype.unhook = function () {
 
 function bind (target, proxy) {
   // TODO: return a Proxy for objects?
-  if (typeof target !== 'function') return
+  if (typeof target !== 'function') return target
 
-  return target?.bind(proxy)
+  return target.bind(proxy)
 }
