@@ -17,6 +17,7 @@ let patching = Object.create(null)
 let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+const moduleLoadCachedStartChannel = dc.channel('dd-trace:moduleLoadCachedStart')
 
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -73,7 +74,26 @@ function Hook (modules, options, onrequire) {
         return require.cache[filename].exports
       }
 
-      return cache[filename].exports
+      const cacheController = {
+        request,
+        filename,
+        useProxy: false
+      }
+      if (moduleLoadCachedStartChannel.hasSubscribers) {
+        moduleLoadCachedStartChannel.publish({ module: this, cacheController })
+      }
+
+      if (cacheController.useProxy) {
+        const mod = this
+        const proxy = new Proxy(cache[filename].exports, {
+          get (target, key) {
+            return key === '__getModule' ? () => mod : target[key]?.bind(proxy)
+          }
+        })
+        return proxy
+      } else {
+        return cache[filename].exports
+      }
     }
 
     // Check if this module has a patcher in-progress already.
