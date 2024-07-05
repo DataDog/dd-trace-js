@@ -92,6 +92,7 @@ jobs:
         version: [16, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
+        module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -109,6 +110,7 @@ jobs:
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
+          CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
 
   integration-vitest:
     runs-on: ubuntu-latest

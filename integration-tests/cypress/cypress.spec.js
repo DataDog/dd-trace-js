@@ -51,7 +51,7 @@ const moduleType = [
     type: 'esm',
     testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
   }
-]
+].filter(type => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === type)
 
 moduleType.forEach(({
   type,
