@@ -87,7 +87,7 @@ function Hook (modules, options, onrequire) {
         const mod = this
         const proxy = new Proxy(cache[filename].exports, {
           get (target, key) {
-            return key === '__getModule' ? () => mod : target[key]?.bind(proxy)
+            return key === '__getCallerModule' ? () => mod : target[key]?.bind(proxy)
           }
         })
         return proxy
