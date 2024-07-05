@@ -24,10 +24,14 @@ function wrapCryptoMethod (channel) {
     return function () {
       if (channel.hasSubscribers && arguments.length > 0) {
         const algorithm = arguments[0]
-        channel.publish({ algorithm })
+        channel.publish({ algorithm, module: getModule(this) })
       }
       return cryptoMethod.apply(this, arguments)
     }
   }
   return wrapMethod
+}
+
+function getModule (self) {
+  return self?.__getModule ? self.__getModule() : undefined
 }
