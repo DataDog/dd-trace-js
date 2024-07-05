@@ -197,7 +197,7 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './appsec/remote_config': remoteConfig,
+      './remote_config': remoteConfig,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
@@ -322,7 +322,7 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -352,7 +352,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
 
@@ -515,7 +515,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './appsec/remote_config': remoteConfig
+          './remote_config': remoteConfig
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -543,7 +543,7 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './appsec/remote_config': remoteConfig,
+          './remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk,
           './appsec/standalone': standalone,
           './telemetry': telemetry
