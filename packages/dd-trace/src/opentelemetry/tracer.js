@@ -15,7 +15,7 @@ class Tracer {
     this._tracerProvider = tracerProvider
     // Is there a reason this is public?
     this.instrumentationLibrary = library
-    this._spanLimits = {};
+    this._spanLimits = {}
   }
 
   get resource () {
