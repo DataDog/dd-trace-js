@@ -121,7 +121,7 @@ class Tracer {
   }
 
   getSpanLimits() {
-    return this._spanLimits;
+    return this._spanLimits
   }
 }
 
