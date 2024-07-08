@@ -489,5 +489,32 @@ versions.forEach((version) => {
         })
       })
     }
+
+    it('does not crash when maxFailures=1 and there is an error', (done) => {
+      receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), payloads => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const testEvents = events.filter(event => event.type === 'test')
+
+        assert.includeMembers(testEvents.map(test => test.content.resource), [
+          'failing-test-and-another-test.js.should work with failing tests',
+          'failing-test-and-another-test.js.does not crash afterwards'
+        ])
+      }).then(() => done()).catch(done)
+
+      childProcess = exec(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            MAX_FAILURES: 1,
+            TEST_DIR: './ci-visibility/playwright-tests-max-failures'
+          },
+          stdio: 'pipe'
+        }
+      )
+    })
   })
 })
