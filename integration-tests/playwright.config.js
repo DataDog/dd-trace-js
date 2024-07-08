@@ -1,7 +1,7 @@
 // Playwright config file for integration tests
 const { devices } = require('@playwright/test')
 
-module.exports = {
+const config = {
   baseURL: process.env.PW_BASE_URL,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
   timeout: Number(process.env.TEST_TIMEOUT) || 30000,
@@ -17,3 +17,9 @@ module.exports = {
   ],
   testMatch: '**/*-test.js'
 }
+
+if (process.env.MAX_FAILURES) {
+  config.maxFailures = Number(process.env.MAX_FAILURES)
+}
+
+module.exports = config
