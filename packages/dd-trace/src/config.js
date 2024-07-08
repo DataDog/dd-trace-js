@@ -994,15 +994,17 @@ class Config {
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
     // ignore tags for now since rc sampling rule tags format is not supported
-    this._setSamplingRule(opts, 'sampler.rules', this._ignoreTags(options.tracing_sampling_rules))
+    this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
     this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
   }
 
-  _ignoreTags (samplingRules) {
-    if (samplingRules) {
-      for (const rule of samplingRules) {
-        delete rule.tags
+  _reformatTags (samplingRules) {
+    for (const rule of (samplingRules || [])) {
+      const reformattedTags = {}
+      for (const tag of (rule.tags || {})) {
+        reformattedTags[tag.key] = tag.value_glob
       }
+      rule.tags = reformattedTags
     }
     return samplingRules
   }

@@ -1516,14 +1516,17 @@ describe('Config', () => {
     ])
   })
 
-  it('should remove tags from sampling rules when set through remote configuration', () => {
+  it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = new Config()
 
     config.configure({
       tracing_sampling_rules: [
         {
           resource: '*',
-          tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],
+          tags: [
+            { key: 'tag-a', value_glob: 'tag-a-val*' },
+            { key: 'tag-b', value_glob: 'tag-b-val*' }
+          ],
           provenance: 'customer'
         }
       ]
@@ -1532,7 +1535,13 @@ describe('Config', () => {
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
       rateLimit: undefined,
-      rules: [{ resource: '*', provenance: 'customer' }],
+      rules: [
+        {
+          resource: '*',
+          tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
+          provenance: 'customer'
+        }
+      ],
       sampleRate: undefined
     })
   })
