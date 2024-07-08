@@ -81,6 +81,7 @@ benchmark-serverless:
 
 benchmark-serverless-trigger:
   stage: benchmarks
+  needs: []
   trigger:
     project: DataDog/serverless-tools
     strategy: depend
