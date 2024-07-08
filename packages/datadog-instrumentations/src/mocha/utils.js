@@ -258,14 +258,12 @@ function getOnFailHandler (isMain) {
 
 function getOnTestRetryHandler () {
   return function (test) {
-    debugger
     const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       asyncResource.runInAsyncScope(() => {
         testRetryCh.publish()
       })
     }
-    debugger
     const key = getTestToArKey(test)
     // could we simply remove the asyncResource here?
     testToAr.delete(key)
