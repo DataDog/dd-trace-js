@@ -1589,7 +1589,12 @@ describe('mocha CommonJS', function () {
           const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
           assert.equal(failedAttempts.length, 2)
 
-          // TODO: maybe the passed should have retry and the first attempt (if failed), should not
+          // The first attempt is not marked as a retry
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+
+          const passedAttempt = tests.find(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedAttempt.meta[TEST_IS_RETRY], 'true')
         })
 
       childProcess.on('exit', () => {

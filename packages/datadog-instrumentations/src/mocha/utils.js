@@ -211,7 +211,7 @@ function getOnTestEndHandler () {
     // if there are afterEach to be run, we don't finish the test yet
     if (asyncResource && !test.parent._afterEach.length) {
       asyncResource.runInAsyncScope(() => {
-        testFinishCh.publish(status)
+        testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
       })
     }
   }
@@ -230,7 +230,7 @@ function getOnHookEndHandler () {
         const asyncResource = getTestAsyncResource(test)
         if (asyncResource) {
           asyncResource.runInAsyncScope(() => {
-            testFinishCh.publish(status)
+            testFinishCh.publish({ status, hasBeenRetried: isMochaRetry(test) })
           })
         }
       }
@@ -256,7 +256,7 @@ function getOnFailHandler (isMain) {
           err.message = `${testOrHook.fullTitle()}: ${err.message}`
           errorCh.publish(err)
           // if it's a hook and it has failed, 'test end' will not be called
-          testFinishCh.publish('fail')
+          testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test) })
         } else {
           errorCh.publish(err)
         }
@@ -284,12 +284,12 @@ function getOnTestRetryHandler () {
   return function (test) {
     const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
+      const isFirstAttempt = test._currentRetry === 0
       asyncResource.runInAsyncScope(() => {
-        testRetryCh.publish()
+        testRetryCh.publish(isFirstAttempt)
       })
     }
     const key = getTestToArKey(test)
-    // could we simply remove the asyncResource here?
     testToAr.delete(key)
   }
 }

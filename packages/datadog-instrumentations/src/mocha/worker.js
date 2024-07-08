@@ -42,7 +42,6 @@ addHook({
   return Runner
 })
 
-// TODO: does this need `libraryConfig` ?
 // Used both in serial and parallel mode, and by both the main process and the workers
 // Used to set the correct async resource to the test.
 addHook({
@@ -50,3 +49,4 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runnable.js'
 }, runnableWrapper)
+// TODO: parallel mode does not support flaky test retries, so no library config is passed.

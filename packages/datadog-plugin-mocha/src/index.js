@@ -175,13 +175,15 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', (status) => {
+    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
         span.setTag(TEST_STATUS, status)
-
+        if (hasBeenRetried) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
         span.finish()
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
@@ -215,12 +217,14 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:mocha:test:retry', () => {
+    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
       const store = storage.getStore()
       const span = store?.span
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
-        span.setTag(TEST_IS_RETRY, 'true')
+        if (!isFirstAttempt) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
 
         span.finish()
         this.telemetry.ciVisEvent(
