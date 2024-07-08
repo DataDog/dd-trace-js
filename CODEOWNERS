@@ -26,6 +26,7 @@
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest.js @DataDog/ci-app-libraries
 
 /integration-tests/ci-visibility/ @DataDog/ci-app-libraries
 /integration-tests/cucumber/ @DataDog/ci-app-libraries
