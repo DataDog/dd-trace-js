@@ -42,6 +42,7 @@ addHook({
   return Runner
 })
 
+// TODO: does this need `libraryConfig` ?
 // Used both in serial and parallel mode, and by both the main process and the workers
 // Used to set the correct async resource to the test.
 addHook({

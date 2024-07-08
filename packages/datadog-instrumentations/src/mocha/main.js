@@ -43,7 +43,7 @@ let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
-let config = {}
+const config = {}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -232,7 +232,6 @@ addHook({
       earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
       isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
 
-      // TODO: do this better
       config.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
       config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
       config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries

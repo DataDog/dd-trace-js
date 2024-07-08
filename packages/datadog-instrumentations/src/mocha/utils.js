@@ -11,6 +11,8 @@ const shimmer = require('../../../datadog-shimmer')
 // test channels
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
+// after a test has failed, we'll publish to this channel
+const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
 const skipCh = channel('ci:mocha:test:skip')
 
@@ -22,6 +24,8 @@ const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
+
+const NUM_FAILED_TEST_RETRIES = 5
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
@@ -88,25 +92,20 @@ function getTestStatus (test) {
   return 'pass'
 }
 
-function setTestAsyncResource (test, newAsyncResource) {
-  const asyncResourceList = getTestAsyncResource(test)
-  if (asyncResourceList) {
-    asyncResourceList.push(newAsyncResource)
-  } else {
-    testToAr.set(test.fn, [newAsyncResource])
-  }
-}
-
-// this does not work well now because there are multiple tests for the same "test" object
-function getTestAsyncResource (test) {
+function getTestToArKey (test) {
   if (!test.fn) {
-    return testToAr.get(test)
+    return test
   }
   if (!wrappedFunctions.has(test.fn)) {
-    return testToAr.get(test.fn)
+    return test.fn
   }
   const originalFn = originalFns.get(test.fn)
-  return testToAr.get(originalFn)
+  return originalFn
+}
+
+function getTestAsyncResource (test) {
+  const key = getTestToArKey(test)
+  return testToAr.get(key)
 }
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
@@ -114,41 +113,9 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    // TODO: this is probably called multiple times. Maybe we can just do it once
-    // where, though?
-    if (libraryConfig.isFlakyTestRetriesEnabled) {
-      // TODO: change magic number
-      this.retries(5)
+    if (libraryConfig?.isFlakyTestRetriesEnabled) {
+      this.retries(NUM_FAILED_TEST_RETRIES)
     }
-    const isBeforeEach = this.parent._beforeEach.includes(this)
-    const isAfterEach = this.parent._afterEach.includes(this)
-
-    const isTestHook = isBeforeEach || isAfterEach
-
-    // we restore the original user defined function
-    if (wrappedFunctions.has(this.fn)) {
-      const originalFn = originalFns.get(this.fn)
-      this.fn = originalFn
-      wrappedFunctions.delete(this.fn)
-    }
-
-    if (isTestHook || this.type === 'test') {
-      const test = isTestHook ? this.ctx.currentTest : this
-      const asyncResourceList = getTestAsyncResource(test)
-
-      if (asyncResourceList) {
-        const asyncResource = asyncResourceList[test._currentRetry]
-        // we bind the test fn to the correct async resource
-        const newFn = asyncResource.bind(this.fn)
-
-        // we store the original function, not to lose it
-        originalFns.set(newFn, this.fn)
-        this.fn = newFn
-
-        wrappedFunctions.add(this.fn)
-      }
-    }
-
     return run.apply(this, arguments)
   })
   return RunnablePackage
@@ -158,7 +125,23 @@ function getOnTestHandler (isMain, newTests) {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    setTestAsyncResource(test, asyncResource)
+
+    // maybe something with afterEach or beforeEach hooks?
+    if (wrappedFunctions.has(test.fn)) {
+      const originalFn = originalFns.get(test.fn)
+      test.fn = originalFn
+      wrappedFunctions.delete(test.fn)
+    }
+    // now it's restored
+    testToAr.set(test.fn, asyncResource)
+
+    // we bind the test fn to the correct async resource
+    const newFn = asyncResource.bind(test.fn)
+
+    // we store the original function, not to lose it
+    originalFns.set(newFn, test.fn)
+    test.fn = newFn
+    wrappedFunctions.add(test.fn)
 
     const {
       file: testSuiteAbsolutePath,
@@ -198,12 +181,11 @@ function getOnTestHandler (isMain, newTests) {
 
 function getOnTestEndHandler () {
   return function (test) {
-    const asyncResourceList = getTestAsyncResource(test)
+    const asyncResource = getTestAsyncResource(test)
     const status = getTestStatus(test)
 
     // if there are afterEach to be run, we don't finish the test yet
-    if (asyncResourceList && !test.parent._afterEach.length) {
-      const asyncResource = asyncResourceList[test._currentRetry]
+    if (asyncResource && !test.parent._afterEach.length) {
       asyncResource.runInAsyncScope(() => {
         testFinishCh.publish(status)
       })
@@ -221,9 +203,8 @@ function getOnHookEndHandler () {
       }
       if (isLastAfterEach) {
         const status = getTestStatus(test)
-        const asyncResourceList = getTestAsyncResource(test)
-        if (asyncResourceList) {
-          const asyncResource = asyncResourceList[test._currentRetry]
+        const asyncResource = getTestAsyncResource(test)
+        if (asyncResource) {
           asyncResource.runInAsyncScope(() => {
             testFinishCh.publish(status)
           })
@@ -246,7 +227,6 @@ function getOnFailHandler (isMain) {
       testAsyncResource = getTestAsyncResource(test)
     }
     if (testAsyncResource) {
-      testAsyncResource = testAsyncResource[test._currentRetry]
       testAsyncResource.runInAsyncScope(() => {
         if (isHook) {
           err.message = `${testOrHook.fullTitle()}: ${err.message}`
@@ -278,13 +258,17 @@ function getOnFailHandler (isMain) {
 
 function getOnTestRetryHandler () {
   return function (test) {
-    const asyncResourceList = getTestAsyncResource(test)
-    const asyncResource = asyncResourceList[test._currentRetry]
+    debugger
+    const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       asyncResource.runInAsyncScope(() => {
-        testFinishCh.publish('fail')
+        testRetryCh.publish()
       })
     }
+    debugger
+    const key = getTestToArKey(test)
+    // could we simply remove the asyncResource here?
+    testToAr.delete(key)
   }
 }
 
@@ -303,7 +287,7 @@ function getOnPendingHandler () {
       testStartLine
     }
 
-    const [asyncResource] = getTestAsyncResource(test)
+    const asyncResource = getTestAsyncResource(test)
     if (asyncResource) {
       asyncResource.runInAsyncScope(() => {
         skipCh.publish(testInfo)
@@ -313,9 +297,9 @@ function getOnPendingHandler () {
       // or the parent suite is skipped
       const skippedTestAsyncResource = new AsyncResource('bound-anonymous-fn')
       if (test.fn) {
-        testToAr.set(test.fn, [skippedTestAsyncResource])
+        testToAr.set(test.fn, skippedTestAsyncResource)
       } else {
-        testToAr.set(test, [skippedTestAsyncResource])
+        testToAr.set(test, skippedTestAsyncResource)
       }
       skippedTestAsyncResource.runInAsyncScope(() => {
         skipCh.publish(testInfo)

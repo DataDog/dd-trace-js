@@ -215,6 +215,23 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
+    this.addSub('ci:mocha:test:retry', () => {
+      const store = storage.getStore()
+      const span = store?.span
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        span.setTag(TEST_IS_RETRY, 'true')
+
+        span.finish()
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        )
+        finishAllTraceSpans(span)
+      }
+    })
+
     this.addSub('ci:mocha:test:parameterize', ({ title, params }) => {
       this._testTitleToParams[title] = params
     })
