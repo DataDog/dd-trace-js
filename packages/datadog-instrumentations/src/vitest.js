@@ -25,6 +25,11 @@ function isReporterPackage (vitestPackage) {
   return vitestPackage.B?.name === 'BaseSequencer'
 }
 
+// from 2.0.0
+function isReporterPackageNew (vitestPackage) {
+  return vitestPackage.e?.name === 'BaseSequencer'
+}
+
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
@@ -80,6 +85,40 @@ function getTestName (task) {
   return testName
 }
 
+function getSortWrapper (sort) {
+  return async function () {
+    if (!testSessionFinishCh.hasSubscribers) {
+      return sort.apply(this, arguments)
+    }
+    shimmer.wrap(this.ctx, 'exit', exit => async function () {
+      let onFinish
+
+      const flushPromise = new Promise(resolve => {
+        onFinish = resolve
+      })
+      const failedSuites = this.state.getFailedFilepaths()
+      let error
+      if (failedSuites.length) {
+        error = new Error(`Test suites failed: ${failedSuites.length}.`)
+      }
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        testSessionFinishCh.publish({
+          status: getSessionStatus(this.state),
+          onFinish,
+          error
+        })
+      })
+
+      await flushPromise
+
+      return exit.apply(this, arguments)
+    })
+
+    return sort.apply(this, arguments)
+  }
+}
+
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
@@ -126,44 +165,26 @@ addHook({
 
 addHook({
   name: 'vitest',
+  versions: ['>=2.0.0'],
+  filePattern: 'dist/vendor/index.*'
+}, (vitestPackage) => {
+  // there are multiple index* files so we have to check the exported values
+  if (isReporterPackageNew(vitestPackage)) {
+    shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
+  }
+
+  return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
   versions: ['>=1.6.0'],
   filePattern: 'dist/vendor/index.*'
 }, (vitestPackage) => {
   // there are multiple index* files so we have to check the exported values
-  if (!isReporterPackage(vitestPackage)) {
-    return vitestPackage
+  if (isReporterPackage(vitestPackage)) {
+    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
   }
-  shimmer.wrap(vitestPackage.B.prototype, 'sort', sort => async function () {
-    if (!testSessionFinishCh.hasSubscribers) {
-      return sort.apply(this, arguments)
-    }
-    shimmer.wrap(this.ctx, 'exit', exit => async function () {
-      let onFinish
-
-      const flushPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
-      const failedSuites = this.state.getFailedFilepaths()
-      let error
-      if (failedSuites.length) {
-        error = new Error(`Test suites failed: ${failedSuites.length}.`)
-      }
-
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish({
-          status: getSessionStatus(this.state),
-          onFinish,
-          error
-        })
-      })
-
-      await flushPromise
-
-      return exit.apply(this, arguments)
-    })
-
-    return sort.apply(this, arguments)
-  })
 
   return vitestPackage
 })
