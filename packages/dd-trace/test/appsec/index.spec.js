@@ -19,7 +19,6 @@ const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
 const Config = require('../../src/config')
 const axios = require('axios')
-const getPort = require('get-port')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
@@ -33,7 +32,9 @@ const resultActions = {
   }
 }
 
-describe('AppSec Index', () => {
+describe('AppSec Index', function () {
+  this.timeout(5000)
+
   let config
   let AppSec
   let web
@@ -200,7 +201,7 @@ describe('AppSec Index', () => {
     it('should call rasp enable', () => {
       AppSec.enable(config)
 
-      expect(rasp.enable).to.be.calledOnceWithExactly()
+      expect(rasp.enable).to.be.calledOnceWithExactly(config)
     })
 
     it('should not call rasp enable when rasp is disabled', () => {
@@ -978,7 +979,9 @@ describe('AppSec Index', () => {
   })
 })
 
-describe('IP blocking', () => {
+describe('IP blocking', function () {
+  this.timeout(5000)
+
   const invalidIp = '1.2.3.4'
   const validIp = '4.3.2.1'
   const ruleData = {
@@ -1001,11 +1004,6 @@ describe('IP blocking', () => {
 
   let http, appListener, port
   before(() => {
-    return getPort().then(newPort => {
-      port = newPort
-    })
-  })
-  before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
@@ -1017,7 +1015,10 @@ describe('IP blocking', () => {
       res.end(JSON.stringify({ message: 'OK' }))
     })
     appListener = server
-      .listen(port, 'localhost', () => done())
+      .listen(0, 'localhost', () => {
+        port = appListener.address().port
+        done()
+      })
   })
 
   beforeEach(() => {

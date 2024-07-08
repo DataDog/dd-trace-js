@@ -7,15 +7,16 @@ const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const EventEmitter = require('events')
 const childProcess = require('child_process')
-const { fork } = childProcess
+const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
 const http = require('http')
-const fs = require('fs/promises')
+const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
+const assert = require('assert')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 
@@ -79,7 +80,7 @@ class FakeAgent extends EventEmitter {
   // but it't not guaranteed to be the last one (so, expectedMessageCount would not be helpful).
   // It can still fail if it takes longer than `timeout` duration or if none pass the assertions (timeout still called)
   assertMessageReceived (fn, timeout, expectedMessageCount = 1, resolveAtFirstSuccess) {
-    timeout = timeout || 5000
+    timeout = timeout || 30000
     let resultResolve
     let resultReject
     let msgCount = 0
@@ -119,7 +120,7 @@ class FakeAgent extends EventEmitter {
   }
 
   assertTelemetryReceived (fn, timeout, requestType, expectedMessageCount = 1) {
-    timeout = timeout || 5000
+    timeout = timeout || 30000
     let resultResolve
     let resultReject
     let msgCount = 0
@@ -159,6 +160,95 @@ class FakeAgent extends EventEmitter {
     this.on('telemetry', messageHandler)
 
     return resultPromise
+  }
+}
+
+async function runAndCheckOutput (filename, cwd, expectedOut) {
+  const proc = spawn('node', [filename], { cwd, stdio: 'pipe' })
+  const pid = proc.pid
+  let out = await new Promise((resolve, reject) => {
+    proc.on('error', reject)
+    let out = Buffer.alloc(0)
+    proc.stdout.on('data', data => {
+      out = Buffer.concat([out, data])
+    })
+    proc.stderr.pipe(process.stdout)
+    proc.on('exit', () => resolve(out.toString('utf8')))
+    setTimeout(() => {
+      if (proc.exitCode === null) proc.kill()
+    }, 1000) // TODO this introduces flakiness. find a better way to end the process.
+  })
+  if (typeof expectedOut === 'function') {
+    expectedOut(out)
+  } else {
+    if (process.env.DD_TRACE_DEBUG) {
+      // Debug adds this, which we don't care about in these tests
+      out = out.replace('Flushing 0 metrics via HTTP\n', '')
+    }
+    assert.strictEqual(out, expectedOut)
+  }
+  return pid
+}
+
+// This is set by the useSandbox function
+let sandbox
+
+// This _must_ be used with the useSandbox function
+async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelemetryPoints) {
+  const cwd = sandbox.folder
+  const cleanup = telemetryForwarder(expectedTelemetryPoints)
+  const pid = await runAndCheckOutput(filename, cwd, expectedOut)
+  const msgs = await cleanup()
+  if (expectedTelemetryPoints.length === 0) {
+    // assert no telemetry sent
+    try {
+      assert.deepStrictEqual(msgs.length, 0)
+    } catch (e) {
+      // This console.log is useful for debugging telemetry. Plz don't remove.
+      // eslint-disable-next-line no-console
+      console.error('Expected no telemetry, but got:\n', msgs.map(msg => JSON.stringify(msg[1].points)).join('\n'))
+      throw e
+    }
+    return
+  }
+  let points = []
+  for (const [telemetryType, data] of msgs) {
+    assert.strictEqual(telemetryType, 'library_entrypoint')
+    assert.deepStrictEqual(data.metadata, meta(pid))
+    points = points.concat(data.points)
+  }
+  let expectedPoints = getPoints(...expectedTelemetryPoints)
+  // We now have to sort both the expected and actual telemetry points.
+  // This is because data can come in in any order.
+  // We'll just contatenate all the data together for each point and sort them.
+  points = points.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
+  expectedPoints = expectedPoints.map(p => p.name + '\t' + p.tags.join(',')).sort().join('\n')
+  assert.strictEqual(points, expectedPoints)
+
+  function getPoints (...args) {
+    const expectedPoints = []
+    let currentPoint = {}
+    for (const arg of args) {
+      if (!currentPoint.name) {
+        currentPoint.name = 'library_entrypoint.' + arg
+      } else {
+        currentPoint.tags = arg.split(',')
+        expectedPoints.push(currentPoint)
+        currentPoint = {}
+      }
+    }
+    return expectedPoints
+  }
+
+  function meta (pid) {
+    return {
+      language_name: 'nodejs',
+      language_version: process.versions.node,
+      runtime_name: 'nodejs',
+      runtime_version: process.versions.node,
+      tracer_version: require('../package.json').version,
+      pid: Number(pid)
+    }
   }
 }
 
@@ -205,9 +295,9 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   // We might use NODE_OPTIONS to init the tracer. We don't want this to affect this operations
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
-  await fs.mkdir(folder)
-  await exec(`yarn pack --filename ${out}`) // TODO: cache this
-  await exec(`yarn add ${allDependencies.join(' ')}`, { cwd: folder, env: restOfEnv })
+  fs.mkdirSync(folder)
+  await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
+  await exec(`yarn add ${allDependencies.join(' ')} --ignore-engines`, { cwd: folder, env: restOfEnv })
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
@@ -229,7 +319,7 @@ async function createSandbox (dependencies = [], isGitRepo = false,
 
   if (isGitRepo) {
     await exec('git init', { cwd: folder })
-    await fs.writeFile(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
+    fs.writeFileSync(path.join(folder, '.gitignore'), 'node_modules/', { flush: true })
     await exec('git config user.email "john@doe.com"', { cwd: folder })
     await exec('git config user.name "John Doe"', { cwd: folder })
     await exec('git config commit.gpgsign false', { cwd: folder })
@@ -243,6 +333,54 @@ async function createSandbox (dependencies = [], isGitRepo = false,
     folder,
     remove: async () => rimraf(folder)
   }
+}
+
+function telemetryForwarder (expectedTelemetryPoints) {
+  process.env.DD_TELEMETRY_FORWARDER_PATH =
+    path.join(__dirname, 'telemetry-forwarder.sh')
+  process.env.FORWARDER_OUT = path.join(__dirname, `forwarder-${Date.now()}.out`)
+
+  let retries = 0
+
+  const tryAgain = async function () {
+    retries += 1
+    await new Promise(resolve => setTimeout(resolve, 100))
+    return cleanup()
+  }
+
+  const cleanup = function () {
+    let msgs
+    try {
+      msgs = fs.readFileSync(process.env.FORWARDER_OUT, 'utf8').trim().split('\n')
+    } catch (e) {
+      if (expectedTelemetryPoints.length && e.code === 'ENOENT' && retries < 10) {
+        return tryAgain()
+      }
+      return []
+    }
+    for (let i = 0; i < msgs.length; i++) {
+      const [telemetryType, data] = msgs[i].split('\t')
+      if (!data && retries < 10) {
+        return tryAgain()
+      }
+      let parsed
+      try {
+        parsed = JSON.parse(data)
+      } catch (e) {
+        if (!data && retries < 10) {
+          return tryAgain()
+        }
+        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+      }
+      msgs[i] = [telemetryType, parsed]
+    }
+    fs.unlinkSync(process.env.FORWARDER_OUT)
+    delete process.env.FORWARDER_OUT
+    delete process.env.DD_TELEMETRY_FORWARDER_PATH
+    return msgs
+  }
+
+  return cleanup
 }
 
 async function curl (url, useHttp2 = false) {
@@ -313,14 +451,43 @@ async function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, stdio
   }, stdioHandler)
 }
 
+function useEnv (env) {
+  before(() => {
+    Object.assign(process.env, env)
+  })
+  after(() => {
+    for (const key of Object.keys(env)) {
+      delete process.env[key]
+    }
+  })
+}
+
+function useSandbox (...args) {
+  before(async () => {
+    sandbox = await createSandbox(...args)
+  })
+  after(() => {
+    const oldSandbox = sandbox
+    sandbox = undefined
+    return oldSandbox.remove()
+  })
+}
+function sandboxCwd () {
+  return sandbox.folder
+}
+
 module.exports = {
   FakeAgent,
   spawnProc,
+  runAndCheckWithTelemetry,
   createSandbox,
   curl,
   curlAndAssertMessage,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  useEnv,
+  useSandbox,
+  sandboxCwd
 }

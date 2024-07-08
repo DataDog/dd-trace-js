@@ -26,12 +26,18 @@
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest.js @DataDog/ci-app-libraries
 
 /integration-tests/ci-visibility/ @DataDog/ci-app-libraries
 /integration-tests/cucumber/ @DataDog/ci-app-libraries
 /integration-tests/cypress/ @DataDog/ci-app-libraries
 /integration-tests/playwright/ @DataDog/ci-app-libraries
-/integration-tests/ci-visibility.spec.js @DataDog/ci-app-libraries
+/integration-tests/jest/jest.spec.js @DataDog/ci-app-libraries
+/integration-tests/mocha/mocha.spec.js @DataDog/ci-app-libraries
+/integration-tests/playwright/playwright.spec.js @DataDog/ci-app-libraries
+/integration-tests/cucumber/cucumber.spec.js @DataDog/ci-app-libraries
+/integration-tests/cypress/cypress.spec.js @DataDog/ci-app-libraries
+/integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js

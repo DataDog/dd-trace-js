@@ -2,15 +2,16 @@
 
 const Axios = require('axios')
 const agent = require('../plugins/agent')
-const getPort = require('get-port')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const path = require('path')
 const { assert } = require('chai')
 
+function noop () {}
+
 withVersions('express', 'express', expressVersion => {
   describe('RASP', () => {
-    let app, server, port, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['http'], { client: false })
@@ -32,14 +33,12 @@ withVersions('express', 'express', expressVersion => {
         }
       }))
 
-      getPort().then(newPort => {
-        port = newPort
+      server = expressApp.listen(0, () => {
+        const port = server.address().port
         axios = Axios.create({
           baseURL: `http://localhost:${port}`
         })
-        server = expressApp.listen(port, () => {
-          done()
-        })
+        done()
       })
     })
 
@@ -65,7 +64,8 @@ withVersions('express', 'express', expressVersion => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', noop)
               res.end('end')
             }
 
@@ -74,21 +74,27 @@ withVersions('express', 'express', expressVersion => {
             await agent.use((traces) => {
               const span = getWebSpan(traces)
               assert.notProperty(span.meta, '_dd.appsec.json')
+              assert.notProperty(span.meta_struct || {}, '_dd.stack')
             })
           })
 
           it('Should detect threat doing a GET request', async () => {
             app = (req, res) => {
-              require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              clientRequest.on('error', noop)
               res.end('end')
             }
 
-            axios.get('/?host=ifconfig.pro')
+            axios.get('/?host=localhost/ifconfig.pro')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)
               assert.property(span.meta, '_dd.appsec.json')
               assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
+              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+              assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+              assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+              assert.property(span.meta_struct, '_dd.stack')
             })
           })
 
@@ -96,17 +102,22 @@ withVersions('express', 'express', expressVersion => {
             app = (req, res) => {
               const clientRequest = require(protocol)
                 .request(`${protocol}://${req.query.host}`, { method: 'POST' })
+              clientRequest.on('error', noop)
               clientRequest.write('dummy_post_data')
               clientRequest.end()
               res.end('end')
             }
 
-            axios.get('/?host=ifconfig.pro')
+            axios.get('/?host=localhost/ifconfig.pro')
 
             await agent.use((traces) => {
               const span = getWebSpan(traces)
               assert.property(span.meta, '_dd.appsec.json')
               assert(span.meta['_dd.appsec.json'].includes('rasp-ssrf-rule-id-1'))
+              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+              assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+              assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+              assert.property(span.meta_struct, '_dd.stack')
             })
           })
         })

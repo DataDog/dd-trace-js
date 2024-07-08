@@ -249,7 +249,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   testAsyncResource.runInAsyncScope(() => {
     testFinishCh.publish({
       testStatus,
-      steps: testResult.steps,
+      steps: testResult?.steps || [],
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,

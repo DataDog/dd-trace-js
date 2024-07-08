@@ -119,6 +119,11 @@ tracer.init({
     },
     rasp: {
       enabled: true
+    },
+    stackTrace: {
+      enabled: true,
+      maxStackTraces: 5,
+      maxDepth: 42
     }
   }
 });
@@ -134,6 +139,11 @@ tracer.init({
       redactionEnabled: true,
       redactionNamePattern: 'password',
       redactionValuePattern: 'bearer'
+    },
+    appsec: {
+      standalone: {
+        enabled: true
+      }
     }
   }
 })
@@ -217,6 +227,7 @@ const elasticsearchOptions: plugins.elasticsearch = {
 const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
   splitByAwsService: false,
+  batchPropagationEnabled: false,
   hooks: {
     request: (span?: Span, response?) => {},
   },
@@ -352,6 +363,9 @@ tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');
+tracer.use('undici');
+tracer.use('vitest');
+tracer.use('vitest', { service: 'vitest-service' });
 tracer.use('winston');
 
 tracer.use('express', false)

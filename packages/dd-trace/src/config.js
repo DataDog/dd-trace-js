@@ -80,9 +80,9 @@ const fromEntries = Object.fromEntries || (entries =>
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
 // eslint-disable-next-line max-len
-const defaultWafObfuscatorKeyRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization'
+const defaultWafObfuscatorKeyRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key)|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
 // eslint-disable-next-line max-len
-const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
+const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
 const runtimeId = uuid()
 
 function maybeFile (filepath) {
@@ -440,6 +440,10 @@ class Config {
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
+    this._setValue(defaults, 'appsec.standalone.enabled', undefined)
+    this._setValue(defaults, 'appsec.stackTrace.enabled', true)
+    this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
+    this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
@@ -524,10 +528,13 @@ class Config {
       DD_APPSEC_ENABLED,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_MAX_STACK_TRACES,
+      DD_APPSEC_MAX_STACK_TRACE_DEPTH,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP,
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP,
       DD_APPSEC_RULES,
       DD_APPSEC_SCA_ENABLED,
+      DD_APPSEC_STACK_TRACE_ENABLED,
       DD_APPSEC_RASP_ENABLED,
       DD_APPSEC_TRACE_RATE_LIMIT,
       DD_APPSEC_WAF_TIMEOUT,
@@ -536,6 +543,7 @@ class Config {
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
       DD_ENV,
+      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
       JEST_WORKER_ID,
       DD_IAST_DEDUPLICATION_ENABLED,
@@ -627,6 +635,12 @@ class Config {
     this._setString(env, 'appsec.rules', DD_APPSEC_RULES)
     // DD_APPSEC_SCA_ENABLED is never used locally, but only sent to the backend
     this._setBoolean(env, 'appsec.sca.enabled', DD_APPSEC_SCA_ENABLED)
+    this._setBoolean(env, 'appsec.standalone.enabled', DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
+    this._setBoolean(env, 'appsec.stackTrace.enabled', DD_APPSEC_STACK_TRACE_ENABLED)
+    this._setValue(env, 'appsec.stackTrace.maxDepth', maybeInt(DD_APPSEC_MAX_STACK_TRACE_DEPTH))
+    this._envUnprocessed['appsec.stackTrace.maxDepth'] = DD_APPSEC_MAX_STACK_TRACE_DEPTH
+    this._setValue(env, 'appsec.stackTrace.maxStackTraces', maybeInt(DD_APPSEC_MAX_STACK_TRACES))
+    this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
@@ -767,6 +781,12 @@ class Config {
     this._setValue(opts, 'appsec.rateLimit', maybeInt(options.appsec.rateLimit))
     this._optsUnprocessed['appsec.rateLimit'] = options.appsec.rateLimit
     this._setString(opts, 'appsec.rules', options.appsec.rules)
+    this._setBoolean(opts, 'appsec.standalone.enabled', options.experimental?.appsec?.standalone?.enabled)
+    this._setBoolean(opts, 'appsec.stackTrace.enabled', options.appsec.stackTrace?.enabled)
+    this._setValue(opts, 'appsec.stackTrace.maxDepth', maybeInt(options.appsec.stackTrace?.maxDepth))
+    this._optsUnprocessed['appsec.stackTrace.maxDepth'] = options.appsec.stackTrace?.maxDepth
+    this._setValue(opts, 'appsec.stackTrace.maxStackTraces', maybeInt(options.appsec.stackTrace?.maxStackTraces))
+    this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec.stackTrace?.maxStackTraces
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)

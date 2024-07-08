@@ -7,6 +7,7 @@ const { storage } = require('../../datadog-core')
 const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
+const { estimateTokens } = require('./token-estimator')
 
 // String#replaceAll unavailable on Node.js@v14 (dd-trace@<=v3)
 const RE_NEWLINE = /\n/g
@@ -15,13 +16,16 @@ const RE_TAB = /\t/g
 // TODO: In the future we should refactor config.js to make it requirable
 let MAX_TEXT_LEN = 128
 
-let encodingForModel
-try {
-  // eslint-disable-next-line import/no-extraneous-dependencies
-  encodingForModel = require('tiktoken').encoding_for_model
-} catch {
-  // we will use token count estimations in this case
+function safeRequire (path) {
+  try {
+    // eslint-disable-next-line import/no-extraneous-dependencies
+    return require(path)
+  } catch {
+    return null
+  }
 }
+
+const encodingForModel = safeRequire('tiktoken')?.encoding_for_model
 
 class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
@@ -305,6 +309,7 @@ class OpenApiPlugin extends TracingPlugin {
   }
 
   sendLog (methodName, span, tags, store, error) {
+    if (!store) return
     if (!Object.keys(store).length) return
     if (!this.sampler.isSampled()) return
 
@@ -325,9 +330,22 @@ function countPromptTokens (methodName, payload, model) {
     const messages = payload.messages
     for (const message of messages) {
       const content = message.content
-      const { tokens, estimated } = countTokens(content, model)
-      promptTokens += tokens
-      promptEstimated = estimated
+      if (typeof content === 'string') {
+        const { tokens, estimated } = countTokens(content, model)
+        promptTokens += tokens
+        promptEstimated = estimated
+      } else if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c.type === 'text') {
+            const { tokens, estimated } = countTokens(c.text, model)
+            promptTokens += tokens
+            promptEstimated = estimated
+          }
+          // unsupported token computation for image_url
+          // as even though URL is a string, its true token count
+          // is based on the image itself, something onerous to do client-side
+        }
+      }
     }
   } else if (methodName === 'completions.create') {
     let prompt = payload.prompt
@@ -382,25 +400,6 @@ function countTokens (content, model) {
   }
 }
 
-// If model is unavailable or tiktoken is not imported, then provide a very rough estimate of the number of tokens
-// Approximate using the following assumptions:
-//    * English text
-//    * 1 token ~= 4 chars
-//    * 1 token ~= ¾ words
-function estimateTokens (content) {
-  let estimatedTokens = 0
-  if (typeof content === 'string') {
-    const estimation1 = content.length / 4
-
-    const matches = content.match(/[\w']+|[.,!?;~@#$%^&*()+/-]/g)
-    const estimation2 = matches ? matches.length * 0.75 : 0 // in the case of an empty string
-    estimatedTokens = Math.round((1.5 * estimation1 + 0.5 * estimation2) / 2)
-  } else if (Array.isArray(content) && typeof content[0] === 'number') {
-    estimatedTokens = content.length
-  }
-  return estimatedTokens
-}
-
 function createEditRequestExtraction (tags, payload, store) {
   const instruction = payload.instruction
   tags['openai.request.instruction'] = instruction
@@ -418,7 +417,7 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   store.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
-    tags[`openai.request.messages.${i}.content`] = truncateText(message.content)
+    tagChatCompletionRequestContent(message.content, i, tags)
     tags[`openai.request.messages.${i}.role`] = message.role
     tags[`openai.request.messages.${i}.name`] = message.name
     tags[`openai.request.messages.${i}.finish_reason`] = message.finish_reason
@@ -707,7 +706,7 @@ function commonCreateResponseExtraction (tags, body, store, methodName) {
   for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
     const choice = body.choices[choiceIdx]
 
-    // logprobs can be nullm and we still want to tag it as 'returned' even when set to 'null'
+    // logprobs can be null and we still want to tag it as 'returned' even when set to 'null'
     const specifiesLogProb = Object.keys(choice).indexOf('logprobs') !== -1
 
     tags[`openai.response.choices.${choiceIdx}.finish_reason`] = choice.finish_reason
@@ -781,6 +780,7 @@ function truncateApiKey (apiKey) {
  */
 function truncateText (text) {
   if (!text) return
+  if (typeof text !== 'string' || !text || (typeof text === 'string' && text.length === 0)) return
 
   text = text
     .replace(RE_NEWLINE, '\\n')
@@ -791,6 +791,28 @@ function truncateText (text) {
   }
 
   return text
+}
+
+function tagChatCompletionRequestContent (contents, messageIdx, tags) {
+  if (typeof contents === 'string') {
+    tags[`openai.request.messages.${messageIdx}.content`] = contents
+  } else if (Array.isArray(contents)) {
+    // content can also be an array of objects
+    // which represent text input or image url
+    for (const contentIdx in contents) {
+      const content = contents[contentIdx]
+      const type = content.type
+      tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.type`] = content.type
+      if (type === 'text') {
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.text`] = truncateText(content.text)
+      } else if (type === 'image_url') {
+        tags[`openai.request.messages.${messageIdx}.content.${contentIdx}.image_url.url`] =
+          truncateText(content.image_url.url)
+      }
+      // unsupported type otherwise, won't be tagged
+    }
+  }
+  // unsupported type otherwise, won't be tagged
 }
 
 // The server almost always responds with JSON

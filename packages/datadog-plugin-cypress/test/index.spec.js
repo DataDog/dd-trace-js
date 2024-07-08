@@ -1,5 +1,4 @@
 'use strict'
-const getPort = require('get-port')
 const { expect } = require('chai')
 const semver = require('semver')
 
@@ -31,15 +30,16 @@ describe('Plugin', function () {
   let agentListenPort
   this.retries(2)
   withVersions('cypress', 'cypress', (version, moduleName) => {
-    beforeEach(function () {
+    beforeEach(() => {
+      return agent.load()
+    })
+    beforeEach(function (done) {
       this.timeout(10000)
-      return agent.load().then(() => {
-        agentListenPort = agent.server.address().port
-        cypressExecutable = require(`../../../versions/cypress@${version}`).get()
-        return getPort().then(port => {
-          appPort = port
-          appServer.listen(appPort)
-        })
+      agentListenPort = agent.server.address().port
+      cypressExecutable = require(`../../../versions/cypress@${version}`).get()
+      appServer.listen(0, () => {
+        appPort = appServer.address().port
+        done()
       })
     })
     afterEach(() => agent.close({ ritmReset: false }))

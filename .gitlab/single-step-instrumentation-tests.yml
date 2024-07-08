@@ -1,0 +1,91 @@
+.base_job_onboarding_tests:
+
+  image: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/test-infra-definitions/runner:a58cc31c
+  tags: ["arch:amd64"]
+  before_script:
+    # Setup AWS Credentials for dd-trace-rb.
+    - mkdir -p ~/.aws
+    - aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.agent-qa-profile --with-decryption --query "Parameter.Value" --out text >> ~/.aws/config
+    - export DD_API_KEY_ONBOARDING=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.dd-api-key-onboarding --with-decryption --query "Parameter.Value" --out text)
+    - export DD_APP_KEY_ONBOARDING=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.dd-app-key-onboarding --with-decryption --query "Parameter.Value" --out text)
+    - export ONBOARDING_AWS_INFRA_SUBNET_ID=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.aws-infra-subnet-id --with-decryption --query "Parameter.Value" --out text)
+    - export ONBOARDING_AWS_INFRA_SECURITY_GROUPS_ID=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.aws-infra-securiy-groups-id --with-decryption --query "Parameter.Value" --out text)
+    - export ONBOARDING_AWS_INFRA_IAM_INSTANCE_PROFILE=ec2InstanceRole
+    - export PULUMI_CONFIG_PASSPHRASE=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.pulumi-config-passphrase --with-decryption --query "Parameter.Value" --out text) 
+    #Install plugins for PULUMI you need connect to gh. Sometimes this problem arises: GitHub rate limit exceeded
+    - export GITHUB_TOKEN=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.gh-token --with-decryption --query "Parameter.Value" --out text) 
+    #Avoid dockerhub rate limits
+    - export DOCKER_LOGIN=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.docker-login --with-decryption --query "Parameter.Value" --out text) 
+    - export DOCKER_LOGIN_PASS=$(aws ssm get-parameter --region us-east-1 --name ci.dd-trace-js.docker-login-pass --with-decryption --query "Parameter.Value" --out text) 
+
+    - export AWS_PROFILE=agent-qa-ci
+    - pulumi login --local #"s3://dd-pulumi-state?region=us-east-1&awssdk=v2&profile=$AWS_PROFILE"
+    - pulumi plugin install resource command 0.7.2
+    - pulumi plugin install resource aws 5.41.0
+
+  after_script:
+    - echo "After onboarding script"
+    - cd system-tests
+    - mkdir -p reports
+    - cp -R logs_*/ reports/
+  
+  artifacts:
+      when: always
+      paths:
+        - system-tests/reports/
+
+onboarding_tests:
+  extends: .base_job_onboarding_tests
+  stage: single-step-instrumentation-tests
+  needs: [package-snapshot,package-snapshot-arm]
+  rules:
+    - if: $JS_PACKAGE_VERSION
+      when: never
+    - if: '$CI_COMMIT_TAG =~ /^v.*/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      when: on_success
+      allow_failure: true
+    - when: manual
+      allow_failure: true
+  allow_failure: false
+  variables:
+    TEST_LIBRARY: nodejs
+    ONBOARDING_FILTER_ENV: prod
+  parallel:
+      matrix:
+        - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs]
+          SCENARIO: [SIMPLE_HOST_AUTO_INJECTION_PROFILING]
+        - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs-container]
+          SCENARIO: [SIMPLE_CONTAINER_AUTO_INJECTION]
+  script:
+    - git clone https://git@github.com/DataDog/system-tests.git system-tests
+    - cp packaging/*.rpm system-tests/binaries
+    - cp packaging/*.deb system-tests/binaries
+    - ls system-tests/binaries
+    - cd system-tests
+    - ./build.sh -i runner
+    - timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-skip-branches ubuntu18_amd64
+
+onboarding_tests_installer:
+  extends: .base_job_onboarding_tests
+  stage: single-step-instrumentation-tests
+  needs: [oci-internal-test-ecr-publish]
+  rules:
+    - when: on_success
+      allow_failure: true
+  allow_failure: false
+  variables:
+    TEST_LIBRARY: nodejs
+    ONBOARDING_FILTER_ENV: prod
+  parallel:
+      matrix:
+        - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
+          SCENARIO: [INSTALLER_AUTO_INJECTION]
+  script:
+    - git clone https://git@github.com/DataDog/system-tests.git system-tests
+    - export DD_INSTALLER_LIBRARY_VERSION="pipeline-${CI_PIPELINE_ID}"
+    - ls system-tests/binaries
+    - cd system-tests
+    - ./build.sh -i runner
+    - timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-skip-branches ubuntu18_amd64

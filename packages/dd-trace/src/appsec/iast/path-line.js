@@ -3,6 +3,7 @@
 const path = require('path')
 const process = require('process')
 const { calculateDDBasePath } = require('../../util')
+const { getCallSiteList } = require('../stack_trace')
 const pathLine = {
   getFirstNonDDPathAndLine,
   getNodeModulesPaths,
@@ -23,24 +24,6 @@ const EXCLUDED_PATH_PREFIXES = [
   'node:async_hooks',
   'async_hooks'
 ]
-
-function getCallSiteInfo () {
-  const previousPrepareStackTrace = Error.prepareStackTrace
-  const previousStackTraceLimit = Error.stackTraceLimit
-  let callsiteList
-  Error.stackTraceLimit = 100
-  try {
-    Error.prepareStackTrace = function (_, callsites) {
-      callsiteList = callsites
-    }
-    const e = new Error()
-    e.stack
-  } finally {
-    Error.prepareStackTrace = previousPrepareStackTrace
-    Error.stackTraceLimit = previousStackTraceLimit
-  }
-  return callsiteList
-}
 
 function getFirstNonDDPathAndLineFromCallsites (callsites, externallyExcludedPaths) {
   if (callsites) {
@@ -91,7 +74,7 @@ function isExcluded (callsite, externallyExcludedPaths) {
 }
 
 function getFirstNonDDPathAndLine (externallyExcludedPaths) {
-  return getFirstNonDDPathAndLineFromCallsites(getCallSiteInfo(), externallyExcludedPaths)
+  return getFirstNonDDPathAndLineFromCallsites(getCallSiteList(), externallyExcludedPaths)
 }
 
 function getNodeModulesPaths (...paths) {

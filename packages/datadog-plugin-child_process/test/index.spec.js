@@ -34,6 +34,10 @@ describe('Child process plugin', () => {
       tracerStub = {
         startSpan: sinon.stub()
       }
+
+      configStub = {
+        service: 'test-service'
+      }
     })
 
     afterEach(() => {
@@ -52,7 +56,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
@@ -74,7 +78,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
@@ -98,7 +102,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'echo',
               'span.kind': undefined,
               'span.type': 'system',
@@ -123,7 +127,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',
@@ -149,7 +153,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'ls',
               'span.kind': undefined,
               'span.type': 'system',
@@ -175,7 +179,7 @@ describe('Child process plugin', () => {
             childOf: undefined,
             tags: {
               component: 'subprocess',
-              'service.name': undefined,
+              'service.name': 'test-service',
               'resource.name': 'sh',
               'span.kind': undefined,
               'span.type': 'system',

@@ -2,10 +2,15 @@ stages:
   - shared-pipeline
   - benchmarks
   - benchmarks-pr-comment
+  - single-step-instrumentation-tests
+  - manual_images
+  - macrobenchmarks
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/single-step-instrumentation-tests.yml"
+  - local: ".gitlab/macrobenchmarks.yml"
 
 variables:
   # dd-trace-js has some exceptions to the default names
