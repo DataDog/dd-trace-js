@@ -113,9 +113,41 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testStartCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+    // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(NUM_FAILED_TEST_RETRIES)
     }
+    // The reason why the wrapping logic is here is because we need to cover
+    // `afterEach` and `beforeEach` hooks as well.
+    // It can't be done in `getOnTestHandler` because it's only called for tests.
+    const isBeforeEach = this.parent._beforeEach.includes(this)
+    const isAfterEach = this.parent._afterEach.includes(this)
+
+    const isTestHook = isBeforeEach || isAfterEach
+
+    // we restore the original user defined function
+    if (wrappedFunctions.has(this.fn)) {
+      const originalFn = originalFns.get(this.fn)
+      this.fn = originalFn
+      wrappedFunctions.delete(this.fn)
+    }
+
+    if (isTestHook || this.type === 'test') {
+      const test = isTestHook ? this.ctx.currentTest : this
+      const asyncResource = getTestAsyncResource(test)
+
+      if (asyncResource) {
+        // we bind the test fn to the correct async resource
+        const newFn = asyncResource.bind(this.fn)
+
+        // we store the original function, not to lose it
+        originalFns.set(newFn, this.fn)
+        this.fn = newFn
+
+        wrappedFunctions.add(this.fn)
+      }
+    }
+
     return run.apply(this, arguments)
   })
   return RunnablePackage
@@ -126,22 +158,14 @@ function getOnTestHandler (isMain, newTests) {
     const testStartLine = testToStartLine.get(test)
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    // maybe something with afterEach or beforeEach hooks?
+    // This may be a retry. If this is the case, `test.fn` is already wrapped,
+    // so we need to restore it.
     if (wrappedFunctions.has(test.fn)) {
       const originalFn = originalFns.get(test.fn)
       test.fn = originalFn
       wrappedFunctions.delete(test.fn)
     }
-    // now it's restored
     testToAr.set(test.fn, asyncResource)
-
-    // we bind the test fn to the correct async resource
-    const newFn = asyncResource.bind(test.fn)
-
-    // we store the original function, not to lose it
-    originalFns.set(newFn, test.fn)
-    test.fn = newFn
-    wrappedFunctions.add(test.fn)
 
     const {
       file: testSuiteAbsolutePath,
