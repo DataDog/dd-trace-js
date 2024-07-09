@@ -57,7 +57,7 @@ onboarding_tests:
         - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs]
           SCENARIO: [SIMPLE_HOST_AUTO_INJECTION_PROFILING]
         - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs-container]
-          SCENARIO: [SIMPLE_CONTAINER_AUTO_INJECTION]
+          SCENARIO: [SIMPLE_CONTAINER_AUTO_INJECTION_PROFILING]
   script:
     - git clone https://git@github.com/DataDog/system-tests.git system-tests
     - cp packaging/*.rpm system-tests/binaries
