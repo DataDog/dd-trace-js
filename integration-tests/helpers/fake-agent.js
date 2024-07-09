@@ -13,8 +13,7 @@ module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
     this.port = port
-    this._rcFiles = {}
-    this._rcTargetsVersion = 0
+    this.resetRemoteConfig()
   }
 
   async start () {
@@ -95,11 +94,12 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   /**
-   * Remove any existing config added by calls to FakeAgent#addRemoteConfig.
+   * Reset any existing Remote Config state. Usefull in `before` and `beforeEach` blocks.
    */
   resetRemoteConfig () {
     this._rcFiles = {}
-    this._rcTargetsVersion++
+    this._rcTargetsVersion = 0
+    this._rcSeenStates = new Set()
   }
 
   // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
@@ -216,12 +216,22 @@ function buildExpressServer (agent) {
       console.error(state.error) // eslint-disable-line no-console
     }
 
-    for (const { apply_error: error } of state.config_states) {
-      if (error) {
+    for (const cs of state.config_states) {
+      const uniqueState = `${cs.id}-${cs.version}-${cs.apply_state}`
+      if (!agent._rcSeenStates.has(uniqueState)) {
+        agent.emit('remote-config-ack-update', cs.id, cs.version, cs.apply_state, cs.apply_error)
+        agent._rcSeenStates.add(uniqueState)
+      }
+
+      if (cs.apply_error) {
         // Print the error sent by the client in case it's useful in debugging tests
-        console.error(error) // eslint-disable-line no-console
+        console.error(cs.apply_error) // eslint-disable-line no-console
       }
     }
+
+    res.on('close', () => {
+      agent.emit('remote-confg-responded')
+    })
 
     if (agent._rcTargetsVersion === state.targets_version) {
       // If the state hasn't changed since the last time the client asked, just return an empty result
@@ -269,6 +279,22 @@ function buildExpressServer (agent) {
       targets: clientConfigs.length === 0 ? undefined : base64(targets),
       target_files: targetFiles,
       client_configs: clientConfigs
+    })
+  })
+
+  app.post('/debugger/v1/input', (req, res) => {
+    res.status(200).send()
+    agent.emit('debugger-input', {
+      headers: req.headers,
+      payload: req.body
+    })
+  })
+
+  app.post('/debugger/v1/diagnostics', upload.any(), (req, res) => {
+    res.status(200).send()
+    agent.emit('debugger-diagnostics', {
+      headers: req.headers,
+      payload: JSON.parse(req.files[0].buffer.toString())
     })
   })
 

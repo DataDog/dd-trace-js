@@ -1,0 +1,136 @@
+'use strict'
+
+const { workerData: { rcPort } } = require('node:worker_threads')
+const { getScript, probes, breakpoints } = require('./state')
+const session = require('./session')
+const { ackReceived, ackInstalled, ackError } = require('./status')
+const log = require('../../log')
+
+let sessionStarted = false
+
+// Example log line probe (simplified):
+// {
+//   id: '100c9a5c-45ad-49dc-818b-c570d31e11d1',
+//   version: 0,
+//   type: 'LOG_PROBE',
+//   where: { sourceFile: 'index.js', lines: ['25'] }, // only use first array element
+//   template: 'Hello World 2',
+//   segments: [...],
+//   captureSnapshot: true,
+//   capture: { maxReferenceDepth: 1 },
+//   sampling: { snapshotsPerSecond: 1 },
+//   evaluateAt: 'EXIT' // only used for method probes
+// }
+//
+// Example log method probe (simplified):
+// {
+//   id: 'd692ee6d-5734-4df7-9d86-e3bc6449cc8c',
+//   version: 0,
+//   type: 'LOG_PROBE',
+//   where: { typeName: 'index.js', methodName: 'handlerA' },
+//   template: 'Executed index.js.handlerA, it took {@duration}ms',
+//   segments: [...],
+//   captureSnapshot: false,
+//   capture: { maxReferenceDepth: 3 },
+//   sampling: { snapshotsPerSecond: 5000 },
+//   evaluateAt: 'EXIT' // only used for method probes
+// }
+rcPort.on('message', async ({ action, conf: probe, ackId }) => {
+  try {
+    await processMsg(action, probe)
+    rcPort.postMessage({ ackId })
+  } catch (err) {
+    rcPort.postMessage({ ackId, error: err })
+    ackError(err, probe)
+  }
+})
+
+async function start () {
+  sessionStarted = true
+  await session.post('Debugger.enable')
+}
+
+async function stop () {
+  sessionStarted = false
+  await session.post('Debugger.disable')
+}
+
+async function processMsg (action, probe) {
+  log.debug(`Received request to ${action} ${probe.type} probe (id: ${probe.id}, version: ${probe.version})`)
+
+  if (action !== 'unapply') ackReceived(probe)
+
+  if (probe.type !== 'LOG_PROBE') {
+    throw new Error(`Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`)
+  }
+  if (!probe.where.sourceFile && !probe.where.lines) {
+    throw new Error(
+      // eslint-disable-next-line max-len
+      `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
+    )
+  }
+
+  switch (action) {
+    case 'unapply':
+      await removeBreakpoint(probe)
+      break
+    case 'apply':
+      await addBreakpoint(probe)
+      break
+    case 'modify':
+      // TODO: Can we modify in place?
+      await removeBreakpoint(probe)
+      await addBreakpoint(probe)
+      break
+    default:
+      throw new Error(
+        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
+      )
+  }
+}
+
+async function addBreakpoint (probe) {
+  if (!sessionStarted) await start()
+
+  const file = probe.where.sourceFile
+  const line = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
+
+  // Optimize for sending data to /debugger/v1/input endpoint
+  probe.location = { file, lines: [line] }
+  delete probe.where
+
+  const script = getScript(file)
+  if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
+  const [path, scriptId] = script
+
+  log.debug(`Adding breakpoint at ${path}:${line} (probe: ${probe.id}, version: ${probe.version})`)
+
+  const { breakpointId } = await session.post('Debugger.setBreakpoint', {
+    location: {
+      scriptId,
+      lineNumber: line - 1 // Beware! lineNumber is zero-indexed
+    }
+  })
+
+  probes.set(probe.id, breakpointId)
+  breakpoints.set(breakpointId, probe)
+
+  ackInstalled(probe)
+}
+
+async function removeBreakpoint ({ id }) {
+  if (!sessionStarted) {
+    // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
+    throw Error(`Cannot remove probe ${id}: Debugger not started`)
+  }
+  if (!probes.has(id)) {
+    throw Error(`Unknown probe id: ${id}`)
+  }
+
+  const breakpointId = probes.get(id)
+  await session.post('Debugger.removeBreakpoint', { breakpointId })
+  probes.delete(id)
+  breakpoints.delete(breakpointId)
+
+  if (breakpoints.size === 0) await stop()
+}
