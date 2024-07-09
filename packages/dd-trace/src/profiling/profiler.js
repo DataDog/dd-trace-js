@@ -69,7 +69,7 @@ class Profiler extends EventEmitter {
       setLogger(config.logger)
 
       mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.SourceMap && config.debugSourceMaps) {
+      if (config.sourceMap && config.debugSourceMaps) {
         this._logger.debug(() => {
           return mapper.infoMap.size === 0
             ? 'Found no source maps'
