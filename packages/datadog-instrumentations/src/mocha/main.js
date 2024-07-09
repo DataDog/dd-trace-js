@@ -21,6 +21,7 @@ const {
   runnableWrapper,
   getOnTestHandler,
   getOnTestEndHandler,
+  getOnTestRetryHandler,
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
@@ -37,10 +38,12 @@ let isSuitesSkipped = false
 let skippedSuites = []
 let isEarlyFlakeDetectionEnabled = false
 let isSuitesSkippingEnabled = false
+let isFlakyTestRetriesEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
+const config = {}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -227,6 +230,12 @@ addHook({
       isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
       isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
       earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+      isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+
+      config.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+      config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
+      config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+      config.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
 
       if (isEarlyFlakeDetectionEnabled) {
         knownTestsCh.publish({
@@ -317,6 +326,8 @@ addHook({
 
     this.on('test end', getOnTestEndHandler())
 
+    this.on('retry', getOnTestRetryHandler())
+
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())
 
@@ -401,7 +412,7 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/runnable.js'
-}, runnableWrapper)
+}, (runnablePackage) => runnableWrapper(runnablePackage, config))
 
 // Only used in parallel mode (--parallel flag is passed)
 // Used to generate suite events and receive test payloads from workers

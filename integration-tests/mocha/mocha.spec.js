@@ -1552,4 +1552,56 @@ describe('mocha CommonJS', function () {
       })
     })
   })
+
+  context('flaky test retries', () => {
+    it('retries failed tests automatically', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 3) // two failed retries and then the pass
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedAttempts.length, 2)
+
+          // The first attempt is not marked as a retry
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+
+          const passedAttempt = tests.find(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedAttempt.meta[TEST_IS_RETRY], 'true')
+        })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
 })
