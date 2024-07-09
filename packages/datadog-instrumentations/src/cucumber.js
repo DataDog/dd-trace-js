@@ -187,12 +187,13 @@ function wrapRun (pl, isLatestVersion) {
     })
     try {
       this.eventBroadcaster.on('envelope', (testCase) => {
+        // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
           if (willBeRetried) { // test case failed and will be retried
-            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt++)
+            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
             failedAttemptAsyncResource.runInAsyncScope(() => {
-              testRetryCh.publish() // the current span will be finished and a new one will be created
+              testRetryCh.publish(numAttempt++ > 0) // the current span will be finished and a new one will be created
             })
 
             const newAsyncResource = new AsyncResource('bound-anonymous-fn')
@@ -231,7 +232,7 @@ function wrapRun (pl, isLatestVersion) {
         const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
 
         attemptAsyncResource.runInAsyncScope(() => {
-          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry })
+          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
         })
       })
       return promise

@@ -195,10 +195,12 @@ class CucumberPlugin extends CiPlugin {
       this.enter(testSpan, store)
     })
 
-    this.addSub('ci:cucumber:test:retry', () => {
+    this.addSub('ci:cucumber:test:retry', (isFlakyRetry) => {
       const store = storage.getStore()
       const span = store.span
-      // span.setTag(TEST_IS_RETRY, 'true') // TODO: not quite
+      if (isFlakyRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+      }
       span.setTag(TEST_STATUS, 'fail')
       span.finish()
       finishAllTraceSpans(span)
@@ -248,7 +250,15 @@ class CucumberPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage, isNew, isEfdRetry }) => {
+    this.addSub('ci:cucumber:test:finish', ({
+      isStep,
+      status,
+      skipReason,
+      errorMessage,
+      isNew,
+      isEfdRetry,
+      isFlakyRetry
+    }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -267,6 +277,10 @@ class CucumberPlugin extends CiPlugin {
 
       if (errorMessage) {
         span.setTag(ERROR_MESSAGE, errorMessage)
+      }
+
+      if (isFlakyRetry > 0) {
+        span.setTag(TEST_IS_RETRY, 'true')
       }
 
       span.finish()
