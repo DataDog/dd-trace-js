@@ -6,6 +6,7 @@ const vulnerabilities = require('../../vulnerabilities')
 const { contains, intersects, remove } = require('./range-utils')
 
 const commandSensitiveAnalyzer = require('./sensitive-analyzers/command-sensitive-analyzer')
+const evalInjectionSensitiveAnalyzer = require('./sensitive-analyzers/eval-injection-sensitive-analyzer')
 const hardcodedPasswordAnalyzer = require('./sensitive-analyzers/hardcoded-password-analyzer')
 const headerSensitiveAnalyzer = require('./sensitive-analyzers/header-sensitive-analyzer')
 const jsonSensitiveAnalyzer = require('./sensitive-analyzers/json-sensitive-analyzer')
@@ -24,6 +25,7 @@ class SensitiveHandler {
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
+    this._sensitiveAnalyzers.set(vulnerabilities.EVAL_INJECTION, evalInjectionSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
     this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
@@ -211,7 +213,7 @@ class SensitiveHandler {
     isSensibleSource
   ) {
     if (sourceIndex != null) {
-      const placeholder = source.value.includes(partValue)
+      const placeholder = source.value?.includes(partValue)
         ? source.pattern
         : '*'.repeat(length)
 
