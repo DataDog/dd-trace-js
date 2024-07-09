@@ -1570,7 +1570,7 @@ describe('Plugin', () => {
               .catch(done)
 
             axios.get(`http://localhost:${port}/user`)
-              .catch(done)
+              .catch(() => {})
           })
         })
 

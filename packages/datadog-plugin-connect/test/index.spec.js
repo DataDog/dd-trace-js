@@ -8,6 +8,8 @@ const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/c
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
+require('../../dd-trace/test/setup/test')
+
 describe('Plugin', () => {
   let tracer
   let connect
@@ -228,7 +230,7 @@ describe('Plugin', () => {
 
               done()
             }
-          })
+          }).unref()
 
           app.use((req, res, next) => {
             handler = next
