@@ -216,7 +216,7 @@ class Config {
     options = this.options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iastOptions: options.experimental?.iast
+      iast: options.iast != null ? options.iast : options.experimental?.iast
     }
 
     checkIfBothOtelAndDdEnvVarSet()
@@ -858,23 +858,23 @@ class Config {
     this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
-    this._setBoolean(opts, 'iast.deduplicationEnabled', options.iastOptions && options.iastOptions.deduplicationEnabled)
+    this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
-      options.iastOptions && (options.iastOptions === true || options.iastOptions.enabled === true))
+      options.iast && (options.iast === true || options.iast.enabled === true))
     this._setValue(opts, 'iast.maxConcurrentRequests',
-      maybeInt(options.iastOptions?.maxConcurrentRequests))
-    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iastOptions?.maxConcurrentRequests
-    this._setValue(opts, 'iast.maxContextOperations', maybeInt(options.iastOptions?.maxContextOperations))
-    this._optsUnprocessed['iast.maxContextOperations'] = options.iastOptions?.maxContextOperations
-    this._setBoolean(opts, 'iast.redactionEnabled', options.iastOptions?.redactionEnabled)
-    this._setString(opts, 'iast.redactionNamePattern', options.iastOptions?.redactionNamePattern)
-    this._setString(opts, 'iast.redactionValuePattern', options.iastOptions?.redactionValuePattern)
-    const iastRequestSampling = maybeInt(options.iastOptions?.requestSampling)
+      maybeInt(options.iast?.maxConcurrentRequests))
+    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iast?.maxConcurrentRequests
+    this._setValue(opts, 'iast.maxContextOperations', maybeInt(options.iast?.maxContextOperations))
+    this._optsUnprocessed['iast.maxContextOperations'] = options.iast?.maxContextOperations
+    this._setBoolean(opts, 'iast.redactionEnabled', options.iast?.redactionEnabled)
+    this._setString(opts, 'iast.redactionNamePattern', options.iast?.redactionNamePattern)
+    this._setString(opts, 'iast.redactionValuePattern', options.iast?.redactionValuePattern)
+    const iastRequestSampling = maybeInt(options.iast?.requestSampling)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
-      this._optsUnprocessed['iast.requestSampling'] = options.iastOptions?.requestSampling
+      this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    this._setString(opts, 'iast.telemetryVerbosity', options.iastOptions && options.iastOptions.telemetryVerbosity)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
@@ -904,7 +904,7 @@ class Config {
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
     const hasTelemetryLogsUsingFeatures =
-      (options.iastOptions && (options.iastOptions === true || options.iastOptions?.enabled === true)) ||
+      (options.iast && (options.iast === true || options.iast?.enabled === true)) ||
       (options.profiling && options.profiling === true)
     this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)

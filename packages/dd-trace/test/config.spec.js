@@ -1093,12 +1093,7 @@ describe('Config', () => {
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false,
-        iast: {
-          enabled: true,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN'
-        }
+        enableGetRumData: false
       },
       appsec: {
         enabled: true,
@@ -1125,6 +1120,11 @@ describe('Config', () => {
           maxDepth: 42,
           maxStackTraces: 5
         }
+      },
+      iast: {
+        enabled: true,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
       remoteConfig: {
         pollInterval: 42
@@ -1210,6 +1210,17 @@ describe('Config', () => {
           requestSampling: 1.0
         }
       },
+      iast: {
+        enabled: true,
+        requestSampling: 15,
+        maxConcurrentRequests: 3,
+        maxContextOperations: 4,
+        deduplicationEnabled: false,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        telemetryVerbosity: 'DEBUG'
+      },
       experimental: {
         appsec: {
           enabled: false,
@@ -1228,6 +1239,17 @@ describe('Config', () => {
             enabled: false,
             requestSampling: 0.5
           }
+        },
+        iast: {
+          enabled: false,
+          requestSampling: 25,
+          maxConcurrentRequests: 6,
+          maxContextOperations: 7,
+          deduplicationEnabled: true,
+          redactionEnabled: true,
+          redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
+          telemetryVerbosity: 'OFF'
         }
       }
     })
@@ -1264,6 +1286,18 @@ describe('Config', () => {
         maxStackTraces: 2,
         maxDepth: 32
       }
+    })
+
+    expect(config).to.have.deep.property('iast', {
+      enabled: true,
+      requestSampling: 15,
+      maxConcurrentRequests: 3,
+      maxContextOperations: 4,
+      deduplicationEnabled: false,
+      redactionEnabled: false,
+      redactionNamePattern: 'REDACTION_NAME_PATTERN',
+      redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+      telemetryVerbosity: 'DEBUG'
     })
   })
 
