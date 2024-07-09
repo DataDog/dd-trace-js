@@ -23,3 +23,17 @@ onboarding_tests_installer:
 onboarding_tests_k8s_injection:
   variables:
     WEBLOG_VARIANT: sample-app
+  script:
+    - cd /system-tests
+    - git pull # update to most recent system-tests
+    - git checkout robertomonteromiguel/debug_kubernetes
+    - ./build.sh -i runner # rebuild running in case there were changes
+    - source venv/bin/activate
+    - python --version
+    - pip freeze
+    - echo "Check command line - Create cluster"
+    - ./debug_kind-config.sh
+    - echo "Check command line - kubectl"
+    - kubectl get pods
+    - echo "Run tests"
+    - ./run.sh K8S_LIB_INJECTION_BASIC
