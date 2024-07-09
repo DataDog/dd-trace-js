@@ -6,10 +6,14 @@ const Config = require('../../../src/config')
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
+const { channel } = require('dc-polyfill')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 const { expect } = require('chai')
+
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
 
 describe('TextMapPropagator', () => {
   let TextMapPropagator
@@ -319,6 +323,26 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.not.have.property('x-datadog-origin')
       expect(carrier).to.not.have.property('x-datadog-tags')
     })
+
+    it('should publish spanContext and carrier', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('0000000000000123'),
+        spanId: id('0000000000000456')
+      })
+
+      const onSpanInject = sinon.stub()
+      injectCh.subscribe(onSpanInject)
+
+      propagator.inject(spanContext, carrier)
+
+      try {
+        expect(onSpanInject).to.be.calledOnce
+        expect(onSpanInject.firstCall.args[0]).to.be.deep.equal({ spanContext, carrier })
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
   })
 
   describe('extract', () => {
@@ -521,6 +545,49 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(carrier)
 
       expect(spanContext._tracestate).to.be.undefined
+    })
+
+    it('extracts span_id from tracecontext headers and stores datadog parent-id in trace_distributed_tags', () => {
+      textMap['x-datadog-trace-id'] = '61185'
+      textMap['x-datadog-parent-id'] = '15'
+      textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+      expect(parseInt(spanContext._spanId.toString(), 16)).to.equal(73456)
+      expect(parseInt(spanContext._traceId.toString(), 16)).to.equal(61185)
+      expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '000000000000000f')
+    })
+
+    it('extracts span_id from tracecontext headers and stores p value from tracestate in trace_distributed_tags',
+      () => {
+        textMap['x-datadog-trace-id'] = '61185'
+        textMap['x-datadog-parent-id'] = '15'
+        textMap.traceparent = '00-0000000000000000000000000000ef01-0000000000011ef0-01'
+        textMap.tracestate = 'other=bleh,dd=p:0000000000000001;s:2;o:foo;t.dm:-4'
+        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+
+        const carrier = textMap
+        const spanContext = propagator.extract(carrier)
+        expect(parseInt(spanContext._spanId.toString(), 16)).to.equal(73456)
+        expect(parseInt(spanContext._traceId.toString(), 16)).to.equal(61185)
+        expect(spanContext._trace.tags).to.have.property('_dd.parent_id', '0000000000000001')
+      })
+
+    it('should publish spanContext and carrier', () => {
+      const onSpanExtract = sinon.stub()
+      extractCh.subscribe(onSpanExtract)
+
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      try {
+        expect(onSpanExtract).to.be.calledOnce
+        expect(onSpanExtract.firstCall.args[0]).to.be.deep.equal({ spanContext, carrier })
+      } finally {
+        extractCh.unsubscribe(onSpanExtract)
+      }
     })
 
     describe('with B3 propagation as multiple headers', () => {

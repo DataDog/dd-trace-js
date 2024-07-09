@@ -64,11 +64,17 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       span.setTag('region', region)
     })
 
-    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response }) => {
+    this.addSub(`apm:aws:request:complete:${this.serviceIdentifier}`, ({ response, cbExists = false }) => {
       const store = storage.getStore()
       if (!store) return
       const { span } = store
       if (!span) return
+      // try to extract DSM context from response if no callback exists as extraction normally happens in CB
+      if (!cbExists && this.serviceIdentifier === 'sqs') {
+        const params = response.request.params
+        const operation = response.request.operation
+        this.responseExtractDSMContext(operation, params, response.data, span)
+      }
       this.addResponseTags(span, response)
       this.finish(span, response, response.error)
     })
@@ -159,6 +165,7 @@ function normalizeConfig (config, serviceIdentifier) {
 
   return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
+    batchPropagationEnabled: config.batchPropagationEnabled !== false,
     hooks
   })
 }

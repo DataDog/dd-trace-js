@@ -3,6 +3,7 @@
 const log = require('../../log')
 const Reporter = require('../reporter')
 const addresses = require('../addresses')
+const { getBlockingAction } = require('../blocking')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
@@ -18,7 +19,7 @@ class WAFContextWrapper {
     this.addressesToSkip = new Set()
   }
 
-  run ({ persistent, ephemeral }) {
+  run ({ persistent, ephemeral }, raspRuleType) {
     const payload = {}
     let payloadHasData = false
     const inputs = {}
@@ -60,7 +61,8 @@ class WAFContextWrapper {
       this.addressesToSkip = newAddressesToSkip
 
       const ruleTriggered = !!result.events?.length
-      const blockTriggered = result.actions?.includes('block')
+
+      const blockTriggered = !!getBlockingAction(result.actions)
 
       Reporter.reportMetrics({
         duration: result.totalRuntime / 1e3,
@@ -70,7 +72,7 @@ class WAFContextWrapper {
         blockTriggered,
         wafVersion: this.wafVersion,
         wafTimeout: result.timeout
-      })
+      }, raspRuleType)
 
       if (ruleTriggered) {
         Reporter.reportAttack(JSON.stringify(result.events))

@@ -30,11 +30,25 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
+  # We'll run these separately for earlier (i.e. unsupported) versions
+  integration-guardrails:
+    strategy:
+      matrix:
+        version: [12, 14, 16]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.version }}
+      - run: yarn install --ignore-engines
+      - run: node node_modules/.bin/mocha --colors --timeout 30000 -r packages/dd-trace/test/setup/core.js integration-tests/init.spec.js
+
   integration-ci:
     strategy:
       matrix:
         version: [18, latest]
-        framework: [cucumber, playwright, selenium]
+        framework: [cucumber, playwright, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -78,6 +92,7 @@ jobs:
         version: [16, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
+        module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -94,6 +109,24 @@ jobs:
       - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
+          NODE_OPTIONS: '-r ./ci/init'
+          CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
+
+  integration-vitest:
+    runs-on: ubuntu-latest
+    env:
+      DD_SERVICE: dd-trace-js-integration-tests
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY_CI_APP }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 20
+      - run: yarn test:integration:vitest
+        env:
           NODE_OPTIONS: '-r ./ci/init'
 
   lint:
@@ -112,3 +145,4 @@ jobs:
       - run: yarn install
       - run: yarn type:test
       - run: yarn type:doc
+

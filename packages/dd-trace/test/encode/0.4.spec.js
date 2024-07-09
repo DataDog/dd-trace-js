@@ -185,6 +185,21 @@ describe('encode', () => {
     })
   })
 
+  it('should encode span events', () => {
+    const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
+    '{"name":"I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx","time_unix_nano":1633023102000000,' +
+    '"attributes":{"emotion":"happy","rating":9.8,"other":[1,9.5,1],"idol":false}}]'
+
+    data[0].meta.events = encodedLink
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { codec })
+    const trace = decoded[0]
+    expect(trace[0].meta.events).to.deep.equal(encodedLink)
+  })
+
   it('should encode spanLinks', () => {
     const traceIdHigh = id('10')
     const traceId = id('1234abcd1234abcd')
@@ -234,5 +249,217 @@ describe('encode', () => {
     expect(trace[0].name).to.equal(data[0].name)
     expect(trace[0].meta).to.deep.equal({ bar: 'baz', '_dd.span_links': encodedLink })
     expect(trace[0].metrics).to.deep.equal({ example: 1 })
+  })
+
+  describe('meta_struct', () => {
+    it('should encode meta_struct with simple key value object', () => {
+      const metaStruct = {
+        foo: 'bar',
+        baz: 123
+      }
+      data[0].meta_struct = metaStruct
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.be.equal(metaStruct.foo)
+      expect(msgpack.decode(trace[0].meta_struct.baz)).to.be.equal(metaStruct.baz)
+    })
+
+    it('should ignore array in meta_struct', () => {
+      const metaStruct = ['one', 2, 'three', 4, 5, 'six']
+      data[0].meta_struct = metaStruct
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+      expect(trace[0].meta_struct).to.deep.equal({})
+    })
+
+    it('should encode meta_struct with empty object and array', () => {
+      const metaStruct = {
+        foo: {},
+        bar: []
+      }
+      data[0].meta_struct = metaStruct
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(metaStruct.foo)
+      expect(msgpack.decode(trace[0].meta_struct.bar)).to.deep.equal(metaStruct.bar)
+    })
+
+    it('should encode meta_struct with possible real use case', () => {
+      const metaStruct = {
+        '_dd.stack': {
+          exploit: [
+            {
+              type: 'test',
+              language: 'nodejs',
+              id: 'someuuid',
+              message: 'Threat detected',
+              frames: [
+                {
+                  id: 0,
+                  file: 'test.js',
+                  line: 1,
+                  column: 31,
+                  function: 'test'
+                },
+                {
+                  id: 1,
+                  file: 'test2.js',
+                  line: 54,
+                  column: 77,
+                  function: 'test'
+                },
+                {
+                  id: 2,
+                  file: 'test.js',
+                  line: 1245,
+                  column: 41,
+                  function: 'test'
+                },
+                {
+                  id: 3,
+                  file: 'test3.js',
+                  line: 2024,
+                  column: 32,
+                  function: 'test'
+                }
+              ]
+            }
+          ]
+        }
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+      expect(msgpack.decode(trace[0].meta_struct['_dd.stack'])).to.deep.equal(metaStruct['_dd.stack'])
+    })
+
+    it('should encode meta_struct ignoring circular references in objects', () => {
+      const circular = {
+        bar: 'baz',
+        deeper: {
+          foo: 'bar'
+        }
+      }
+      circular.deeper.circular = circular
+      const metaStruct = {
+        foo: circular
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: {
+          bar: 'baz',
+          deeper: {
+            foo: 'bar'
+          }
+        }
+      }
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+    })
+
+    it('should encode meta_struct ignoring circular references in arrays', () => {
+      const circular = [{
+        bar: 'baz'
+      }]
+      circular.push(circular)
+      const metaStruct = {
+        foo: circular
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: [{
+          bar: 'baz'
+        }]
+      }
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+    })
+
+    it('should encode meta_struct ignoring undefined properties', () => {
+      const metaStruct = {
+        foo: 'bar',
+        undefinedProperty: undefined
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: 'bar'
+      }
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+      expect(trace[0].meta_struct.undefinedProperty).to.be.undefined
+    })
+
+    it('should encode meta_struct ignoring null properties', () => {
+      const metaStruct = {
+        foo: 'bar',
+        nullProperty: null
+      }
+      data[0].meta_struct = metaStruct
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      const expectedMetaStruct = {
+        foo: 'bar'
+      }
+      expect(msgpack.decode(trace[0].meta_struct.foo)).to.deep.equal(expectedMetaStruct.foo)
+      expect(trace[0].meta_struct.nullProperty).to.be.undefined
+    })
+
+    it('should not encode null meta_struct', () => {
+      data[0].meta_struct = null
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+
+      const decoded = msgpack.decode(buffer, { codec })
+      const trace = decoded[0]
+
+      expect(trace[0].meta_struct).to.be.undefined
+    })
   })
 })

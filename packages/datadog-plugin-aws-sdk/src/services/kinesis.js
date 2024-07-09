@@ -52,7 +52,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
         // extract DSM context after as we might not have a parent-child but may have a DSM context
         this.responseExtractDSMContext(
-          request.operation, response, span || null, streamName
+          request.operation, request.params, response, span || null, { streamName }
         )
       }
     })
@@ -100,7 +100,8 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
   }
 
-  responseExtractDSMContext (operation, response, span, streamName) {
+  responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
+    const { streamName } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'getRecords') return
     if (!response || !response.Records || !response.Records[0]) return
@@ -151,7 +152,12 @@ class Kinesis extends BaseAwsSdkPlugin {
       case 'putRecords':
         stream = params.StreamArn ? params.StreamArn : (params.StreamName ? params.StreamName : '')
         for (let i = 0; i < params.Records.length; i++) {
-          this.injectToMessage(span, params.Records[i], stream, i === 0)
+          this.injectToMessage(
+            span,
+            params.Records[i],
+            stream,
+            i === 0 || (this.config.kinesis && this.config.kinesis.batchPropagationEnabled)
+          )
         }
     }
   }

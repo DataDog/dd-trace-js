@@ -2,8 +2,8 @@
 
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
-/packages/dd-trace/src/lambda/ @DataDog/serverless
-/packages/dd-trace/test/lambda/ @DataDog/serverless
+/packages/dd-trace/src/lambda/ @DataDog/serverless-aws
+/packages/dd-trace/test/lambda/ @DataDog/serverless-aws
 
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
@@ -26,12 +26,18 @@
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/vitest.js @DataDog/ci-app-libraries
 
 /integration-tests/ci-visibility/ @DataDog/ci-app-libraries
 /integration-tests/cucumber/ @DataDog/ci-app-libraries
 /integration-tests/cypress/ @DataDog/ci-app-libraries
 /integration-tests/playwright/ @DataDog/ci-app-libraries
-/integration-tests/ci-visibility.spec.js @DataDog/ci-app-libraries
+/integration-tests/jest/jest.spec.js @DataDog/ci-app-libraries
+/integration-tests/mocha/mocha.spec.js @DataDog/ci-app-libraries
+/integration-tests/playwright/playwright.spec.js @DataDog/ci-app-libraries
+/integration-tests/cucumber/cucumber.spec.js @DataDog/ci-app-libraries
+/integration-tests/cypress/cypress.spec.js @DataDog/ci-app-libraries
+/integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
 
 /packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
@@ -42,7 +48,7 @@
 /.github/workflows/ci-visibility-performance.yml @DataDog/ci-app-libraries
 /.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
 /.github/workflows/core.yml @DataDog/dd-trace-js
-/.github/workflows/lambda.yml @DataDog/serverless-apm
+/.github/workflows/lambda.yml @DataDog/serverless-aws
 /.github/workflows/package-size.yml @DataDog/dd-trace-js
 /.github/workflows/plugins.yml @DataDog/dd-trace-js
 /.github/workflows/pr-labels.yml @DataDog/dd-trace-js
@@ -52,8 +58,7 @@
 /.github/workflows/release-dev.yml @DataDog/dd-trace-js
 /.github/workflows/release-latest.yml @DataDog/dd-trace-js
 /.github/workflows/release-proposal.yml @DataDog/dd-trace-js
-/.github/workflows/serverless-integration-test.yml @DataDog/serverless
-/.github/workflows/serverless-performance.yml @DataDog/serverless-apm @DataDog/serverless
+/.github/workflows/serverless-integration-test.yml @DataDog/serverless-aws @DataDog/serverless
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
 /.github/workflows/tracing.yml @DataDog/dd-trace-js

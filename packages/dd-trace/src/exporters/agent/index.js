@@ -7,7 +7,7 @@ const Writer = require('./writer')
 class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
-    const { url, hostname, port, lookup, protocolVersion, stats = {} } = config
+    const { url, hostname, port, lookup, protocolVersion, stats = {}, appsec } = config
     this._url = url || new URL(format({
       protocol: 'http:',
       hostname: hostname || 'localhost',
@@ -15,7 +15,7 @@ class AgentExporter {
     }))
 
     const headers = {}
-    if (stats.enabled) {
+    if (stats.enabled || appsec?.standalone?.enabled) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 

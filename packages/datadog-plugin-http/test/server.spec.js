@@ -1,7 +1,5 @@
 'use strict'
 
-const { AbortController } = require('node-abort-controller') // AbortController is not available in node <15
-const getPort = require('get-port')
 const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
@@ -24,12 +22,6 @@ describe('Plugin', () => {
           res.writeHead(200)
           res.end()
         }
-      })
-
-      beforeEach(() => {
-        return getPort().then(newPort => {
-          port = newPort
-        })
       })
 
       afterEach(() => {
@@ -59,7 +51,10 @@ describe('Plugin', () => {
         beforeEach(done => {
           const server = new http.Server(listener)
           appListener = server
-            .listen(port, 'localhost', () => done())
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
         })
 
         it('should send traces to agent', (done) => {

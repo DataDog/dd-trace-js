@@ -54,7 +54,7 @@ class ChildProcessPlugin extends TracingPlugin {
     }
 
     this.startSpan('command_execution', {
-      service: this.config.service,
+      service: this.config.service || this._tracerConfig.service,
       resource: (shell === true) ? 'sh' : cmdFields[0],
       type: 'system',
       meta

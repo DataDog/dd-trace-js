@@ -113,9 +113,15 @@ interface Tracer extends opentracing.Tracer {
   wrap<T = (...args: any[]) => any> (name: string, options: (...args: any[]) => tracer.TraceOptions & tracer.SpanOptions, fn: T): T;
 
   /**
-   * Create and return a string that can be included in the <head> of a
-   * document to enable RUM tracing to include it. The resulting string
-   * should not be cached.
+   * Returns an HTML string containing <meta> tags that should be included in
+   * the <head> of a document to enable correlating the current trace with the
+   * RUM view. Otherwise, it is not possible to associate the trace used to
+   * generate the initial HTML document with a given RUM view. The resulting
+   * HTML document should not be cached as the meta tags are time-sensitive
+   * and are associated with a specific user.
+   *
+   * Note that this feature is currently not supported by the backend and
+   * using it will have no effect.
    */
   getRumData (): string;
 
@@ -144,6 +150,7 @@ interface Plugins {
   "aws-sdk": tracer.plugins.aws_sdk;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
+  "child_process": tracer.plugins.child_process;
   "connect": tracer.plugins.connect;
   "couchbase": tracer.plugins.couchbase;
   "cucumber": tracer.plugins.cucumber;
@@ -190,6 +197,8 @@ interface Plugins {
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
+  "undici": tracer.plugins.undici;
+  "vitest": tracer.plugins.vitest;
   "winston": tracer.plugins.winston;
 }
 
@@ -548,6 +557,19 @@ declare namespace tracer {
          */
         redactionValuePattern?: string
       }
+
+      appsec?: {
+        /**
+         * Configuration of Standalone ASM mode
+         */
+        standalone?: {
+          /**
+           * Whether to enable Standalone ASM.
+           * @default false
+           */
+          enabled?: boolean
+        }
+      }
     };
 
     /**
@@ -683,6 +705,34 @@ declare namespace tracer {
          * @default 0.1
          */
         requestSampling?: number
+      },
+      /**
+       * Configuration for RASP
+       */
+      rasp?: {
+        /** Whether to enable RASP.
+         * @default false
+         */
+        enabled?: boolean
+      },
+      /**
+       * Configuration for stack trace reporting
+       */
+      stackTrace?: {
+        /** Whether to enable stack trace reporting.
+         * @default true
+         */
+        enabled?: boolean,
+
+        /** Specifies the maximum number of stack traces to be reported.
+         * @default 2
+         */
+        maxStackTraces?: number,
+
+        /** Specifies the maximum depth of a stack trace to be reported.
+         * @default 32
+         */
+        maxDepth?: number,
       }
     };
 
@@ -1174,6 +1224,13 @@ declare namespace tracer {
       splitByAwsService?: boolean;
 
       /**
+       * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
+       * behavior is to inject the first message in batch send operations.
+       * @default false
+       */
+      batchPropagationEnabled?: boolean;
+
+      /**
        * Hooks to run before spans are finished.
        */
       hooks?: {
@@ -1206,6 +1263,12 @@ declare namespace tracer {
      * [cassandra-driver](https://github.com/datastax/nodejs-driver) module.
      */
     interface cassandra_driver extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [child_process](https://nodejs.org/api/child_process.html) module.
+     */
+    interface child_process extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -1501,7 +1564,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [jest](https://github.com/facebook/jest) module.
+     * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
 
@@ -1777,6 +1840,18 @@ declare namespace tracer {
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [undici](https://github.com/nodejs/undici) module.
+     */
+    interface undici extends HttpClient {}
+
+    /**
+     * This plugin automatically instruments the
+     * [vitest](https://github.com/vitest-dev/vitest) module.
+     */
+    interface vitest extends Integration {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)

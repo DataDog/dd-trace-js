@@ -15,6 +15,7 @@ function enable (config, appsec) {
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
   rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
+  rc.updateCapabilities(RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
 
   const activation = Activation.fromConfig(config)
 
@@ -70,6 +71,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, true)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
@@ -91,6 +93,7 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_DD_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXCLUSIONS, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_REQUEST_BLOCKING, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RESPONSE_BLOCKING, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_RULES, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)

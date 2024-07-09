@@ -1,0 +1,110 @@
+{
+  "version": "2.2",
+  "metadata": {
+    "rules_version": "1.5.0"
+  },
+  "rules": [
+    {
+      "id": "test-rule-id-1",
+      "name": "test-rule-name-1",
+      "tags": {
+        "type": "security_scanner1",
+        "category": "attack_attempt1"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.status"
+              }
+            ],
+            "regex": "^404$",
+            "options": {
+              "case_sensitive": true
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.headers.no_cookies"
+              }
+            ],
+            "regex": "^404$",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ],
+      "on_match": [
+        "block"
+      ]
+    },
+    {
+      "id": "test-rule-id-2",
+      "name": "test-rule-name-2",
+      "tags": {
+        "type": "security_scanner2",
+        "category": "attack_attempt2"
+      },
+      "conditions": [
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.headers.no_cookies"
+              }
+            ],
+            "regex": "^bad1$",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.headers.no_cookies"
+              }
+            ],
+            "regex": "^bad2$",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        },
+        {
+          "operator": "match_regex",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.response.headers.no_cookies"
+              }
+            ],
+            "regex": "^bad3$",
+            "options": {
+              "case_sensitive": false
+            }
+          }
+        }
+      ],
+      "transformers": [
+        "lowercase"
+      ],
+      "on_match": [
+        "block"
+      ]
+    }
+  ]
+}

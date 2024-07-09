@@ -26,7 +26,11 @@ function loadInst (plugin) {
     loadInstFile(`${plugin}/server.js`, instrumentations)
     loadInstFile(`${plugin}/client.js`, instrumentations)
   } catch (e) {
-    loadInstFile(`${plugin}.js`, instrumentations)
+    try {
+      loadInstFile(`${plugin}/main.js`, instrumentations)
+    } catch (e) {
+      loadInstFile(`${plugin}.js`, instrumentations)
+    }
   }
 
   return instrumentations
@@ -81,7 +85,8 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it('should conform to the naming schema', () => {
+        it('should conform to the naming schema', function () {
+          this.timeout(10000)
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {
@@ -143,10 +148,12 @@ function withNamingSchema (
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
   describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
+
     beforeEach(() => {
       const plugin = tracer()._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
+
     afterEach(() => {
       computePeerServiceSpy.restore()
     })

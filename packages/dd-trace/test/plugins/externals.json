@@ -247,6 +247,12 @@
       "versions": [">=2"]
     }
   ],
+  "lodash": [
+    {
+      "name": "lodash",
+      "versions": [">=4"]
+    }
+  ],
   "mariadb": [
     {
       "name": "mariadb",

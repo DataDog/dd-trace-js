@@ -23,7 +23,7 @@ class Sqs extends BaseAwsSdkPlugin {
       const plugin = this
       const contextExtraction = this.responseExtract(request.params, request.operation, response)
       let span
-      let parsedMessageAttributes
+      let parsedMessageAttributes = null
       if (contextExtraction && contextExtraction.datadogContext) {
         obj.needsFinish = true
         const options = {
@@ -39,8 +39,9 @@ class Sqs extends BaseAwsSdkPlugin {
         this.enter(span, store)
       }
       // extract DSM context after as we might not have a parent-child but may have a DSM context
+
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, parsedMessageAttributes || null
+        request.operation, request.params, response, span || null, { parsedMessageAttributes }
       )
     })
 
@@ -165,7 +166,8 @@ class Sqs extends BaseAwsSdkPlugin {
     }
   }
 
-  responseExtractDSMContext (operation, params, response, span, parsedAttributes) {
+  responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
+    let { parsedAttributes } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
     if (!response || !response.Messages || !response.Messages[0]) return
@@ -188,7 +190,7 @@ class Sqs extends BaseAwsSdkPlugin {
             // SQS to SQS
           }
         }
-        if (message.MessageAttributes && message.MessageAttributes._datadog) {
+        if (!parsedAttributes && message.MessageAttributes && message.MessageAttributes._datadog) {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }
@@ -216,7 +218,23 @@ class Sqs extends BaseAwsSdkPlugin {
         break
       case 'sendMessageBatch':
         for (let i = 0; i < params.Entries.length; i++) {
-          this.injectToMessage(span, params.Entries[i], params.QueueUrl, i === 0)
+          this.injectToMessage(
+            span,
+            params.Entries[i],
+            params.QueueUrl,
+            i === 0 || (this.config.sqs && this.config.sqs.batchPropagationEnabled)
+          )
+        }
+        break
+      case 'receiveMessage':
+        if (!params.MessageAttributeNames) {
+          params.MessageAttributeNames = ['_datadog']
+        } else if (
+          !params.MessageAttributeNames.includes('_datadog') &&
+          !params.MessageAttributeNames.includes('.*') &&
+          !params.MessageAttributeNames.includes('All')
+        ) {
+          params.MessageAttributeNames.push('_datadog')
         }
         break
     }

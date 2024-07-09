@@ -31,7 +31,10 @@ function newStore () {
   return {
     [DD_TELEMETRY_REQUEST_METRICS]: {
       duration: 0,
-      durationExt: 0
+      durationExt: 0,
+      raspDuration: 0,
+      raspDurationExt: 0,
+      raspEvalCount: 0
     }
   }
 }
@@ -74,6 +77,28 @@ function getOrCreateMetricTags (store, versionsTags) {
     store[DD_TELEMETRY_WAF_RESULT_TAGS] = metricTags
   }
   return metricTags
+}
+
+function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
+  if (!req) return
+
+  const store = getStore(req)
+
+  // it does not depend on whether telemetry is enabled or not
+  addRaspRequestMetrics(store, metrics)
+
+  if (!enabled) return
+
+  const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
+  appsecMetrics.count('appsec.rasp.rule.eval', tags).inc(1)
+
+  if (metrics.wafTimeout) {
+    appsecMetrics.count('appsec.rasp.timeout', tags).inc(1)
+  }
+
+  if (metrics.ruleTriggered) {
+    appsecMetrics.count('appsec.rasp.rule.match', tags).inc(1)
+  }
 }
 
 function updateWafRequestsMetricTags (metrics, req) {
@@ -141,6 +166,12 @@ function addRequestMetrics (store, { duration, durationExt }) {
   store[DD_TELEMETRY_REQUEST_METRICS].durationExt += durationExt || 0
 }
 
+function addRaspRequestMetrics (store, { duration, durationExt }) {
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDuration += duration || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspDurationExt += durationExt || 0
+  store[DD_TELEMETRY_REQUEST_METRICS].raspEvalCount++
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -153,6 +184,7 @@ module.exports = {
   disable,
 
   updateWafRequestsMetricTags,
+  updateRaspRequestsMetricTags,
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
   incrementWafRequestsMetric,
