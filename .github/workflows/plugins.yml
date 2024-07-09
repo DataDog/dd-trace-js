@@ -15,62 +15,6 @@ concurrency:
 
 
 jobs:
-  aerospike-node-14:
-    runs-on: ubuntu-latest
-    container:
-      image: ubuntu:18.04
-    services:
-      aerospike:
-        image: aerospike:ce-5.3.0.16
-        ports:
-          - 3000:3000
-      testagent:
-        image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.16.0
-        env:
-          LOG_LEVEL: DEBUG
-          TRACE_LANGUAGE: javascript
-          ENABLED_CHECKS: trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
-          PORT: 9126
-        ports:
-          - 9126:9126
-    env:
-      PLUGINS: aerospike
-      SERVICES: aerospike
-      PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
-      DD_TEST_AGENT_URL: http://testagent:9126
-      AEROSPIKE_HOST_ADDRESS: aerospike
-      # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-    steps:
-      # Needs to remain on v3 for now due to GLIBC version
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '14'
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - id: extract
-        run: |
-          version="${{fromJson(steps.pkg.outputs.json).version}}"
-          majorVersion=$(echo "$version" | cut -d '.' -f 1)
-          echo "Major Version: $majorVersion"
-          echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
-      - name: Install dependencies and run tests
-        if: env.MAJOR_VERSION == '3'
-        run: |
-          apt-get update && \
-          apt-get install -y \
-            python3 python3-pip \
-            wget \
-            g++ libssl1.0.0 libssl-dev zlib1g-dev && \
-          npm install -g yarn
-          yarn install --ignore-engines
-          yarn test:plugins:ci
-      - if: always()
-        uses: codecov/codecov-action@v2
-
   aerospike-node-16:
     runs-on: ubuntu-latest
     services:
