@@ -33,6 +33,8 @@ onboarding_tests_k8s_injection:
     - pip freeze
     - echo "Check command line - Create cluster"
     - ./debug_kind-config.sh
+    - echo "Get cluster info"
+    - kubectl cluster-info --context kind-lib-injection-testing
     - echo "Check command line - kubectl"
     - kubectl get pods
     - echo "Run tests"
