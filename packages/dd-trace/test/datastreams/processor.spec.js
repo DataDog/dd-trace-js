@@ -203,7 +203,7 @@ describe('DataStreamsProcessor', () => {
     env: 'test',
     version: 'v1',
     service: 'service1',
-    tags: { DD_TAG: 'some tag', DD_OTHER_TAG: 'some other tag' }
+    tags: { foo: 'foovalue', bar: 'barvalue' }
   }
 
   beforeEach(() => {
@@ -307,7 +307,7 @@ describe('DataStreamsProcessor', () => {
       }],
       TracerVersion: pkg.version,
       Lang: 'javascript',
-      Tags: ['DD_TAG:some tag', 'DD_OTHER_TAG:some other tag']
+      Tags: ['foo:foovalue', 'bar:barvalue']
     })
   })
 })
