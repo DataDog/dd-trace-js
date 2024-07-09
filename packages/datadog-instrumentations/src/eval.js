@@ -3,6 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('dc-polyfill')
 
+// eslint-disable-next-line no-eval
 if (globalThis.eval) {
   const evalStartChannel = channel('datadog:eval:start')
 

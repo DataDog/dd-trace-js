@@ -9,6 +9,7 @@ describe('Eval injection vulnerability', () => {
       (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
         testThatRequestHasVulnerability({
           fn: (req, res) => {
+            // eslint-disable-next-line no-eval
             res.send('' + eval(req.query.script))
           },
           vulnerability: 'EVAL_INJECTION',
