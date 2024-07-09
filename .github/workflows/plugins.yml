@@ -948,7 +948,7 @@ jobs:
         version:
           - 18
           - latest
-        range: ['>=9.5 <11.1', '>=11.1 <13.2', '>=13.2']
+        range: ['9.5.0', '11.1.4', '13.2.0', 'latest']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
