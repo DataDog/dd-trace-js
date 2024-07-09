@@ -195,6 +195,15 @@ class CucumberPlugin extends CiPlugin {
       this.enter(testSpan, store)
     })
 
+    this.addSub('ci:cucumber:test:retry', () => {
+      const store = storage.getStore()
+      const span = store.span
+      // span.setTag(TEST_IS_RETRY, 'true') // TODO: not quite
+      span.setTag(TEST_STATUS, 'fail')
+      span.finish()
+      finishAllTraceSpans(span)
+    })
+
     this.addSub('ci:cucumber:test-step:start', ({ resource }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store

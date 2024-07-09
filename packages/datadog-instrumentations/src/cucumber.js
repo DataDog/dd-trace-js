@@ -1,11 +1,13 @@
 'use strict'
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
+const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:cucumber:test:start')
+const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
 
 const testStepStartCh = channel('ci:cucumber:test-step:start')
@@ -47,6 +49,7 @@ const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
+const numAttemptToAsyncResource = new Map()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
@@ -60,6 +63,7 @@ let isUnskippable = false
 let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let isFlakyTestRetriesEnabled = false
 let knownTests = []
 let skippedSuites = []
 let isSuitesSkipped = false
@@ -162,47 +166,79 @@ function wrapRun (pl, isLatestVersion) {
       return run.apply(this, arguments)
     }
 
+    let numAttempt = 0
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      const testFileAbsolutePath = this.pickle.uri
 
-      const testSourceLine = this.gherkinDocument?.feature?.location?.line
+    numAttemptToAsyncResource.set(numAttempt, asyncResource)
 
-      testStartCh.publish({
-        testName: this.pickle.name,
-        testFileAbsolutePath,
-        testSourceLine,
-        isParallel: !!process.env.CUCUMBER_WORKER_ID
+    const testFileAbsolutePath = this.pickle.uri
+
+    const testSourceLine = this.gherkinDocument?.feature?.location?.line
+
+    const testStartPayload = {
+      testName: this.pickle.name,
+      testFileAbsolutePath,
+      testSourceLine,
+      isParallel: !!process.env.CUCUMBER_WORKER_ID
+    }
+    asyncResource.runInAsyncScope(() => {
+      testStartCh.publish(testStartPayload)
+    })
+    try {
+      this.eventBroadcaster.on('envelope', (testCase) => {
+        if (testCase?.testCaseFinished) {
+          const { testCaseFinished: { willBeRetried } } = testCase
+          if (willBeRetried) { // test case failed and will be retried
+            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt++)
+            failedAttemptAsyncResource.runInAsyncScope(() => {
+              testRetryCh.publish() // the current span will be finished and a new one will be created
+            })
+
+            const newAsyncResource = new AsyncResource('bound-anonymous-fn')
+            numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
+
+            newAsyncResource.runInAsyncScope(() => {
+              testStartCh.publish(testStartPayload) // a new span will be created
+            })
+          }
+        }
       })
-      try {
-        const promise = run.apply(this, arguments)
-        promise.finally(() => {
-          const result = this.getWorstStepResult()
-          const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result)
-            : getStatusFromResult(result)
+      let promise
 
-          if (lastStatusByPickleId.has(this.pickle.id)) {
-            lastStatusByPickleId.get(this.pickle.id).push(status)
-          } else {
-            lastStatusByPickleId.set(this.pickle.id, [status])
-          }
-          let isNew = false
-          let isEfdRetry = false
-          if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
-            const numRetries = numRetriesByPickleId.get(this.pickle.id)
+      asyncResource.runInAsyncScope(() => {
+        promise = run.apply(this, arguments)
+      })
+      promise.finally(() => {
+        const result = this.getWorstStepResult()
+        const { status, skipReason, errorMessage } = isLatestVersion
+          ? getStatusFromResultLatest(result)
+          : getStatusFromResult(result)
 
-            isNew = numRetries !== undefined
-            isEfdRetry = numRetries > 0
-          }
+        if (lastStatusByPickleId.has(this.pickle.id)) {
+          lastStatusByPickleId.get(this.pickle.id).push(status)
+        } else {
+          lastStatusByPickleId.set(this.pickle.id, [status])
+        }
+        let isNew = false
+        let isEfdRetry = false
+        if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+          const numRetries = numRetriesByPickleId.get(this.pickle.id)
+
+          isNew = numRetries !== undefined
+          isEfdRetry = numRetries > 0
+        }
+        const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+
+        attemptAsyncResource.runInAsyncScope(() => {
           testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry })
         })
-        return promise
-      } catch (err) {
-        errorCh.publish(err)
-        throw err
-      }
-    })
+      })
+      return promise
+    } catch (err) {
+      errorCh.publish(err)
+      throw err
+    }
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
     if (!testStepStartCh.hasSubscribers) {
@@ -267,6 +303,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
+    isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
 
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -303,6 +340,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
+
+    if (isFlakyTestRetriesEnabled && !this.options.retry) {
+      this.options.retry = NUM_FAILED_TEST_RETRIES
+    }
 
     sessionAsyncResource.runInAsyncScope(() => {
       sessionStartCh.publish({ command, frameworkVersion })
