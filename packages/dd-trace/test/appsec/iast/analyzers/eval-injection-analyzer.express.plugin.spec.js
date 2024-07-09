@@ -20,7 +20,7 @@ describe('Eval injection vulnerability', () => {
 
         testThatRequestHasNoVulnerability((req, res) => {
           // eslint-disable-next-line no-eval
-          res.send(eval('1 + 2'))
+          res.send('' + eval('1 + 2'))
         }, 'EVAL_INJECTION')
       })
   })
