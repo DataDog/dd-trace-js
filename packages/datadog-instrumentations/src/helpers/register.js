@@ -28,6 +28,7 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
+
 if (!disabledInstrumentations.has('eval')) {
   require('../eval')
 }

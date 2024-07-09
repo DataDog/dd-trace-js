@@ -15,11 +15,9 @@ module.exports = function extractSensitiveRanges (evidence) {
 
     const start = currentRange.end
     const end = nextRange?.start || evidence.value.length
-    if (start !== end) {
-      newRanges.push({
-        start,
-        end
-      })
+
+    if (start < end) {
+      newRanges.push({ start, end })
     }
   }
 

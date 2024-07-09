@@ -13,9 +13,7 @@ if (globalThis.eval) {
         return originalEval.apply(this, arguments)
       }
 
-      evalStartChannel.publish({
-        script
-      })
+      evalStartChannel.publish({ script })
 
       return originalEval.apply(this, arguments)
     }
