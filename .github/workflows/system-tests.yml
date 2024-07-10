@@ -60,6 +60,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: rochdev/pull-images-optional-cleanup
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
@@ -72,6 +73,7 @@ jobs:
           library: nodejs
           weblog: ${{ matrix.weblog-variant }}
           scenarios: '["${{ matrix.scenario }}"]'
+          cleanup: false
       - name: Build weblog
         run: ./build.sh -i weblog
       - name: Build agent
