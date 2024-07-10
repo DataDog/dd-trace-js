@@ -41,11 +41,12 @@ jobs:
           echo "Major Version: $majorVersion"
           echo "MAJOR_VERSION=$majorVersion" >> $GITHUB_ENV
       - uses: ./.github/actions/node/oldest
-      - name: Install dependencies and run tests
+      - name: Install dependencies
         if: env.MAJOR_VERSION == '4'
-        run: |
-          yarn install --ignore-engines
-          yarn test:plugins:ci
+        uses: ./.github/actions/install
+      - name: Run tests
+        if: env.MAJOR_VERSION == '4'
+        run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -85,11 +86,12 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-      - name: Install dependencies and run tests
-        if: env.MAJOR_VERSION >= '5'
-        run: |
-          yarn install --ignore-engines
-          yarn test:plugins:ci
+      - name: Install dependencies
+        if: env.MAJOR_VERSION == '5'
+        uses: ./.github/actions/install
+      - name: Run tests
+        if: env.MAJOR_VERSION == '5'
+        run: yarn test:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
@@ -984,7 +986,7 @@ jobs:
         with:
           cache: yarn
           node-version: '16'
-      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/install
       - run: yarn config set ignore-engines true
       - run: yarn services --ignore-engines
       - run: yarn test:plugins --ignore-engines
