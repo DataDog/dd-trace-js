@@ -3,7 +3,8 @@
 const {
   getTestSuitePath,
   removeEfdStringFromTestName,
-  addEfdStringToTestName
+  addEfdStringToTestName,
+  NUM_FAILED_TEST_RETRIES
 } = require('../../../dd-trace/src/plugins/util/test')
 const { channel, AsyncResource } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -24,8 +25,6 @@ const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
 const testFileToSuiteAr = new Map()
 const wrappedFunctions = new WeakSet()
-
-const NUM_FAILED_TEST_RETRIES = 5
 
 function isNewTest (test, knownTests) {
   const testSuite = getTestSuitePath(test.file, process.cwd())
