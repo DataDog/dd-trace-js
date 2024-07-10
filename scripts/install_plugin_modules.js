@@ -81,7 +81,10 @@ async function assertInstrumentation (instrumentation, external) {
 
   for (const version of versions) {
     if (version) {
-      await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      if (version !== '*') {
+        await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      }
+
       await assertModules(instrumentation.name, version, external)
     }
   }
