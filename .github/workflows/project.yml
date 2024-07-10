@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
@@ -78,7 +78,7 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
         if: ${{ matrix.framework == 'selenium' }}
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn test:integration:${{ matrix.framework }}
         env:
           NODE_OPTIONS: '-r ./ci/init'
@@ -122,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: actions/setup-node@v3
         with:
           node-version: 20
@@ -135,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn lint
 
   typescript:
@@ -143,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
 
