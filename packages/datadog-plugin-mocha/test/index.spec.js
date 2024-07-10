@@ -4,6 +4,7 @@ const path = require('path')
 const fs = require('fs')
 
 const nock = require('nock')
+const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ORIGIN_KEY, COMPONENT, ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
@@ -449,12 +450,26 @@ describe('Plugin', () => {
       })
 
       it('works with retries', (done) => {
+        let testNames = []
+        // retry listener did not happen until 6.0.0
+        if (semver.satisfies(version, '>=6.0.0')) {
+          testNames = [
+            ['mocha-test-retries will be retried and pass', 'fail'],
+            ['mocha-test-retries will be retried and pass', 'fail'],
+            ['mocha-test-retries will be retried and pass', 'pass'],
+            ['mocha-test-retries will be retried and fail', 'fail'],
+            ['mocha-test-retries will be retried and fail', 'fail'],
+            ['mocha-test-retries will be retried and fail', 'fail'],
+            ['mocha-test-retries will be retried and fail', 'fail'],
+            ['mocha-test-retries will be retried and fail', 'fail']
+          ]
+        } else {
+          testNames = [
+            ['mocha-test-retries will be retried and pass', 'pass'],
+            ['mocha-test-retries will be retried and fail', 'fail']
+          ]
+        }
         const testFilePath = path.join(__dirname, 'mocha-test-retries.js')
-
-        const testNames = [
-          ['mocha-test-retries will be retried and pass', 'pass'],
-          ['mocha-test-retries will be retried and fail', 'fail']
-        ]
 
         const assertionPromises = testNames.map(([testName, status]) => {
           return agent.use(trace => {
