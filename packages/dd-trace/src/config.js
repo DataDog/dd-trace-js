@@ -1000,10 +1000,12 @@ class Config {
   _reformatTags (samplingRules) {
     for (const rule of (samplingRules || [])) {
       const reformattedTags = {}
-      for (const tag of (rule.tags || {})) {
-        reformattedTags[tag.key] = tag.value_glob
+      if (rule.tags) {
+        for (const tag of (rule.tags || {})) {
+          reformattedTags[tag.key] = tag.value_glob
+        }
+        rule.tags = reformattedTags
       }
-      rule.tags = reformattedTags
     }
     return samplingRules
   }
