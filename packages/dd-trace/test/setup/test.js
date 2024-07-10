@@ -12,30 +12,88 @@ const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 const { after, afterEach, before, beforeEach, describe, it } = require('node:test')
+const { NODE_MAJOR } = require('../../../../version')
+const { AsyncLocalStorage } = require('async_hooks')
 
-const itWrapper = function (name, ...args) {
-  const fn = args[args.length - 1]
+const hookStorage = new AsyncLocalStorage()
 
-  if (fn.length > 0) {
-    args[args.length - 1] = (t, done) => fn(done)
-  }
-
-  return it(name, ...args)
-}
-
-itWrapper.only = it.only
-itWrapper.skip = it.skip
-
-global.after = after
-global.afterEach = afterEach
-global.before = before
-global.beforeEach = beforeEach
-global.describe = describe
-global.it = itWrapper
+global.after = wrapIt(after)
+global.afterEach = wrapEach(afterEach)
+global.before = wrapIt(before)
+global.beforeEach = wrapEach(beforeEach)
+global.describe = wrapDescribe(describe)
+global.it = wrapIt(it)
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
+
+function wrapDescribe (describe) {
+  if (NODE_MAJOR >= 18) return describe
+
+  const wrapper = function (...args) {
+    const fn = args[args.length - 1]
+    const parentHooks = hookStorage.getStore() || []
+
+    args[args.length - 1] = function (...args) {
+      parentHooks.forEach(hook => hook())
+
+      return hookStorage.run([...parentHooks], () => {
+        return fn.apply(this, args)
+      })
+    }
+
+    return describe.apply(this, args)
+  }
+
+  wrapper.only = wrapper.only && wrapDescribe(it.only)
+  wrapper.skip = wrapper.skip && wrapDescribe(it.skip)
+
+  return wrapper
+}
+
+function wrapIt (it) {
+  const wrapper = function (...args) {
+    const fn = args[args.length - 1]
+
+    if (fn.length > 0) {
+      args[args.length - 1] = function (t, done) {
+        if (done) return fn(done)
+
+        return new Promise((resolve, reject) => {
+          return fn((e) => {
+            if (e instanceof Error) {
+              reject(e)
+            } else {
+              resolve()
+            }
+          })
+        })
+      }
+    }
+
+    return it.apply(this, args)
+  }
+
+  wrapper.only = wrapper.only && wrapIt(it.only)
+  wrapper.skip = wrapper.skip && wrapIt(it.skip)
+
+  return wrapper
+}
+
+function wrapEach (each) {
+  if (NODE_MAJOR >= 18) return each
+
+  const wrapper = wrapIt(function (...args) {
+    const hooks = hookStorage.getStore()
+
+    hooks.push(() => each.apply(this, args))
+
+    return each.apply(this, args)
+  })
+
+  return wrapper
+}
 
 const testedPlugins = agent.testedPlugins
 
@@ -242,10 +300,10 @@ function withVersions (plugin, modules, range, cb) {
           `${moduleName}@${v.test}/node_modules`
         )
 
-        describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
+        global.describe(`with ${moduleName} ${v.range} (${v.version})`, () => {
           let nodePath
 
-          before(() => {
+          global.before(() => {
             // set plugin name and version to later report to test agent regarding tested integrations and
             // their tested range of versions
             const lastPlugin = testedPlugins[testedPlugins.length - 1]
@@ -263,7 +321,7 @@ function withVersions (plugin, modules, range, cb) {
 
           cb(v.test, moduleName)
 
-          after(() => {
+          global.after(() => {
             process.env.NODE_PATH = nodePath
             require('module').Module._initPaths()
           })
@@ -274,7 +332,7 @@ function withVersions (plugin, modules, range, cb) {
 
 function withExports (moduleName, version, exportNames, versionRange, fn) {
   const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()
-  describe('with the default export', () => fn(getExport))
+  global.describe('with the default export', () => fn(getExport))
 
   if (typeof versionRange === 'function') {
     fn = versionRange
@@ -285,7 +343,7 @@ function withExports (moduleName, version, exportNames, versionRange, fn) {
 
   for (const exportName of exportNames) {
     const getExport = () => require(`../../../../versions/${moduleName}@${version}`).get()[exportName]
-    describe(`with exports.${exportName}`, () => fn(getExport))
+    global.describe(`with exports.${exportName}`, () => fn(getExport))
   }
 }
 
