@@ -85,7 +85,7 @@ describe('Plugin', function () {
       }
 
       before(async function () {
-        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+        this.timeout(240 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
         const pkg = require(`../../../versions/next@${version}/package.json`)
