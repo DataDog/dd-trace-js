@@ -40,7 +40,7 @@ async function makeRequest (url) {
       })
 
       res.on('end', () => {
-        resolve( Buffer.concat(chunks).toString('utf8'))
+        resolve(Buffer.concat(chunks).toString('utf8'))
       })
 
       res.on('error', reject)
@@ -106,7 +106,6 @@ app.get('/propagation-after-drop-and-call-sdk', async (req, res) => {
   const url = `http://localhost:${port}/sdk`
 
   const sdkRes = await makeRequest(url)
-
 
   res.status(200).send(`drop-and-call-sdk ${sdkRes}`)
 })
