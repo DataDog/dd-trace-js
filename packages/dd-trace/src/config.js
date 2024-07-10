@@ -993,9 +993,8 @@ class Config {
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
-    // ignore tags for now since rc sampling rule tags format is not supported
-    this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
     this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+    this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
   }
 
   _reformatTags (samplingRules) {
