@@ -95,6 +95,9 @@ const MOCHA_WORKER_TRACE_PAYLOAD_CODE = 80
 const EFD_STRING = "Retried by Datadog's Early Flake Detection"
 const EFD_TEST_NAME_REGEX = new RegExp(EFD_STRING + ' \\(#\\d+\\): ', 'g')
 
+// Flaky test retries
+const NUM_FAILED_TEST_RETRIES = 5
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_FRAMEWORK,
@@ -167,7 +170,8 @@ module.exports = {
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
-  TEST_BROWSER_VERSION
+  TEST_BROWSER_VERSION,
+  NUM_FAILED_TEST_RETRIES
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
