@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           registry-url: 'https://registry.npmjs.org'
-      - run: yarn install
+      - uses: ./.github/actions/install
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
