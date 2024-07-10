@@ -1,8 +1,14 @@
 'use strict'
 
-const P = require('bluebird')
+try {
 
-const isWrapped = P.prototype._then.toString().includes('AsyncResource')
+  const P = require('bluebird')
 
-// eslint-disable-next-line no-console
-console.log(isWrapped)
+  const isWrapped = P.prototype._then.toString().includes('AsyncResource')
+
+  // eslint-disable-next-line no-console
+  console.log(isWrapped)
+} catch (e) {
+  const fastify = require('fastify')
+  console.log(fastify.toString().startsWith('function shim'))
+}
