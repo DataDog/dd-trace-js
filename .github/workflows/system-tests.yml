@@ -69,6 +69,8 @@ jobs:
       - name: Pull images
         uses: ./.github/actions/pull_images
         with:
+          library: nodejs
+          weblog: ${{ matrix.weblog-variant }}
           scenarios: '["${{ matrix.scenario }}"]'
       - name: Build weblog
         run: ./build.sh -i weblog
