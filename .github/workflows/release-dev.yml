@@ -1,14 +1,9 @@
 name: Release dev release line
 
-on:
-  pull_request_target:
-    types: [labeled]
-    branches:
-      - master
+on: workflow_dispatch
 
 jobs:
   dev_release:
-    if: ${{ github.event.label.name == 'release-dev' }}
     runs-on: ubuntu-latest
     environment: npm
     permissions:
