@@ -1,11 +1,14 @@
 'use strict'
 
+const semver = require('semver')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { rawExpectedSchema } = require('./naming')
 const { DD_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { NODE_MAJOR } = require('../../../version')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -19,6 +22,9 @@ describe('Plugin', () => {
 
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', version => {
+      const specificVersion = require(`../../../versions/undici@${version}`).version()
+      if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=6')) return
+
       function server (app, listener) {
         const server = require('http').createServer(app)
         server.listen(0, 'localhost', () => listener(server.address().port))
