@@ -44,7 +44,7 @@
     "test:integration:serverless": "mocha --colors --timeout 30000 -r \"packages/dd-trace/test/setup/core.js\" \"integration-tests/serverless/*.spec.js\"",
     "test:integration:plugins": "mocha --colors --exit -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/datadog-plugin-@($(echo $PLUGINS))/test/integration-test/**/*.spec.js\"",
     "test:shimmer": "mocha --colors 'packages/datadog-shimmer/test/**/*.spec.js'",
-    "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer",
+    "test:shimmer:ci": "nyc --no-clean --include 'packages/datadog-shimmer/src/**/*.js' -- npm run test:shimmer"
   },
   "repository": {
     "type": "git",
