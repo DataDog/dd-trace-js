@@ -28,7 +28,7 @@
     "test:lambda": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/lambda/**/*.spec.js\"",
     "test:lambda:ci": "nyc --no-clean --include \"packages/dd-trace/src/lambda/**/*.js\" -- npm run test:lambda",
     "test:plugins": "zsh -c 'node --test --test-reporter spec packages/datadog-plugin-$(echo $PLUGIN)/test/**/*.spec.js'",
-    "test:plugins:ci": "shopt -s globstar && yarn services && node --test packages/datadog-plugin-$(echo $PLUGIN)/test/**/*.spec.js",
+    "test:plugins:ci": "shopt -s globstar && yarn services && node --test --test-reporter spec packages/datadog-plugin-$(echo $PLUGIN)/test/**/*.spec.js",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "tap \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "npm run test:profiler -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/profiling/**/*.js\"",
