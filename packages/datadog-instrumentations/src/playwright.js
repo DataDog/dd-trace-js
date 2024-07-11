@@ -278,6 +278,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     testFinishCh.publish({
       testStatus,
       steps: testResult?.steps || [],
+      isRetry: testResult?.retry > 0,
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
