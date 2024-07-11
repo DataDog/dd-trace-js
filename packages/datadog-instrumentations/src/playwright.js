@@ -215,6 +215,13 @@ function getChannelPromise (channelToPublishTo) {
     })
   })
 }
+// eslint-disable-next-line
+// Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
+// We can't use test.outcome() directly because it's set on follow up handlers:
+// our `testEndHandler` is called before the outocome is set.
+function testWillRetry (test, testStatus) {
+  return testStatus === 'fail' && test.results.length <= test.retries
+}
 
 function testBeginHandler (test, browserName) {
   const {
@@ -288,8 +295,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     addErrorToTestSuite(testSuiteAbsolutePath, error)
   }
 
-  remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
-    .filter(currentTest => currentTest !== test)
+  if (!testWillRetry(test, testStatus)) {
+    remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+      .filter(currentTest => currentTest !== test)
+  }
 
   // Last test, we finish the suite
   // TODO: we need to check retries!
