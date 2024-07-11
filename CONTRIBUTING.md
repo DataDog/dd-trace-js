@@ -135,19 +135,6 @@ PLUGINS="express|bluebird" yarn test:plugins
 ```
 
 
-### Memory Leaks
-
-To run the memory leak tests, use:
-
-```sh
-$ yarn leak:core
-
-# or
-
-$ yarn leak:plugins
-```
-
-
 ### Linting
 
 We use [ESLint](https://eslint.org) to make sure that new code
