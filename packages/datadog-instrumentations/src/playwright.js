@@ -237,7 +237,6 @@ function testBeginHandler (test, browserName) {
     return
   }
 
-  // TODO: we need to check retries!
   const isNewTestSuite = !startedSuites.includes(testSuiteAbsolutePath)
 
   if (isNewTestSuite) {
@@ -302,7 +301,6 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
   }
 
   // Last test, we finish the suite
-  // TODO: we need to check retries!
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
     const testStatuses = testSuiteToTestStatuses.get(testSuiteAbsolutePath)
 
