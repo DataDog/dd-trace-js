@@ -218,7 +218,7 @@ function getChannelPromise (channelToPublishTo) {
 // eslint-disable-next-line
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
-// our `testEndHandler` is called before the outocome is set.
+// our `testEndHandler` is called before the outcome is set.
 function testWillRetry (test, testStatus) {
   return testStatus === 'fail' && test.results.length <= test.retries
 }
