@@ -174,10 +174,10 @@ function withNamingSchema (
 
   const testTitle = 'service and operation naming' + (desc !== '' ? ` (${desc})` : '')
 
-  describe(testTitle, () => {
+  global.describe(testTitle, () => {
     Object.keys(schemaDefinitions).forEach(versionName => {
-      describe(`in version ${versionName}`, () => {
-        before(() => {
+      global.describe(`in version ${versionName}`, () => {
+        global.before(() => {
           fullConfig = Nomenclature.config
           Nomenclature.configure({
             spanAttributeSchema: versionName,
@@ -186,7 +186,7 @@ function withNamingSchema (
           })
         })
 
-        after(() => {
+        global.after(() => {
           Nomenclature.configure(fullConfig)
         })
 
@@ -194,7 +194,7 @@ function withNamingSchema (
 
         const { opName, serviceName } = expected[versionName]
 
-        it('should conform to the naming schema', { timeout: 10000 }, function () {
+        global.it('should conform to the naming schema', { timeout: 10000 }, function () {
           return new Promise((resolve, reject) => {
             agent
               .use(traces => {
@@ -217,7 +217,7 @@ function withNamingSchema (
       })
     })
 
-    describe('service naming short-circuit in v0', () => {
+    global.describe('service naming short-circuit in v0', () => {
       before(() => {
         fullConfig = Nomenclature.config
         Nomenclature.configure({
@@ -227,7 +227,7 @@ function withNamingSchema (
         })
       })
 
-      after(() => {
+      global.after(() => {
         Nomenclature.configure(fullConfig)
       })
 
@@ -235,7 +235,7 @@ function withNamingSchema (
 
       const { serviceName } = expected.v1
 
-      it('should pass service name through', done => {
+      global.it('should pass service name through', done => {
         agent
           .use(traces => {
             const span = traces[0][0]
@@ -254,19 +254,19 @@ function withNamingSchema (
 }
 
 function withPeerService (tracer, pluginName, spanGenerationFn, service, serviceSource, opts = {}) {
-  describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
+  global.describe('peer service computation' + (opts.desc ? ` ${opts.desc}` : ''), () => {
     let computePeerServiceSpy
 
-    beforeEach(() => {
+    global.beforeEach(() => {
       const plugin = tracer()._pluginManager._pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
 
-    afterEach(() => {
+    global.afterEach(() => {
       computePeerServiceSpy.restore()
     })
 
-    it('should compute peer service', done => {
+    global.it('should compute peer service', done => {
       agent
         .use(traces => {
           const span = traces[0][0]
