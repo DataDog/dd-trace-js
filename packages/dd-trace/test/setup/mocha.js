@@ -245,7 +245,7 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          cb(v.test, moduleName)
+          cb(v.test, moduleName, v.version)
 
           after(() => {
             process.env.NODE_PATH = nodePath
