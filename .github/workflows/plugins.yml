@@ -670,7 +670,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  redis:
+  ioredis:
     runs-on: ubuntu-latest
     services:
       redis:
