@@ -64,13 +64,14 @@ function wrapDescribe (describe) {
 
 function wrapIt (it, optionsAfterFn = false) {
   const wrapper = function (...args) {
-    const fn = args[args.length - 1]
+    const index = optionsAfterFn ? 0 : args.length - 1
+    const fn = args[index]
 
     addTimeout(args, optionsAfterFn)
 
     if (fn.length > 0) {
-      args[args.length - 1] = function (t, done) {
-        if (done) return fn.call(this, done)
+      args[index] = function (t, ddone) {
+        if (ddone) return fn.call(this, ddone)
 
         return new Promise((resolve, reject) => {
           return fn.call(this, (e) => {
