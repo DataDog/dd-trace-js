@@ -78,7 +78,7 @@ const ASYNC_TESTS = [
 
 describe('Plugin', () => {
   let Mocha
-  withVersions('mocha', 'mocha', version => {
+  withVersions('mocha', 'mocha', (version, _, specificVersion) => {
     afterEach(() => {
       // This needs to be done when using the programmatic API:
       // https://github.com/mochajs/mocha/wiki/Using-Mocha-programmatically
@@ -452,7 +452,7 @@ describe('Plugin', () => {
       it('works with retries', (done) => {
         let testNames = []
         // retry listener did not happen until 6.0.0
-        if (semver.satisfies(version, '>=6.0.0')) {
+        if (semver.satisfies(specificVersion, '>=6.0.0')) {
           testNames = [
             ['mocha-test-retries will be retried and pass', 'fail'],
             ['mocha-test-retries will be retried and pass', 'fail'],
