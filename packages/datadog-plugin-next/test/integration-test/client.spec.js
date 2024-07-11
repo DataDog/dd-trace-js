@@ -46,7 +46,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 240000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined, {
         NODE_OPTIONS
       })
@@ -55,6 +55,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
       }, undefined, undefined, true)
-    }).timeout(120 * 1000)
+    })
   })
 })

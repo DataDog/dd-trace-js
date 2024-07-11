@@ -32,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -44,6 +44,6 @@ describe('esm', () => {
         assert.propertyVal(payload[0][0], 'name', 'express.request')
         assert.propertyVal(payload[0][1], 'name', 'express.middleware')
       })
-    }).timeout(50000)
+    })
   })
 })

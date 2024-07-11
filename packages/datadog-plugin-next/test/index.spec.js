@@ -577,9 +577,7 @@ describe('Plugin', function () {
               axios
                 .get(`http://127.0.0.1:${port}${resource}`)
                 .catch(done)
-            }).timeout(5000)
-            // increase timeout for longer test in CI
-            // locally, do not see any slowdowns
+            })
           })
         })
       }

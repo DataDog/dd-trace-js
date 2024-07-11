@@ -32,7 +32,7 @@ describe('esm', () => {
   })
 
   context('http', () => {
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -43,6 +43,6 @@ describe('esm', () => {
         assert.strictEqual(payload[0].length, 1)
         assert.propertyVal(payload[0][0], 'name', 'web.request')
       })
-    }).timeout(20000)
+    })
   })
 })

@@ -32,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,
         'server.mjs',
@@ -42,6 +42,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(50000)
+    })
   })
 })
