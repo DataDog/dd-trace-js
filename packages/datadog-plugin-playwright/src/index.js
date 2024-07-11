@@ -116,7 +116,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -134,6 +134,9 @@ class PlaywrightPlugin extends CiPlugin {
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
+      }
+      if (isRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
       }
 
       steps.forEach(step => {

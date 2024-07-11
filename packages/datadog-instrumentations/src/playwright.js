@@ -2,7 +2,7 @@ const semver = require('semver')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
+const { parseAnnotations, getTestSuitePath, NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -21,6 +21,7 @@ const testToAr = new WeakMap()
 const testSuiteToAr = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
+const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 let applyRepeatEachIndex = null
 
@@ -35,6 +36,7 @@ const STATUS_TO_TEST_STATUS = {
 
 let remainingTestsByFile = {}
 let isEarlyFlakeDetectionEnabled = false
+let isFlakyTestRetriesEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let knownTests = {}
 let rootDir = ''
@@ -196,6 +198,31 @@ function getTestSuiteError (testSuiteAbsolutePath) {
   return new Error(`${errors.length} errors in this test suite:\n${errors.map(e => e.message).join('\n------\n')}`)
 }
 
+function getTestByTestId (dispatcher, testId) {
+  if (dispatcher._testById) {
+    return dispatcher._testById.get(testId)?.test
+  }
+  const allTests = dispatcher._allTests || dispatcher._ddAllTests
+  if (allTests) {
+    return allTests.find(({ id }) => id === testId)
+  }
+}
+
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    testSessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
+}
+// eslint-disable-next-line
+// Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
+// We can't use test.outcome() directly because it's set on follow up handlers:
+// our `testEndHandler` is called before the outcome is set.
+function testWillRetry (test, testStatus) {
+  return testStatus === 'fail' && test.results.length <= test.retries
+}
+
 function testBeginHandler (test, browserName) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -250,6 +277,7 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     testFinishCh.publish({
       testStatus,
       steps: testResult?.steps || [],
+      isRetry: testResult?.retry > 0,
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
@@ -267,8 +295,10 @@ function testEndHandler (test, annotations, testStatus, error, isTimeout) {
     addErrorToTestSuite(testSuiteAbsolutePath, error)
   }
 
-  remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
-    .filter(currentTest => currentTest !== test)
+  if (!testWillRetry(test, testStatus)) {
+    remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+      .filter(currentTest => currentTest !== test)
+  }
 
   // Last test, we finish the suite
   if (!remainingTestsByFile[testSuiteAbsolutePath].length) {
@@ -335,16 +365,6 @@ function dispatcherHook (dispatcherExport) {
   return dispatcherExport
 }
 
-function getTestByTestId (dispatcher, testId) {
-  if (dispatcher._testById) {
-    return dispatcher._testById.get(testId)?.test
-  }
-  const allTests = dispatcher._allTests || dispatcher._ddAllTests
-  if (allTests) {
-    return allTests.find(({ id }) => id === testId)
-  }
-}
-
 function dispatcherHookNew (dispatcherExport, runWrapper) {
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, 'run', runWrapper)
   shimmer.wrap(dispatcherExport.Dispatcher.prototype, '_createWorker', createWorker => function () {
@@ -373,8 +393,6 @@ function runnerHook (runnerExport, playwrightVersion) {
   shimmer.wrap(runnerExport.Runner.prototype, 'runAllTests', runAllTests => async function () {
     let onDone
 
-    const testSessionAsyncResource = new AsyncResource('bound-anonymous-fn')
-
     rootDir = getRootDir(this)
 
     const processArgv = process.argv.slice(2).join(' ')
@@ -383,45 +401,41 @@ function runnerHook (runnerExport, playwrightVersion) {
       testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
     })
 
-    const configurationPromise = new Promise((resolve) => {
-      onDone = resolve
-    })
-
-    testSessionAsyncResource.runInAsyncScope(() => {
-      libraryConfigurationCh.publish({ onDone })
-    })
-
     try {
-      const { err, libraryConfig } = await configurationPromise
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+        isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
       }
     } catch (e) {
+      isEarlyFlakeDetectionEnabled = false
       log.error(e)
     }
 
     if (isEarlyFlakeDetectionEnabled && semver.gte(playwrightVersion, MINIMUM_SUPPORTED_VERSION_EFD)) {
-      const knownTestsPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
-      testSessionAsyncResource.runInAsyncScope(() => {
-        knownTestsCh.publish({ onDone })
-      })
-
       try {
-        const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+        const { err, knownTests: receivedKnownTests } = await getChannelPromise(knownTestsCh)
         if (!err) {
           knownTests = receivedKnownTests
         } else {
           isEarlyFlakeDetectionEnabled = false
         }
       } catch (err) {
+        isEarlyFlakeDetectionEnabled = false
         log.error(err)
       }
     }
 
     const projects = getProjectsFromRunner(this)
+
+    if (isFlakyTestRetriesEnabled) {
+      projects.forEach(project => {
+        if (project.retries === 0) { // Only if it hasn't been set by the user
+          project.retries = NUM_FAILED_TEST_RETRIES
+        }
+      })
+    }
 
     const runAllTestsReturn = await runAllTests.apply(this, arguments)
 
