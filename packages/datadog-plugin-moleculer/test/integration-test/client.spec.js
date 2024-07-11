@@ -19,10 +19,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('moleculer', 'moleculer', '>0.14.0', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'moleculer@${version}'`, 'get-port'], false, [
         './packages/datadog-plugin-moleculer/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

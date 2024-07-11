@@ -1306,8 +1306,6 @@ describe('Plugin', () => {
           let loopback
 
           beforeEach(function () {
-            this.timeout(5000)
-
             loopback = require(`../../../versions/loopback@${loopbackVersion}`).get()
           })
 

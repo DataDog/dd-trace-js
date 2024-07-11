@@ -15,15 +15,13 @@ describe('esm', () => {
 
   withVersions('memcached', 'memcached', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'memcached@${version}'`], false, [
         './packages/datadog-plugin-memcached/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 20000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

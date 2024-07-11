@@ -15,15 +15,13 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(50000)
     sandbox = await createSandbox(['get-port'], false, [
       './packages/datadog-plugin-fetch/test/integration-test/*'])
-  })
+  }, { timeout: 50000 })
 
   after(async function () {
-    this.timeout(50000)
     await sandbox.remove()
-  })
+  }, { timeout: 50000 })
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()

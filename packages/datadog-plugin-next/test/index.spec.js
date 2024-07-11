@@ -37,7 +37,6 @@ describe('Plugin', function () {
         })
 
         before(function (done) {
-          this.timeout(120000)
           const cwd = standalone
             ? path.join(__dirname, '.next/standalone')
             : __dirname
@@ -72,21 +71,17 @@ describe('Plugin', function () {
 
           server.stderr.on('data', chunk => process.stderr.write(chunk))
           server.stdout.on('data', chunk => process.stdout.write(chunk))
-        })
+        }, { timeout: 120000 })
 
         after(async function () {
-          this.timeout(5000)
-
           server.kill()
 
           await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
           await agent.close({ ritmReset: false })
-        })
+        }, { timeout: 5000 })
       }
 
       before(async function () {
-        this.timeout(240 * 1000) // Webpack is very slow and builds on every test run
-
         const cwd = __dirname
         const pkg = require(`../../../versions/next@${version}/package.json`)
         const realVersion = require(`../../../versions/next@${version}`).version()
@@ -126,10 +121,9 @@ describe('Plugin', function () {
           execSync(`mkdir ${publicDestination}`)
           execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
         }
-      })
+      }, { timeout: 240000 }) // Webpack is very slow and builds on every test run
 
       after(function () {
-        this.timeout(5000)
         const files = [
           'package.json',
           'node_modules',
@@ -138,7 +132,7 @@ describe('Plugin', function () {
         ]
         const paths = files.map(file => path.join(__dirname, file))
         execSync(`rm -rf ${paths.join(' ')}`)
-      })
+      }, { timeout: 5000 })
 
       withNamingSchema(
         (done) => {

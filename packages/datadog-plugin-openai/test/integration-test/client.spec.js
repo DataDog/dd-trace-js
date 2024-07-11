@@ -17,10 +17,9 @@ describe('esm', () => {
   // issue link: https://github.com/DataDog/import-in-the-middle/issues/60
   withVersions('openai', 'openai', '>=3 <4', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'openai@${version}'`, 'nock'], false, [
         './packages/datadog-plugin-openai/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

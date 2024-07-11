@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('limitd-client', 'limitd-client', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'limitd-client@${version}'`], false, [
         './packages/datadog-plugin-limitd-client/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

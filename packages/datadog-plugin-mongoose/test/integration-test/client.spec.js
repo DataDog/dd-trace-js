@@ -23,10 +23,9 @@ describe('esm', () => {
     if (NODE_MAJOR === 14 && semver.satisfies(specificVersion, '>=8')) return
 
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'mongoose@${version}'`], false, [
         './packages/datadog-plugin-mongoose/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

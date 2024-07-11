@@ -20,10 +20,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('cassandra-driver', 'cassandra-driver', range, version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'cassandra-driver@${version}'`], false, [
         './packages/datadog-plugin-cassandra-driver/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

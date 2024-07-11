@@ -12,56 +12,68 @@ const Nomenclature = require('../../src/service-naming')
 const { storage } = require('../../../datadog-core')
 const { schemaDefinitions } = require('../../src/service-naming/schemas')
 const { after, afterEach, before, beforeEach, describe, it } = require('node:test')
-const { NODE_MAJOR } = require('../../../../version')
+const { NODE_MAJOR, NODE_MINOR } = require('../../../../version')
 const { AsyncLocalStorage } = require('async_hooks')
 
 const hookStorage = new AsyncLocalStorage()
+const timeoutStorage = new AsyncLocalStorage()
 
-global.after = wrapIt(after)
+global.after = wrapIt(after, true)
 global.afterEach = wrapEach(afterEach)
-global.before = wrapIt(before)
+global.before = wrapIt(before, true)
 global.beforeEach = wrapEach(beforeEach)
 global.describe = wrapDescribe(describe)
+global.describe.only = wrapDescribe(describe.only)
+global.describe.skip = describe.skip
+global.describe.todo = describe.todo
+global.context = global.describe
 global.it = wrapIt(it)
+global.it.only = wrapIt(it.only)
+global.it.skip = it.skip
+global.it.todo = it.todo
 global.withVersions = withVersions
 global.withExports = withExports
 global.withNamingSchema = withNamingSchema
 global.withPeerService = withPeerService
 
 function wrapDescribe (describe) {
-  if (NODE_MAJOR >= 18) return describe
-
   const wrapper = function (...args) {
-    const fn = args[args.length - 1]
-    const parentHooks = hookStorage.getStore() || []
+    const hookStore = hookStorage.getStore()
+    const timeout = getTimeout(args)
 
-    args[args.length - 1] = function (...args) {
-      parentHooks.forEach(hook => hook())
+    if (NODE_MAJOR < 20 || (NODE_MAJOR === 20 && NODE_MINOR < 13)) {
+      const fn = args[args.length - 1]
+      const parentHooks = hookStore || []
 
-      return hookStorage.run([...parentHooks], () => {
-        return fn.apply(this, args)
-      })
+      args[args.length - 1] = function (...args) {
+        parentHooks.forEach(hook => hook())
+
+        return timeoutStorage.run(timeout, () => {
+          return hookStorage.run([...parentHooks], () => {
+            return fn.apply(this, args)
+          })
+        })
+      }
     }
 
     return describe.apply(this, args)
   }
 
-  wrapper.only = wrapper.only && wrapDescribe(it.only)
-  wrapper.skip = wrapper.skip && wrapDescribe(it.skip)
-
   return wrapper
 }
 
-function wrapIt (it) {
+function wrapIt (it, optionsAfterFn = false) {
   const wrapper = function (...args) {
     const fn = args[args.length - 1]
 
+    addTimeout(args, optionsAfterFn)
+
     if (fn.length > 0) {
       args[args.length - 1] = function (t, done) {
-        if (done) return fn(done)
+        if (done) return fn.call(this, done)
 
         return new Promise((resolve, reject) => {
-          return fn((e) => {
+          return fn.call(this, (e) => {
             if (e instanceof Error) {
               reject(e)
             } else {
@@ -75,14 +87,11 @@ function wrapIt (it) {
     return it.apply(this, args)
   }
 
-  wrapper.only = wrapper.only && wrapIt(it.only)
-  wrapper.skip = wrapper.skip && wrapIt(it.skip)
-
   return wrapper
 }
 
 function wrapEach (each) {
-  if (NODE_MAJOR >= 18) return each
+  if (NODE_MAJOR > 20 || (NODE_MAJOR === 20 && NODE_MINOR >= 13)) return wrapIt(each, true)
 
   const wrapper = wrapIt(function (...args) {
     const hooks = hookStorage.getStore()
@@ -90,9 +99,30 @@ function wrapEach (each) {
     hooks.push(() => each.apply(this, args))
 
     return each.apply(this, args)
-  })
+  }, true)
 
   return wrapper
+}
+
+function getTimeout (args, optionsAfterFn = false) {
+  const index = optionsAfterFn ? args.length - 1 : args.length - 2
+
+  return typeof args[index] === 'object' && args[index].timeout
+}
+
+function addTimeout (args, optionsAfterFn = false) {
+  const timeoutStore = timeoutStorage.getStore()
+  const options = { timeout: timeoutStore || 5000 }
+  const index = optionsAfterFn ? args.length - 1 : args.length - 2
+  const spliceIndex = index + 1
+
+  if (typeof args[index] === 'object') {
+    args[index] = Object.assign(options, args[index])
+  } else {
+    args.splice(spliceIndex, 0, options)
+  }
+
+  return options.timeout
 }
 
 const testedPlugins = agent.testedPlugins

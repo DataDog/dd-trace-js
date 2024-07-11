@@ -16,10 +16,9 @@ describe('esm', () => {
 
   withVersions('hapi', '@hapi/hapi', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'@hapi/hapi@${version}'`], false, [
         './packages/datadog-plugin-hapi/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

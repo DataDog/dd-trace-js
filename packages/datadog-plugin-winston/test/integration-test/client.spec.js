@@ -15,15 +15,13 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('winston', 'winston', '>=3', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'winston@${version}'`]
         , false, ['./packages/datadog-plugin-winston/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 50000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

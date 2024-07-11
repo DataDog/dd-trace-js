@@ -21,10 +21,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('microgateway-core', 'microgateway-core', '>=3.0.0', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'microgateway-core@${version}'`, 'get-port'], false, [
         './packages/datadog-plugin-microgateway-core/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

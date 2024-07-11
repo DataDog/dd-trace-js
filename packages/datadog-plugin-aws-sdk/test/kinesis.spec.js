@@ -7,8 +7,7 @@ const { setup } = require('./spec_helpers')
 const helpers = require('./kinesis_helpers')
 const { rawExpectedSchema } = require('./kinesis-naming')
 
-describe('Kinesis', function () {
-  this.timeout(10000)
+describe('Kinesis', { timeout: 10000 }, function () {
   setup()
 
   withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
