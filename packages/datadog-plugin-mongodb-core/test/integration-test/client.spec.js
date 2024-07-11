@@ -22,10 +22,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb', '>=4', version => {
     before(async function () {
-      this.timeout(30000)
       sandbox = await createSandbox([`'mongodb@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-    })
+    }, { timeout: 30000 })
 
     after(async function () {
       await sandbox.remove()
@@ -56,10 +55,9 @@ describe('esm', () => {
   // test against later versions because server2.mjs uses newer package syntax
   withVersions('mongodb-core', 'mongodb-core', '>=3', version => {
     before(async function () {
-      this.timeout(30000)
       sandbox = await createSandbox([`'mongodb-core@${version}'`], false, [
         './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
-    })
+    }, { timeout: 30000 })
 
     after(async function () {
       await sandbox.remove()

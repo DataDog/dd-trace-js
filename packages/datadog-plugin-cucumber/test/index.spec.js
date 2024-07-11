@@ -52,9 +52,8 @@ const runCucumber = (version, Cucumber, requireName, featureName, testName) => {
   return cli.run()
 }
 
-describe('Plugin', function () {
+describe('Plugin', { timeout: 10000 }, function () {
   let Cucumber
-  this.timeout(10000)
   withVersions('cucumber', '@cucumber/cucumber', version => {
     const specificVersion = require(`../../../versions/@cucumber/cucumber@${version}`).version()
     if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=10')) return

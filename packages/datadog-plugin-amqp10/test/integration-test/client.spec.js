@@ -14,10 +14,9 @@ describe('esm', () => {
   let sandbox
   withVersions('amqp10', 'amqp10', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'amqp10@${version}'`, 'rhea'], false, [
         './packages/datadog-plugin-amqp10/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

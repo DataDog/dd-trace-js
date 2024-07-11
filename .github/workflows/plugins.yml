@@ -34,7 +34,7 @@ jobs:
         ports:
           - 9126:9126
     env:
-      PLUGINS: aerospike
+      PLUGIN: aerospike
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: '3.16.2 - 3.16.7'
       DD_TEST_AGENT_URL: http://testagent:9126
@@ -79,7 +79,7 @@ jobs:
         ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
-      PLUGINS: aerospike
+      PLUGIN: aerospike
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: '>=4.0.0 <5.2.0'
     steps:
@@ -121,7 +121,7 @@ jobs:
         ports:
           - "127.0.0.1:3000-3002:3000-3002"
     env:
-      PLUGINS: aerospike
+      PLUGIN: aerospike
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
@@ -150,7 +150,7 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
-  amqp10: # TODO: move rhea to its own job
+  amqp10:
     runs-on: ubuntu-latest
     services:
       qpid:
@@ -161,7 +161,7 @@ jobs:
         ports:
           - 5673:5672
     env:
-      PLUGINS: amqp10|rhea
+      PLUGIN: amqp10
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -187,7 +187,7 @@ jobs:
         ports:
           - 5672:5672
     env:
-      PLUGINS: amqplib
+      PLUGIN: amqplib
       SERVICES: rabbitmq
     steps:
       - uses: actions/checkout@v4
@@ -207,7 +207,7 @@ jobs:
   apollo:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: apollo
+      PLUGIN: apollo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -259,7 +259,7 @@ jobs:
           EDGE_PORT: 4567
           EDGE_PORT_HTTP: 4567
     env:
-      PLUGINS: aws-sdk
+      PLUGIN: aws-sdk
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
@@ -278,7 +278,7 @@ jobs:
   axios:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: axios
+      PLUGIN: axios
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -295,7 +295,7 @@ jobs:
   bluebird:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: bluebird
+      PLUGIN: bluebird
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -309,10 +309,27 @@ jobs:
       - if: always()
         uses: ./.github/actions/testagent/logs
 
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN: body-parser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
   bunyan:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: bunyan
+      PLUGIN: bunyan
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -336,7 +353,7 @@ jobs:
         ports:
           - 9042:9042
     env:
-      PLUGINS: cassandra-driver
+      PLUGIN: cassandra-driver
       SERVICES: cassandra
     steps:
       - uses: actions/checkout@v4
@@ -354,7 +371,7 @@ jobs:
   child_process:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: child_process
+      PLUGIN: child_process
     steps:
       - uses: actions/checkout@v2
       - uses: ./.github/actions/node/setup
@@ -366,6 +383,23 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
+
+  cookie-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN: cookie-parser
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
 
   couchbase:
     strategy:
@@ -379,7 +413,7 @@ jobs:
           - 8091-8095:8091-8095
           - 11210:11210
     env:
-      PLUGINS: couchbase
+      PLUGIN: couchbase
       SERVICES: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
@@ -394,7 +428,7 @@ jobs:
   connect:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: connect
+      PLUGIN: connect
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -413,7 +447,7 @@ jobs:
   cucumber:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: cucumber
+      PLUGIN: cucumber
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -431,7 +465,7 @@ jobs:
   cypress:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: cypress
+      PLUGIN: cypress
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -445,7 +479,7 @@ jobs:
   dns:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: dns
+      PLUGIN: dns
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -471,7 +505,7 @@ jobs:
         ports:
           - 9200:9200
     env:
-      PLUGINS: elasticsearch
+      PLUGIN: elasticsearch
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@v4
@@ -487,7 +521,30 @@ jobs:
   express:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: express|body-parser|cookie-parser
+      PLUGIN: express
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  express-mongo-sanitize:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGIN: express-mongo-sanitize
+      SERVICES: mongo
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -504,7 +561,7 @@ jobs:
   fastify:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: fastify
+      PLUGIN: fastify
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -521,7 +578,7 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: fetch
+      PLUGIN: fetch
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -538,7 +595,7 @@ jobs:
   generic-pool:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: generic-pool
+      PLUGIN: generic-pool
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -560,7 +617,7 @@ jobs:
         ports:
           - 8081:8081
     env:
-      PLUGINS: google-cloud-pubsub
+      PLUGIN: google-cloud-pubsub
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@v4
@@ -578,7 +635,7 @@ jobs:
   graphql:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: graphql
+      PLUGIN: graphql
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -597,7 +654,7 @@ jobs:
   grpc:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: grpc
+      PLUGIN: grpc
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -614,7 +671,7 @@ jobs:
   hapi:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: hapi
+      PLUGIN: hapi
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -634,7 +691,7 @@ jobs:
         node-version: ['18', '20', 'latest']
     runs-on: ubuntu-latest
     env:
-      PLUGINS: http
+      PLUGIN: http
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -651,7 +708,7 @@ jobs:
   http2:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: http2
+      PLUGIN: http2
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -667,11 +724,34 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
+  redis:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:4.0-alpine
+        ports:
+          - 6379:6379
+    env:
+      PLUGIN: ioredis
+      SERVICES: redis
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
   # TODO: fix performance issues and test more Node versions
   jest:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: jest
+      PLUGIN: jest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -698,7 +778,7 @@ jobs:
           - 9092:9092
           - 9093:9093
     env:
-      PLUGINS: kafkajs
+      PLUGIN: kafkajs
       SERVICES: kafka
     steps:
       - uses: actions/checkout@v4
@@ -716,7 +796,7 @@ jobs:
   knex:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: knex
+      PLUGIN: knex
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -733,7 +813,7 @@ jobs:
   koa:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: koa
+      PLUGIN: koa
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -761,8 +841,34 @@ jobs:
         ports:
           - 9231:9231
     env:
-      PLUGINS: limitd-client
+      PLUGIN: limitd-client
       SERVICES: limitd
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  mariadb:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGIN: mariadb
+      SERVICES: mysql
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -784,7 +890,7 @@ jobs:
         ports:
           - 11211:11211
     env:
-      PLUGINS: memcached
+      PLUGIN: memcached
       SERVICES: memcached
     steps:
       - uses: actions/checkout@v4
@@ -802,7 +908,7 @@ jobs:
   microgateway-core:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: microgateway-core
+      PLUGIN: microgateway-core
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -819,7 +925,7 @@ jobs:
   mocha:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: mocha
+      PLUGIN: mocha
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -836,7 +942,7 @@ jobs:
   moleculer:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: moleculer
+      PLUGIN: moleculer
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -858,7 +964,7 @@ jobs:
         ports:
           - 27017:27017
     env:
-      PLUGINS: mongodb-core|express-mongo-sanitize
+      PLUGIN: mongodb-core
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v4
@@ -881,7 +987,7 @@ jobs:
         ports:
           - 27017:27017
     env:
-      PLUGINS: mongoose
+      PLUGIN: mongoose
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v4
@@ -907,7 +1013,33 @@ jobs:
         ports:
           - 3306:3306
     env:
-      PLUGINS: mysql|mysql2|mariadb # TODO: move mysql2 to its own job
+      PLUGIN: mysql
+      SERVICES: mysql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
+  mysql2:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
+    env:
+      PLUGIN: mysql2
       SERVICES: mysql
     steps:
       - uses: actions/checkout@v4
@@ -925,7 +1057,7 @@ jobs:
   net:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: net
+      PLUGIN: net
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -951,7 +1083,7 @@ jobs:
         range: ['>=9.5 <11.1', '>=11.1 <13.2', '>=13.2']
     runs-on: ubuntu-latest
     env:
-      PLUGINS: next
+      PLUGIN: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
@@ -966,7 +1098,7 @@ jobs:
   openai:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: openai
+      PLUGIN: openai
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -991,7 +1123,7 @@ jobs:
         ports:
           - 9201:9200
     env:
-      PLUGINS: opensearch
+      PLUGIN: opensearch
       SERVICES: opensearch
     steps:
       - uses: actions/checkout@v4
@@ -1029,7 +1161,7 @@ jobs:
         ports:
           - 9126:9126
     env:
-      PLUGINS: oracledb
+      PLUGIN: oracledb
       SERVICES: oracledb
       DD_TEST_AGENT_URL: http://testagent:9126
       # Needed to fix issue with `actions/checkout@v3: https://github.com/actions/checkout/issues/1590
@@ -1049,7 +1181,7 @@ jobs:
   paperplane:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: paperplane
+      PLUGIN: paperplane
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1065,7 +1197,7 @@ jobs:
   pino:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: pino
+      PLUGIN: pino
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1091,7 +1223,7 @@ jobs:
           - 5432:5432
     env:
       PG_TEST_NATIVE: 'true'
-      PLUGINS: pg
+      PLUGIN: pg
       SERVICES: postgres
     steps:
       - uses: actions/checkout@v4
@@ -1109,7 +1241,7 @@ jobs:
   promise:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: promise
+      PLUGIN: promise
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1128,7 +1260,7 @@ jobs:
   promise-js:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: promise-js
+      PLUGIN: promise-js
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1145,7 +1277,7 @@ jobs:
   q:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: q
+      PLUGIN: q
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1167,7 +1299,7 @@ jobs:
         ports:
           - 6379:6379
     env:
-      PLUGINS: redis|ioredis # TODO: move ioredis to its own job
+      PLUGIN: redis
       SERVICES: redis
     steps:
       - uses: actions/checkout@v4
@@ -1185,7 +1317,7 @@ jobs:
   restify:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: restify
+      PLUGIN: restify
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1199,10 +1331,39 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
+  rhea:
+    runs-on: ubuntu-latest
+    services:
+      qpid:
+        image: scholzj/qpid-cpp:1.38.0
+        env:
+          QPIDD_ADMIN_USERNAME: admin
+          QPIDD_ADMIN_PASSWORD: admin
+        ports:
+          - 5673:5672
+    env:
+      PLUGIN: rhea
+      SERVICES: qpid
+      DD_DATA_STREAMS_ENABLED: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:upstream
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
   router:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: router
+      PLUGIN: router
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1219,7 +1380,7 @@ jobs:
   sharedb:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: sharedb
+      PLUGIN: sharedb
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1243,7 +1404,7 @@ jobs:
         ports:
           - 1433:1433
     env:
-      PLUGINS: tedious
+      PLUGIN: tedious
       SERVICES: mssql
     steps:
       - uses: actions/checkout@v4
@@ -1260,7 +1421,7 @@ jobs:
   undici:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: undici
+      PLUGIN: undici
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1277,7 +1438,7 @@ jobs:
   when:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: when
+      PLUGIN: when
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -1294,7 +1455,7 @@ jobs:
   winston:
     runs-on: ubuntu-latest
     env:
-      PLUGINS: winston
+      PLUGIN: winston
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start

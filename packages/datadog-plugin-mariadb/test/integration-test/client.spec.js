@@ -16,10 +16,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'mariadb@${version}'`], false, [
         './packages/datadog-plugin-mariadb/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

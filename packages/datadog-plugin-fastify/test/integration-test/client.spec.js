@@ -17,10 +17,9 @@ describe('esm', () => {
   // skip older versions of fastify due to syntax differences
   withVersions('fastify', 'fastify', '>=3', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,
         ['./packages/datadog-plugin-fastify/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

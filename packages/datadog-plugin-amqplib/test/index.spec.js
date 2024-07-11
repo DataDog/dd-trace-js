@@ -303,9 +303,7 @@ describe('Plugin', () => {
           })
         })
 
-        describe('when data streams monitoring is enabled', function () {
-          this.timeout(10000)
-
+        describe('when data streams monitoring is enabled', { timeout: 10000 }, function () {
           const expectedProducerHash = '17191234428405871432'
           const expectedConsumerHash = '18277095184718602853'
 

@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('graphql', 'graphql', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'graphql@${version}'`], false, [
         './packages/datadog-plugin-graphql/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async function () {
       await sandbox.remove()

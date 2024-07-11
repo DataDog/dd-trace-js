@@ -413,3 +413,5 @@ module.exports = {
   getDsmStats,
   dsmStatsExist
 }
+
+require('../setup/test')

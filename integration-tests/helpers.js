@@ -18,6 +18,8 @@ const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
 const assert = require('assert')
 
+require('../packages/dd-trace/test/setup/test')
+
 const hookFile = 'dd-trace/loader-hook.mjs'
 
 class FakeAgent extends EventEmitter {
@@ -89,7 +91,7 @@ class FakeAgent extends EventEmitter {
     const timeoutObj = setTimeout(() => {
       const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
-    }, timeout)
+    }, timeout).unref()
 
     const resultPromise = new Promise((resolve, reject) => {
       resultResolve = () => {

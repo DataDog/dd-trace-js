@@ -15,15 +15,13 @@ describe('esm', () => {
   let sandbox
   withVersions('koa', 'koa', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'koa@${version}'`], false,
         ['./packages/datadog-plugin-koa/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 50000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

@@ -16,10 +16,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('sharedb', 'sharedb', '>=3', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'sharedb@${version}'`], false, [
         './packages/datadog-plugin-sharedb/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()

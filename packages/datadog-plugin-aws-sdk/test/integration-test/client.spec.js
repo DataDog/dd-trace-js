@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('aws-sdk', ['aws-sdk'], version => {
     before(async function () {
-      this.timeout(60000)
       sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
         './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
-    })
+    }, { timeout: 60000 })
 
     after(async () => {
       await sandbox.remove()

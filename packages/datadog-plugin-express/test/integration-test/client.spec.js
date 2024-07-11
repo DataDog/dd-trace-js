@@ -15,15 +15,13 @@ describe('esm', () => {
 
   withVersions('express', 'express', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'express@${version}'`], false,
         ['./packages/datadog-plugin-express/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 50000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

@@ -28,12 +28,10 @@ describe('esm', () => {
   // match versions tested with unit tests
   withVersions('next', 'next', VERSIONS_TO_TEST, version => {
     before(async function () {
-      // next builds slower in the CI, match timeout with unit tests
-      this.timeout(120 * 1000)
       sandbox = await createSandbox([`'next@${version}'`, 'react', 'react-dom'],
         false, ['./packages/datadog-plugin-next/test/integration-test/*'],
         BUILD_COMMAND)
-    })
+    }, { timeout: 240000 }) // next builds slower in the CI, match timeout with unit tests
 
     after(async () => {
       await sandbox.remove()
