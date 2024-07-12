@@ -60,7 +60,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
-          ref: rochdev/pull-images-optional-cleanup
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
