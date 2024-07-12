@@ -217,7 +217,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
     expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
-    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(271)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(190)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(550)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
@@ -248,7 +248,7 @@ describe('Config', () => {
       {
         name: 'appsec.obfuscatorKeyRegex',
         // eslint-disable-next-line max-len
-        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key)|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
+        value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {

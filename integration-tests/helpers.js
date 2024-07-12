@@ -296,8 +296,15 @@ async function createSandbox (dependencies = [], isGitRepo = false,
   const { NODE_OPTIONS, ...restOfEnv } = process.env
 
   fs.mkdirSync(folder)
+  const addCommand = `yarn add ${allDependencies.join(' ')} --ignore-engines`
+  const addOptions = { cwd: folder, env: restOfEnv }
   await exec(`yarn pack --filename ${out}`, { env: restOfEnv }) // TODO: cache this
-  await exec(`yarn add ${allDependencies.join(' ')} --ignore-engines`, { cwd: folder, env: restOfEnv })
+
+  try {
+    await exec(addCommand, addOptions)
+  } catch (e) { // retry in case of server error from registry
+    await exec(addCommand, addOptions)
+  }
 
   for (const path of integrationTestsPaths) {
     if (process.platform === 'win32') {
