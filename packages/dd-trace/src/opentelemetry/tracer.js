@@ -120,7 +120,8 @@ class Tracer {
     return this._tracerProvider.getActiveSpanProcessor()
   }
 
-  getSpanLimits() {
+  // not used in our codebase but needed for compatibility. See issue #1244
+  getSpanLimits () {
     return this._spanLimits
   }
 }
