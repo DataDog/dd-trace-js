@@ -9,7 +9,7 @@ class EvalInjectionAnalyzer extends InjectionAnalyzer {
   }
 
   onConfigure () {
-    this.addSub('datadog:eval:start', ({ script }) => this.analyze(script))
+    this.addSub('datadog:eval:call', ({ script }) => this.analyze(script))
   }
 }
 

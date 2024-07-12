@@ -10,6 +10,7 @@ const { isDebugAllowed } = require('../telemetry/verbosity')
 const { taintObject } = require('./operations-taint-object')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
+const evalCallCh = dc.channel('datadog:eval:call')
 
 const JSON_VALUE = 'json.value'
 
@@ -132,6 +133,13 @@ function csiMethodsOverrides (getContext) {
     random: function (res, fn) {
       if (mathRandomCallCh.hasSubscribers) {
         mathRandomCallCh.publish({ fn })
+      }
+      return res
+    },
+
+    eval: function (res, fn, target, script) {
+      if (evalCallCh.hasSubscribers && fn === globalThis.eval) {
+        evalCallCh.publish({ script })
       }
       return res
     },

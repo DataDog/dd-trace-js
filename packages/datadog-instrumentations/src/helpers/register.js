@@ -29,10 +29,6 @@ if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
 
-if (!disabledInstrumentations.has('eval')) {
-  require('../eval')
-}
-
 const HOOK_SYMBOL = Symbol('hookExportsMap')
 
 if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
