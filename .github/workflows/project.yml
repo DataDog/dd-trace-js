@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
 
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
-      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/install
       - run: node node_modules/.bin/mocha --colors --timeout 30000 -r packages/dd-trace/test/setup/core.js integration-tests/init.spec.js
 
   integration-ci:
@@ -78,7 +78,7 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
         if: ${{ matrix.framework == 'selenium' }}
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn test:integration:${{ matrix.framework }}
         env:
           NODE_OPTIONS: '-r ./ci/init'
@@ -92,6 +92,7 @@ jobs:
         version: [16, latest]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
+        module-type: ['commonJS', 'esm']
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
@@ -100,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install --ignore-engines
+      - uses: ./.github/actions/install
       - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.version }}
@@ -109,6 +110,8 @@ jobs:
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: '-r ./ci/init'
+          CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
+
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -119,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: actions/setup-node@v3
         with:
           node-version: 20
@@ -132,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn lint
 
   typescript:
@@ -140,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn type:test
       - run: yarn type:doc
 
