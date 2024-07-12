@@ -39,6 +39,9 @@ describe('scrub cmds', () => {
 
     expect(scrubCmdParams('test -password very_secret -api_key 1234'))
       .to.be.deep.equal(['test', '-password', '?', '-api_key', '?'])
+
+    expect(scrubCmdParams('test --address https://some.address.com --email testing@to.es --api-key 1234'))
+      .to.be.deep.equal(['test', '--address', '?', '--email', '?', '--api-key', '?'])
   })
 
   it('Should scrub md5 commands', () => {
