@@ -3,10 +3,10 @@
 const { URL, format } = require('url')
 const uuid = require('crypto-randomuuid')
 const { EventEmitter } = require('events')
-const tracerVersion = require('../../../../../package.json').version
-const request = require('../../exporters/common/request')
-const log = require('../../log')
-const { getExtraServices } = require('../../service-naming/extra-services')
+const tracerVersion = require('../../../../package.json').version
+const request = require('../exporters/common/request')
+const log = require('../log')
+const { getExtraServices } = require('../service-naming/extra-services')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 const Scheduler = require('./scheduler')
 
