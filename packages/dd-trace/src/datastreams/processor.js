@@ -211,7 +211,8 @@ class DataStreamsProcessor {
       Stats,
       TracerVersion: pkg.version,
       Version: this.version,
-      Lang: 'javascript'
+      Lang: 'javascript',
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
     }
     this.writer.flush(payload)
   }

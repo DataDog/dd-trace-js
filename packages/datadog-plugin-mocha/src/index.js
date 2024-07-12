@@ -175,13 +175,15 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', (status) => {
+    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
         span.setTag(TEST_STATUS, status)
-
+        if (hasBeenRetried) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
         span.finish()
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
@@ -204,14 +206,33 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:test:error', (err) => {
       const store = storage.getStore()
-      if (err && store && store.span) {
-        const span = store.span
+      const span = store?.span
+      if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
           span.setTag(TEST_STATUS, 'skip')
         } else {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', err)
         }
+      }
+    })
+
+    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
+      const store = storage.getStore()
+      const span = store?.span
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        if (!isFirstAttempt) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
+
+        span.finish()
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        )
+        finishAllTraceSpans(span)
       }
     })
 
