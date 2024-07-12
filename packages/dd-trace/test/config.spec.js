@@ -1531,7 +1531,6 @@ describe('Config', () => {
         }
       ]
     }, true)
-
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
       rateLimit: undefined,
