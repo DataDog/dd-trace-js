@@ -30,16 +30,19 @@ describe('Code injection vulnerability', () => {
         testThatRequestHasVulnerability({
           fn: (req, res) => {
             // eslint-disable-next-line no-eval
-            res.send('' + require(evalFunctionsPath).runEval(req.query.script))
+            res.send(require(evalFunctionsPath).runEval(req.query.script, 'test-result'))
           },
           vulnerability: 'CODE_INJECTION',
           makeRequest: (done, config) => {
-            axios.get(`http://localhost:${config.port}/?script=1%2B2`).catch(done)
+            axios.get(`http://localhost:${config.port}/?script=1%2B2`)
+              .then(res => {
+                expect(res.data).to.equal('test-result')
+              })
+              .catch(done)
           }
         })
         testThatRequestHasNoVulnerability({
           fn: (req, res) => {
-            // eslint-disable-next-line no-eval
             res.send('' + require(evalFunctionsPath).runFakeEval(req.query.script))
           },
           vulnerability: 'CODE_INJECTION',

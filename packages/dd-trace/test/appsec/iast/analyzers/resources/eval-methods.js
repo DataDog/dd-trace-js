@@ -7,10 +7,13 @@ const obj = {
 }
 
 module.exports = {
-  runEval: (code) => {
-    return eval(code)
+  runEval: (code, result) => {
+    // eslint-disable-next-line no-eval
+    const script = `(${code}, result)`
+
+    return eval(script)
   },
-  runFakeEval: (code) => {
-    return obj.eval(code)
+  runFakeEval: (code, returnData) => {
+    return obj.eval(`(${code}, returnData)`)
   }
 }

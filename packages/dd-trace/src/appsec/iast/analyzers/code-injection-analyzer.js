@@ -10,7 +10,6 @@ class CodeInjectionAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('datadog:eval:call', ({ script }) => {
-      console.log('kaixo world?', script)
       return this.analyze(script)
     })
   }
