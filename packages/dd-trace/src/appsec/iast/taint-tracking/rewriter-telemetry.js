@@ -6,10 +6,7 @@ const { INSTRUMENTED_PROPAGATION } = require('../telemetry/iast-metric')
 
 const telemetryRewriter = {
   off (content, filename, rewriter) {
-    const response = rewriter.rewrite(content, filename)
-    if (filename.indexOf('eval') > -1)
-      console.log(response)
-    return response
+    return rewriter.rewrite(content, filename)
   },
 
   information (content, filename, rewriter) {
