@@ -39,7 +39,7 @@ jobs:
 
 
   system-tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ contains(fromJSON('["CROSSED_TRACING_LIBRARIES", "INTEGRATIONS"]'), matrix.scenario) && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
     needs:
       - get-essential-scenarios
     strategy:
@@ -64,10 +64,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: 'binaries/dd-trace-js'
-      - name: Build weblog
-        run: ./build.sh -i weblog
       - name: Build runner
         uses: ./.github/actions/install_runner
+      - name: Pull images
+        uses: ./.github/actions/pull_images
+        with:
+          library: nodejs
+          weblog: ${{ matrix.weblog-variant }}
+          scenarios: '["${{ matrix.scenario }}"]'
+          cleanup: false
+      - name: Build weblog
+        run: ./build.sh -i weblog
       - name: Build agent
         id: build-agent
         run: ./build.sh -i agent
