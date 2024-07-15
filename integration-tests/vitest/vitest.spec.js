@@ -136,5 +136,35 @@ versions.forEach((version) => {
         }
       )
     })
+
+    context('flaky test retries', () => {
+      it('can retry flaky tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+
+        }).then(() => done()).catch(done)
+        childProcess = exec(
+          './node_modules/.bin/vitest run', // TODO: change tests we run
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // maybe only in node@20
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
+    })
   })
 })

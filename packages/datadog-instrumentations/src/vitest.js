@@ -16,6 +16,7 @@ const testSuiteErrorCh = channel('ci:vitest:test-suite:error')
 // test session hooks
 const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
+const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 
 const taskToAsync = new WeakMap()
 
@@ -28,6 +29,14 @@ function isReporterPackage (vitestPackage) {
 // from 2.0.0
 function isReporterPackageNew (vitestPackage) {
   return vitestPackage.e?.name === 'BaseSequencer'
+}
+
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    sessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
 }
 
 function getSessionStatus (state) {
@@ -90,6 +99,23 @@ function getSortWrapper (sort) {
     if (!testSessionFinishCh.hasSubscribers) {
       return sort.apply(this, arguments)
     }
+    // There isn't any other async function that we seem to be able to hook into
+    // So we will use the sort from BaseSequencer. This means that custom sequencer
+    // will not work, but this will be a known limitation.
+    let isFlakyTestRetriesEnabled = false
+
+    try {
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      if (!err) {
+        isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+      }
+    } catch (e) {
+      isFlakyTestRetriesEnabled = false
+    }
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
+      this.ctx.config.retry = 3 // TODO: change to correct value
+    }
+
     shimmer.wrap(this.ctx, 'exit', exit => async function () {
       let onFinish
 
