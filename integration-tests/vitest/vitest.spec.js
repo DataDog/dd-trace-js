@@ -89,7 +89,10 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report failed test',
             'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.context can report more',
             'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report passed test',
-            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more'
+            'ci-visibility/vitest-tests/test-visibility-failed-hooks.mjs.other context can report more',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.no suite',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.skip no suite',
+            'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.programmatic skip no suite'
           ]
         )
 
