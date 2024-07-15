@@ -518,45 +518,7 @@ declare namespace tracer {
       /**
        * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
        */
-      iast?: boolean | {
-        /**
-         * Whether to enable IAST.
-         * @default false
-         */
-        enabled?: boolean,
-        /**
-         * Controls the percentage of requests that iast will analyze
-         * @default 30
-         */
-        requestSampling?: number,
-        /**
-         * Controls how many request can be analyzing code vulnerabilities at the same time
-         * @default 2
-         */
-        maxConcurrentRequests?: number,
-        /**
-         * Controls how many code vulnerabilities can be detected in the same request
-         * @default 2
-         */
-        maxContextOperations?: number,
-        /**
-         * Whether to enable vulnerability deduplication
-         */
-        deduplicationEnabled?: boolean,
-        /**
-         * Whether to enable vulnerability redaction
-         * @default true
-         */
-        redactionEnabled?: boolean,
-        /**
-         * Specifies a regex that will redact sensitive source names in vulnerability reports.
-         */
-        redactionNamePattern?: string,
-        /**
-         * Specifies a regex that will redact sensitive source values in vulnerability reports.
-         */
-        redactionValuePattern?: string
-      }
+      iast?: boolean | IastOptions
 
       appsec?: {
         /**
@@ -735,6 +697,11 @@ declare namespace tracer {
         maxDepth?: number,
       }
     };
+
+    /**
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+     */
+    iast?: boolean | IastOptions
 
     /**
      * Configuration of ASM Remote Configuration
@@ -2136,6 +2103,61 @@ declare namespace tracer {
     export type SpanStatus = otel.SpanStatus;
     export type TimeInput = otel.TimeInput;
     export type TraceState = otel.TraceState;
+  }
+
+  /**
+   * Iast configuration used in `tracer` and `tracer.experimental` options
+   */
+  interface IastOptions {
+    /**
+     * Whether to enable IAST.
+     * @default false
+     */
+    enabled?: boolean,
+
+    /**
+     * Controls the percentage of requests that iast will analyze
+     * @default 30
+     */
+    requestSampling?: number,
+
+    /**
+     * Controls how many request can be analyzing code vulnerabilities at the same time
+     * @default 2
+     */
+    maxConcurrentRequests?: number,
+
+    /**
+     * Controls how many code vulnerabilities can be detected in the same request
+     * @default 2
+     */
+    maxContextOperations?: number,
+
+    /**
+     * Whether to enable vulnerability deduplication
+     */
+    deduplicationEnabled?: boolean,
+
+    /**
+     * Whether to enable vulnerability redaction
+     * @default true
+     */
+    redactionEnabled?: boolean,
+
+    /**
+     * Specifies a regex that will redact sensitive source names in vulnerability reports.
+     */
+    redactionNamePattern?: string,
+
+    /**
+     * Specifies a regex that will redact sensitive source values in vulnerability reports.
+     */
+    redactionValuePattern?: string,
+
+    /**
+     * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
+     */
+    telemetryVerbosity?: string
   }
 }
 
