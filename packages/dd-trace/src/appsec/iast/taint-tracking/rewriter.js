@@ -117,7 +117,6 @@ function enableRewriter (telemetryVerbosity) {
       shimmer.wrap(Module.prototype, '_compile', compileMethod => getCompileMethodFn(compileMethod))
     }
   } catch (e) {
-    console.error(e)
     iastLog.error('Error enabling TaintTracking Rewriter')
       .errorAndPublish(e)
   }

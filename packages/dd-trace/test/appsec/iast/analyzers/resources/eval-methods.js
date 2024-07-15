@@ -8,9 +8,9 @@ const obj = {
 
 module.exports = {
   runEval: (code, result) => {
-    // eslint-disable-next-line no-eval
     const script = `(${code}, result)`
 
+    // eslint-disable-next-line no-eval
     return eval(script)
   },
   runFakeEval: (code, returnData) => {

@@ -138,6 +138,7 @@ function csiMethodsOverrides (getContext) {
     },
 
     eval: function (res, fn, target, script) {
+      // eslint-disable-next-line no-eval
       if (evalCallCh.hasSubscribers && fn === globalThis.eval) {
         evalCallCh.publish({ script })
       }
