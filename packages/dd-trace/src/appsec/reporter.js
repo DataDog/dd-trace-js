@@ -207,10 +207,6 @@ function finishRequest (req, res) {
 
   // collect some headers even when no attack is detected
   const mandatoryTags = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
-  const ua = mandatoryTags['http.request.headers.user-agent']
-  if (ua) {
-    mandatoryTags['http.useragent'] = ua
-  }
   rootSpan.addTags(mandatoryTags)
 
   const tags = rootSpan.context()._tags
