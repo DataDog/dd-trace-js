@@ -11,7 +11,8 @@ const {
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
-  TEST_TYPE
+  TEST_TYPE,
+  TEST_IS_RETRY
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // tested with 1.6.0
@@ -129,7 +130,6 @@ versions.forEach((version) => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            // maybe only in node@20
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
           },
           stdio: 'pipe'
@@ -150,15 +150,52 @@ versions.forEach((version) => {
         })
 
         receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
 
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 11)
+          assert.includeMembers(testEvents.map(test => test.content.resource), [
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            // passes at the third retry
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            // never passes
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            // passes on the first try
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+          ])
+          const eventuallyPassingTest = testEvents.filter(
+            test => test.content.resource ===
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass'
+          )
+          assert.equal(eventuallyPassingTest.length, 4)
+          assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 3)
+          assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 1)
+          assert.equal(eventuallyPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 3)
+
+          const neverPassingTest = testEvents.filter(
+            test => test.content.resource ===
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
+          )
+          assert.equal(neverPassingTest.length, 6)
+          assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'fail').length, 6)
+          assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_STATUS] === 'pass').length, 0)
+          assert.equal(neverPassingTest.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 5)
         }).then(() => done()).catch(done)
+
         childProcess = exec(
           './node_modules/.bin/vitest run', // TODO: change tests we run
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              // maybe only in node@20
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
             },
             stdio: 'pipe'
