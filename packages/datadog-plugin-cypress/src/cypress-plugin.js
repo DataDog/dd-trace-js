@@ -485,29 +485,45 @@ class CypressPlugin {
     // This is not always the case, such as when an `after` hook fails:
     // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
     let latestError
-    finishedTests.forEach((finishedTest) => {
-      const cypressTest = cypressTests.find(test => test.title.join(' ') === finishedTest.testName)
-      if (!cypressTest) {
-        return
+
+    const finishedTestsByTestName = finishedTests.reduce((acc, finishedTest) => {
+      if (!acc[finishedTest.testName]) {
+        acc[finishedTest.testName] = []
       }
-      if (cypressTest.displayError) {
-        latestError = new Error(cypressTest.displayError)
-      }
-      const cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
-      // update test status
-      if (cypressTestStatus !== finishedTest.testStatus) {
-        finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
-        finishedTest.testSpan.setTag('error', latestError)
-      }
-      if (this.itrCorrelationId) {
-        finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
-      }
-      if (spec.absolute && this.repositoryRoot) {
-        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
-      } else {
-        finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
-      }
-      finishedTest.testSpan.finish(finishedTest.finishTime)
+      acc[finishedTest.testName].push(finishedTest)
+      return acc
+    }, {})
+
+    Object.entries(finishedTestsByTestName).forEach(([testName, finishedTestAttempts]) => {
+      finishedTestAttempts.forEach((finishedTest, attemptIndex) => {
+        // TODO: there could be multiple if there have been retries!
+        // potentially we need to match the test status!
+        const cypressTest = cypressTests.find(test => test.title.join(' ') === testName)
+        if (!cypressTest) {
+          return
+        }
+        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        if (cypressTest.attempts) {
+          cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
+        }
+        if (cypressTest.displayError) {
+          latestError = new Error(cypressTest.displayError)
+        }
+        // Update test status
+        if (cypressTestStatus !== finishedTest.testStatus) {
+          finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
+          finishedTest.testSpan.setTag('error', latestError)
+        }
+        if (this.itrCorrelationId) {
+          finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
+        }
+        if (spec.absolute && this.repositoryRoot) {
+          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+        } else {
+          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+        }
+        finishedTest.testSpan.finish(finishedTest.finishTime)
+      })
     })
 
     if (this.testSuiteSpan) {

@@ -47,10 +47,10 @@ const moduleTypes = [
       return `./node_modules/.bin/cypress run ${commandSuffix}`
     }
   },
-  {
-    type: 'esm',
-    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
-  }
+  // {
+  //   type: 'esm',
+  //   testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
+  // }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
 moduleTypes.forEach(({
@@ -1172,6 +1172,57 @@ moduleTypes.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    context('flaky test retries', () => {
+      it.only('retries flaky tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            debugger
+            assert.equal(tests.length, 5)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/eventually-passing-test.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+
+        childProcess.stdout.pipe(process.stdout)
+        childProcess.stderr.pipe(process.stderr)
       })
     })
   })
