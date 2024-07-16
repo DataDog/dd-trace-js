@@ -13,7 +13,7 @@ module.exports = {
     // eslint-disable-next-line no-eval
     return eval(script)
   },
-  runFakeEval: (code, returnData) => {
-    return obj.eval(`(${code}, returnData)`)
+  runFakeEval: (code, result) => {
+    return obj.eval(`(${code}, result)`)
   }
 }
