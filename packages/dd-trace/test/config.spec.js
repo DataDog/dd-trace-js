@@ -28,17 +28,26 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
+  function reloadLoggerAndConfig () {
+    log = proxyquire('../src/log', {})
+    log.use = sinon.spy()
+    log.toggle = sinon.spy()
+    log.warn = sinon.spy()
+    log.error = sinon.spy()
+
+    Config = proxyquire('../src/config', {
+      './pkg': pkg,
+      './log': log,
+      './telemetry': { updateConfig },
+      fs,
+      os
+    })
+  }
+
   beforeEach(() => {
     pkg = {
       name: '',
       version: ''
-    }
-
-    log = {
-      use: sinon.spy(),
-      toggle: sinon.spy(),
-      warn: sinon.spy(),
-      error: sinon.spy()
     }
 
     updateConfig = sinon.stub()
@@ -58,19 +67,26 @@ describe('Config', () => {
     }
     osType = 'Linux'
 
-    Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      './telemetry': { updateConfig },
-      fs,
-      os
-    })
+    reloadLoggerAndConfig()
   })
 
   afterEach(() => {
     updateConfig.reset()
     process.env = env
     existsSyncParam = undefined
+  })
+
+  it('should initialize its own logging config based off the loggers config', () => {
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_TRACE_LOG_LEVEL = 'error'
+
+    reloadLoggerAndConfig()
+
+    const config = new Config()
+
+    expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('logger', undefined)
+    expect(config).to.have.property('logLevel', 'error')
   })
 
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
@@ -91,6 +107,9 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
     process.env.OTEL_PROPAGATORS = 'datadog,tracecontext'
+
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -118,6 +137,9 @@ describe('Config', () => {
     process.env.OTEL_METRICS_EXPORTER = 'none'
     process.env.OTEL_RESOURCE_ATTRIBUTES = 'foo=bar1,baz=qux1'
     process.env.OTEL_PROPAGATORS = 'b3,datadog'
+
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -464,6 +486,9 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
 
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
+
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
@@ -633,13 +658,13 @@ describe('Config', () => {
 
   it('should read case-insensitive booleans from environment variables', () => {
     process.env.DD_TRACING_ENABLED = 'False'
-    process.env.DD_TRACE_DEBUG = 'TRUE'
+    process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST = 'TRUE'
     process.env.DD_RUNTIME_METRICS_ENABLED = '0'
 
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
-    expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('tracePropagationExtractFirst', true)
     expect(config).to.have.property('runtimeMetrics', false)
   })
 
@@ -649,14 +674,12 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_TRACING_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_ENV = 'test'
 
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
-    expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
