@@ -193,7 +193,7 @@ function propagationStyle (key, option, defaultValue) {
   if (Array.isArray(option)) return option.map(v => v.toLowerCase())
 
   // If it's not an array but not undefined there's something wrong with the input
-  if (typeof option !== 'undefined') {
+  if (option !== undefined) {
     log.warn('Unexpected input for config.tracePropagationStyle')
   }
 
@@ -201,7 +201,7 @@ function propagationStyle (key, option, defaultValue) {
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
 
   const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE, process.env.OTEL_PROPAGATORS)
-  if (typeof envVar !== 'undefined') {
+  if (envVar !== undefined) {
     return envVar.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
