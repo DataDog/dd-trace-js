@@ -52,7 +52,7 @@ describe('esm', () => {
 })
 
 async function curl (url) {
-  if (typeof url === 'object') {
+  if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
     }
