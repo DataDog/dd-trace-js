@@ -283,7 +283,7 @@ class Span {
   }
 
   get ended () {
-    return typeof this.duration !== 'undefined'
+    return this.duration !== undefined
   }
 }
 

@@ -69,7 +69,7 @@ class VulnerabilityFormatter {
   }
 
   formatEvidence (type, evidence, sourcesIndexes, sources) {
-    if (typeof evidence.value === 'undefined') {
+    if (evidence.value === undefined) {
       return undefined
     }
 
