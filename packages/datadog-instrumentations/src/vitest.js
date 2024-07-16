@@ -134,7 +134,7 @@ addHook({
     taskToAsync.set(task, asyncResource)
 
     asyncResource.runInAsyncScope(() => {
-      testStartCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+      testStartCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
     })
     return onBeforeTryTask.apply(this, arguments)
   })
@@ -242,7 +242,7 @@ addHook({
       if (result) {
         const { state, duration, errors } = result
         if (state === 'skip') { // programmatic skip
-          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
         } else if (state === 'pass') {
           if (testAsyncResource) {
             testAsyncResource.runInAsyncScope(() => {
@@ -267,7 +267,7 @@ addHook({
           }
         }
       } else { // test.skip or test.todo
-        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
       }
     })
 
