@@ -81,7 +81,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
     for (const message of messages) {
-      if (typeof message === 'object') {
+      if (message !== null && typeof message === 'object') {
         this.tracer.inject(span, 'text_map', message.headers)
         if (this.config.dsmEnabled) {
           const payloadSize = getMessageSize(message)

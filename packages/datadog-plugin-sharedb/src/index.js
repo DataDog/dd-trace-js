@@ -54,7 +54,7 @@ function sanitize (input) {
 }
 
 function isObject (val) {
-  return typeof val === 'object' && val !== null && !(val instanceof Array)
+  return val !== null && typeof val === 'object' && !Array.isArray(val)
 }
 
 module.exports = SharedbPlugin
