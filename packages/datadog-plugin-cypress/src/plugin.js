@@ -22,7 +22,8 @@ module.exports = (on, config) => {
   // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
   if (tracer._tracer instanceof NoopTracer) {
     // We still need to register these tasks or the support file will fail
-    return on('task', noopTask)
+    on('task', noopTask)
+    return config
   }
 
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
