@@ -118,7 +118,7 @@ class OpenApiPlugin extends TracingPlugin {
     }
 
     // createChatCompletion, createCompletion
-    if (payload.logit_bias && typeof payload.logit_bias === 'object') {
+    if (payload.logit_bias !== null && typeof payload.logit_bias === 'object') {
       for (const [tokenId, bias] of Object.entries(payload.logit_bias)) {
         tags[`openai.request.logit_bias.${tokenId}`] = bias
       }
