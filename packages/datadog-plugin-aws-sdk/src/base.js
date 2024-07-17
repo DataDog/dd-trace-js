@@ -163,9 +163,15 @@ function normalizeConfig (config, serviceIdentifier) {
       break
   }
 
+  // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
+  const serviceId = serviceIdentifier.toUpperCase()
+  const serviceBatchPropagationValue = process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED ??
+    process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`]
+  const serviceBatchPropagationEnabled = serviceBatchPropagationValue ? isTrue(serviceBatchPropagationValue) : false
+
   return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
-    batchPropagationEnabled: config.batchPropagationEnabled !== false,
+    batchPropagationEnabled: config.batchPropagationEnabled !== false || serviceBatchPropagationEnabled !== false,
     hooks
   })
 }
