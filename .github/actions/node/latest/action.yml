@@ -4,4 +4,6 @@ runs:
   steps:
     - uses: actions/setup-node@v3
       with:
-        node-version: 'latest'
+        # TODO: revert to "latest" when
+        # https://github.com/nodejs/node/issues/53902 is fixed
+        node-version: '22.4'
