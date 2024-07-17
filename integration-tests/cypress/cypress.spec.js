@@ -1221,7 +1221,6 @@ moduleTypes.forEach(({
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
             assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
 
-
             const neverPassingTest = tests.filter(
               test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
             )
