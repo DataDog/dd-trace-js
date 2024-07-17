@@ -47,10 +47,10 @@ const moduleTypes = [
       return `./node_modules/.bin/cypress run ${commandSuffix}`
     }
   },
-  // {
-  //   type: 'esm',
-  //   testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
-  // }
+  {
+    type: 'esm',
+    testCommand: `node --loader=${hookFile} ./cypress-esm-config.mjs`
+  }
 ].filter(moduleType => !process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === moduleType.type)
 
 moduleTypes.forEach(({
