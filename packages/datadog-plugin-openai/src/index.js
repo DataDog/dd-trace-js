@@ -427,14 +427,14 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
 function commonCreateImageRequestExtraction (tags, payload, store) {
   // createImageEdit, createImageVariation
   const img = payload.file || payload.image
-  if (img && typeof img === 'object' && img.path) {
+  if (img !== null && typeof img === 'object' && img.path) {
     const file = path.basename(img.path)
     tags['openai.request.image'] = file
     store.file = file
   }
 
   // createImageEdit
-  if (payload.mask && typeof payload.mask === 'object' && payload.mask.path) {
+  if (payload.mask !== null && typeof payload.mask === 'object' && payload.mask.path) {
     const mask = path.basename(payload.mask.path)
     tags['openai.request.mask'] = mask
     store.mask = mask
@@ -633,7 +633,7 @@ function commonCreateAudioRequestExtraction (tags, body, store) {
   tags['openai.request.response_format'] = body.response_format
   tags['openai.request.language'] = body.language
 
-  if (body.file && typeof body.file === 'object' && body.file.path) {
+  if (body.file !== null && typeof body.file === 'object' && body.file.path) {
     const filename = path.basename(body.file.path)
     tags['openai.request.filename'] = filename
     store.file = filename
@@ -646,7 +646,7 @@ function commonFileRequestExtraction (tags, body) {
   // User can provider either exact file contents or a file read stream
   // With the stream we extract the filepath
   // This is a best effort attempt to extract the filename during the request
-  if (body.file && typeof body.file === 'object' && body.file.path) {
+  if (body.file !== null && typeof body.file === 'object' && body.file.path) {
     tags['openai.request.filename'] = path.basename(body.file.path)
   }
 }
