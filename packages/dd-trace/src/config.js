@@ -218,46 +218,35 @@ class Config {
       iast: options.iast != null ? options.iast : options.experimental?.iast
     }
 
+    if (typeof options.appsec === 'boolean') {
+      options.appsec = {
+        enabled: options.appsec
+      }
+    } else if (options.appsec == null) {
+      options.appsec = {}
+    }
+
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
     this.debug = logConfig.enabled
     this.logger = coalesce(options.logger, logConfig.logger)
-    this.logLevel = coalesce(options.logLevel, logConfig.logLevel)
+    this.logLevel = coalesce(options.logLevel, logConfig.logLevel) // TODO: this.logLevel is never used in production
 
     log.use(this.logger)
     log.toggle(this.debug, this.logLevel)
 
     checkIfBothOtelAndDdEnvVarSet()
 
-    const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
-      process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
-      false
-    )
-
-    const DD_SERVICE_MAPPING = coalesce(
-      options.serviceMapping,
-      process.env.DD_SERVICE_MAPPING
-        ? fromEntries(
-          process.env.DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
-        )
-        : {}
-    )
-
-    const DD_API_KEY = coalesce(
-      process.env.DATADOG_API_KEY,
-      process.env.DD_API_KEY
-    )
-
     // TODO: Remove the experimental env vars as a major?
-    const DD_TRACE_B3_ENABLED = coalesce(
+    const DD_TRACE_B3_ENABLED = isTrue(coalesce(
       options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
-    )
-    const defaultPropagationStyle = ['datadog', 'tracecontext']
-    if (isTrue(DD_TRACE_B3_ENABLED)) {
-      defaultPropagationStyle.push('b3')
-      defaultPropagationStyle.push('b3 single header')
+    ))
+    setHiddenProperty(this, '_defaultPropagationStyle', ['datadog', 'tracecontext'])
+    if (DD_TRACE_B3_ENABLED) {
+      this._defaultPropagationStyle.push('b3')
+      this._defaultPropagationStyle.push('b3 single header')
     }
     if (process.env.DD_TRACE_PROPAGATION_STYLE && (
       process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
@@ -269,122 +258,8 @@ class Config {
         'environment variables'
       )
     }
-    const PROPAGATION_STYLE_INJECT = propagationStyle(
-      'inject',
-      options.tracePropagationStyle,
-      defaultPropagationStyle
-    )
-    const PROPAGATION_STYLE_EXTRACT = propagationStyle(
-      'extract',
-      options.tracePropagationStyle,
-      defaultPropagationStyle
-    )
 
-    validateOtelPropagators(PROPAGATION_STYLE_INJECT)
-
-    const DD_TRACE_PROPAGATION_EXTRACT_FIRST = coalesce(
-      process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST,
-      false
-    )
-
-    if (typeof options.appsec === 'boolean') {
-      options.appsec = {
-        enabled: options.appsec
-      }
-    } else if (options.appsec == null) {
-      options.appsec = {}
-    }
-
-    const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
-      maybeFile(options.appsec.blockedTemplateGraphql),
-      maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
-    )
-    const DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING = coalesce(
-      options.appsec.eventTracking && options.appsec.eventTracking.mode,
-      process.env.DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
-      'safe'
-    ).toLowerCase()
-    const DD_API_SECURITY_ENABLED = coalesce(
-      options.appsec?.apiSecurity?.enabled,
-      process.env.DD_API_SECURITY_ENABLED && isTrue(process.env.DD_API_SECURITY_ENABLED),
-      process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED && isTrue(process.env.DD_EXPERIMENTAL_API_SECURITY_ENABLED),
-      true
-    )
-    const DD_API_SECURITY_REQUEST_SAMPLE_RATE = coalesce(
-      options.appsec?.apiSecurity?.requestSampling,
-      parseFloat(process.env.DD_API_SECURITY_REQUEST_SAMPLE_RATE),
-      0.1
-    )
-
-    // 0: disabled, 1: logging, 2: garbage collection + logging
-    const DD_TRACE_SPAN_LEAK_DEBUG = coalesce(
-      process.env.DD_TRACE_SPAN_LEAK_DEBUG,
-      0
-    )
-
-    const DD_INSTRUMENTATION_INSTALL_ID = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_ID,
-      null
-    )
-    const DD_INSTRUMENTATION_INSTALL_TIME = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TIME,
-      null
-    )
-    const DD_INSTRUMENTATION_INSTALL_TYPE = coalesce(
-      process.env.DD_INSTRUMENTATION_INSTALL_TYPE,
-      null
-    )
-
-    const sampler = {
-      spanSamplingRules: coalesce(
-        options.spanSamplingRules,
-        safeJsonParse(maybeFile(process.env.DD_SPAN_SAMPLING_RULES_FILE)),
-        safeJsonParse(process.env.DD_SPAN_SAMPLING_RULES),
-        []
-      ).map(rule => {
-        return remapify(rule, {
-          sample_rate: 'sampleRate',
-          max_per_second: 'maxPerSecond'
-        })
-      })
-    }
-
-    // TODO: refactor
-    this.apiKey = DD_API_KEY
-    this.serviceMapping = DD_SERVICE_MAPPING
-    this.tracePropagationStyle = {
-      inject: PROPAGATION_STYLE_INJECT,
-      extract: PROPAGATION_STYLE_EXTRACT,
-      otelPropagators: process.env.DD_TRACE_PROPAGATION_STYLE ||
-        process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
-        process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
-        ? false
-        : !!process.env.OTEL_PROPAGATORS
-    }
-    this.tracePropagationExtractFirst = isTrue(DD_TRACE_PROPAGATION_EXTRACT_FIRST)
-    this.sampler = sampler
-    this.appsec = {
-      blockedTemplateGraphql: DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
-      eventTracking: {
-        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING),
-        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
-      },
-      apiSecurity: {
-        enabled: DD_API_SECURITY_ENABLED,
-        // Coerce value between 0 and 1
-        requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
-      }
-    }
-
-    // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
-    this.memcachedCommandEnabled = isTrue(DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this.isAzureFunction = getIsAzureFunction()
-    this.spanLeakDebug = Number(DD_TRACE_SPAN_LEAK_DEBUG)
-    this.installSignature = {
-      id: DD_INSTRUMENTATION_INSTALL_ID,
-      time: DD_INSTRUMENTATION_INSTALL_TIME,
-      type: DD_INSTRUMENTATION_INSTALL_TYPE
-    }
 
     this._applyDefaults()
     this._applyEnvironment()
@@ -478,9 +353,15 @@ class Config {
 
     const defaults = setHiddenProperty(this, '_defaults', {})
 
+    this._setValue(defaults, 'apiKey', undefined)
+    this._setValue(defaults, 'appsec.apiSecurity.enabled', true)
+    this._setValue(defaults, 'appsec.apiSecurity.requestSampling', 0.1)
+    this._setValue(defaults, 'appsec.blockedTemplateGraphql', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
+    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', false)
@@ -516,6 +397,9 @@ class Config {
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'installSignature.id', null)
+    this._setValue(defaults, 'installSignature.time', null)
+    this._setValue(defaults, 'installSignature.type', null)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
     this._setValue(defaults, 'isGCPFunction', false)
@@ -524,6 +408,7 @@ class Config {
     this._setValue(defaults, 'isManualApiEnabled', false)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
+    this._setValue(defaults, 'memcachedCommandEnabled', false)
     this._setValue(defaults, 'openAiLogsEnabled', false)
     this._setValue(defaults, 'openaiSpanCharLimit', 128)
     this._setValue(defaults, 'peerServiceMapping', {})
@@ -544,11 +429,14 @@ class Config {
     this._setValue(defaults, 'sampleRate', undefined)
     this._setValue(defaults, 'sampler.rateLimit', undefined)
     this._setValue(defaults, 'sampler.rules', [])
+    this._setValue(defaults, 'sampler.spanSamplingRules', [])
     this._setValue(defaults, 'scope', undefined)
     this._setValue(defaults, 'service', service)
+    this._setValue(defaults, 'serviceMapping', {})
     this._setValue(defaults, 'site', 'datadoghq.com')
     this._setValue(defaults, 'spanAttributeSchema', 'v0')
     this._setValue(defaults, 'spanComputePeerService', false)
+    this._setValue(defaults, 'spanLeakDebug', 0)
     this._setValue(defaults, 'spanRemoveIntegrationFromService', false)
     this._setValue(defaults, 'startupLogs', false)
     this._setValue(defaults, 'stats.enabled', false)
@@ -562,6 +450,10 @@ class Config {
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
+    this._setValue(defaults, 'tracePropagationExtractFirst', false)
+    this._setValue(defaults, 'tracePropagationStyle.inject', undefined)
+    this._setValue(defaults, 'tracePropagationStyle.extract', undefined)
+    this._setValue(defaults, 'tracePropagationStyle.otelPropagators', undefined)
     this._setValue(defaults, 'tracing', true)
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
@@ -571,8 +463,14 @@ class Config {
   _applyEnvironment () {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
+      DATADOG_API_KEY,
       DD_AGENT_HOST,
+      DD_API_KEY,
+      DD_API_SECURITY_ENABLED,
+      DD_API_SECURITY_REQUEST_SAMPLE_RATE,
+      DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING,
       DD_APPSEC_ENABLED,
+      DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML,
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_MAX_STACK_TRACES,
@@ -590,6 +488,7 @@ class Config {
       DD_DOGSTATSD_HOSTNAME,
       DD_DOGSTATSD_PORT,
       DD_ENV,
+      DD_EXPERIMENTAL_API_SECURITY_ENABLED,
       DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED,
       DD_EXPERIMENTAL_PROFILING_ENABLED,
       JEST_WORKER_ID,
@@ -605,6 +504,9 @@ class Config {
       DD_INJECTION_ENABLED,
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
+      DD_INSTRUMENTATION_INSTALL_ID,
+      DD_INSTRUMENTATION_INSTALL_TIME,
+      DD_INSTRUMENTATION_INSTALL_TYPE,
       DD_LOGS_INJECTION,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
@@ -616,8 +518,11 @@ class Config {
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
       DD_SERVICE,
+      DD_SERVICE_MAPPING,
       DD_SERVICE_NAME,
       DD_SITE,
+      DD_SPAN_SAMPLING_RULES,
+      DD_SPAN_SAMPLING_RULES_FILE,
       DD_TAGS,
       DD_TELEMETRY_DEBUG,
       DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED,
@@ -637,9 +542,11 @@ class Config {
       DD_TRACE_GIT_METADATA_ENABLED,
       DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_HEADER_TAGS,
+      DD_TRACE_MEMCACHED_COMMAND_ENABLED,
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       DD_TRACE_PARTIAL_FLUSH_MIN_SPANS,
       DD_TRACE_PEER_SERVICE_MAPPING,
+      DD_TRACE_PROPAGATION_EXTRACT_FIRST,
       DD_TRACE_RATE_LIMIT,
       DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED,
       DD_TRACE_REPORT_HOSTNAME,
@@ -647,6 +554,7 @@ class Config {
       DD_TRACE_SAMPLING_RULES,
       DD_TRACE_SCOPE,
       DD_TRACE_SPAN_ATTRIBUTE_SCHEMA,
+      DD_TRACE_SPAN_LEAK_DEBUG,
       DD_TRACE_STARTUP_LOGS,
       DD_TRACE_TAGS,
       DD_TRACE_TELEMETRY_ENABLED,
@@ -669,11 +577,24 @@ class Config {
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
 
+    this._setString(env, 'apiKey', coalesce(DATADOG_API_KEY, DD_API_KEY)) // TODO: Why don't we default to the new key?
+    this._setBoolean(env, 'appsec.apiSecurity.enabled',
+      coalesce(DD_API_SECURITY_ENABLED, DD_EXPERIMENTAL_API_SECURITY_ENABLED))
+    this._setValue(env, 'appsec.apiSecurity.requestSampling', maybeRequestSampling(DD_API_SECURITY_REQUEST_SAMPLE_RATE))
+    this._envUnprocessed['appsec.apiSecurity.requestSampling'] = DD_API_SECURITY_REQUEST_SAMPLE_RATE
+    this._setValue(env, 'appsec.blockedTemplateGraphql', maybeFile(DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON))
+    this._envUnprocessed['appsec.blockedTemplateGraphql'] = DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
     this._setValue(env, 'appsec.blockedTemplateJson', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON))
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
+    if (typeof DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING === 'string') {
+      const processed = DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()
+      this._setBoolean(env, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(processed))
+      this._setString(env, 'appsec.eventTracking.mode', processed)
+      this._envUnprocessed['appsec.eventTracking.mode'] = DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING
+    }
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
     this._setBoolean(env, 'appsec.rasp.enabled', DD_APPSEC_RASP_ENABLED)
@@ -721,8 +642,15 @@ class Config {
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    // TODO: Slight change in behavior in the following 3 => empty strings fall back to default value,
+    // but I assume this is what we want
+    this._setString(env, 'installSignature.id', DD_INSTRUMENTATION_INSTALL_ID)
+    this._setString(env, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
+    this._setString(env, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
+    // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
+    this._setBoolean(env, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
     this._envUnprocessed.openaiSpanCharLimit = DD_OPENAI_SPAN_CHAR_LIMIT
@@ -767,13 +695,27 @@ class Config {
     this._setValue(env, 'sampler.rateLimit', DD_TRACE_RATE_LIMIT)
     this._setSamplingRule(env, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     this._envUnprocessed['sampler.rules'] = DD_TRACE_SAMPLING_RULES
+    this._setValue(env, 'sampler.spanSamplingRules', maybeRemapSpanSamplingRules(coalesce(
+      safeJsonParse(maybeFile(DD_SPAN_SAMPLING_RULES_FILE)),
+      safeJsonParse(DD_SPAN_SAMPLING_RULES)
+    )))
+    // TODO: What should be the value of this._envUnprocessed['sampler.spanSamplingRules']?
     this._setString(env, 'scope', DD_TRACE_SCOPE)
     this._setString(env, 'service', DD_SERVICE || DD_SERVICE_NAME || tags.service || OTEL_SERVICE_NAME)
+    if (DD_SERVICE_MAPPING) {
+      this._setValue(env, 'serviceMapping', fromEntries(
+        DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
+      ))
+      this._envUnprocessed.serviceMapping = DD_SERVICE_MAPPING
+    }
     this._setString(env, 'site', DD_SITE)
     if (DD_TRACE_SPAN_ATTRIBUTE_SCHEMA) {
       this._setString(env, 'spanAttributeSchema', validateNamingVersion(DD_TRACE_SPAN_ATTRIBUTE_SCHEMA))
       this._envUnprocessed.spanAttributeSchema = DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
     }
+    // 0: disabled, 1: logging, 2: garbage collection + logging
+    this._setValue(env, 'spanLeakDebug', maybeInt(DD_TRACE_SPAN_LEAK_DEBUG))
+    this._envUnprocessed.spanLeakDebug = DD_TRACE_SPAN_LEAK_DEBUG
     this._setBoolean(env, 'spanRemoveIntegrationFromService', DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED)
     this._setBoolean(env, 'startupLogs', DD_TRACE_STARTUP_LOGS)
     this._setTags(env, 'tags', tags)
@@ -797,6 +739,7 @@ class Config {
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
+    this._setBoolean(env, 'tracePropagationExtractFirst', DD_TRACE_PROPAGATION_EXTRACT_FIRST)
     this._setBoolean(env, 'tracing', DD_TRACING_ENABLED)
     this._setString(env, 'version', DD_VERSION || tags.version)
   }
@@ -810,11 +753,24 @@ class Config {
 
     tagger.add(tags, options.tags)
 
+    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
+    this._setValue(opts, 'appsec.apiSecurity.requestSampling',
+      maybeRequestSampling(options.appsec.apiSecurity?.requestSampling))
+    this._optsUnprocessed['appsec.apiSecurity.requestSampling'] = options.appsec.apiSecurity?.requestSampling
+    this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
+    this._optsUnprocessed['appsec.blockedTemplateGraphql'] = options.appsec.blockedTemplateGraphql
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
+    // TODO: Do we really want to allow empty strings here?
+    if (options.appsec.eventTracking && typeof options.appsec.eventTracking.mode === 'string') {
+      const processed = options.appsec.eventTracking.mode.toLowerCase()
+      this._setBoolean(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(processed))
+      this._setString(opts, 'appsec.eventTracking.mode', processed)
+      this._optsUnprocessed['appsec.eventTracking.mode'] = options.appsec.eventTracking.mode
+    }
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
     this._setBoolean(opts, 'appsec.rasp.enabled', options.appsec.rasp?.enabled)
@@ -884,7 +840,11 @@ class Config {
     const ingestion = options.ingestion || {}
     this._setValue(opts, 'sampler.rateLimit', coalesce(options.rateLimit, ingestion.rateLimit))
     this._setSamplingRule(opts, 'sampler.rules', options.samplingRules)
+    // TODO: Consider creating a _setSpanSamplingRule instead
+    this._setValue(opts, 'sampler.spanSamplingRules', maybeRemapSpanSamplingRules(options.spanSamplingRules))
+    this._optsUnprocessed['sampler.spanSamplingRules'] = options.spanSamplingRules
     this._setString(opts, 'service', options.service || tags.service)
+    this._setValue(opts, 'serviceMapping', options.serviceMapping)
     this._setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
       this._setString(opts, 'spanAttributeSchema', validateNamingVersion(options.spanAttributeSchema))
@@ -1013,6 +973,27 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
+
+    this._setValue(calc, 'tracePropagationStyle.inject', propagationStyle(
+      'inject',
+      this._optionsArg.tracePropagationStyle,
+      this._defaultPropagationStyle
+    ))
+    // TODO: Normally this only happens in the Config constructor, but now also after calls to config.configure.
+    // Is that a problem?
+    validateOtelPropagators(calc['tracePropagationStyle.inject'])
+    this._setValue(calc, 'tracePropagationStyle.extract', propagationStyle(
+      'extract',
+      this._optionsArg.tracePropagationStyle,
+      this._defaultPropagationStyle
+    ))
+    this._setBoolean(calc, 'tracePropagationStyle.otelPropagators',
+      process.env.DD_TRACE_PROPAGATION_STYLE ||
+      process.env.DD_TRACE_PROPAGATION_STYLE_INJECT ||
+      process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT
+        ? false
+        : !!process.env.OTEL_PROPAGATORS
+    )
   }
 
   _applyRemote (options) {
@@ -1145,7 +1126,7 @@ class Config {
 
           let value = container[name]
           set(this, name, value)
-          value = unprocessed[name] || value
+          value = unprocessed[name] || value // TODO: Why do we want to report the unprocesses version of the value?
 
           changes.push({ name, value, origin })
 
@@ -1167,6 +1148,22 @@ function maybeInt (number) {
 function maybeFloat (number) {
   const parsed = parseFloat(number)
   return isNaN(parsed) ? undefined : parsed
+}
+
+// Coerce value between 0 and 1
+function maybeRequestSampling (value) {
+  const parsed = maybeFloat(value)
+  return parsed === undefined ? undefined : Math.min(1, Math.max(0, parsed))
+}
+
+function maybeRemapSpanSamplingRules (obj) {
+  if (obj === undefined) return
+  return obj.map(rule => {
+    return remapify(rule, {
+      sample_rate: 'sampleRate',
+      max_per_second: 'maxPerSecond'
+    })
+  })
 }
 
 function getAgentUrl (url, options) {
