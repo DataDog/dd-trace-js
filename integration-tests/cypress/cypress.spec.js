@@ -1191,8 +1191,11 @@ moduleTypes.forEach(({
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            debugger
-            assert.equal(tests.length, 5)
+            assert.equal(tests.length, 4)
+            // TODO: check is_retry tag
+            // TODO: check test suite status
+            // TODO: add constantly failing tests
+            // TODO: add passing tests
           })
 
         const {

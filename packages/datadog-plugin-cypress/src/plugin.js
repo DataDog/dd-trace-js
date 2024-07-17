@@ -25,10 +25,10 @@ module.exports = (on, config) => {
     return on('task', noopTask)
   }
 
-  cypressPlugin.init(tracer, config)
-
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
   on('after:spec', cypressPlugin.afterSpec.bind(cypressPlugin))
   on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
   on('task', cypressPlugin.getTasks())
+
+  return cypressPlugin.init(tracer, config)
 }

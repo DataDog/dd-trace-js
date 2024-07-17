@@ -28,7 +28,8 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  NUM_FAILED_TEST_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -207,10 +208,34 @@ class CypressPlugin {
     this.knownTests = []
   }
 
+  // Init function returns a promise that resolves with the Cypress configuration
+  // Depending on the recieved configuration, the Cypress configuration can be modified,
+  // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
+
+    return getLibraryConfiguration(this.tracer, this.testConfiguration).then((libraryConfigurationResponse) => {
+      const {
+        libraryConfig: {
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          isEarlyFlakeDetectionEnabled,
+          earlyFlakeDetectionNumRetries,
+          isFlakyTestRetriesEnabled
+        }
+      } = libraryConfigurationResponse
+      this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
+      this.isCodeCoverageEnabled = isCodeCoverageEnabled
+      this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+      this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+      this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+      if (this.isFlakyTestRetriesEnabled) {
+        this.cypressConfig.retries.runMode = NUM_FAILED_TEST_RETRIES
+      }
+      return this.cypressConfig
+    })
   }
 
   getTestSuiteSpan (suite) {
@@ -300,25 +325,6 @@ class CypressPlugin {
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
-
-    const libraryConfigurationResponse = await getLibraryConfiguration(this.tracer, this.testConfiguration)
-
-    if (libraryConfigurationResponse.err) {
-      log.error(libraryConfigurationResponse.err)
-    } else {
-      const {
-        libraryConfig: {
-          isSuitesSkippingEnabled,
-          isCodeCoverageEnabled,
-          isEarlyFlakeDetectionEnabled,
-          earlyFlakeDetectionNumRetries
-        }
-      } = libraryConfigurationResponse
-      this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
-      this.isCodeCoverageEnabled = isCodeCoverageEnabled
-      this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-      this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-    }
 
     if (this.isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getKnownTests(
