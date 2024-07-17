@@ -508,8 +508,11 @@ class CypressPlugin {
         if (!cypressTest) {
           return
         }
+        // finishedTests can include multiple tests with the same name if they have been retried
+        // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
+        // the same length as `finishedTestAttempts`
         let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
-        if (cypressTest.attempts) {
+        if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           if (attemptIndex > 0) {
             finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
