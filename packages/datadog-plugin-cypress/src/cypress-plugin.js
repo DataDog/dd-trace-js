@@ -209,7 +209,7 @@ class CypressPlugin {
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
-  // Depending on the recieved configuration, the Cypress configuration can be modified,
+  // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
     this._isInit = true
@@ -511,6 +511,9 @@ class CypressPlugin {
         let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
         if (cypressTest.attempts) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
+          if (attemptIndex > 0) {
+            finishedTest.testSpan.setTag(TEST_IS_RETRY, 'true')
+          }
         }
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
