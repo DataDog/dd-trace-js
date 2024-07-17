@@ -216,26 +216,32 @@ class CypressPlugin {
     this.tracer = tracer
     this.cypressConfig = cypressConfig
 
-    return getLibraryConfiguration(this.tracer, this.testConfiguration).then((libraryConfigurationResponse) => {
-      const {
-        libraryConfig: {
-          isSuitesSkippingEnabled,
-          isCodeCoverageEnabled,
-          isEarlyFlakeDetectionEnabled,
-          earlyFlakeDetectionNumRetries,
-          isFlakyTestRetriesEnabled
+    this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
+      .then((libraryConfigurationResponse) => {
+        if (libraryConfigurationResponse.err) {
+          log.error(libraryConfigurationResponse.err)
+        } else {
+          const {
+            libraryConfig: {
+              isSuitesSkippingEnabled,
+              isCodeCoverageEnabled,
+              isEarlyFlakeDetectionEnabled,
+              earlyFlakeDetectionNumRetries,
+              isFlakyTestRetriesEnabled
+            }
+          } = libraryConfigurationResponse
+          this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
+          this.isCodeCoverageEnabled = isCodeCoverageEnabled
+          this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+          this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+          this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+          if (this.isFlakyTestRetriesEnabled) {
+            this.cypressConfig.retries.runMode = NUM_FAILED_TEST_RETRIES
+          }
         }
-      } = libraryConfigurationResponse
-      this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
-      this.isCodeCoverageEnabled = isCodeCoverageEnabled
-      this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-      this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-      this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-      if (this.isFlakyTestRetriesEnabled) {
-        this.cypressConfig.retries.runMode = NUM_FAILED_TEST_RETRIES
-      }
-      return this.cypressConfig
-    })
+        return this.cypressConfig
+      })
+    return this.libraryConfigurationPromise
   }
 
   getTestSuiteSpan (suite) {
@@ -322,6 +328,9 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
+    // We need to make sure that the plugin is initialized before running the tests
+    // This is for the case where the user has not returned the promise from the init function
+    await this.libraryConfigurationPromise
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
     this.rootDir = getRootDir(details)
