@@ -1,5 +1,6 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -16,6 +17,7 @@ const testSuiteErrorCh = channel('ci:vitest:test-suite:error')
 // test session hooks
 const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
+const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 
 const taskToAsync = new WeakMap()
 
@@ -28,6 +30,14 @@ function isReporterPackage (vitestPackage) {
 // from 2.0.0
 function isReporterPackageNew (vitestPackage) {
   return vitestPackage.e?.name === 'BaseSequencer'
+}
+
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    sessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
 }
 
 function getSessionStatus (state) {
@@ -90,6 +100,23 @@ function getSortWrapper (sort) {
     if (!testSessionFinishCh.hasSubscribers) {
       return sort.apply(this, arguments)
     }
+    // There isn't any other async function that we seem to be able to hook into
+    // So we will use the sort from BaseSequencer. This means that a custom sequencer
+    // will not work. This will be a known limitation.
+    let isFlakyTestRetriesEnabled = false
+
+    try {
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      if (!err) {
+        isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+      }
+    } catch (e) {
+      isFlakyTestRetriesEnabled = false
+    }
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
+      this.ctx.config.retry = NUM_FAILED_TEST_RETRIES
+    }
+
     shimmer.wrap(this.ctx, 'exit', exit => async function () {
       let onFinish
 
@@ -126,15 +153,31 @@ addHook({
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
   // test start (only tests that are not marked as skip or todo)
-  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task) {
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
     }
+    const { retry: numAttempt } = retryInfo
+    // We finish the previous test here because we know it has failed already
+    if (numAttempt > 0) {
+      const asyncResource = taskToAsync.get(task)
+      const testError = task.result?.errors?.[0]
+      if (asyncResource) {
+        asyncResource.runInAsyncScope(() => {
+          testErrorCh.publish({ error: testError })
+        })
+      }
+    }
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     taskToAsync.set(task, asyncResource)
 
     asyncResource.runInAsyncScope(() => {
-      testStartCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
+      testStartCh.publish({
+        testName: getTestName(task),
+        testSuiteAbsolutePath: task.file.filepath,
+        isRetry: numAttempt > 0
+      })
     })
     return onBeforeTryTask.apply(this, arguments)
   })
@@ -235,6 +278,7 @@ addHook({
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
+    // Only one test task per test, even if there are retries
     testTasks.forEach(task => {
       const testAsyncResource = taskToAsync.get(task)
       const { result } = task
@@ -258,8 +302,10 @@ addHook({
           }
 
           if (testAsyncResource) {
+            const isRetry = task.result?.retryCount > 0
+            // `duration` is the duration of all the retries, so it can't be used if there are retries
             testAsyncResource.runInAsyncScope(() => {
-              testErrorCh.publish({ duration, error: testError })
+              testErrorCh.publish({ duration: !isRetry ? duration : undefined, error: testError })
             })
           }
           if (errors?.length) {
