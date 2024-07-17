@@ -5,5 +5,6 @@ runs:
     - uses: actions/setup-node@v3
       with:
         # TODO: revert to "latest" when
-        # https://github.com/nodejs/node/issues/53902 is fixed
+        # https://github.com/nodejs/node/issues/53902 is fixed, along with
+        # other occurrences in plugins.yml
         node-version: '22.4'
