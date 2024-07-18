@@ -35,7 +35,7 @@ function wrapQuery (query) {
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     const processId = this.processID
 
-    const pgQuery = arguments[0] && typeof arguments[0] === 'object'
+    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
       ? arguments[0]
       : { text: arguments[0] }
 
@@ -109,7 +109,7 @@ function wrapPoolQuery (query) {
 
     const asyncResource = new AsyncResource('bound-anonymous-fn')
 
-    const pgQuery = arguments[0] && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
 
     return asyncResource.runInAsyncScope(() => {
       startPoolQueryCh.publish({

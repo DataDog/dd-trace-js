@@ -185,7 +185,7 @@ function remapify (input, mappings) {
 
 function propagationStyle (key, option, defaultValue) {
   // Extract by key if in object-form value
-  if (typeof option === 'object' && !Array.isArray(option)) {
+  if (option !== null && typeof option === 'object' && !Array.isArray(option)) {
     option = option[key]
   }
 
