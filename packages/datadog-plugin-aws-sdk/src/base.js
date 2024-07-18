@@ -3,7 +3,8 @@
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { isTrue, isFalse } = require('../../dd-trace/src/util')
+const { isTrue } = require('../../dd-trace/src/util')
+const coalesce = require('koalas')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -163,22 +164,24 @@ function normalizeConfig (config, serviceIdentifier) {
       break
   }
 
-  const baseAWSBatchPropagationValue = process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED
-  const baseAWSBatchPropagationEnabled = baseAWSBatchPropagationValue ? isTrue(baseAWSBatchPropagationValue) : false
+  const baseAWSBatchPropagationEnabled = isTrue(
+    coalesce(
+      config.batchPropagationEnabled,
+      process.env.DD_TRACE_SPAN_LEAK_DEBUG,
+      false
+    )
+  )
 
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
-  const serviceBatchPropagationValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`]
-
-  // we should respect the integration service configuration if set to false even if the base is set to true
-  let serviceBatchPropagationEnabled
-  if (isFalse(serviceBatchPropagationValue)) {
-    serviceBatchPropagationEnabled = false
-  } else {
-    serviceBatchPropagationEnabled = serviceBatchPropagationValue
-      ? isTrue(serviceBatchPropagationValue)
-      : baseAWSBatchPropagationEnabled
-  }
+  const serviceBatchPropagationEnabled = isTrue(
+    coalesce(
+      specificConfig.batchPropagationEnabled,
+      process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`],
+      baseAWSBatchPropagationEnabled,
+      false
+    )
+  )
 
   // Merge the specific config back into the main config
   return {
