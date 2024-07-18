@@ -3,7 +3,7 @@
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
-const { isTrue } = require('../../dd-trace/src/util')
+const { isTrue, isFalse } = require('../../dd-trace/src/util')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static get id () { return 'aws' }
@@ -163,17 +163,34 @@ function normalizeConfig (config, serviceIdentifier) {
       break
   }
 
+  const baseAWSBatchPropagationValue = process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED
+  const baseAWSBatchPropagationEnabled = baseAWSBatchPropagationValue ? isTrue(baseAWSBatchPropagationValue) : false
+
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
-  const serviceBatchPropagationValue = process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED ??
-    process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`]
-  const serviceBatchPropagationEnabled = serviceBatchPropagationValue ? isTrue(serviceBatchPropagationValue) : false
+  const serviceBatchPropagationValue = process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`]
 
-  return Object.assign({}, config, specificConfig, {
+  // we should respect the integration service configuration if set to false even if the base is set to true
+  let serviceBatchPropagationEnabled
+  if (isFalse(serviceBatchPropagationValue)) {
+    serviceBatchPropagationEnabled = false
+  } else {
+    serviceBatchPropagationEnabled = serviceBatchPropagationValue
+      ? isTrue(serviceBatchPropagationValue)
+      : baseAWSBatchPropagationEnabled
+  }
+
+  // Merge the specific config back into the main config
+  return {
+    ...config,
+    [serviceIdentifier]: {
+      ...specificConfig,
+      batchPropagationEnabled: serviceBatchPropagationEnabled
+    },
     splitByAwsService: config.splitByAwsService !== false,
-    batchPropagationEnabled: config.batchPropagationEnabled !== false || serviceBatchPropagationEnabled !== false,
+    batchPropagationEnabled: baseAWSBatchPropagationEnabled,
     hooks
-  })
+  }
 }
 
 function getHooks (config) {
