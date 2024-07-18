@@ -66,6 +66,7 @@ describe('weak-hash-analyzer', () => {
 
   describe('some locations should be excluded', () => {
     let locationPrefix
+
     before(() => {
       if (process.platform === 'win32') {
         locationPrefix = 'C:\\path\\to\\project'

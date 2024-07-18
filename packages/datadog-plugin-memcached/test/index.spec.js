@@ -32,6 +32,7 @@ describe('Plugin', () => {
           'localhost',
           'out.host'
         )
+
         it('should do automatic instrumentation when using callbacks', done => {
           memcached = new Memcached('localhost:11211', { retries: 0 })
 

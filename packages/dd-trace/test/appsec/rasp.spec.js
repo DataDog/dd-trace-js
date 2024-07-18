@@ -6,6 +6,7 @@ const addresses = require('../../src/appsec/addresses')
 
 describe('RASP', () => {
   let waf, rasp, datadogCore, stackTrace, web
+
   beforeEach(() => {
     datadogCore = {
       storage: {

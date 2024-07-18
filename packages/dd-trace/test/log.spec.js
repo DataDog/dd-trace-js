@@ -283,6 +283,7 @@ describe('log', () => {
 
   describe('logWriter', () => {
     let logWriter
+
     beforeEach(() => {
       logWriter = require('../src/log/writer')
     })

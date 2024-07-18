@@ -47,8 +47,11 @@ describe('Plugin', () => {
       describe('server', () => {
         describe('without configuration', () => {
           before(() => agent.load('moleculer', { client: false }))
+
           before(() => startBroker())
+
           after(() => broker.stop())
+
           after(() => agent.close({ ritmReset: false }))
 
           it('should do automatic instrumentation', done => {
@@ -97,8 +100,11 @@ describe('Plugin', () => {
             params: true,
             meta: true
           }))
+
           before(() => startBroker())
+
           after(() => broker.stop())
+
           after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
@@ -131,6 +137,7 @@ describe('Plugin', () => {
           let tracer
 
           beforeEach(() => startBroker())
+
           afterEach(() => broker.stop())
 
           beforeEach(done => {
@@ -139,6 +146,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
           })
+
           afterEach(() => agent.close({ ritmReset: false }))
 
           withPeerService(
@@ -185,8 +193,11 @@ describe('Plugin', () => {
             params: true,
             meta: true
           }))
+
           before(() => startBroker())
+
           after(() => broker.stop())
+
           after(() => agent.close({ ritmReset: false }))
 
           it('should have the configured service name', done => {
@@ -215,8 +226,11 @@ describe('Plugin', () => {
 
       describe('client + server (local)', () => {
         before(() => agent.load('moleculer'))
+
         before(() => startBroker())
+
         after(() => broker.stop())
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {
@@ -254,6 +268,7 @@ describe('Plugin', () => {
         let clientBroker
 
         before(() => agent.load('moleculer'))
+
         before(() => startBroker())
 
         before(function () {
@@ -281,7 +296,9 @@ describe('Plugin', () => {
         })
 
         after(() => clientBroker.stop())
+
         after(() => broker.stop())
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should propagate context', async () => {

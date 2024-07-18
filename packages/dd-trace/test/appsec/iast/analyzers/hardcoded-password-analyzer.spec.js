@@ -33,6 +33,7 @@ describe('Hardcoded Password Analyzer', () => {
     const column = 3
 
     let report
+
     beforeEach(() => {
       report = sinon.stub(hardcodedPasswordAnalyzer, '_report')
     })
