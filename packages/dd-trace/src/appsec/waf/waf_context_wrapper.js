@@ -25,7 +25,7 @@ class WAFContextWrapper {
     const inputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
 
-    if (persistent && typeof persistent === 'object') {
+    if (persistent !== null && typeof persistent === 'object') {
       // TODO: possible optimization: only send params that haven't already been sent with same value to this wafContext
       for (const key of Object.keys(persistent)) {
         // TODO: requiredAddresses is no longer used due to processor addresses are not included in the list. Check on
