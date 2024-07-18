@@ -193,6 +193,12 @@ function withVersions (plugin, modules, range, cb) {
   }
 
   modules.forEach(moduleName => {
+    if (process.env.PACKAGE_NAMES) {
+      const packages = process.env.PACKAGE_NAMES.split(',')
+
+      if (!packages.includes(moduleName)) return
+    }
+
     const testVersions = new Map()
 
     instrumentations
