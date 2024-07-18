@@ -17,10 +17,9 @@ describe('esm', () => {
   // skip older versions of fastify due to syntax differences
   withVersions('fastify', 'fastify', '>=3', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'fastify@${version}'`], false,
         ['./packages/datadog-plugin-fastify/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -35,7 +34,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -43,9 +42,9 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    }).timeout(20000)
+    })
 
-    it('* import fastify is instrumented', async () => {
+    it('* import fastify is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server1.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -53,9 +52,9 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    }).timeout(20000)
+    })
 
-    it('Fastify import fastify is instrumented', async () => {
+    it('Fastify import fastify is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server2.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -63,6 +62,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
-    }).timeout(20000)
+    })
   })
 })

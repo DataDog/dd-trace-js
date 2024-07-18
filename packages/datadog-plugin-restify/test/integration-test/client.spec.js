@@ -17,10 +17,9 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('restify', 'restify', '>3', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'restify@${version}'`],
         false, ['./packages/datadog-plugin-restify/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -35,7 +34,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -43,6 +42,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'restify.request'), true)
       })
-    }).timeout(20000)
+    })
   })
 })

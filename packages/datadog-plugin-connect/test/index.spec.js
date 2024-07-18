@@ -228,7 +228,7 @@ describe('Plugin', () => {
 
               done()
             }
-          })
+          }).unref()
 
           app.use((req, res, next) => {
             handler = next
@@ -737,6 +737,10 @@ describe('Plugin', () => {
 
         after(() => {
           return agent.close({ ritmReset: false })
+        })
+
+        afterEach(() => {
+          appListener.close()
         })
 
         beforeEach(() => {

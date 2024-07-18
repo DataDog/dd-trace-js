@@ -15,15 +15,13 @@ describe('esm', () => {
   let sandbox
   withVersions('koa', 'koa', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'koa@${version}'`], false,
         ['./packages/datadog-plugin-koa/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 50000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -34,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
@@ -42,6 +40,6 @@ describe('esm', () => {
         assert.isArray(payload)
         assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
       })
-    }).timeout(50000)
+    })
   })
 })

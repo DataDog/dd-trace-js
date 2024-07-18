@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('oracledb', 'oracledb', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'oracledb@${version}'`], false, [
         './packages/datadog-plugin-oracledb/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -33,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
@@ -45,6 +44,6 @@ describe('esm', () => {
       })
 
       await res
-    }).timeout(20000)
+    })
   })
 })

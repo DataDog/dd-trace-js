@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('aws-sdk', ['aws-sdk'], version => {
     before(async function () {
-      this.timeout(60000)
       sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
         './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
-    })
+    }, { timeout: 60000 })
 
     after(async () => {
       await sandbox.remove()
@@ -33,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
@@ -48,6 +47,6 @@ describe('esm', () => {
       )
 
       await res
-    }).timeout(20000)
+    })
   })
 })

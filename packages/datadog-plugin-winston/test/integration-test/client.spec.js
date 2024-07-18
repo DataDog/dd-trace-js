@@ -15,15 +15,13 @@ describe('esm', () => {
   // test against later versions because server.mjs uses newer package syntax
   withVersions('winston', 'winston', '>=3', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'winston@${version}'`]
         , false, ['./packages/datadog-plugin-winston/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 50000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -34,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,
         'server.mjs',
@@ -44,6 +42,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(50000)
+    })
   })
 })

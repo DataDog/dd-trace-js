@@ -764,7 +764,7 @@ describe('Plugin', () => {
         })
 
         if (satisfies(process.version, '>=20')) {
-          it('should not record default HTTP agent timeout as error with Node 20', done => {
+          it('should not record default HTTP agent timeout as error with Node 20', { timeout: 10000 }, done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -790,9 +790,9 @@ describe('Plugin', () => {
 
               req.end()
             })
-          }).timeout(10000)
+          })
 
-          it('should record error if custom Agent timeout is used with Node 20', done => {
+          it('should record error if custom Agent timeout is used with Node 20', { timeout: 10000 }, done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -822,9 +822,9 @@ describe('Plugin', () => {
 
               req.end()
             })
-          }).timeout(10000)
+          })
 
-          it('should record error if req.setTimeout is used with Node 20', done => {
+          it('should record error if req.setTimeout is used with Node 20', { timeout: 10000 }, done => {
             const app = express()
 
             app.get('/user', async (req, res) => {
@@ -851,7 +851,7 @@ describe('Plugin', () => {
 
               req.end()
             })
-          }).timeout(10000)
+          })
         }
 
         it('should only record a request once', done => {

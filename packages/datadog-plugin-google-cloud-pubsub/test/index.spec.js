@@ -13,9 +13,7 @@ const TIMEOUT = 30000
 describe('Plugin', () => {
   let tracer
 
-  describe('google-cloud-pubsub', function () {
-    this.timeout(TIMEOUT)
-
+  describe('google-cloud-pubsub', { timeout: TIMEOUT }, function () {
     before(() => {
       process.env.PUBSUB_EMULATOR_HOST = 'localhost:8081'
     })

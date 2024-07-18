@@ -18,7 +18,6 @@ const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', '
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
-const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
   if (thing.dep) {
@@ -32,7 +31,7 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
 const names = fs.readdirSync(path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
   .filter(file => file.endsWith('.js'))
   .map(file => file.slice(0, -3))
-  .filter(file => !filter || filter.includes(file))
+  .filter(file => !process.env.PLUGIN || process.env.PLUGIN === file)
 
 run()
 

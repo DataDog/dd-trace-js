@@ -358,6 +358,12 @@
       "versions": ["^4"]
     }
   ],
+  "rhea": [
+    {
+      "name": "amqp10",
+      "versions": ["*"]
+    }
+  ],
   "sequelize": [
     {
       "name": "express",

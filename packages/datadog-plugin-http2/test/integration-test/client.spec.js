@@ -14,15 +14,13 @@ describe('esm', () => {
   let sandbox
 
   before(async function () {
-    this.timeout(50000)
     sandbox = await createSandbox(['http2'], false, [
       './packages/datadog-plugin-http2/test/integration-test/*'])
-  })
+  }, { timeout: 50000 })
 
   after(async function () {
-    this.timeout(50000)
     await sandbox.remove()
-  })
+  }, { timeout: 50000 })
 
   beforeEach(async () => {
     agent = await new FakeAgent().start()
@@ -34,7 +32,7 @@ describe('esm', () => {
   })
 
   context('http2', () => {
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
       const resultPromise = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
@@ -47,7 +45,7 @@ describe('esm', () => {
       })
       await curl(proc)
       return resultPromise
-    }).timeout(50000)
+    })
   })
 })
 

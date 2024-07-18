@@ -251,14 +251,14 @@ describe('Plugin', () => {
       })
 
       describe('client + server (remote)', () => {
+        const waitTimeout = 10000
+
         let clientBroker
 
         before(() => agent.load('moleculer'))
         before(() => startBroker())
 
         before(function () {
-          const waitTimeout = 10000
-          this.timeout(waitTimeout) // wait for discovery
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
           clientBroker = new ServiceBroker({
@@ -278,7 +278,7 @@ describe('Plugin', () => {
 
           return clientBroker.start()
             .then(() => clientBroker.waitForServices('math', waitTimeout))
-        })
+        }, { timeout: waitTimeout })
 
         after(() => clientBroker.stop())
         after(() => broker.stop())

@@ -14,10 +14,9 @@ describe('esm', () => {
 
   withVersions('pino', 'pino', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'pino@${version}'`],
         false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -32,7 +31,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,
         'server.mjs',
@@ -42,6 +41,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(20000)
+    })
   })
 })

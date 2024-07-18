@@ -27,8 +27,8 @@ const expectedConsumerHash = computePathwayHash(
 )
 
 describe('Plugin', () => {
-  describe('kafkajs', function () {
-    this.timeout(10000) // TODO: remove when new internal trace has landed
+  // TODO: remove timeout when new internal trace has landed
+  describe('kafkajs', { timeout: 10000 }, function () {
     afterEach(() => {
       return agent.close({ ritmReset: false })
     })

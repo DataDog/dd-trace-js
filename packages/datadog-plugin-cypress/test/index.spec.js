@@ -34,21 +34,19 @@ describe('Plugin', function () {
       return agent.load()
     })
     beforeEach(function (done) {
-      this.timeout(10000)
       agentListenPort = agent.server.address().port
       cypressExecutable = require(`../../../versions/cypress@${version}`).get()
       appServer.listen(0, () => {
         appPort = appServer.address().port
         done()
       })
-    })
+    }, { timeout: 10000 })
     afterEach(() => agent.close({ ritmReset: false }))
     afterEach(done => {
       appServer.close(done)
     })
 
-    describe('cypress', function () {
-      this.timeout(testTimeout)
+    describe('cypress', { timeout: testTimeout }, function () {
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         const testSuiteFolder = semver.intersects(version, '>=10')

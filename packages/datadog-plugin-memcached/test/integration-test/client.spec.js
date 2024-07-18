@@ -15,15 +15,13 @@ describe('esm', () => {
 
   withVersions('memcached', 'memcached', version => {
     before(async function () {
-      this.timeout(50000)
       sandbox = await createSandbox([`'memcached@${version}'`], false, [
         './packages/datadog-plugin-memcached/test/integration-test/*'])
-    })
+    }, { timeout: 50000 })
 
     after(async function () {
-      this.timeout(50000)
       await sandbox.remove()
-    })
+    }, { timeout: 20000 })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -34,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 50000 }, async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
@@ -44,6 +42,6 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
 
       await res
-    }).timeout(50000)
+    })
   })
 })

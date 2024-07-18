@@ -65,12 +65,12 @@ function loadAgent (moduleName, version, isAgentlessTest, isEvpProxyTest) {
   })
 }
 
-describe('Plugin', function () {
+describe('Plugin', { timeout: testTimeout }, function () {
   let jestExecutable
   let jestCommonOptions
 
-  this.timeout(testTimeout)
-  this.retries(2)
+  // TODO: figure out how to retry a test with node:test
+  // this.retries(2)
 
   withVersions('jest', ['jest-environment-node', 'jest-environment-jsdom'], (version, moduleName) => {
     afterEach(() => {

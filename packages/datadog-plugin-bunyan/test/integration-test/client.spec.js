@@ -13,10 +13,9 @@ describe('esm', () => {
   let sandbox
   withVersions('bunyan', 'bunyan', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'bunyan@${version}'`], false,
         ['./packages/datadog-plugin-bunyan/test/integration-test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -30,7 +29,7 @@ describe('esm', () => {
       proc && proc.kill()
       await agent.stop()
     })
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       proc = await spawnPluginIntegrationTestProc(
         sandbox.folder,
         'server.mjs',
@@ -40,6 +39,6 @@ describe('esm', () => {
           expect(jsonObject).to.have.property('dd')
         }
       )
-    }).timeout(20000)
+    })
   })
 })

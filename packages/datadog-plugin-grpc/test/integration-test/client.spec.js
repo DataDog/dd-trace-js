@@ -15,10 +15,9 @@ describe('esm', () => {
 
   withVersions('grpc', '@grpc/grpc-js', version => {
     before(async function () {
-      this.timeout(20000)
       sandbox = await createSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader', 'get-port@^3.2.0'], false, [
         './packages/datadog-plugin-grpc/test/*'])
-    })
+    }, { timeout: 20000 })
 
     after(async () => {
       await sandbox.remove()
@@ -33,7 +32,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
+    it('is instrumented', { timeout: 20000 }, async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
         assert.isArray(payload)
@@ -42,6 +41,6 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'integration-test/server.mjs', agent.port)
 
       await res
-    }).timeout(20000)
+    })
   })
 })
