@@ -50,6 +50,7 @@ describe('OuboundPlugin', () => {
       expect(getRemapStub).to.not.be.called
     })
   })
+
   describe('peer.service computation', () => {
     let instance = null
 
@@ -101,6 +102,7 @@ describe('OuboundPlugin', () => {
       })
     })
   })
+
   describe('remapping computation', () => {
     let instance = null
     let mappingStub = null

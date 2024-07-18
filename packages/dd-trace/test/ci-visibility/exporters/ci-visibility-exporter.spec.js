@@ -45,6 +45,7 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata()
     })
+
     it('should resolve _gitUploadPromise with an error when git metadata request fails', (done) => {
       const scope = nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')
@@ -61,6 +62,7 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata()
     })
+
     it('should use the input repository URL', (done) => {
       nock(`http://localhost:${port}`)
         .post('/api/v2/git/repository/search_commits')

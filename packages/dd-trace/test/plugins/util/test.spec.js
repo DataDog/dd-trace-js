@@ -32,11 +32,13 @@ describe('getTestParametersString', () => {
     )
     expect(input).to.eql({ test_stuff: [] })
   })
+
   it('does not crash when test name is not found and does not modify input', () => {
     const input = { test_stuff: [['params'], ['params2']] }
     expect(getTestParametersString(input, 'test_not_present')).to.equal('')
     expect(input).to.eql({ test_stuff: [['params'], ['params2']] })
   })
+
   it('does not crash when parameters can not be serialized and removes params from input', () => {
     const circular = { a: 'b' }
     circular.b = circular
@@ -56,6 +58,7 @@ describe('getTestSuitePath', () => {
     const testSuitePath = getTestSuitePath(undefined, sourceRoot)
     expect(testSuitePath).to.equal(sourceRoot)
   })
+
   it('returns sourceRoot if the test path has the same value', () => {
     const sourceRoot = '/users/opt'
     const testSuiteAbsolutePath = sourceRoot
@@ -78,6 +81,7 @@ describe('getCodeOwnersFileEntries', () => {
       owners: ['@datadog-dd-trace-js']
     })
   })
+
   it('returns null if CODEOWNERS can not be found', () => {
     const rootDir = path.join(__dirname, '__not_found__')
     // We have to change the working directory,
@@ -88,6 +92,7 @@ describe('getCodeOwnersFileEntries', () => {
     expect(codeOwnersFileEntries).to.equal(null)
     process.chdir(oldCwd)
   })
+
   it('tries both input rootDir and process.cwd()', () => {
     const rootDir = path.join(__dirname, '__not_found__')
     const oldCwd = process.cwd()
@@ -113,6 +118,7 @@ describe('getCodeOwnersForFilename', () => {
 
     expect(codeOwners).to.equal(null)
   })
+
   it('returns the code owners for a given file path', () => {
     const rootDir = path.join(__dirname, '__test__')
     const codeOwnersFileEntries = getCodeOwnersFileEntries(rootDir)
@@ -135,15 +141,18 @@ describe('getCodeOwnersForFilename', () => {
 
 describe('coverage utils', () => {
   let coverage
+
   beforeEach(() => {
     delete require.cache[require.resolve('./fixtures/coverage.json')]
     coverage = require('./fixtures/coverage.json')
   })
+
   describe('getCoveredFilenamesFromCoverage', () => {
     it('returns the list of files the code coverage includes', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
       expect(coverageFiles).to.eql(['subtract.js', 'add.js'])
     })
+
     it('returns an empty list if coverage is empty', () => {
       const coverageFiles = getCoveredFilenamesFromCoverage({})
       expect(coverageFiles).to.eql([])
@@ -166,6 +175,7 @@ describe('coverage utils', () => {
       mergeCoverage(coverage, newCoverageMap)
       expect(JSON.stringify(coverage)).to.equal(JSON.stringify(newCoverageMap.toJSON()))
     })
+
     it('returns a copy that is not affected by other copies being reset', () => {
       const newCoverageMap = istanbul.createCoverageMap()
 
@@ -221,6 +231,7 @@ describe('metadata validation', () => {
       ).to.equal(JSON.stringify({}))
     })
   })
+
   it('should keep valid metadata', () => {
     const validMetadata1 = {
       [GIT_REPOSITORY_URL]: 'https://datadoghq.com/myrepo/repo.git',
@@ -261,6 +272,7 @@ describe('parseAnnotations', () => {
       'test.responsible_team': 'sales'
     })
   })
+
   it('does not crash with invalid arguments', () => {
     const tags = parseAnnotations([
       {},

@@ -16,6 +16,7 @@ const { Namespace } = require('../../../../src/telemetry/metrics')
 
 describe('Metrics', () => {
   let IastMetric, NoTaggedIastMetric, reqNamespace, inc, context
+
   beforeEach(() => {
     context = {}
     inc = sinon.stub()
