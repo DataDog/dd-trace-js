@@ -33,7 +33,7 @@ const log = {
    * @returns Read-only version of logging config. To modify config, call `log.use` and `log.toggle`
    */
   getConfig () {
-    return Object.freeze({ ...config })
+    return { ...config }
   },
 
   use (logger) {
