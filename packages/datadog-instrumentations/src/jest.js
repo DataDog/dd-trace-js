@@ -230,6 +230,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             retriedTestsToNumAttempts.set(originalTestName, numEfdRetry + 1)
           }
         }
+        const isJestRetry = event.test?.invocations > 1
         asyncResource.runInAsyncScope(() => {
           testStartCh.publish({
             name: removeEfdStringFromTestName(testName),
@@ -240,7 +241,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             testParameters,
             frameworkVersion: jestVersion,
             isNew: isNewTest,
-            isEfdRetry: numEfdRetry > 0
+            isEfdRetry: numEfdRetry > 0,
+            isJestRetry
           })
           originalTestFns.set(event.test, event.test.fn)
           event.test.fn = asyncResource.bind(event.test.fn)
