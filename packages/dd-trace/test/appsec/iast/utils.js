@@ -154,7 +154,7 @@ function checkNoVulnerabilityInRequest (vulnerability, config, done, makeRequest
 function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb, makeRequest, config, done) {
   let location
   let occurrences = occurrencesAndLocation
-  if (typeof occurrencesAndLocation === 'object') {
+  if (occurrencesAndLocation !== null && typeof occurrencesAndLocation === 'object') {
     location = occurrencesAndLocation.location
     occurrences = occurrencesAndLocation.occurrences
   }
@@ -325,7 +325,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     function testThatRequestHasVulnerability (fn, vulnerability, occurrencesAndLocation, cb, makeRequest) {
       let testDescription
-      if (typeof fn === 'object') {
+      if (fn !== null && typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability
@@ -347,7 +347,7 @@ function prepareTestServerForIastInExpress (description, expressVersion, loadMid
 
     function testThatRequestHasNoVulnerability (fn, vulnerability, makeRequest) {
       let testDescription
-      if (typeof fn === 'object') {
+      if (fn !== null && typeof fn === 'object') {
         const obj = fn
         fn = obj.fn
         vulnerability = obj.vulnerability
