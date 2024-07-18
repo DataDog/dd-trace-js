@@ -9,8 +9,8 @@ stages:
 
 include:
   - remote: https://gitlab-templates.ddbuild.io/apm/packaging.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/single-step-instrumentation-tests.yml
   - local: ".gitlab/benchmarks.yml"
-  - local: ".gitlab/single-step-instrumentation-tests.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
 variables:
@@ -174,3 +174,24 @@ deploy-lib-init-trigger:
     IMG_SIGNING: "false"
     RETRY_COUNT: 5
     RETRY_DELAY: 300
+
+onboarding_tests:
+  extends: .base_job_onboarding
+  stage: single-step-instrumentation-tests
+  needs: [oci-internal-test-ecr-publish]
+  rules:
+    - when: on_success
+      allow_failure: true
+  allow_failure: false
+  variables:
+    TEST_LIBRARY: nodejs
+    DD_INSTALLER_LIBRARY_VERSION: pipeline-${CI_PIPELINE_ID}
+    SCENARIO: SIMPLE_AUTO_INJECTION_PROFILING
+  parallel:
+      matrix:
+        - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
+  script:
+    - git clone https://git@github.com/DataDog/system-tests.git system-tests
+    - cd system-tests
+    - ./build.sh -i runner
+    - timeout 2700s ./run.sh $SCENARIO --vm-weblog ${ONBOARDING_FILTER_WEBLOG} --vm-env prod --vm-library ${TEST_LIBRARY} --vm-provider aws --vm-skip-branches ubuntu18_amd64
