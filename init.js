@@ -3,12 +3,9 @@
 const path = require('path')
 const Module = require('module')
 const semver = require('semver')
+const log = require('./packages/dd-trace/src/log')
 const { isTrue } = require('./packages/dd-trace/src/util')
 const telemetry = require('./packages/dd-trace/src/telemetry/init-telemetry')
-
-const log = semver.satisfies(process.versions.node, '>=16')
-  ? require('./packages/dd-trace/src/log')
-  : { info: isTrue(process.env.DD_TRACE_DEBUG) ? console.log : () => {} } // eslint-disable-line no-console
 
 let initBailout = false
 let clobberBailout = false
