@@ -97,6 +97,7 @@ describe('Plugin', function () {
           jestExecutable = loadedAgent.jestExecutable
           jestCommonOptions = loadedAgent.jestCommonOptions
         })
+
         it('should create test spans for sync, async, integration, parameterized and retried tests', (done) => {
           const tests = [
             {
@@ -319,6 +320,7 @@ describe('Plugin', function () {
             jestExecutable = loadedAgent.jestExecutable
             jestCommonOptions = loadedAgent.jestCommonOptions
           })
+
           it('should create events for session, suite and test', (done) => {
             const events = [
               {

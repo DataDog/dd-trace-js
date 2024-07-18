@@ -26,6 +26,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['ioredis']))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation when using callbacks', done => {
@@ -118,6 +119,7 @@ describe('Plugin', () => {
           splitByInstance: true,
           allowlist: ['get']
         }))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should be configured with the correct values', done => {
@@ -162,6 +164,7 @@ describe('Plugin', () => {
         before(() => agent.load('ioredis', {
           whitelist: ['get']
         }))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should be able to filter commands', done => {

@@ -200,6 +200,7 @@ describe('Plugin', () => {
             fetch.fetch(`http://localhost:${port}/user?foo=bar`, { headers: { foo: 'bar' } })
           })
         })
+
         it('should handle connection errors', done => {
           let error
 
@@ -217,6 +218,7 @@ describe('Plugin', () => {
             error = err
           })
         })
+
         it('should not record HTTP 5XX responses as errors by default', done => {
           const app = express()
 

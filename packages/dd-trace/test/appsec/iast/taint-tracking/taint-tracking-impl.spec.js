@@ -48,6 +48,7 @@ const propagationFunctions = require(propagationFunctionsFile)
 
 describe('TaintTracking', () => {
   let instrumentedFunctionsFile
+
   beforeEach(() => {
     instrumentedFunctionsFile = copyFileToTmp(propagationFunctionsFile)
   })
