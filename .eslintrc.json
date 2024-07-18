@@ -13,7 +13,12 @@
   ],
   "env": {
     "node": true,
-    "es2020": true
+    "es2021": true
+  },
+  "settings": {
+    "node": {
+      "version": ">=16.0.0"
+    }
   },
   "rules": {
     "max-len": [2, 120, 2],
