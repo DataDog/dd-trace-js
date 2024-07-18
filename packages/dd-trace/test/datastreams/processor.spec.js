@@ -78,6 +78,7 @@ describe('StatsPoint', () => {
 describe('StatsBucket', () => {
   describe('Checkpoints', () => {
     let buckets
+
     beforeEach(() => { buckets = new StatsBucket() })
 
     it('should start empty', () => {

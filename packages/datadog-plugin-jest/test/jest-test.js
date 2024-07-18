@@ -4,18 +4,21 @@ const tracer = require('dd-trace')
 describe('jest-test-suite', () => {
   // eslint-disable-next-line
   jest.setTimeout(400)
+
   it('tracer and active span are available', () => {
     expect(global._ddtrace).not.toEqual(undefined)
     const testSpan = tracer.scope().active()
     expect(testSpan).not.toEqual(null)
     testSpan.setTag('test.add.stuff', 'stuff')
   })
+
   it('done', (done) => {
     setTimeout(() => {
       expect(100).toEqual(100)
       done()
     }, 50)
   })
+
   it('done fail', (done) => {
     setTimeout(() => {
       try {
@@ -26,12 +29,14 @@ describe('jest-test-suite', () => {
       }
     }, 50)
   })
+
   it('done fail uncaught', (done) => {
     setTimeout(() => {
       expect(100).toEqual(200)
       done()
     }, 50)
   })
+
   it('can do integration http', (done) => {
     const req = http.request('http://test:123', (res) => {
       expect(res.statusCode).toEqual(200)
@@ -50,6 +55,7 @@ describe('jest-test-suite', () => {
       expect(parameters[1]).toEqual([2, 3, 5])
     })
   }
+
   it('promise passes', () => {
     return new Promise((resolve) =>
       setTimeout(() => {
@@ -58,6 +64,7 @@ describe('jest-test-suite', () => {
       }, 50)
     )
   })
+
   it('promise fails', () => {
     return new Promise((resolve) =>
       setTimeout(() => {
@@ -68,6 +75,7 @@ describe('jest-test-suite', () => {
   })
   // eslint-disable-next-line
   jest.setTimeout(200)
+
   it('timeout', () => {
     return new Promise((resolve) =>
       setTimeout(() => {
@@ -76,9 +84,11 @@ describe('jest-test-suite', () => {
       }, 300)
     )
   }, 200)
+
   it('passes', () => {
     expect(true).toEqual(true)
   })
+
   it('fails', () => {
     expect(true).toEqual(false)
   })
@@ -103,6 +113,7 @@ if (jest.retryTimes) {
     // eslint-disable-next-line
     jest.retryTimes(2)
     let retryAttempt = 0
+
     it('can retry', () => {
       expect(retryAttempt++).toEqual(2)
     })

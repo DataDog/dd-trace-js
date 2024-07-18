@@ -9,11 +9,13 @@ const axios = require('axios')
 
 describe('ip extractor', () => {
   let port, appListener, controller
+
   before(() => {
     return getPort().then(newPort => {
       port = newPort
     })
   })
+
   before(done => {
     const server = new http.Server(async (req, res) => {
       controller && await controller(req, res)
@@ -23,6 +25,7 @@ describe('ip extractor', () => {
     appListener = server
       .listen(port, 'localhost', () => done())
   })
+
   after(() => {
     appListener && appListener.close()
   })

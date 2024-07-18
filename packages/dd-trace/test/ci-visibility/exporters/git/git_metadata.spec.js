@@ -232,6 +232,7 @@ describe('git_metadata', () => {
       done()
     })
   })
+
   describe('validateGitRepositoryUrl', () => {
     it('should return false if Git repository URL is invalid', () => {
       const invalidUrls = [
@@ -243,6 +244,7 @@ describe('git_metadata', () => {
         expect(validateGitRepositoryUrl(invalidUrl), `${invalidUrl} is a valid URL`).to.be.false
       })
     })
+
     it('should return true if Git repository URL is valid', () => {
       const validUrls = [
         'https://test.com',
@@ -260,6 +262,7 @@ describe('git_metadata', () => {
       })
     })
   })
+
   describe('validateGitCommitSha', () => {
     it('should return false if Git commit SHA is invalid', () => {
       const invalidSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf382'
@@ -274,6 +277,7 @@ describe('git_metadata', () => {
         expect(validateGitCommitSha(invalidSha)).to.be.false
       })
     })
+
     it('should return true if Git commit SHA is valid', () => {
       const validSha1 = 'cb466452bfe18d4f6be2836c2a5551843013cf38'
       const validSha2 = 'cb466452bfe18d4f6be2836c2a5551843013cf381234223920318230492823f3'
@@ -284,6 +288,7 @@ describe('git_metadata', () => {
       })
     })
   })
+
   it('should not crash if packfiles can not be accessed', (done) => {
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
