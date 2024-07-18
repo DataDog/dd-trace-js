@@ -128,9 +128,23 @@ moduleTypes.forEach(({
       childProcess.stderr.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
+
+      // TODO: remove once we find the source of flakiness
+      childProcess.stdout.pipe(process.stdout)
+      childProcess.stderr.pipe(process.stderr)
+
       childProcess.on('exit', () => {
         assert.notInclude(testOutput, 'TypeError')
-        assert.include(testOutput, '1 of 1 failed')
+        // TODO: remove try/catch once we find the source of flakiness
+        try {
+          assert.include(testOutput, '1 of 1 failed')
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.log('---- Actual test output -----')
+          // eslint-disable-next-line no-console
+          console.log(testOutput)
+          throw e
+        }
         done()
       })
     })
