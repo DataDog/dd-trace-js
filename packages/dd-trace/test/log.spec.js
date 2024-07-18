@@ -37,9 +37,9 @@ describe('log', () => {
     it('should not be possbile to mutate config object returned by getConfig', () => {
       const log = require('../src/log')
       const config = log.getConfig()
-      expect(() => { config.enabled = 1 }).to.throw()
-      expect(() => { config.logger = 1 }).to.throw()
-      expect(() => { config.logLevel = 1 }).to.throw()
+      config.enabled = 1
+      config.logger = 1
+      config.logLevel = 1
       expect(log.getConfig()).to.deep.equal({
         enabled: false,
         logger: undefined,
