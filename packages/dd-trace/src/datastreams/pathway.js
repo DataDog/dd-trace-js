@@ -73,15 +73,24 @@ function decodePathwayContextBase64 (pathwayContext) {
 class DsmPathwayCodec {
   // we use a class for encoding / decoding in case we update our encoding/decoding. A class will make updates easier
   // instead of using individual functions.
-  static encode (dataStreamsContext, carrier) {
+  static encode (dataStreamsContext, carrier, carrierSetter) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
       return
     }
-    carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
+    if (!carrier && carrierSetter) {
+      carrierSetter(CONTEXT_PROPAGATION_KEY_BASE64, encodePathwayContextBase64(dataStreamsContext))
+    } else if (carrier) {
+      carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
+    }
   }
 
-  static decode (carrier) {
-    if (carrier == null) return
+  static decode (carrier, carrierGetter) {
+    if (carrier == null) {
+      carrier = carrierGetter(CONTEXT_PROPAGATION_KEY_BASE64) ?? carrierGetter(CONTEXT_PROPAGATION_KEY)
+      if (carrier == null) {
+        return
+      }
+    }
 
     let ctx
     if (CONTEXT_PROPAGATION_KEY_BASE64 in carrier) {

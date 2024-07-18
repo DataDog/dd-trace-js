@@ -181,6 +181,7 @@ class Tracer extends NoopProxy {
       if (!this._tracingInitialized) {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
+        this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         this.appsec = new AppsecSdk(this._tracer, config)
         this._tracingInitialized = true
       }

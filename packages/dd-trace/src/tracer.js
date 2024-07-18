@@ -11,6 +11,7 @@ const { DataStreamsProcessor } = require('./datastreams/processor')
 const { DsmPathwayCodec } = require('./datastreams/pathway')
 const { DD_MAJOR } = require('../../../version')
 const DataStreamsContext = require('./data_streams_context')
+const { DataStreamsCheckpointer } = require('./data_streams')
 const { flushStartupLogs } = require('../../datadog-instrumentations/src/check_require_cache')
 const log = require('./log/writer')
 
@@ -22,7 +23,9 @@ const MEASURED = tags.MEASURED
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
-    this._dataStreamsProcessor = new DataStreamsProcessor(config)
+    const _dataStreamsProcessor = new DataStreamsProcessor(config)
+    this._dataStreamsProcessor = _dataStreamsProcessor
+    this.dataStreamsCheckpointer = new DataStreamsCheckpointer(config, _dataStreamsProcessor)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
