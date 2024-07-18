@@ -17,6 +17,7 @@ describe('CI Visibility Agentless Exporter', () => {
     sinon.stub(cp, 'execFileSync').returns('false')
     nock.cleanAll()
   })
+
   afterEach(() => {
     sinon.restore()
   })
@@ -60,6 +61,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('will request skippable to api.site by default', (done) => {
       const scope = nock('https://api.datadoge.c0m')
         .post('/api/v2/libraries/tests/services/setting')
@@ -91,6 +93,7 @@ describe('CI Visibility Agentless Exporter', () => {
         })
       })
     })
+
     it('can request ITR configuration right away', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -113,6 +116,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('can report code coverages if enabled by the API', (done) => {
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -134,6 +138,7 @@ describe('CI Visibility Agentless Exporter', () => {
         done()
       })
     })
+
     it('will not allow skippable request if ITR configuration fails', (done) => {
       // request will fail
       delete process.env.DD_API_KEY

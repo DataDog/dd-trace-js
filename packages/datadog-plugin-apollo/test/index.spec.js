@@ -133,6 +133,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('apollo')
         })
+
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
           const source = `query ${operationName} { hello(name: "world") }`
@@ -346,6 +347,7 @@ describe('Plugin', () => {
                 })
             })
         })
+
         it('should instrument fetch failure', done => {
           let error
           const operationName = 'MyQuery'

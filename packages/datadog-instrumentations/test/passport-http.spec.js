@@ -12,6 +12,7 @@ withVersions('passport-http', 'passport-http', version => {
     before(() => {
       return agent.load(['express', 'passport', 'passport-http'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const passport = require('../../../versions/passport').get()
@@ -74,6 +75,7 @@ withVersions('passport-http', 'passport-http', version => {
         done()
       })
     })
+
     beforeEach(() => {
       subscriberStub = sinon.stub()
     })

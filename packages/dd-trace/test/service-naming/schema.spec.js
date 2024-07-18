@@ -75,9 +75,11 @@ describe('Service naming', () => {
       it('should answer undefined on inexistent plugin', () => {
         expect(resolver.getSchemaItem('messaging', 'inbound', 'foo')).to.be.equal(undefined)
       })
+
       it('should answer undefined on inexistent i/o dir', () => {
         expect(resolver.getSchemaItem('messaging', 'foo', 'kafka')).to.be.equal(undefined)
       })
+
       it('should answer undefined on inexistent type', () => {
         expect(resolver.getSchemaItem('foo', 'inbound', 'kafka')).to.be.equal(undefined)
       })
@@ -89,6 +91,7 @@ describe('Service naming', () => {
         expect(dummySchema.messaging.inbound.kafka.opName).to.be.calledWith(extra)
       })
     })
+
     describe('Service name getter', () => {
       it('should add service name and passthrough service name arguments', () => {
         const opts = { tracerService: 'test-service', ...extra }

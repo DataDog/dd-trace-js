@@ -376,6 +376,7 @@ describe('request', function () {
         done(err)
       })
     })
+
     it('should ignore badly compressed data and log an error', (done) => {
       const badlyCompressedData = 'this is not actually compressed data'
       nock('http://test:123', {
