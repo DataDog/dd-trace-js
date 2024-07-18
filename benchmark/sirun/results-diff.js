@@ -16,7 +16,7 @@ function walk (tree, oldTree, path = []) {
     }
   }
 
-  if (typeof tree === 'object') {
+  if (tree !== null && typeof tree === 'object') {
     const result = {}
     for (const name in tree) {
       if (name in oldTree) {
@@ -26,7 +26,7 @@ function walk (tree, oldTree, path = []) {
     return result
   }
 
-  throw new Error(tree.toString())
+  throw new Error(String(tree))
 }
 
 module.exports = walk
