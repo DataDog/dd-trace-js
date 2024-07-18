@@ -6,7 +6,7 @@ stages:
   - macrobenchmarks
 
 include:
-  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include-wip/one-pipeline.yml
+  - remote: https://gitlab-templates.ddbuild.io/libdatadog/include/one-pipeline.yml
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
 
