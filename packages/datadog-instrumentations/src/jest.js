@@ -12,7 +12,8 @@ const {
   getTestParametersString,
   addEfdStringToTestName,
   removeEfdStringFromTestName,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
+  NUM_FAILED_TEST_RETRIES
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -49,6 +50,9 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 const CHILD_MESSAGE_CALL = 1
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10000
+// eslint-disable-next-line
+// https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
+const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
 let knownTests = {}
@@ -127,6 +131,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
+      this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -138,6 +143,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         } catch (e) {
           // If there has been an error parsing the tests, we'll disable Early Flake Deteciton
           this.isEarlyFlakeDetectionEnabled = false
+        }
+      }
+
+      if (this.isFlakyTestRetriesEnabled) {
+        const currentNumRetries = this.global[RETRY_TIMES]
+        if (!currentNumRetries) {
+          this.global[RETRY_TIMES] = NUM_FAILED_TEST_RETRIES
         }
       }
     }
@@ -758,6 +770,7 @@ addHook({
       _ddIsEarlyFlakeDetectionEnabled,
       _ddEarlyFlakeDetectionNumRetries,
       _ddRepositoryRoot,
+      _ddIsFlakyTestRetriesEnabled,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
