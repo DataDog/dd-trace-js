@@ -6,7 +6,8 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
-  TEST_SOURCE_FILE
+  TEST_SOURCE_FILE,
+  TEST_IS_RETRY
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -25,16 +26,22 @@ class VitestPlugin extends CiPlugin {
 
     this.taskToFinishTime = new WeakMap()
 
-    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath }) => {
+    this.addSub('ci:vitest:test:start', ({ testName, testSuiteAbsolutePath, isRetry }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const store = storage.getStore()
+
+      const extraTags = {
+        [TEST_SOURCE_FILE]: testSuite
+      }
+      if (isRetry) {
+        extraTags[TEST_IS_RETRY] = 'true'
+      }
+
       const span = this.startTestSpan(
         testName,
         testSuite,
         this.testSuiteSpan,
-        {
-          [TEST_SOURCE_FILE]: testSuite
-        }
+        extraTags
       )
 
       this.enter(span, store)
@@ -73,7 +80,11 @@ class VitestPlugin extends CiPlugin {
         if (error) {
           span.setTag('error', error)
         }
-        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        if (duration) {
+          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        } else {
+          span.finish() // retries will not have a duration
+        }
         finishAllTraceSpans(span)
       }
     })

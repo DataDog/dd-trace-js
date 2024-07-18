@@ -172,7 +172,7 @@ jobs:
   aws-sdk:
     strategy:
       matrix:
-        node-version: ['18', 'latest']
+        node-version: ['18', '22.4']
     runs-on: ubuntu-latest
     services:
       localstack:
@@ -577,7 +577,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: ['18', '20', 'latest']
+        node-version: ['18', '20', '22.4']
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -796,6 +796,30 @@ jobs:
         uses: ./.github/actions/testagent/logs
       - uses: codecov/codecov-action@v3
 
+  mongodb:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: circleci/mongo
+        ports:
+          - 27017:27017
+    env:
+      PLUGINS: mongodb-core
+      PACKAGE_NAMES: mongodb
+      SERVICES: mongo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:plugins:ci
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+      - uses: codecov/codecov-action@v3
+
   mongodb-core:
     runs-on: ubuntu-latest
     services:
@@ -805,6 +829,7 @@ jobs:
           - 27017:27017
     env:
       PLUGINS: mongodb-core|express-mongo-sanitize
+      PACKAGE_NAMES: mongodb-core,express-mongo-sanitize
       SERVICES: mongo
     steps:
       - uses: actions/checkout@v4
@@ -893,7 +918,7 @@ jobs:
       matrix:
         version:
           - 18
-          - latest
+          - 22.4
         range: ['9.5.0', '11.1.4', '13.2.0', '*']
     runs-on: ubuntu-latest
     env:
