@@ -43,7 +43,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v3
         with:
-          cache: yarn
           node-version: '18'
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
