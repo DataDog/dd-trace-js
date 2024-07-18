@@ -18,7 +18,7 @@ jobs:
       # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
-        version: [18, 20, latest]
+        version: [18, 20, 22.4]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
   integration-ci:
     strategy:
       matrix:
-        version: [18, latest]
+        version: [18, 22.4]
         framework: [cucumber, playwright, selenium, jest, mocha]
     runs-on: ubuntu-latest
     env:
@@ -89,7 +89,7 @@ jobs:
         # Important: This is outside the minimum supported version of dd-trace-js
         # Node > 16 does not work with Cypress@6.7.0 (not even without our plugin)
         # TODO: figure out what to do with this: we might have to deprecate support for cypress@6.7.0
-        version: [16, latest]
+        version: [16, 22.4]
         # 6.7.0 is the minimum version we support
         cypress-version: [6.7.0, latest]
         module-type: ['commonJS', 'esm']
