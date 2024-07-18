@@ -21,7 +21,5 @@ onboarding_tests_installer:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
 
 onboarding_tests_k8s_injection:
-  rules:
-    - when: on_success
   variables:
     WEBLOG_VARIANT: sample-app
