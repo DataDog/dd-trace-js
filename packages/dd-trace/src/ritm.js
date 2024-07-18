@@ -206,13 +206,28 @@ function bindOrProxy (target, proxy, mod) {
   return target
 }
 
+const proxyCache = new WeakMap()
+
 function getProxy (target, mod) {
   if (!target) return target
+
+  let targetMap = proxyCache.get(target)
+  if (targetMap && targetMap.has(mod)) {
+    return targetMap.get(mod)
+  }
 
   const proxy = new Proxy(target, {
     get (target, key) {
       return key === '__getCallerModule' ? () => mod : bindOrProxy(target[key], proxy, mod)
     }
   })
+
+  if (!targetMap) {
+    targetMap = new WeakMap()
+    proxyCache.set(target, targetMap)
+  }
+
+  targetMap.set(mod, proxy)
+
   return proxy
 }
