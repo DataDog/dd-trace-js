@@ -8,6 +8,7 @@ const tracerVersion = require('../../../package.json').version
 describe('startup logging', () => {
   let firstStderrCall
   let secondStderrCall
+
   before(() => {
     sinon.stub(console, 'info')
     sinon.stub(console, 'warn')

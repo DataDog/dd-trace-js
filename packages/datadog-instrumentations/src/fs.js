@@ -272,7 +272,7 @@ function createWrapFunction (prefix = '', override = '') {
         const outerResource = new AsyncResource('bound-anonymous-fn')
 
         arguments[lastIndex] = innerResource.bind(function (e) {
-          if (typeof e === 'object') { // fs.exists receives a boolean
+          if (e !== null && typeof e === 'object') { // fs.exists receives a boolean
             errorChannel.publish(e)
           }
 

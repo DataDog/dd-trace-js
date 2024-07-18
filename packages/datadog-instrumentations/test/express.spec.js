@@ -12,6 +12,7 @@ withVersions('express', 'express', version => {
     before(() => {
       return agent.load(['express', 'body-parser'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const app = express()
@@ -24,6 +25,7 @@ withVersions('express', 'express', version => {
         done()
       })
     })
+
     beforeEach(async () => {
       requestBody = sinon.stub()
     })

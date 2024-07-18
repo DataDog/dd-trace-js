@@ -376,6 +376,7 @@ describe('Plugin', () => {
             done()
           })
         })
+
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent.use(traces => {
             expect(traces[0][0]).to.have.property('resource', 'SELECT 1 + 1 AS solution')
@@ -461,6 +462,7 @@ describe('Plugin', () => {
             queryText = connect.sql
           })
         })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')
@@ -542,6 +544,7 @@ describe('Plugin', () => {
             queryText = queryPool.sql
           })
         })
+
         it('query should inject _dd.dbm_trace_injected into span', done => {
           agent.use(traces => {
             expect(traces[0][0].meta).to.have.property('_dd.dbm_trace_injected', 'true')

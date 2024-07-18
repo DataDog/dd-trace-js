@@ -81,7 +81,10 @@ async function assertInstrumentation (instrumentation, external) {
 
   for (const version of versions) {
     if (version) {
-      await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      if (version !== '*') {
+        await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      }
+
       await assertModules(instrumentation.name, version, external)
     }
   }
@@ -203,7 +206,11 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines', { cwd: folder() })
+  try {
+    exec('yarn --ignore-engines', { cwd: folder() })
+  } catch (e) { // retry in case of server error from registry
+    exec('yarn --ignore-engines', { cwd: folder() })
+  }
 }
 
 function addFolder (name, version) {

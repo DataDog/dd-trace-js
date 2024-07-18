@@ -63,6 +63,7 @@ versions.forEach(version => {
     // TODO: add esm tests
     describe(`cucumber@${version} ${type}`, () => {
       let sandbox, cwd, receiver, childProcess
+
       before(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)
@@ -777,6 +778,7 @@ versions.forEach(version => {
               })
             })
           })
+
           context('early flake detection', () => {
             it('retries new tests', (done) => {
               const NUM_RETRIES_EFD = 3
@@ -1033,6 +1035,56 @@ versions.forEach(version => {
               })
             })
           })
+
+          if (version === 'latest') { // flaky test retries only supported from >=8.0.0
+            context('flaky test retries', () => {
+              it('can retry failed tests', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    // 2 failures and 1 passed attempt
+                    assert.equal(tests.length, 3)
+
+                    const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                    assert.equal(failedTests.length, 2)
+                    const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                    assert.equal(passedTests.length, 1)
+
+                    // All but the first one are retries
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 2)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: envVars,
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+            })
+          }
         })
       })
     })

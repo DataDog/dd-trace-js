@@ -132,7 +132,7 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (typeof inputOptions === 'object') {
+    if (inputOptions !== null && typeof inputOptions === 'object') {
       return Object.assign(inputURL || {}, inputOptions)
     } else {
       return inputURL
