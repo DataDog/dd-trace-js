@@ -47,7 +47,7 @@ class Stepfunctions extends BaseAwsSdkPlugin {
 
       try {
         const inputObj = JSON.parse(input)
-        if (inputObj && typeof inputObj === 'object') {
+        if (inputObj !== null && typeof inputObj === 'object') {
           // We've parsed the input JSON string
           inputObj._datadog = {}
           this.tracer.inject(span, 'text_map', inputObj._datadog)

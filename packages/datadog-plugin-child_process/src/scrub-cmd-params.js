@@ -61,7 +61,9 @@ function scrubChildProcessCmd (expression) {
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
 
-      if (typeof token === 'object') {
+      if (token === null) {
+        continue
+      } else if (typeof token === 'object') {
         if (token.pattern) {
           result.push(token.pattern)
         } else if (token.op) {
