@@ -12,9 +12,6 @@ async function runCypress () {
               module.default(on, config)
             })
           }
-          import('dd-trace/ci/cypress/plugin').then(module => {
-            module.default(on, config)
-          })
           if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
             on('after:run', (...args) => {
               // do custom stuff
@@ -33,6 +30,9 @@ async function runCypress () {
               })
             })
           }
+          return import('dd-trace/ci/cypress/plugin').then(module => {
+            return module.default(on, config)
+          })
         },
         specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
       },
