@@ -19,6 +19,7 @@ function noop (res) { return res }
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
   concat: noop,
+  eval: noop,
   join: noop,
   parse: noop,
   plusOperator: noop,
