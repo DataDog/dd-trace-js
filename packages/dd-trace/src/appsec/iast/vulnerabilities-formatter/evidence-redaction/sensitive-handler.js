@@ -213,7 +213,7 @@ class SensitiveHandler {
     isSensibleSource
   ) {
     if (sourceIndex != null) {
-      const placeholder = source.value?.includes(partValue)
+      const placeholder = source.value.includes(partValue)
         ? source.pattern
         : '*'.repeat(length)
 

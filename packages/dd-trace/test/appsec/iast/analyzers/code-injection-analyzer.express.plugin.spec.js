@@ -41,6 +41,7 @@ describe('Code injection vulnerability', () => {
               .catch(done)
           }
         })
+
         testThatRequestHasNoVulnerability({
           fn: (req, res) => {
             res.send('' + require(evalFunctionsPath).runFakeEval(req.query.script))
