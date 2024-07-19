@@ -394,7 +394,7 @@ function telemetryForwarder (expectedTelemetryPoints) {
 }
 
 async function curl (url, useHttp2 = false) {
-  if (typeof url === 'object') {
+  if (url !== null && typeof url === 'object') {
     if (url.then) {
       return curl(await url)
     }

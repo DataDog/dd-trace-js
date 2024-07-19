@@ -16,6 +16,7 @@ describe('encoding', () => {
       expect(decoded).to.equal(n)
       expect(bytes).to.length(0)
     })
+
     it('encoding then decoding should be a no op for bigger than int32 numbers', () => {
       const n = 1679711644352
       const expectedEncoded = new Uint8Array([
@@ -32,6 +33,7 @@ describe('encoding', () => {
       expect(decoded2).to.equal(n)
       expect(bytes2).to.length(0)
     })
+
     it('encoding a number bigger than Max safe int fails.', () => {
       const n = Number.MAX_SAFE_INTEGER + 10
       const encoded = encodeVarint(n)

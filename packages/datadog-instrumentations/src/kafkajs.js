@@ -59,7 +59,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
         try {
           const { topic, messages = [] } = arguments[0]
           for (const message of messages) {
-            if (typeof message === 'object') {
+            if (message !== null && typeof message === 'object') {
               message.headers = message.headers || {}
             }
           }

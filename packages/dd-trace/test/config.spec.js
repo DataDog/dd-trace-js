@@ -1914,6 +1914,7 @@ describe('Config', () => {
       expect(config).not.to.have.property('repositoryUrl')
     })
   })
+
   it('should sanitize values for API Security sampling between 0 and 1', () => {
     expect(new Config({
       appsec: {

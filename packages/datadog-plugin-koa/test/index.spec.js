@@ -26,6 +26,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         before(() => agent.load(['koa', 'http'], [{}, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         it('should do automatic instrumentation on 2.x middleware', done => {
@@ -652,6 +653,7 @@ describe('Plugin', () => {
 
       describe('with configuration', () => {
         before(() => agent.load(['koa', 'http'], [{ middleware: false }, { client: false }]))
+
         after(() => agent.close({ ritmReset: false }))
 
         describe('middleware set to false', () => {
