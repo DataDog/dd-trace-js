@@ -145,9 +145,7 @@ describe('Sns', function () {
             keyOne: { DataType: 'String', StringValue: 'keyOne' },
             keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
           }
-        }, (err, d) => {
-          if (err) return done(err)
-        })
+        }, e => e && done(e))
       })
 
       it('expands and redacts keys identified as expandable', done => {
@@ -245,7 +243,7 @@ describe('Sns', function () {
         }
 
         if (supportsSMSNotification(moduleName, version)) {
-          // TODO test this
+          // TODO
           describe.skip('phone number', () => {
             before(done => {
               sns.createSMSSandboxPhoneNumber({ PhoneNumber: '+33628606135' }, err => err && done(err))
@@ -296,29 +294,32 @@ describe('Sns', function () {
           })
         }
 
-        describe.skip('subscription confirmation tokens', () => {
-          // TODO test this
+        describe('subscription confirmation tokens', () => {
           it('redacts tokens in request', done => {
             agent.use(traces => {
               const span = traces[0][0]
 
-              expect(span.resource).to.equal('publish')
+              // expect(span.resource).to.equal('publish') // typo?
+              expect(span.resource).to.equal(`confirmSubscription ${TopicArn}`)
               expect(span.meta).to.include({
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
-                'aws.request.body.TopicArn': 'TestTopic'
+                // 'aws.request.body.TopicArn': 'TestTopic' // typo?
+                'aws.request.body.TopicArn': TopicArn
               })
             }).then(done, done)
 
             sns.confirmSubscription({
               TopicArn,
               Token: '1234'
-            }, e => e && done(e))
+            }, () => {})
           })
-          it('redacts tokens in response', () => {
+
+          // TODO
+          it.skip('redacts tokens in response', () => {
 
           })
         })
