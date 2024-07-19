@@ -7,6 +7,11 @@ const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart } = req
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
+const log = require('../log')
+
+const RULE_TYPES = {
+  SSRF: 'ssrf'
+}
 
 class DatadogRaspAbortError extends Error {
   constructor (req, res, blockingAction) {
@@ -16,10 +21,6 @@ class DatadogRaspAbortError extends Error {
     this.res = res
     this.blockingAction = blockingAction
   }
-}
-
-const RULE_TYPES = {
-  SSRF: 'ssrf'
 }
 
 let config, abortOnUncaughtException
@@ -41,48 +42,59 @@ function removeAllListeners (emitter, event) {
   }
 }
 
+function findDatadogRaspAbortError (err, deep = 10) {
+  if (err instanceof DatadogRaspAbortError) {
+    return err
+  }
+
+  if (err.cause && deep > 0) {
+    return findDatadogRaspAbortError(err.cause, deep - 1)
+  }
+}
+
 function handleUncaughtExceptionMonitor (err) {
-  if (err instanceof DatadogRaspAbortError || err.cause instanceof DatadogRaspAbortError) {
-    const { req, res, blockingAction } = err
-    block(req, res, web.root(req), null, blockingAction)
+  const abortError = findDatadogRaspAbortError(err)
+  if (!abortError) return
 
-    if (!process.hasUncaughtExceptionCaptureCallback()) {
-      const cleanUp = removeAllListeners(process, 'uncaughtException')
-      const handler = () => {
-        process.removeListener('uncaughtException', handler)
+  const { req, res, blockingAction } = abortError
+  block(req, res, web.root(req), null, blockingAction)
+
+  if (!process.hasUncaughtExceptionCaptureCallback()) {
+    const cleanUp = removeAllListeners(process, 'uncaughtException')
+    const handler = () => {
+      process.removeListener('uncaughtException', handler)
+    }
+
+    setTimeout(() => {
+      process.removeListener('uncaughtException', handler)
+      cleanUp()
+    })
+
+    process.on('uncaughtException', handler)
+  } else {
+    // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
+    let previousCb
+    const cb = ({ currentCallback, abortController }) => {
+      setUncaughtExceptionCaptureCallbackStart.unsubscribe(cb)
+      if (!currentCallback) {
+        abortController.abort()
+        return
       }
 
-      setTimeout(() => {
-        process.removeListener('uncaughtException', handler)
-        cleanUp()
+      previousCb = currentCallback
+    }
+
+    setUncaughtExceptionCaptureCallbackStart.subscribe(cb)
+
+    process.setUncaughtExceptionCaptureCallback(null)
+
+    // For some reason, previous callback was defined before the instrumentation
+    // We can not restore it, so we let the app decide
+    if (previousCb) {
+      process.setUncaughtExceptionCaptureCallback(() => {
+        process.setUncaughtExceptionCaptureCallback(null)
+        process.setUncaughtExceptionCaptureCallback(previousCb)
       })
-
-      process.on('uncaughtException', handler)
-    } else {
-      // uncaughtException event is not executed when hasUncaughtExceptionCaptureCallback is true
-      let previousCb
-      const cb = ({ currentCallback, abortController }) => {
-        setUncaughtExceptionCaptureCallbackStart.unsubscribe(cb)
-        if (!currentCallback) {
-          abortController.abort()
-          return
-        }
-
-        previousCb = currentCallback
-      }
-
-      setUncaughtExceptionCaptureCallbackStart.subscribe(cb)
-
-      process.setUncaughtExceptionCaptureCallback(null)
-
-      // For some reason, previous callback was defined before the instrumentation
-      // We can not restore it, so we let the app decide
-      if (previousCb) {
-        process.setUncaughtExceptionCaptureCallback(() => {
-          process.setUncaughtExceptionCaptureCallback(null)
-          process.setUncaughtExceptionCaptureCallback(previousCb)
-        })
-      }
     }
   }
 }
@@ -93,6 +105,10 @@ function enable (_config) {
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
+
+  if (abortOnUncaughtException) {
+    log.warn('The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
+  }
 }
 
 function disable () {
@@ -153,5 +169,6 @@ function handleResult (actions, req, res, abortController) {
 module.exports = {
   enable,
   disable,
-  handleResult
+  handleResult,
+  handleUncaughtExceptionMonitor // exported only for testing purpose
 }

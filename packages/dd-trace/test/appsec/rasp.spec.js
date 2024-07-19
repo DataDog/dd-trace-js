@@ -3,6 +3,7 @@
 const proxyquire = require('proxyquire')
 const { httpClientRequestStart } = require('../../src/appsec/channels')
 const addresses = require('../../src/appsec/addresses')
+const { handleUncaughtExceptionMonitor } = require('../../src/appsec/rasp')
 
 describe('RASP', () => {
   let waf, rasp, datadogCore, stackTrace, web
@@ -165,6 +166,15 @@ describe('RASP', () => {
       httpClientRequestStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
+    })
+  })
+
+  describe('handleUncaughtExceptionMonitor', () => {
+    it('should not break with infinite loop of cause', () => {
+      const err = new Error()
+      err.cause = err
+
+      handleUncaughtExceptionMonitor(err)
     })
   })
 })
