@@ -191,6 +191,7 @@ describe('RASP', () => {
 
   describe('without express', () => {
     let app, server, axios
+
     before(() => {
       return agent.load(['http'], { client: false })
     })

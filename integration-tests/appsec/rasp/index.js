@@ -107,6 +107,7 @@ app.get('/ssrf/http/custom-uncaught-exception-capture-callback', (req, res) => {
 })
 
 app.get('/ssrf/http/should-block-in-domain', (req, res) => {
+  // eslint-disable-next-line n/no-deprecated-api
   const d = require('node:domain').create()
   d.run(() => {
     http.get(`https://${req.query.host}`, () => {
