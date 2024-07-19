@@ -314,6 +314,39 @@ describe('Plugin', () => {
           }, 250)
         })
       })
+
+      describe('with batch propagation configuration', () => {
+        before(() => {
+          return agent.load(['aws-sdk'], [{
+            service: 'test',
+            batchPropagationEnabled: true,
+            kinesis: {
+              batchPropagationEnabled: false
+            },
+            sns: false,
+            sqs: {
+              batchPropagationEnabled: false
+            }
+          }])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sns.config.enabled).to.equal(false)
+          expect(sqs.config.batchPropagationEnabled).to.equal(false)
+        })
+      })
     })
   })
 })
