@@ -164,36 +164,24 @@ function normalizeConfig (config, serviceIdentifier) {
       break
   }
 
-  const baseAWSBatchPropagationEnabled = isTrue(
-    coalesce(
-      config.batchPropagationEnabled,
-      process.env.DD_TRACE_SPAN_LEAK_DEBUG,
-      false
-    )
-  )
-
   // check if AWS batch propagation or AWS_[SERVICE] batch propagation is enabled via env variable
   const serviceId = serviceIdentifier.toUpperCase()
-  const serviceBatchPropagationEnabled = isTrue(
+  const batchPropagationEnabled = isTrue(
     coalesce(
       specificConfig.batchPropagationEnabled,
       process.env[`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`],
-      baseAWSBatchPropagationEnabled,
+      config.batchPropagationEnabled,
+      process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
       false
     )
   )
 
   // Merge the specific config back into the main config
-  return {
-    ...config,
-    [serviceIdentifier]: {
-      ...specificConfig,
-      batchPropagationEnabled: serviceBatchPropagationEnabled
-    },
+  return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
-    batchPropagationEnabled: baseAWSBatchPropagationEnabled,
+    batchPropagationEnabled,
     hooks
-  }
+  })
 }
 
 function getHooks (config) {
