@@ -1188,5 +1188,88 @@ moduleTypes.forEach(({
         })
       })
     })
+
+    context('flaky test retries', () => {
+      it('retries flaky tests', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.equal(testSuites.length, 1)
+            assert.equal(testSuites[0].meta[TEST_STATUS], 'fail')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.equal(tests.length, 10)
+
+            assert.includeMembers(tests.map(test => test.resource), [
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              // passes at the second retry
+              'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              // never passes
+              'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
+              // passes on the first try
+              'cypress/e2e/flaky-test-retries.js.flaky test retry always passes'
+            ])
+
+            const eventuallyPassingTest = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry eventually passes'
+            )
+            assert.equal(eventuallyPassingTest.length, 3)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+
+            const neverPassingTest = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.equal(neverPassingTest.length, 6)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
+            assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+          })
+
+        const {
+          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: specToRun
+            },
+            stdio: 'pipe'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          receiverPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+    })
   })
 })
