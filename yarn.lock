@@ -419,9 +419,10 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@./datadog-native-iast-rewriter-2.4.0-pre-001.tgz":
+"@datadog/native-iast-rewriter@2.4.0-pre-001":
   version "2.4.0-pre-001"
-  resolved "./datadog-native-iast-rewriter-2.4.0-pre-001.tgz#bbf9d23786928a66eb18e7f00b5ef584ac38a610"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.4.0-pre-001.tgz#bbf9d23786928a66eb18e7f00b5ef584ac38a610"
+  integrity sha512-Q9q/XrHWs3FlGe0xshfVVt4+DGfn5M2N/9ujloAcaFDjhHJQm/HX5RJVBihWZWvR7JiJg99KENbdVzpud7qRaQ==
   dependencies:
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
