@@ -22,6 +22,7 @@ describe('encoding', () => {
     expect(hash)
       .to.deep.equal(Buffer.from('ec99e1e8e682985d', 'hex'))
   })
+
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
       hash: Buffer.from('4cce4d8e07685728', 'hex'),
@@ -34,6 +35,7 @@ describe('encoding', () => {
     expect(decoded.pathwayStartNs).to.equal(expectedContext.pathwayStartNs)
     expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
   })
+
   it('decoding of a context should be consistent between languages', () => {
     const data = Buffer.from([76, 206, 77, 142, 7, 104, 87, 40, 196, 231,
       192, 159, 143, 98, 200, 217, 195, 159, 143, 98])
@@ -47,6 +49,7 @@ describe('encoding', () => {
     expect(decoded.pathwayStartNs).to.equal(expectedContext.pathwayStartNs)
     expect(decoded.edgeStartNs).to.equal(expectedContext.edgeStartNs)
   })
+
   it('should encode and decode to the same value when using base64', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,

@@ -39,10 +39,10 @@ function normalizeArgs (args, shell) {
 
   if (Array.isArray(args[1])) {
     childProcessInfo.command = childProcessInfo.command + ' ' + args[1].join(' ')
-    if (args[2] != null && typeof args[2] === 'object') {
+    if (args[2] !== null && typeof args[2] === 'object') {
       childProcessInfo.options = args[2]
     }
-  } else if (args[1] != null && typeof args[1] === 'object') {
+  } else if (args[1] !== null && typeof args[1] === 'object') {
     childProcessInfo.options = args[1]
   }
   childProcessInfo.shell = shell ||

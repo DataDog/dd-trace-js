@@ -1003,12 +1003,14 @@ describe('IP blocking', function () {
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
+
   before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
       })
   })
+
   before(done => {
     const server = new http.Server((req, res) => {
       res.writeHead(200)
