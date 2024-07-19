@@ -171,6 +171,7 @@ class DatadogSpan {
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {
+      // eslint-disable-next-line @datadog/safe-typeof-object
       if (typeof attributesOrStartTime === 'object') {
         event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
       } else {

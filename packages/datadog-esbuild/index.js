@@ -7,7 +7,7 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     hook.fn()
   } else {
     hook()

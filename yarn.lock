@@ -412,6 +412,10 @@
   resolved "https://registry.npmjs.org/@colors/colors/-/colors-1.5.0.tgz"
   integrity "sha1-u1BFecHK6SPmV2pPXaQ9Jfl729k= sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="
 
+"@datadog/eslint-plugin@DataDog/eslint-plugin":
+  version "1.0.0"
+  resolved "https://codeload.github.com/DataDog/eslint-plugin/tar.gz/97f4183315bbee879958d651d826f4d674b7e853"
+
 "@datadog/native-appsec@8.0.1":
   version "8.0.1"
   resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.0.1.tgz#be06be92d79d7462aa64ee3a33108133083134fc"

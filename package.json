@@ -102,6 +102,7 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
+    "@datadog/eslint-plugin": "DataDog/eslint-plugin",
     "@types/node": ">=18",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",

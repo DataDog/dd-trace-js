@@ -21,18 +21,16 @@ class DynamoDb extends BaseAwsSdkPlugin {
       // batch operations have different format, collect table name for batch
       // https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDB.html#batchGetItem-property`
       // dynamoDB batch TableName
-      if (params.RequestItems !== null) {
-        if (typeof params.RequestItems === 'object') {
-          if (Object.keys(params.RequestItems).length === 1) {
-            const tableName = Object.keys(params.RequestItems)[0]
+      if (params.RequestItems !== null && typeof params.RequestItems === 'object') {
+        if (Object.keys(params.RequestItems).length === 1) {
+          const tableName = Object.keys(params.RequestItems)[0]
 
-            // also add span type to match serverless convention
-            Object.assign(tags, {
-              'resource.name': `${operation} ${tableName}`,
-              'aws.dynamodb.table_name': tableName,
-              tablename: tableName
-            })
-          }
+          // also add span type to match serverless convention
+          Object.assign(tags, {
+            'resource.name': `${operation} ${tableName}`,
+            'aws.dynamodb.table_name': tableName,
+            tablename: tableName
+          })
         }
       }
 
