@@ -234,6 +234,25 @@ describe('Plugin', () => {
             }).toArray()
           })
 
+          it('should log the aggregate pipeline in mongodb.query', done => {
+            agent
+              .use(traces => {
+                const span = traces[0][0]
+                const resource = 'aggregate test.$cmd'
+                const query = '[{"$match":{"_id":"1234"}},{"$project":{"_id":1}}]'
+
+                expect(span).to.have.property('resource', resource)
+                expect(span.meta).to.have.property('mongodb.query', query)
+              })
+              .then(done)
+              .catch(done)
+
+            collection.aggregate([
+              { $match: { _id: '1234' } },
+              { $project: { _id: 1 } }
+            ]).toArray()
+          })
+
           it('should use the toJSON method of objects if it exists', done => {
             const id = '123456781234567812345678'
 

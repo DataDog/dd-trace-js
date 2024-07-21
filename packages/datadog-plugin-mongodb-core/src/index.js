@@ -44,6 +44,7 @@ function getQuery (cmd) {
   if (!cmd || typeof cmd !== 'object' || Array.isArray(cmd)) return
   if (cmd.query) return sanitizeBigInt(limitDepth(cmd.query))
   if (cmd.filter) return sanitizeBigInt(limitDepth(cmd.filter))
+  if (cmd.pipeline) return sanitizeBigInt(limitDepth(cmd.pipeline))
 }
 
 function getResource (plugin, ns, query, operationName) {
