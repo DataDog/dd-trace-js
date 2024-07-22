@@ -79,6 +79,7 @@ module.exports = class Plugin {
         return handler.apply(this, arguments)
       } catch (e) {
         logger.error('Error in plugin handler:', e)
+        logger.info('Disabling plugin:', plugin.id)
         plugin.configure(false)
       }
     }
@@ -105,12 +106,10 @@ module.exports = class Plugin {
     }
     this.config = config
     if (config.enabled && !this._enabled) {
-      logger.info('Enabling plugin:', this.id)
       this._enabled = true
       this._subscriptions.forEach(sub => sub.enable())
       this._bindings.forEach(sub => sub.enable())
     } else if (!config.enabled && this._enabled) {
-      logger.info('Disabling plugin:', this.id)
       this._enabled = false
       this._subscriptions.forEach(sub => sub.disable())
       this._bindings.forEach(sub => sub.disable())

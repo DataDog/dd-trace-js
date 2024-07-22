@@ -45,7 +45,6 @@ describe('Plugin', () => {
   after(() => { Object.keys(testPlugins).forEach(name => delete plugins[name]) })
 
   it('should disable upon error', () => {
-
     const plugin = new BadPlugin()
     plugin.configure({ enabled: true })
 
