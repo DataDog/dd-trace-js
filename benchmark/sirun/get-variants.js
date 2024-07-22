@@ -6,6 +6,4 @@ const path = require('path')
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 const variants = Object.keys(metaJson.variants)
 
-console.log(variants)
-
 process.stdout.write(variants.join(' '))
