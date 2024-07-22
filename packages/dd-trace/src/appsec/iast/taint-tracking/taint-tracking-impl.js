@@ -143,6 +143,7 @@ function csiMethodsOverrides (getContext) {
       if (evalCallCh.hasSubscribers && fn === globalThis.eval) {
         evalCallCh.publish({ script })
       }
+
       return res
     },
 

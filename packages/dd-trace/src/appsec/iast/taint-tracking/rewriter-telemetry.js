@@ -11,8 +11,8 @@ const telemetryRewriter = {
 
   information (content, filename, rewriter) {
     const response = this.off(content, filename, rewriter)
-    const metrics = response.metrics
 
+    const metrics = response.metrics
     if (metrics && metrics.instrumentedPropagation) {
       INSTRUMENTED_PROPAGATION.inc(undefined, metrics.instrumentedPropagation)
     }

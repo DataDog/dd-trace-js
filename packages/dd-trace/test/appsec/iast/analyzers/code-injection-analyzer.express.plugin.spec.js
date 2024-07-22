@@ -53,7 +53,6 @@ describe('Code injection vulnerability', () => {
         })
 
         testThatRequestHasNoVulnerability((req, res) => {
-          // eslint-disable-next-line no-eval
           res.send('' + require(evalFunctionsPath).runEval('1 + 2'))
         }, 'CODE_INJECTION')
       })
