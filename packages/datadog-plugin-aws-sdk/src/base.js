@@ -73,7 +73,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       if (!cbExists && this.serviceIdentifier === 'sqs') {
         const params = response.request.params
         const operation = response.request.operation
-        this.responseExtractDSMContext(operation, params, response.data, span)
+        this.responseExtractDSMContext(operation, params, response.data ?? response, span)
       }
       this.addResponseTags(span, response)
       this.finish(span, response, response.error)
@@ -165,6 +165,7 @@ function normalizeConfig (config, serviceIdentifier) {
 
   return Object.assign({}, config, specificConfig, {
     splitByAwsService: config.splitByAwsService !== false,
+    batchPropagationEnabled: config.batchPropagationEnabled !== false,
     hooks
   })
 }

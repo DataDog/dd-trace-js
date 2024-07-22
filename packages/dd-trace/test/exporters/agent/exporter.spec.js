@@ -43,6 +43,18 @@ describe('Exporter', () => {
     })
   })
 
+  it('should pass computed stats header through to writer if standalone appsec is enabled', () => {
+    const stats = { enabled: false }
+    const appsec = { standalone: { enabled: true } }
+    exporter = new Exporter({ url, flushInterval, stats, appsec }, prioritySampler)
+
+    expect(Writer).to.have.been.calledWithMatch({
+      headers: {
+        'Datadog-Client-Computed-Stats': 'yes'
+      }
+    })
+  })
+
   it('should support IPv6', () => {
     const stats = { enabled: true }
     exporter = new Exporter({ hostname: '::1', flushInterval, stats }, prioritySampler)
@@ -102,6 +114,7 @@ describe('Exporter', () => {
     beforeEach(() => {
       exporter = new Exporter({ url })
     })
+
     it('should set the URL on self and writer', () => {
       exporter.setUrl('http://example2.com')
       const url = new URL('http://example2.com')

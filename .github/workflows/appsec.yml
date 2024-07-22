@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@v3
 
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/node/20
@@ -39,8 +39,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: codecov/codecov-action@v3
 
@@ -62,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -85,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/18
@@ -110,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/20
@@ -124,7 +126,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -138,7 +140,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -158,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -178,7 +180,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
@@ -192,7 +194,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/18
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/20
@@ -206,10 +208,12 @@ jobs:
       matrix:
         version:
           - 18
-          - latest
+          - 22.4
+        range: ['9.5.0', '11.1.4', '13.2.0', '*']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/testagent/start
@@ -217,7 +221,7 @@ jobs:
         with:
           cache: yarn
           node-version: ${{ matrix.version }}
-      - run: yarn install
+      - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - if: always()
         uses: ./.github/actions/testagent/logs
@@ -230,7 +234,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/node/setup
-      - run: yarn install
+      - uses: ./.github/actions/install
       - uses: ./.github/actions/node/oldest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest

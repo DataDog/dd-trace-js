@@ -78,6 +78,7 @@ describe('StatsPoint', () => {
 describe('StatsBucket', () => {
   describe('Checkpoints', () => {
     let buckets
+
     beforeEach(() => { buckets = new StatsBucket() })
 
     it('should start empty', () => {
@@ -203,7 +204,7 @@ describe('DataStreamsProcessor', () => {
     env: 'test',
     version: 'v1',
     service: 'service1',
-    tags: { tag: 'some tag' }
+    tags: { foo: 'foovalue', bar: 'barvalue' }
   }
 
   beforeEach(() => {
@@ -306,7 +307,8 @@ describe('DataStreamsProcessor', () => {
         Backlogs: []
       }],
       TracerVersion: pkg.version,
-      Lang: 'javascript'
+      Lang: 'javascript',
+      Tags: ['foo:foovalue', 'bar:barvalue']
     })
   })
 })

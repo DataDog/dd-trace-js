@@ -14,6 +14,7 @@ describe('Plugin', () => {
 
   describe('amqp10', () => {
     before(() => agent.load('rhea'))
+
     after(() => agent.close({ ritmReset: false }))
 
     withVersions('amqp10', 'amqp10', version => {
@@ -94,6 +95,7 @@ describe('Plugin', () => {
 
             sender.send({ key: 'value' })
           })
+
           it('should handle errors', done => {
             let error
 

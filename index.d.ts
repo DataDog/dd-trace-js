@@ -198,6 +198,7 @@ interface Plugins {
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
+  "vitest": tracer.plugins.vitest;
   "winston": tracer.plugins.winston;
 }
 
@@ -517,45 +518,7 @@ declare namespace tracer {
       /**
        * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
        */
-      iast?: boolean | {
-        /**
-         * Whether to enable IAST.
-         * @default false
-         */
-        enabled?: boolean,
-        /**
-         * Controls the percentage of requests that iast will analyze
-         * @default 30
-         */
-        requestSampling?: number,
-        /**
-         * Controls how many request can be analyzing code vulnerabilities at the same time
-         * @default 2
-         */
-        maxConcurrentRequests?: number,
-        /**
-         * Controls how many code vulnerabilities can be detected in the same request
-         * @default 2
-         */
-        maxContextOperations?: number,
-        /**
-         * Whether to enable vulnerability deduplication
-         */
-        deduplicationEnabled?: boolean,
-        /**
-         * Whether to enable vulnerability redaction
-         * @default true
-         */
-        redactionEnabled?: boolean,
-        /**
-         * Specifies a regex that will redact sensitive source names in vulnerability reports.
-         */
-        redactionNamePattern?: string,
-        /**
-         * Specifies a regex that will redact sensitive source values in vulnerability reports.
-         */
-        redactionValuePattern?: string
-      }
+      iast?: boolean | IastOptions
 
       appsec?: {
         /**
@@ -734,6 +697,11 @@ declare namespace tracer {
         maxDepth?: number,
       }
     };
+
+    /**
+     * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+     */
+    iast?: boolean | IastOptions
 
     /**
      * Configuration of ASM Remote Configuration
@@ -1223,6 +1191,13 @@ declare namespace tracer {
       splitByAwsService?: boolean;
 
       /**
+       * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
+       * behavior is to inject the first message in batch send operations.
+       * @default false
+       */
+      batchPropagationEnabled?: boolean;
+
+      /**
        * Hooks to run before spans are finished.
        */
       hooks?: {
@@ -1556,7 +1531,7 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [jest](https://github.com/facebook/jest) module.
+     * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
 
@@ -1838,6 +1813,12 @@ declare namespace tracer {
      * [undici](https://github.com/nodejs/undici) module.
      */
     interface undici extends HttpClient {}
+
+    /**
+     * This plugin automatically instruments the
+     * [vitest](https://github.com/vitest-dev/vitest) module.
+     */
+    interface vitest extends Integration {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
@@ -2122,6 +2103,61 @@ declare namespace tracer {
     export type SpanStatus = otel.SpanStatus;
     export type TimeInput = otel.TimeInput;
     export type TraceState = otel.TraceState;
+  }
+
+  /**
+   * Iast configuration used in `tracer` and `tracer.experimental` options
+   */
+  interface IastOptions {
+    /**
+     * Whether to enable IAST.
+     * @default false
+     */
+    enabled?: boolean,
+
+    /**
+     * Controls the percentage of requests that iast will analyze
+     * @default 30
+     */
+    requestSampling?: number,
+
+    /**
+     * Controls how many request can be analyzing code vulnerabilities at the same time
+     * @default 2
+     */
+    maxConcurrentRequests?: number,
+
+    /**
+     * Controls how many code vulnerabilities can be detected in the same request
+     * @default 2
+     */
+    maxContextOperations?: number,
+
+    /**
+     * Whether to enable vulnerability deduplication
+     */
+    deduplicationEnabled?: boolean,
+
+    /**
+     * Whether to enable vulnerability redaction
+     * @default true
+     */
+    redactionEnabled?: boolean,
+
+    /**
+     * Specifies a regex that will redact sensitive source names in vulnerability reports.
+     */
+    redactionNamePattern?: string,
+
+    /**
+     * Specifies a regex that will redact sensitive source values in vulnerability reports.
+     */
+    redactionValuePattern?: string,
+
+    /**
+     * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
+     */
+    telemetryVerbosity?: string
   }
 }
 

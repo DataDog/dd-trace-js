@@ -193,6 +193,12 @@ function withVersions (plugin, modules, range, cb) {
   }
 
   modules.forEach(moduleName => {
+    if (process.env.PACKAGE_NAMES) {
+      const packages = process.env.PACKAGE_NAMES.split(',')
+
+      if (!packages.includes(moduleName)) return
+    }
+
     const testVersions = new Map()
 
     instrumentations
@@ -204,10 +210,14 @@ function withVersions (plugin, modules, range, cb) {
         versions
           .filter(version => !process.env.RANGE || semver.subset(version, process.env.RANGE))
           .forEach(version => {
-            const min = semver.coerce(version).version
+            if (version !== '*') {
+              const min = semver.coerce(version).version
+
+              testVersions.set(min, { range: version, test: min })
+            }
+
             const max = require(`../../../../versions/${moduleName}@${version}`).version()
 
-            testVersions.set(min, { range: version, test: min })
             testVersions.set(max, { range: version, test: version })
           })
       })
@@ -241,7 +251,7 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          cb(v.test, moduleName)
+          cb(v.test, moduleName, v.version)
 
           after(() => {
             process.env.NODE_PATH = nodePath

@@ -217,8 +217,8 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
     expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
-    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(155)
-    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(443)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(190)
+    expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(550)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateGraphql', undefined)
@@ -248,13 +248,13 @@ describe('Config', () => {
       {
         name: 'appsec.obfuscatorKeyRegex',
         // eslint-disable-next-line max-len
-        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?)key)|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization',
+        value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {
         name: 'appsec.obfuscatorValueRegex',
         // eslint-disable-next-line max-len
-        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
+        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
       { name: 'appsec.rasp.enabled', value: false, origin: 'default' },
@@ -1093,12 +1093,7 @@ describe('Config', () => {
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false,
-        iast: {
-          enabled: true,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN'
-        }
+        enableGetRumData: false
       },
       appsec: {
         enabled: true,
@@ -1125,6 +1120,11 @@ describe('Config', () => {
           maxDepth: 42,
           maxStackTraces: 5
         }
+      },
+      iast: {
+        enabled: true,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
       remoteConfig: {
         pollInterval: 42
@@ -1210,6 +1210,17 @@ describe('Config', () => {
           requestSampling: 1.0
         }
       },
+      iast: {
+        enabled: true,
+        requestSampling: 15,
+        maxConcurrentRequests: 3,
+        maxContextOperations: 4,
+        deduplicationEnabled: false,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        telemetryVerbosity: 'DEBUG'
+      },
       experimental: {
         appsec: {
           enabled: false,
@@ -1228,6 +1239,17 @@ describe('Config', () => {
             enabled: false,
             requestSampling: 0.5
           }
+        },
+        iast: {
+          enabled: false,
+          requestSampling: 25,
+          maxConcurrentRequests: 6,
+          maxContextOperations: 7,
+          deduplicationEnabled: true,
+          redactionEnabled: true,
+          redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
+          telemetryVerbosity: 'OFF'
         }
       }
     })
@@ -1264,6 +1286,18 @@ describe('Config', () => {
         maxStackTraces: 2,
         maxDepth: 32
       }
+    })
+
+    expect(config).to.have.deep.property('iast', {
+      enabled: true,
+      requestSampling: 15,
+      maxConcurrentRequests: 3,
+      maxContextOperations: 4,
+      deduplicationEnabled: false,
+      redactionEnabled: false,
+      redactionNamePattern: 'REDACTION_NAME_PATTERN',
+      redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+      telemetryVerbosity: 'DEBUG'
     })
   })
 
@@ -1516,23 +1550,31 @@ describe('Config', () => {
     ])
   })
 
-  it('should remove tags from sampling rules when set through remote configuration', () => {
+  it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = new Config()
 
     config.configure({
       tracing_sampling_rules: [
         {
           resource: '*',
-          tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],
+          tags: [
+            { key: 'tag-a', value_glob: 'tag-a-val*' },
+            { key: 'tag-b', value_glob: 'tag-b-val*' }
+          ],
           provenance: 'customer'
         }
       ]
     }, true)
-
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
       rateLimit: undefined,
-      rules: [{ resource: '*', provenance: 'customer' }],
+      rules: [
+        {
+          resource: '*',
+          tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
+          provenance: 'customer'
+        }
+      ],
       sampleRate: undefined
     })
   })
@@ -1872,6 +1914,7 @@ describe('Config', () => {
       expect(config).not.to.have.property('repositoryUrl')
     })
   })
+
   it('should sanitize values for API Security sampling between 0 and 1', () => {
     expect(new Config({
       appsec: {

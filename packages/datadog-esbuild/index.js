@@ -7,7 +7,11 @@ const hooks = require('../datadog-instrumentations/src/helpers/hooks.js')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/utils/src/extract-package-and-module-path')
 
 for (const hook of Object.values(hooks)) {
-  hook()
+  if (typeof hook === 'object') {
+    hook.fn()
+  } else {
+    hook()
+  }
 }
 
 const modulesOfInterest = new Set()

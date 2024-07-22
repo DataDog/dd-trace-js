@@ -38,7 +38,7 @@ function wrapStart (start) {
 
 function wrapExt (ext) {
   return function (events, method, options) {
-    if (typeof events === 'object') {
+    if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
       arguments[1] = wrapExtension(method)
