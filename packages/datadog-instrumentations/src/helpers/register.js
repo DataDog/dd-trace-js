@@ -88,16 +88,13 @@ for (const packageName of names) {
       if (matchesFile) {
         const version = moduleVersion || getVersion(moduleBaseDir)
         if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
-          namesAndSuccesses[name] = {
-            success: false,
-            version
-          }
+          namesAndSuccesses[`${name}@${version}`] = false
         }
 
         if (matchVersion(version, versions)) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
-            namesAndSuccesses[name].success = true
+            namesAndSuccesses[`${name}@${version}`] = true
             return moduleExports
           }
 
@@ -117,19 +114,20 @@ for (const packageName of names) {
               `integration_version:${version}`
             ])
           }
-          namesAndSuccesses[name].success = true
+          namesAndSuccesses[`${name}@${version}`] = true
         }
       }
     }
-    for (const name of Object.keys(namesAndSuccesses)) {
-      const { success, version } = namesAndSuccesses[name]
-      if (!success && !seenCombo.has(`${name}@${version}`)) {
+    for (const nameVersion of Object.keys(namesAndSuccesses)) {
+      const [name, version] = nameVersion.split('@')
+      const success = namesAndSuccesses[nameVersion]
+      if (!success && !seenCombo.has(nameVersion)) {
         telemetry('abort.integration', [
           `integration:${name}`,
           `integration_version:${version}`
         ])
-        log.info(`Found incompatible integration version: ${name}@${version}`)
-        seenCombo.add(`${name}@${version}`)
+        log.info(`Found incompatible integration version: ${nameVersion}`)
+        seenCombo.add(nameVersion)
       }
     }
 
