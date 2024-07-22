@@ -180,7 +180,7 @@ function wrapSetHeader (setHeader) {
 }
 
 function wrapAppendOrRemoveHeader (originalMethod) {
-  return function wrappedAppendOrRemoveHeade () {
+  return function wrappedAppendOrRemoveHeader () {
     if (!startSetHeaderCh.hasSubscribers) {
       return originalMethod.apply(this, arguments)
     }
