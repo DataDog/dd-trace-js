@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: conti/dsm-manual-checkpoint-tests
       - name: Get Essential Scenarios
         id: parse-yml
         run: yq -o tsv .TRACER_ESSENTIAL_SCENARIOS ./scenario_groups.yml | xargs node -p "x=process.argv;x.shift();x.push('CROSSED_TRACING_LIBRARIES');'scenario='+JSON.stringify(x)" >> $GITHUB_OUTPUT
@@ -60,6 +61,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'DataDog/system-tests'
+          ref: conti/dsm-manual-checkpoint-tests
       - name: Checkout dd-trace-js
         uses: actions/checkout@v4
         with:
