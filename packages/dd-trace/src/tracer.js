@@ -23,9 +23,8 @@ const MEASURED = tags.MEASURED
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
-    const _dataStreamsProcessor = new DataStreamsProcessor(config)
-    this._dataStreamsProcessor = _dataStreamsProcessor
-    this.dataStreamsCheckpointer = new DataStreamsCheckpointer(config, _dataStreamsProcessor)
+    this._dataStreamsProcessor = new DataStreamsProcessor(config)
+    this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
