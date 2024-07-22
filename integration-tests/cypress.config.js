@@ -10,7 +10,6 @@ module.exports = {
       if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
         cypressFailFast(on, config)
       }
-      ddTracePlugin(on, config)
       if (process.env.CYPRESS_ENABLE_AFTER_RUN_CUSTOM) {
         on('after:run', (...args) => {
           // do custom stuff
@@ -25,6 +24,7 @@ module.exports = {
           return ddAfterSpec(...args)
         })
       }
+      return ddTracePlugin(on, config)
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
   },

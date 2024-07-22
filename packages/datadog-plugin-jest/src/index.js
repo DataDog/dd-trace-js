@@ -148,6 +148,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
+        config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
       })
     })
 
@@ -324,7 +325,8 @@ class JestPlugin extends CiPlugin {
       testStartLine,
       testSourceFile,
       isNew,
-      isEfdRetry
+      isEfdRetry,
+      isJestRetry
     } = test
 
     const extraTags = {
@@ -347,6 +349,10 @@ class JestPlugin extends CiPlugin {
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
       }
+    }
+
+    if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

@@ -22,6 +22,5 @@ module.exports = (on, config) => {
       return ddAfterSpec(...args)
     })
   }
-  require('dd-trace/ci/cypress/plugin')(on, config)
-  return config
+  return require('dd-trace/ci/cypress/plugin')(on, config)
 }
