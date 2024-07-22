@@ -211,33 +211,23 @@ function propagationStyle (key, option, defaultValue) {
 }
 
 class Config {
-  constructor (options) {
-    options = options || {}
+  constructor (options = {}) {
     options = this.options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
       iast: options.iast != null ? options.iast : options.experimental?.iast
     }
 
-    checkIfBothOtelAndDdEnvVarSet()
-
     // Configure the logger first so it can be used to warn about other configs
-    this.debug = isTrue(coalesce(
-      process.env.DD_TRACE_DEBUG,
-      process.env.OTEL_LOG_LEVEL && process.env.OTEL_LOG_LEVEL === 'debug',
-      false
-    ))
-    this.logger = options.logger
-
-    this.logLevel = coalesce(
-      options.logLevel,
-      process.env.DD_TRACE_LOG_LEVEL,
-      process.env.OTEL_LOG_LEVEL,
-      'debug'
-    )
+    const logConfig = log.getConfig()
+    this.debug = logConfig.enabled
+    this.logger = coalesce(options.logger, logConfig.logger)
+    this.logLevel = coalesce(options.logLevel, logConfig.logLevel)
 
     log.use(this.logger)
-    log.toggle(this.debug, this.logLevel, this)
+    log.toggle(this.debug, this.logLevel)
+
+    checkIfBothOtelAndDdEnvVarSet()
 
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
