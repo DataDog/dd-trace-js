@@ -3,6 +3,7 @@
 // TODO: move anything related to tracing to TracingPlugin instead
 
 const dc = require('dc-polyfill')
+const logger = require('../log')
 const { storage } = require('../../../datadog-core')
 
 class Subscription {
@@ -72,7 +73,17 @@ module.exports = class Plugin {
   }
 
   addSub (channelName, handler) {
-    this._subscriptions.push(new Subscription(channelName, handler))
+    const plugin = this
+    const wrappedHandler = function () {
+      try {
+        return handler.apply(this, arguments)
+      } catch (e) {
+        logger.error('Error in plugin handler:', e)
+        logger.info('Disabling plugin:', plugin.id)
+        plugin.configure(false)
+      }
+    }
+    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
   }
 
   addBind (channelName, transform) {
