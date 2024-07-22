@@ -42,6 +42,7 @@ describe('Plugin', () => {
       loadChannel.publish({ name })
     }
   })
+
   after(() => { Object.keys(testPlugins).forEach(name => delete plugins[name]) })
 
   it('should disable upon error', () => {
