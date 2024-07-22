@@ -8,7 +8,7 @@ class DataStreamsCheckpointer {
   }
 
   setProduceCheckpoint (type, target, carrier) {
-    if (!this.config.dataStreamsEnabled) return
+    if (!this.config.dsmEnabled) return
 
     const ctx = this.dsmProcessor.setCheckpoint(
       ['type:' + type, 'topic:' + target, 'direction:out', 'manual_checkpoint:true'],
@@ -22,7 +22,7 @@ class DataStreamsCheckpointer {
   }
 
   setConsumeCheckpoint (type, source, carrier) {
-    if (!this.config.dataStreamsEnabled) return
+    if (!this.config.dsmEnabled) return
 
     const parentCtx = this.tracer.extract('text_map_dsm', carrier)
     DataStreamsContext.setDataStreamsContext(parentCtx)

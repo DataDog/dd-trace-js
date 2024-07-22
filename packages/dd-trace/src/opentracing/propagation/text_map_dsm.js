@@ -12,13 +12,15 @@ class DSMTextMapPropagator {
   }
 
   inject (ctx, carrier) {
+    if (!this.config.dsmEnabled) return
+
     this._injectDatadogDSMContext(ctx, carrier)
 
     log.debug(() => `Inject into carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
   extract (carrier) {
-    if (!this.config.dataStreamsEnabled) return
+    if (!this.config.dsmEnabled) return
 
     const dsmContext = this._extractDatadogDSMContext(carrier)
 
@@ -29,14 +31,10 @@ class DSMTextMapPropagator {
   }
 
   _injectDatadogDSMContext (ctx, carrier) {
-    if (!this.config.dataStreamsEnabled) return
-
-    DsmPathwayCodec.encode(ctx, null, carrier)
+    DsmPathwayCodec.encode(ctx, carrier)
   }
 
   _extractDatadogDSMContext (carrier) {
-    if (!this.config.dataStreamsEnabled) return
-
     const ctx = DsmPathwayCodec.decode(carrier)
     return ctx
   }

@@ -40,7 +40,7 @@ class DatadogTracer {
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
       [formats.LOG]: new LogPropagator(config),
-      [formats.DSM]: new DSMTextMapPropagator(config)
+      text_map_dsm: new DSMTextMapPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
@@ -74,12 +74,14 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
+    let isSpanContext = false
     if (context instanceof Span) {
+      isSpanContext = true
       context = context.context()
     }
 
     try {
-      this._prioritySampler.sample(context)
+      if (isSpanContext) this._prioritySampler.sample(context)
       this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error(e)

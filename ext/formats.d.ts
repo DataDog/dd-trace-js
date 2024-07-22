@@ -5,7 +5,7 @@ declare const formats: {
   HTTP_HEADERS: typeof opentracing.FORMAT_HTTP_HEADERS
   BINARY: typeof opentracing.FORMAT_BINARY
   LOG: 'log'
-  DSM: 'text_map_dsm'
+  TEXT_MAP_DSM: 'text_map_dsm'
 }
 
 export = formats
