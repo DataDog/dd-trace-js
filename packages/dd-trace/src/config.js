@@ -134,7 +134,7 @@ const fromEntries = Object.fromEntries || (entries =>
 // eslint-disable-next-line max-len
 const qsRegex = '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}'
 // eslint-disable-next-line max-len
-const defaultWafObfuscatorKeyRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key)|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
+const defaultWafObfuscatorKeyRegex = '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt'
 // eslint-disable-next-line max-len
 const defaultWafObfuscatorValueRegex = '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}'
 const runtimeId = uuid()
@@ -185,7 +185,7 @@ function remapify (input, mappings) {
 
 function propagationStyle (key, option, defaultValue) {
   // Extract by key if in object-form value
-  if (typeof option === 'object' && !Array.isArray(option)) {
+  if (option !== null && typeof option === 'object' && !Array.isArray(option)) {
     option = option[key]
   }
 
@@ -193,7 +193,7 @@ function propagationStyle (key, option, defaultValue) {
   if (Array.isArray(option)) return option.map(v => v.toLowerCase())
 
   // If it's not an array but not undefined there's something wrong with the input
-  if (typeof option !== 'undefined') {
+  if (option !== undefined) {
     log.warn('Unexpected input for config.tracePropagationStyle')
   }
 
@@ -201,7 +201,7 @@ function propagationStyle (key, option, defaultValue) {
   const envKey = `DD_TRACE_PROPAGATION_STYLE_${key.toUpperCase()}`
 
   const envVar = coalesce(process.env[envKey], process.env.DD_TRACE_PROPAGATION_STYLE, process.env.OTEL_PROPAGATORS)
-  if (typeof envVar !== 'undefined') {
+  if (envVar !== undefined) {
     return envVar.split(',')
       .filter(v => v !== '')
       .map(v => v.trim().toLowerCase())
@@ -211,33 +211,23 @@ function propagationStyle (key, option, defaultValue) {
 }
 
 class Config {
-  constructor (options) {
-    options = options || {}
+  constructor (options = {}) {
     options = this.options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
-      iastOptions: options.experimental?.iast
+      iast: options.iast != null ? options.iast : options.experimental?.iast
     }
 
-    checkIfBothOtelAndDdEnvVarSet()
-
     // Configure the logger first so it can be used to warn about other configs
-    this.debug = isTrue(coalesce(
-      process.env.DD_TRACE_DEBUG,
-      process.env.OTEL_LOG_LEVEL && process.env.OTEL_LOG_LEVEL === 'debug',
-      false
-    ))
-    this.logger = options.logger
-
-    this.logLevel = coalesce(
-      options.logLevel,
-      process.env.DD_TRACE_LOG_LEVEL,
-      process.env.OTEL_LOG_LEVEL,
-      'debug'
-    )
+    const logConfig = log.getConfig()
+    this.debug = logConfig.enabled
+    this.logger = coalesce(options.logger, logConfig.logger)
+    this.logLevel = coalesce(options.logLevel, logConfig.logLevel)
 
     log.use(this.logger)
-    log.toggle(this.debug, this.logLevel, this)
+    log.toggle(this.debug, this.logLevel)
+
+    checkIfBothOtelAndDdEnvVarSet()
 
     const DD_TRACE_MEMCACHED_COMMAND_ENABLED = coalesce(
       process.env.DD_TRACE_MEMCACHED_COMMAND_ENABLED,
@@ -858,23 +848,23 @@ class Config {
     this._optsUnprocessed.flushMinSpans = options.flushMinSpans
     this._setArray(opts, 'headerTags', options.headerTags)
     this._setString(opts, 'hostname', options.hostname)
-    this._setBoolean(opts, 'iast.deduplicationEnabled', options.iastOptions && options.iastOptions.deduplicationEnabled)
+    this._setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
     this._setBoolean(opts, 'iast.enabled',
-      options.iastOptions && (options.iastOptions === true || options.iastOptions.enabled === true))
+      options.iast && (options.iast === true || options.iast.enabled === true))
     this._setValue(opts, 'iast.maxConcurrentRequests',
-      maybeInt(options.iastOptions?.maxConcurrentRequests))
-    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iastOptions?.maxConcurrentRequests
-    this._setValue(opts, 'iast.maxContextOperations', maybeInt(options.iastOptions?.maxContextOperations))
-    this._optsUnprocessed['iast.maxContextOperations'] = options.iastOptions?.maxContextOperations
-    this._setBoolean(opts, 'iast.redactionEnabled', options.iastOptions?.redactionEnabled)
-    this._setString(opts, 'iast.redactionNamePattern', options.iastOptions?.redactionNamePattern)
-    this._setString(opts, 'iast.redactionValuePattern', options.iastOptions?.redactionValuePattern)
-    const iastRequestSampling = maybeInt(options.iastOptions?.requestSampling)
+      maybeInt(options.iast?.maxConcurrentRequests))
+    this._optsUnprocessed['iast.maxConcurrentRequests'] = options.iast?.maxConcurrentRequests
+    this._setValue(opts, 'iast.maxContextOperations', maybeInt(options.iast?.maxContextOperations))
+    this._optsUnprocessed['iast.maxContextOperations'] = options.iast?.maxContextOperations
+    this._setBoolean(opts, 'iast.redactionEnabled', options.iast?.redactionEnabled)
+    this._setString(opts, 'iast.redactionNamePattern', options.iast?.redactionNamePattern)
+    this._setString(opts, 'iast.redactionValuePattern', options.iast?.redactionValuePattern)
+    const iastRequestSampling = maybeInt(options.iast?.requestSampling)
     if (iastRequestSampling > -1 && iastRequestSampling < 101) {
       this._setValue(opts, 'iast.requestSampling', iastRequestSampling)
-      this._optsUnprocessed['iast.requestSampling'] = options.iastOptions?.requestSampling
+      this._optsUnprocessed['iast.requestSampling'] = options.iast?.requestSampling
     }
-    this._setString(opts, 'iast.telemetryVerbosity', options.iastOptions && options.iastOptions.telemetryVerbosity)
+    this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
@@ -904,7 +894,7 @@ class Config {
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
     const hasTelemetryLogsUsingFeatures =
-      (options.iastOptions && (options.iastOptions === true || options.iastOptions?.enabled === true)) ||
+      (options.iast && (options.iast === true || options.iast?.enabled === true)) ||
       (options.profiling && options.profiling === true)
     this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
@@ -1043,15 +1033,18 @@ class Config {
     this._setArray(opts, 'headerTags', headerTags)
     this._setTags(opts, 'tags', tags)
     this._setBoolean(opts, 'tracing', options.tracing_enabled)
-    // ignore tags for now since rc sampling rule tags format is not supported
-    this._setSamplingRule(opts, 'sampler.rules', this._ignoreTags(options.tracing_sampling_rules))
     this._remoteUnprocessed['sampler.rules'] = options.tracing_sampling_rules
+    this._setSamplingRule(opts, 'sampler.rules', this._reformatTags(options.tracing_sampling_rules))
   }
 
-  _ignoreTags (samplingRules) {
-    if (samplingRules) {
-      for (const rule of samplingRules) {
-        delete rule.tags
+  _reformatTags (samplingRules) {
+    for (const rule of (samplingRules || [])) {
+      const reformattedTags = {}
+      if (rule.tags) {
+        for (const tag of (rule.tags || {})) {
+          reformattedTags[tag.key] = tag.value_glob
+        }
+        rule.tags = reformattedTags
       }
     }
     return samplingRules

@@ -121,16 +121,16 @@ function incomingHttpEndTranslator ({ req, res }) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
-  if (req.params && typeof req.params === 'object') {
+  if (req.params !== null && typeof req.params === 'object') {
     persistent[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies && typeof req.cookies === 'object') {
+  if (req.cookies !== null && typeof req.cookies === 'object') {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query && typeof req.query === 'object') {
+  if (req.query !== null && typeof req.query === 'object') {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 

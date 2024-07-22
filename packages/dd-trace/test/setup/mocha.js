@@ -193,6 +193,12 @@ function withVersions (plugin, modules, range, cb) {
   }
 
   modules.forEach(moduleName => {
+    if (process.env.PACKAGE_NAMES) {
+      const packages = process.env.PACKAGE_NAMES.split(',')
+
+      if (!packages.includes(moduleName)) return
+    }
+
     const testVersions = new Map()
 
     instrumentations
@@ -245,7 +251,7 @@ function withVersions (plugin, modules, range, cb) {
             require('module').Module._initPaths()
           })
 
-          cb(v.test, moduleName)
+          cb(v.test, moduleName, v.version)
 
           after(() => {
             process.env.NODE_PATH = nodePath

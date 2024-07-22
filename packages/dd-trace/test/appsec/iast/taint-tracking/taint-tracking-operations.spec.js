@@ -277,6 +277,7 @@ describe('IAST TaintTracking Operations', () => {
 
   describe('enableTaintTracking', () => {
     let context
+
     beforeEach(() => {
       context = { [taintTrackingOperations.IAST_TRANSACTION_ID]: 'id' }
       iastContextFunctions.saveIastContext(
@@ -408,6 +409,7 @@ describe('IAST TaintTracking Operations', () => {
         value
       )
     })
+
     it('Given iastContext with undefined IAST_TRANSACTION_ID should not call TaintedUtils.isTainted', () => {
       const iastContext = {}
       taintTrackingOperations.isTainted(iastContext)

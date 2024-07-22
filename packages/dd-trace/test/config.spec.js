@@ -28,17 +28,26 @@ describe('Config', () => {
   const BLOCKED_TEMPLATE_GRAPHQL = readFileSync(BLOCKED_TEMPLATE_GRAPHQL_PATH, { encoding: 'utf8' })
   const DD_GIT_PROPERTIES_FILE = require.resolve('./fixtures/config/git.properties')
 
+  function reloadLoggerAndConfig () {
+    log = proxyquire('../src/log', {})
+    log.use = sinon.spy()
+    log.toggle = sinon.spy()
+    log.warn = sinon.spy()
+    log.error = sinon.spy()
+
+    Config = proxyquire('../src/config', {
+      './pkg': pkg,
+      './log': log,
+      './telemetry': { updateConfig },
+      fs,
+      os
+    })
+  }
+
   beforeEach(() => {
     pkg = {
       name: '',
       version: ''
-    }
-
-    log = {
-      use: sinon.spy(),
-      toggle: sinon.spy(),
-      warn: sinon.spy(),
-      error: sinon.spy()
     }
 
     updateConfig = sinon.stub()
@@ -58,19 +67,26 @@ describe('Config', () => {
     }
     osType = 'Linux'
 
-    Config = proxyquire('../src/config', {
-      './pkg': pkg,
-      './log': log,
-      './telemetry': { updateConfig },
-      fs,
-      os
-    })
+    reloadLoggerAndConfig()
   })
 
   afterEach(() => {
     updateConfig.reset()
     process.env = env
     existsSyncParam = undefined
+  })
+
+  it('should initialize its own logging config based off the loggers config', () => {
+    process.env.DD_TRACE_DEBUG = 'true'
+    process.env.DD_TRACE_LOG_LEVEL = 'error'
+
+    reloadLoggerAndConfig()
+
+    const config = new Config()
+
+    expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('logger', undefined)
+    expect(config).to.have.property('logLevel', 'error')
   })
 
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
@@ -91,6 +107,9 @@ describe('Config', () => {
     process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'b3,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'b3,tracecontext'
     process.env.OTEL_PROPAGATORS = 'datadog,tracecontext'
+
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -118,6 +137,9 @@ describe('Config', () => {
     process.env.OTEL_METRICS_EXPORTER = 'none'
     process.env.OTEL_RESOURCE_ATTRIBUTES = 'foo=bar1,baz=qux1'
     process.env.OTEL_PROPAGATORS = 'b3,datadog'
+
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
 
     const config = new Config()
 
@@ -217,7 +239,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
     expect(config).to.have.nested.property('appsec.stackTrace.maxStackTraces', 2)
     expect(config).to.have.nested.property('appsec.wafTimeout', 5e3)
-    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(271)
+    expect(config).to.have.nested.property('appsec.obfuscatorKeyRegex').with.length(190)
     expect(config).to.have.nested.property('appsec.obfuscatorValueRegex').with.length(550)
     expect(config).to.have.nested.property('appsec.blockedTemplateHtml', undefined)
     expect(config).to.have.nested.property('appsec.blockedTemplateJson', undefined)
@@ -248,7 +270,7 @@ describe('Config', () => {
       {
         name: 'appsec.obfuscatorKeyRegex',
         // eslint-disable-next-line max-len
-        value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key)|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
+        value: '(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt',
         origin: 'default'
       },
       {
@@ -464,6 +486,9 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TIME = '1703188212'
     process.env.DD_INSTRUMENTATION_CONFIG_ID = 'abcdef123'
 
+    // required if we want to check updates to config.debug and config.logLevel which is fetched from logger
+    reloadLoggerAndConfig()
+
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
@@ -633,13 +658,13 @@ describe('Config', () => {
 
   it('should read case-insensitive booleans from environment variables', () => {
     process.env.DD_TRACING_ENABLED = 'False'
-    process.env.DD_TRACE_DEBUG = 'TRUE'
+    process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST = 'TRUE'
     process.env.DD_RUNTIME_METRICS_ENABLED = '0'
 
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
-    expect(config).to.have.property('debug', true)
+    expect(config).to.have.property('tracePropagationExtractFirst', true)
     expect(config).to.have.property('runtimeMetrics', false)
   })
 
@@ -649,14 +674,12 @@ describe('Config', () => {
     process.env.DD_TRACE_AGENT_HOSTNAME = 'agent'
     process.env.DD_TRACE_AGENT_PORT = '6218'
     process.env.DD_TRACING_ENABLED = 'false'
-    process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_ENV = 'test'
 
     const config = new Config()
 
     expect(config).to.have.property('tracing', false)
-    expect(config).to.have.property('debug', true)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
     expect(config).to.have.nested.property('url.protocol', 'https:')
     expect(config).to.have.nested.property('url.hostname', 'agent2')
@@ -1093,12 +1116,7 @@ describe('Config', () => {
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false,
-        iast: {
-          enabled: true,
-          redactionNamePattern: 'REDACTION_NAME_PATTERN',
-          redactionValuePattern: 'REDACTION_VALUE_PATTERN'
-        }
+        enableGetRumData: false
       },
       appsec: {
         enabled: true,
@@ -1125,6 +1143,11 @@ describe('Config', () => {
           maxDepth: 42,
           maxStackTraces: 5
         }
+      },
+      iast: {
+        enabled: true,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN'
       },
       remoteConfig: {
         pollInterval: 42
@@ -1210,6 +1233,17 @@ describe('Config', () => {
           requestSampling: 1.0
         }
       },
+      iast: {
+        enabled: true,
+        requestSampling: 15,
+        maxConcurrentRequests: 3,
+        maxContextOperations: 4,
+        deduplicationEnabled: false,
+        redactionEnabled: false,
+        redactionNamePattern: 'REDACTION_NAME_PATTERN',
+        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+        telemetryVerbosity: 'DEBUG'
+      },
       experimental: {
         appsec: {
           enabled: false,
@@ -1228,6 +1262,17 @@ describe('Config', () => {
             enabled: false,
             requestSampling: 0.5
           }
+        },
+        iast: {
+          enabled: false,
+          requestSampling: 25,
+          maxConcurrentRequests: 6,
+          maxContextOperations: 7,
+          deduplicationEnabled: true,
+          redactionEnabled: true,
+          redactionNamePattern: 'IGNORED_REDACTION_NAME_PATTERN',
+          redactionValuePattern: 'IGNORED_REDACTION_VALUE_PATTERN',
+          telemetryVerbosity: 'OFF'
         }
       }
     })
@@ -1264,6 +1309,18 @@ describe('Config', () => {
         maxStackTraces: 2,
         maxDepth: 32
       }
+    })
+
+    expect(config).to.have.deep.property('iast', {
+      enabled: true,
+      requestSampling: 15,
+      maxConcurrentRequests: 3,
+      maxContextOperations: 4,
+      deduplicationEnabled: false,
+      redactionEnabled: false,
+      redactionNamePattern: 'REDACTION_NAME_PATTERN',
+      redactionValuePattern: 'REDACTION_VALUE_PATTERN',
+      telemetryVerbosity: 'DEBUG'
     })
   })
 
@@ -1516,23 +1573,31 @@ describe('Config', () => {
     ])
   })
 
-  it('should remove tags from sampling rules when set through remote configuration', () => {
+  it('should reformat tags from sampling rules when set through remote configuration', () => {
     const config = new Config()
 
     config.configure({
       tracing_sampling_rules: [
         {
           resource: '*',
-          tags: [{ key: 'tag-a', value_glob: 'tag-a-val*' }],
+          tags: [
+            { key: 'tag-a', value_glob: 'tag-a-val*' },
+            { key: 'tag-b', value_glob: 'tag-b-val*' }
+          ],
           provenance: 'customer'
         }
       ]
     }, true)
-
     expect(config).to.have.deep.nested.property('sampler', {
       spanSamplingRules: [],
       rateLimit: undefined,
-      rules: [{ resource: '*', provenance: 'customer' }],
+      rules: [
+        {
+          resource: '*',
+          tags: { 'tag-a': 'tag-a-val*', 'tag-b': 'tag-b-val*' },
+          provenance: 'customer'
+        }
+      ],
       sampleRate: undefined
     })
   })
@@ -1872,6 +1937,7 @@ describe('Config', () => {
       expect(config).not.to.have.property('repositoryUrl')
     })
   })
+
   it('should sanitize values for API Security sampling between 0 and 1', () => {
     expect(new Config({
       appsec: {

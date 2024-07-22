@@ -125,6 +125,17 @@ tracer.init({
       maxStackTraces: 5,
       maxDepth: 42
     }
+  },
+  iast: {
+    enabled: true,
+    requestSampling: 50,
+    maxConcurrentRequests: 4,
+    maxContextOperations: 30,
+    deduplicationEnabled: true,
+    redactionEnabled: true,
+    redactionNamePattern: 'password',
+    redactionValuePattern: 'bearer',
+    telemetryVerbosity: 'OFF'
   }
 });
 
@@ -138,7 +149,8 @@ tracer.init({
       deduplicationEnabled: true,
       redactionEnabled: true,
       redactionNamePattern: 'password',
-      redactionValuePattern: 'bearer'
+      redactionValuePattern: 'bearer',
+      telemetryVerbosity: 'OFF'
     },
     appsec: {
       standalone: {

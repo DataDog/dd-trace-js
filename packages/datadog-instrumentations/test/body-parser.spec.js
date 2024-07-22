@@ -12,6 +12,7 @@ withVersions('body-parser', 'body-parser', version => {
     before(() => {
       return agent.load(['express', 'body-parser'], { client: false })
     })
+
     before((done) => {
       const express = require('../../../versions/express').get()
       const bodyParser = require(`../../../versions/body-parser@${version}`).get()
@@ -26,6 +27,7 @@ withVersions('body-parser', 'body-parser', version => {
         done()
       })
     })
+
     beforeEach(async () => {
       middlewareProcessBodyStub = sinon.stub()
     })

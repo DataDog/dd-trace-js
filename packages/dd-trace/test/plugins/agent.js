@@ -184,7 +184,7 @@ function runCallback (callback, options, handlers) {
     deferred.reject = reject
   })
 
-  const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+  const timeoutMs = options !== null && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
 
   const timeout = setTimeout(() => {
     if (error) {

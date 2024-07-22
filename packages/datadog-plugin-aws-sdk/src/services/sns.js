@@ -63,7 +63,7 @@ class Sns extends BaseAwsSdkPlugin {
             span,
             params.PublishBatchRequestEntries[i],
             params.TopicArn,
-            i === 0 || (this.config.sns && this.config.sns.batchPropagationEnabled)
+            i === 0 || (this.config.batchPropagationEnabled)
           )
         }
         break
