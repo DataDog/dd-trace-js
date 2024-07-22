@@ -314,6 +314,65 @@ describe('Plugin', () => {
           }, 250)
         })
       })
+
+      describe('with programmatic batchPropagationEnabled configuration', () => {
+        before(() => {
+          return agent.load(['aws-sdk'], [{
+            service: 'test',
+            batchPropagationEnabled: true,
+            kinesis: {
+              batchPropagationEnabled: false
+            },
+            sns: false,
+            sqs: {
+              batchPropagationEnabled: false
+            }
+          }])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sns.config.enabled).to.equal(false)
+          expect(sqs.config.batchPropagationEnabled).to.equal(false)
+        })
+      })
+
+      describe('with env variable _BATCH_PROPAGATION_ENABLED configuration', () => {
+        before(() => {
+          process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = true
+          process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = false
+          process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = true
+
+          return agent.load(['aws-sdk'])
+        })
+
+        before(() => {
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        it('should be configurable on a per-service basis', () => {
+          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+
+          expect(kinesis.config.batchPropagationEnabled).to.equal(false)
+          expect(sns.config.batchPropagationEnabled).to.equal(true)
+          expect(sqs.config.batchPropagationEnabled).to.equal(true)
+        })
+      })
     })
   })
 })
