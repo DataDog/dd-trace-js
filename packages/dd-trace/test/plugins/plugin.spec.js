@@ -25,7 +25,7 @@ describe('Plugin', () => {
 
     constructor () {
       super()
-      this.addSub('apm:badPlugin:start', this.start)
+      this.addSub('apm:goodPlugin:start', this.start)
     }
 
     start () {
