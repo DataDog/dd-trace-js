@@ -157,8 +157,8 @@ class Sqs extends BaseAwsSdkPlugin {
       if (attributes.StringValue) {
         const textMap = attributes.StringValue
         return JSON.parse(textMap)
-      } else if (attributes.Type === 'Binary') {
-        const buffer = Buffer.from(attributes.Value, 'base64')
+      } else if (attributes.Type === 'Binary' || attributes.DataType === 'Binary') {
+        const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
     } catch (e) {

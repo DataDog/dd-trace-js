@@ -5,6 +5,7 @@ const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const TextMapPropagator = require('./propagation/text_map')
+const DSMTextMapPropagator = require('./propagation/text_map_dsm')
 const HttpPropagator = require('./propagation/http')
 const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
@@ -38,7 +39,8 @@ class DatadogTracer {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
-      [formats.LOG]: new LogPropagator(config)
+      [formats.LOG]: new LogPropagator(config),
+      [formats.DSM]: new DSMTextMapPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
@@ -71,14 +73,14 @@ class DatadogTracer {
     return span
   }
 
-  inject (spanContext, format, carrier) {
-    if (spanContext instanceof Span) {
-      spanContext = spanContext.context()
+  inject (context, format, carrier) {
+    if (context instanceof Span) {
+      context = context.context()
     }
 
     try {
-      this._prioritySampler.sample(spanContext)
-      this._propagators[format].inject(spanContext, carrier)
+      this._prioritySampler.sample(context)
+      this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error(e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
