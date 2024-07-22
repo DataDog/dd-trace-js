@@ -150,10 +150,10 @@ function handleResult (actions, req, res, abortController) {
     )
   }
 
-  if (abortOnUncaughtException) return
+  if (!abortController || abortOnUncaughtException) return
 
   const blockingAction = getBlockingAction(actions)
-  if (blockingAction && abortController) {
+  if (blockingAction) {
     const rootSpan = web.root(req)
     // Should block only in express
     if (rootSpan?.context()._name === 'express.request') {
