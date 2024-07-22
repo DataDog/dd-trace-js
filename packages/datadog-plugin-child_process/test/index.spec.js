@@ -96,8 +96,8 @@ describe('Child process plugin', () => {
         done()
       })
     })
-
   })
+
   describe('unit tests', () => {
     let tracerStub, configStub, spanStub
 
