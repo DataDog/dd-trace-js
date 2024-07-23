@@ -480,15 +480,15 @@ describe('Plugin', () => {
           })
         })
 
-        Promise.all(assertionPromises)
-          .then(() => done())
-          .catch(done)
-
         const mocha = new Mocha({
           reporter: function () {} // silent on internal tests
         })
         mocha.addFile(testFilePath)
-        mocha.run()
+        mocha.run().on('end', () => {
+          Promise.all(assertionPromises)
+            .then(() => done())
+            .catch(done)
+        })
       })
 
       it('works when skipping suites', function (done) {
