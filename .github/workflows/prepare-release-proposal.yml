@@ -1,0 +1,100 @@
+name: Prepare release proposal
+
+on:
+  workflow_dispatch:
+    inputs:
+      base-branch:
+        description: 'Release branch'
+        required: true
+        type: choice
+        options:
+        - v4.x
+        - v5.x
+      release-type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+        - minor
+        - patch
+
+jobs:
+  create-proposal:
+    runs-on: ubuntu-latest
+
+    permissions: write-all
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.base-branch }}
+          token: ${{ secrets.GH_ACCESS_TOKEN_RELEASE }}
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull master branch
+        run: |
+          git checkout master
+          git pull
+          git checkout ${{ github.event.inputs.base-branch }}
+
+
+      - name: Configure node
+        uses: actions/setup-node@v3
+
+      - name: Install dependencies
+        run: |
+          yarn
+
+      - name: Create proposal branch
+        id: create_branch
+        run: |
+          branch_name=`node scripts/prepare-release-proposal.js create-branch ${{ github.event.inputs.release-type }}`
+          echo "branch_name=$branch_name" >> $GITHUB_OUTPUT
+
+      - name: Install branch-diff
+        run: |
+          npm i -g @bengl/branch-diff
+
+      - name: Configure branch-diff
+        run: |
+          mkdir -p ~/.config/changelog-maker
+          echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+
+      - name: Commit branch diffs
+        id: commit_branch_diffs
+        run: |
+          node scripts/prepare-release-proposal.js commit-branch-diffs ${{ github.event.inputs.base-branch }} ${{ github.event.inputs.release-type }} > branch-diffs.txt
+
+      - name: Push proposal branch
+        run: |
+          git push origin ${{steps.create_branch.outputs.branch_name}}
+
+      - name: Update package.json
+        id: pkg
+        run: |
+          content=`node scripts/prepare-release-proposal.js update-package-json ${{ github.event.inputs.release-type }}`
+          echo "version=$content" >> $GITHUB_OUTPUT
+
+      - name: Create PR
+        run: |
+          gh pr create --draft --base ${{ github.event.inputs.base-branch }} --title "v${{ steps.pkg.outputs.version }}" -F branch-diffs.txt
+          rm branch-diffs.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Commit package.json and push to proposal branch after the PR is created to force CI execution
+      - name: Commit package.json
+        run: |
+          git add package.json
+          git commit -m "v${{ steps.pkg.outputs.version }}"
+
+      - name: Push package.json update
+        run: |
+          git push origin ${{steps.create_branch.outputs.branch_name}}
+
