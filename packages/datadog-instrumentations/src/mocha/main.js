@@ -395,9 +395,13 @@ addHook({
       }
 
       const asyncResource = testFileToSuiteAr.get(suite.file)
-      asyncResource.runInAsyncScope(() => {
-        testSuiteFinishCh.publish(status)
-      })
+      if (asyncResource) {
+        asyncResource.runInAsyncScope(() => {
+          testSuiteFinishCh.publish(status)
+        })
+      } else {
+        log.warn(() => `No AsyncResource found for suite ${suite.file}`)
+      }
     })
 
     return run.apply(this, arguments)
