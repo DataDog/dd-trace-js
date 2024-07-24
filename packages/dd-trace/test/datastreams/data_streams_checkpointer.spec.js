@@ -25,13 +25,13 @@ describe('data streams checkpointer manual api', () => {
     agent.expectPipelineStats(dsmStats => {
       let statsPointsReceived = 0
       // we should have 1 dsm stats points
-      dsmStats.forEach((timeStatsBucket) => {
+      for (const timeStatsBucket of dsmStats) {
         if (timeStatsBucket && timeStatsBucket.Stats) {
-          timeStatsBucket.Stats.forEach((statsBuckets) => {
-            statsPointsReceived += statsBuckets.Stats.length
-          })
+          for (const statsBucket of timeStatsBucket.Stats) {
+            statsPointsReceived += statsBucket.Stats.length
+          }
         }
-      })
+      }
       expect(statsPointsReceived).to.equal(1)
       expect(agent.dsmStatsExist(agent, expectedProducerHash, expectedEdgeTags)).to.equal(true)
     }).then(done, done)
@@ -49,13 +49,13 @@ describe('data streams checkpointer manual api', () => {
     agent.expectPipelineStats(dsmStats => {
       let statsPointsReceived = 0
       // we should have 2 dsm stats points because of the earlier produce
-      dsmStats.forEach((timeStatsBucket) => {
+      for (const timeStatsBucket of dsmStats) {
         if (timeStatsBucket && timeStatsBucket.Stats) {
-          timeStatsBucket.Stats.forEach((statsBuckets) => {
-            statsPointsReceived += statsBuckets.Stats.length
-          })
+          for (const statsBucket of timeStatsBucket.Stats) {
+            statsPointsReceived += statsBucket.Stats.length
+          }
         }
-      })
+      }
       expect(statsPointsReceived).to.equal(2)
       expect(agent.dsmStatsExist(agent, expectedConsumerHash, expectedEdgeTags)).to.equal(true)
     }).then(done, done)

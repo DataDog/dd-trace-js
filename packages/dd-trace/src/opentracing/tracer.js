@@ -40,7 +40,7 @@ class DatadogTracer {
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
       [formats.BINARY]: new BinaryPropagator(config),
       [formats.LOG]: new LogPropagator(config),
-      text_map_dsm: new DSMTextMapPropagator(config)
+      [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config)
     }
     if (config.reportHostname) {
       this._hostname = os.hostname()
