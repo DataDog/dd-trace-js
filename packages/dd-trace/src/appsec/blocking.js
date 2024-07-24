@@ -9,6 +9,8 @@ let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
 
+const responseBlockedSet = new WeakSet()
+
 const specificBlockingTypes = {
   GRAPHQL: 'graphql'
 }
@@ -117,6 +119,8 @@ function block (req, res, rootSpan, abortController, actionParameters) {
 
   res.writeHead(statusCode, headers).end(body)
 
+  responseBlockedSet.add(res)
+
   abortController?.abort()
 }
 
@@ -144,11 +148,16 @@ function setTemplates (config) {
   }
 }
 
+function isBlocked (res) {
+  return responseBlockedSet.has(res)
+}
+
 module.exports = {
   addSpecificEndpoint,
   block,
   specificBlockingTypes,
   getBlockingData,
   getBlockingAction,
-  setTemplates
+  setTemplates,
+  isBlocked
 }
