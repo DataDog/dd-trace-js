@@ -295,6 +295,11 @@ class Config {
       options.appsec = {}
     }
 
+    const DD_LLMOBS_ENABLED = coalesce(
+      process.env.DD_LLMOBS_ENABLED,
+      !!options.llmobs
+    )
+
     const DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON = coalesce(
       maybeFile(options.appsec.blockedTemplateGraphql),
       maybeFile(process.env.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON)
@@ -374,6 +379,10 @@ class Config {
         // Coerce value between 0 and 1
         requestSampling: Math.min(1, Math.max(0, DD_API_SECURITY_REQUEST_SAMPLE_RATE))
       }
+    }
+
+    this.llmobs = {
+      enabled: isTrue(DD_LLMOBS_ENABLED)
     }
 
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
@@ -522,6 +531,8 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'llmobs.agentlessEnabled', false)
+    this._setValue(defaults, 'llmobs.mlApp', undefined)
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'openAiLogsEnabled', false)
@@ -606,6 +617,8 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LLMOBS_AGENTLESS_ENABLED,
+      DD_LLMOBS_ML_APP,
       DD_OPENAI_LOGS_ENABLED,
       DD_OPENAI_SPAN_CHAR_LIMIT,
       DD_PROFILING_ENABLED,
@@ -722,6 +735,8 @@ class Config {
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
+    this._setBoolean(env, 'llmobs.agentlessEnabled', DD_LLMOBS_AGENTLESS_ENABLED)
+    this._setString(env, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
     this._setBoolean(env, 'openAiLogsEnabled', DD_OPENAI_LOGS_ENABLED)
     this._setValue(env, 'openaiSpanCharLimit', maybeInt(DD_OPENAI_SPAN_CHAR_LIMIT))
@@ -866,6 +881,8 @@ class Config {
     }
     this._setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
     this._setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
+    this._setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
+    this._setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     this._setBoolean(opts, 'logInjection', options.logInjection)
     this._setString(opts, 'lookup', options.lookup)
     this._setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)
