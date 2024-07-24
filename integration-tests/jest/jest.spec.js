@@ -2114,4 +2114,90 @@ describe('jest CommonJS', () => {
       })
     })
   })
+
+  context('flaky test retries', () => {
+    it('retries failed tests automatically', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 10)
+          assert.includeMembers(tests.map(test => test.resource), [
+            // does not retry
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries will not retry passed tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            // retries twice and passes
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests',
+            // retries up to 5 times and still fails
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          ])
+
+          const eventuallyPassingTest = tests.filter(
+            test => test.resource ===
+            'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests'
+          )
+          assert.equal(eventuallyPassingTest.length, 3)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 2)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+          assert.equal(eventuallyPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 2)
+
+          const neverPassingTest = tests.filter(
+            test => test.resource ===
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
+          )
+          assert.equal(neverPassingTest.length, 6)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'fail').length, 6)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_STATUS] === 'pass').length, 0)
+          assert.equal(neverPassingTest.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 5)
+
+          const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+          const passingSuite = testSuites.find(
+            suite => suite.resource === 'test_suite.ci-visibility/jest-flaky/flaky-passes.js'
+          )
+          assert.equal(passingSuite.meta[TEST_STATUS], 'pass')
+
+          const failedSuite = testSuites.find(
+            suite => suite.resource === 'test_suite.ci-visibility/jest-flaky/flaky-fails.js'
+          )
+          assert.equal(failedSuite.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
 })

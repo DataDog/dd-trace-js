@@ -208,7 +208,7 @@ jobs:
       matrix:
         version:
           - 18
-          - 22.4
+          - latest
         range: ['9.5.0', '11.1.4', '13.2.0', '*']
     runs-on: ubuntu-latest
     env:
@@ -240,3 +240,13 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@v3
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: yarn install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:integration:appsec
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:integration:appsec

@@ -222,7 +222,7 @@ class Sqs extends BaseAwsSdkPlugin {
             span,
             params.Entries[i],
             params.QueueUrl,
-            i === 0 || (this.config.sqs && this.config.sqs.batchPropagationEnabled)
+            i === 0 || (this.config.batchPropagationEnabled)
           )
         }
         break

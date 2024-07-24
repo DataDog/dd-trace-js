@@ -158,6 +158,7 @@ describe('GraphQL', () => {
   describe('block response', () => {
     const req = {}
     const res = {}
+
     beforeEach(() => {
       sinon.stub(storage, 'getStore').returns({ req, res })
 

@@ -203,6 +203,7 @@ describe('telemetry app-heartbeat', () => {
     telemetry.stop()
     traceAgent.close()
   })
+
   it('should send heartbeat in uniform intervals', (done) => {
     let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
     const sendDataRequest = {
@@ -439,6 +440,7 @@ describe('Telemetry retry', () => {
       bar2: { _enabled: false }
     }
   })
+
   afterEach(() => {
     clock.restore()
   })

@@ -43,7 +43,9 @@ function patch (http, methodName) {
         return request.apply(this, arguments)
       }
 
-      const ctx = { args, http }
+      const abortController = new AbortController()
+
+      const ctx = { args, http, abortController }
 
       return startChannel.runStores(ctx, () => {
         let finished = false
@@ -107,6 +109,10 @@ function patch (http, methodName) {
             return emit.apply(this, arguments)
           }
 
+          if (abortController.signal.aborted) {
+            req.destroy(abortController.signal.reason || new Error('Aborted'))
+          }
+
           return req
         } catch (e) {
           ctx.error = e
@@ -132,7 +138,7 @@ function patch (http, methodName) {
   }
 
   function combineOptions (inputURL, inputOptions) {
-    if (typeof inputOptions === 'object') {
+    if (inputOptions !== null && typeof inputOptions === 'object') {
       return Object.assign(inputURL || {}, inputOptions)
     } else {
       return inputURL

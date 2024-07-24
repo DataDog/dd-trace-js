@@ -81,8 +81,8 @@ function compare (expected, actual) {
 }
 
 function isObject (obj) {
-  // `null` is also typeof 'object', so check for that with truthiness.
-  return obj && typeof obj === 'object'
+  // `null` is also typeof 'object'
+  return obj !== null && typeof obj === 'object'
 }
 
 function withDefaults (defaults, obj) {

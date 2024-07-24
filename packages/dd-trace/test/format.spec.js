@@ -108,6 +108,7 @@ describe('format', () => {
         attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
       }])
     })
+
     it('should convert a span to the correct trace format', () => {
       trace = format(span)
 

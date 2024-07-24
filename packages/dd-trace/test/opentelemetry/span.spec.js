@@ -220,6 +220,7 @@ describe('OTel Span', () => {
         expect(span.name).to.equal(kindName)
       })
     }
+
     it('should map span name with default span kind of internal', () => {
       const span = makeSpan()
       expect(span.name).to.equal('internal')
@@ -452,6 +453,7 @@ describe('OTel Span', () => {
     expect(processor.onStart).to.have.been.calledWith(span, span._context)
     expect(processor.onEnd).to.have.been.calledWith(span)
   })
+
   it('should add span events', () => {
     const span1 = makeSpan('span1')
     const span2 = makeSpan('span2')

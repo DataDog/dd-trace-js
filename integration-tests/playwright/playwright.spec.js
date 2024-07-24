@@ -31,6 +31,7 @@ const versions = ['1.18.0', 'latest']
 versions.forEach((version) => {
   describe(`playwright@${version}`, () => {
     let sandbox, cwd, receiver, childProcess, webAppPort
+
     before(async function () {
       // bump from 30 to 60 seconds because playwright dependencies are heavy
       this.timeout(60000)

@@ -132,7 +132,7 @@ function getSizeOrZero (obj) {
     })
     return payloadSize
   }
-  if (typeof obj === 'object') {
+  if (obj !== null && typeof obj === 'object') {
     try {
       return getHeadersSize(obj)
     } catch {

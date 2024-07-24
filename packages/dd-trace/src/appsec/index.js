@@ -13,7 +13,8 @@ const {
   nextBodyParsed,
   nextQueryParsed,
   responseBody,
-  responseWriteHead
+  responseWriteHead,
+  responseSetHeader
 } = require('./channels')
 const waf = require('./waf')
 const addresses = require('./addresses')
@@ -23,7 +24,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { block, setTemplates, getBlockingAction } = require('./blocking')
+const { isBlocked, block, setTemplates, getBlockingAction } = require('./blocking')
 const { passportTrackEvent } = require('./passport')
 const { storage } = require('../../../datadog-core')
 const graphql = require('./graphql')
@@ -62,6 +63,7 @@ function enable (_config) {
     cookieParser.subscribe(onRequestCookieParser)
     responseBody.subscribe(onResponseBody)
     responseWriteHead.subscribe(onResponseWriteHead)
+    responseSetHeader.subscribe(onResponseSetHeader)
 
     if (_config.appsec.eventTracking.enabled) {
       passportVerify.subscribe(onPassportVerify)
@@ -121,16 +123,16 @@ function incomingHttpEndTranslator ({ req, res }) {
   }
 
   // TODO: temporary express instrumentation, will use express plugin later
-  if (req.params && typeof req.params === 'object') {
+  if (req.params !== null && typeof req.params === 'object') {
     persistent[addresses.HTTP_INCOMING_PARAMS] = req.params
   }
 
   // we need to keep this to support other cookie parsers
-  if (req.cookies && typeof req.cookies === 'object') {
+  if (req.cookies !== null && typeof req.cookies === 'object') {
     persistent[addresses.HTTP_INCOMING_COOKIES] = req.cookies
   }
 
-  if (req.query && typeof req.query === 'object') {
+  if (req.query !== null && typeof req.query === 'object') {
     persistent[addresses.HTTP_INCOMING_QUERY] = req.query
   }
 
@@ -223,11 +225,10 @@ function onPassportVerify ({ credentials, user }) {
 }
 
 const responseAnalyzedSet = new WeakSet()
-const responseBlockedSet = new WeakSet()
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
   // avoid "write after end" error
-  if (responseBlockedSet.has(res)) {
+  if (isBlocked(res)) {
     abortController?.abort()
     return
   }
@@ -255,15 +256,18 @@ function onResponseWriteHead ({ req, res, abortController, statusCode, responseH
   handleResults(results, req, res, rootSpan, abortController)
 }
 
+function onResponseSetHeader ({ res, abortController }) {
+  if (isBlocked(res)) {
+    abortController?.abort()
+  }
+}
+
 function handleResults (actions, req, res, rootSpan, abortController) {
   if (!actions || !req || !res || !rootSpan || !abortController) return
 
   const blockingAction = getBlockingAction(actions)
   if (blockingAction) {
     block(req, res, rootSpan, abortController, blockingAction)
-    if (!abortController.signal || abortController.signal.aborted) {
-      responseBlockedSet.add(res)
-    }
   }
 }
 
@@ -290,6 +294,7 @@ function disable () {
   if (responseBody.hasSubscribers) responseBody.unsubscribe(onResponseBody)
   if (passportVerify.hasSubscribers) passportVerify.unsubscribe(onPassportVerify)
   if (responseWriteHead.hasSubscribers) responseWriteHead.unsubscribe(onResponseWriteHead)
+  if (responseSetHeader.hasSubscribers) responseSetHeader.unsubscribe(onResponseSetHeader)
 }
 
 module.exports = {
