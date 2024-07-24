@@ -74,14 +74,14 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
-    let isSpanContext = false
     if (context instanceof Span) {
-      isSpanContext = true
       context = context.context()
     }
 
     try {
-      if (isSpanContext) this._prioritySampler.sample(context)
+      if (format !== 'text_map_dsm') {
+        this._prioritySampler.sample(context)
+      }
       this._propagators[format].inject(context, carrier)
     } catch (e) {
       log.error(e)
