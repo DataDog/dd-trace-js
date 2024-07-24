@@ -252,7 +252,7 @@ async function runAndCheckWithTelemetry (filename, expectedOut, ...expectedTelem
   }
 }
 
-function spawnProc (filename, options = {}, stdioHandler) {
+function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
   const proc = fork(filename, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
@@ -277,6 +277,9 @@ function spawnProc (filename, options = {}, stdioHandler) {
     })
 
     proc.stderr.on('data', data => {
+      if (stderrHandler) {
+        stderrHandler(data)
+      }
       // eslint-disable-next-line no-console
       if (!options.silent) console.error(data.toString())
     })
