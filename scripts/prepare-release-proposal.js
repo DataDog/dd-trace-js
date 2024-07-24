@@ -20,7 +20,7 @@ function helpAndExit () {
 
 function createReleaseBranch (args) {
   if (typeof args === 'string') {
-    const newVersion = semver.inc(packageJson.version, args[0])
+    const newVersion = semver.inc(packageJson.version, args)
     const branchName = `v${newVersion}-proposal`
     execSync(`git checkout -b ${branchName}`, { stdio: 'ignore' })
 
