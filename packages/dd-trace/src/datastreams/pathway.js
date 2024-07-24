@@ -17,11 +17,13 @@ function shaHash (checkpointString) {
 }
 
 function computeHash (service, env, edgeTags, parentHash) {
-  const key = `${service}${env}` + edgeTags.join('') + parentHash.toString()
+  const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
+
+  const key = `${service}${env}` + hashableEdgeTags.join('') + parentHash.toString()
   if (cache.get(key)) {
     return cache.get(key)
   }
-  const currentHash = shaHash(`${service}${env}` + edgeTags.join(''))
+  const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
   const buf = Buffer.concat([currentHash, parentHash], 16)
   const val = shaHash(buf.toString())
   cache.set(key, val)
