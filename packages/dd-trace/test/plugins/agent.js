@@ -37,7 +37,7 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function dsmStatsExist (agent, expectedHash) {
+function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
   let hashFound = false
   if (dsmStats.length !== 0) {
@@ -45,6 +45,20 @@ function dsmStatsExist (agent, expectedHash) {
       statsTimeBucket.Stats.forEach((statsBucket) => {
         statsBucket.Stats.forEach((stats) => {
           if (stats.Hash.toString() === expectedHash) {
+            if (expectedEdgeTags) {
+              if (expectedEdgeTags.length !== stats.EdgeTags.length) {
+                return false
+              }
+
+              const expected = expectedEdgeTags.slice().sort()
+              const actual = stats.EdgeTags.slice().sort()
+
+              for (let i = 0; i < expected.length; i++) {
+                if (expected[i] !== actual[i]) {
+                  return false
+                }
+              }
+            }
             hashFound = true
             return hashFound
           }
