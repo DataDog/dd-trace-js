@@ -16,6 +16,7 @@ const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
 const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 const appsecStandalone = require('./appsec/standalone')
+const LLMObsSDK = require('./llmobs/sdk')
 
 class LazyModule {
   constructor (provider) {
@@ -46,7 +47,8 @@ class Tracer extends NoopProxy {
     // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
-      iast: new LazyModule(() => require('./appsec/iast'))
+      iast: new LazyModule(() => require('./appsec/iast')),
+      llmobs: new LazyModule(() => require('./llmobs'))
     }
   }
 
@@ -178,10 +180,14 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
+      if (config.llmobs.enabled) {
+        this._modules.llmobs.enable(config)
+      }
       if (!this._tracingInitialized) {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.appsec = new AppsecSdk(this._tracer, config)
+        this.llmobs = new LLMObsSDK(this._tracer, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -190,6 +196,7 @@ class Tracer extends NoopProxy {
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
       this._modules.iast.disable()
+      this._modules.llmobs.disable()
     }
 
     if (this._tracingInitialized) {
