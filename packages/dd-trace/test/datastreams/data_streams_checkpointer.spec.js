@@ -8,6 +8,7 @@ const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
 
 describe('data streams checkpointer manual api', () => {
   let tracer
+
   before(() => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
     tracer = require('../..').init()
