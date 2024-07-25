@@ -317,7 +317,7 @@ function updateConfig (changes, config) {
     'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
   }
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'appsec.eventTracking', 'serviceMapping'])
 
   const configuration = []
   const names = [] // list of config names whose values have been changed
