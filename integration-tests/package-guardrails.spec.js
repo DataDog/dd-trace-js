@@ -52,6 +52,17 @@ false
     })
   })
 
+  context('when package is in range (fastify)', () => {
+    context('when fastify is latest', () => {
+      useSandbox(['fastify'])
+      it('should instrument the package', () => runTest('true\n'))
+    })
+    context('when fastify is latest and logging enabled', () => {
+      useSandbox(['fastify'])
+      it('should instrument the package', () => runTest('true\n'))
+    })
+  })
+
   context('when package errors out', () => {
     useSandbox(['bluebird'])
     before(() => {
