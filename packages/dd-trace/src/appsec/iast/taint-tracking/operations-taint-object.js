@@ -25,6 +25,7 @@ function taintObject (iastContext, object, type) {
           } else {
             parent[key] = tainted
           }
+          // eslint-disable-next-line @datadog/safe-typeof-object
         } else if (typeof value === 'object' && !visited.has(value)) {
           visited.add(value)
 

@@ -5,7 +5,8 @@
   "extends": [
     "eslint:recommended",
     "standard",
-    "plugin:mocha/recommended"
+    "plugin:mocha/recommended",
+    "plugin:@datadog/recommended"
   ],
   "plugins": [
     "mocha",

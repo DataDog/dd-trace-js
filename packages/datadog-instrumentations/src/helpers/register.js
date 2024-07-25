@@ -50,7 +50,7 @@ for (const packageName of names) {
 
   let hook = hooks[packageName]
 
-  if (typeof hook === 'object') {
+  if (hook !== null && typeof hook === 'object') {
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
   }

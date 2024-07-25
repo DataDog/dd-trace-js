@@ -66,6 +66,7 @@ function request (data, options, callback) {
   }
 
   if (options.url) {
+    // eslint-disable-next-line @datadog/safe-typeof-object
     const url = typeof options.url === 'object' ? urlToOptions(options.url) : fromUrlString(options.url)
     if (url.protocol === 'unix:') {
       options.socketPath = url.pathname
