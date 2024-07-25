@@ -103,7 +103,7 @@
     "tlhunter-sorted-set": "^0.1.0"
   },
   "devDependencies": {
-    "@types/node": ">=18",
+    "@types/node": "^16.18.103",
     "autocannon": "^4.5.2",
     "aws-sdk": "^2.1446.0",
     "axios": "^1.6.7",
