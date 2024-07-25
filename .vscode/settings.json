@@ -1,4 +1,3 @@
 {
-  "debug.node.autoAttach": "on",
-  "search.smartCase": true
+  "debug.node.autoAttach": "on"
 }
