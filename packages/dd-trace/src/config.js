@@ -212,7 +212,7 @@ function propagationStyle (key, option, defaultValue) {
 
 class Config {
   constructor (options = {}) {
-    options = this.options = {
+    options = {
       ...options,
       appsec: options.appsec != null ? options.appsec : options.experimental?.appsec,
       iast: options.iast != null ? options.iast : options.experimental?.iast
@@ -476,7 +476,7 @@ class Config {
       pkg.name ||
       'node'
 
-    const defaults = this._defaults = {}
+    const defaults = setHiddenProperty(this, '_defaults', {})
 
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
@@ -661,8 +661,8 @@ class Config {
     } = process.env
 
     const tags = {}
-    const env = this._env = {}
-    this._envUnprocessed = {}
+    const env = setHiddenProperty(this, '_env', {})
+    setHiddenProperty(this, '_envUnprocessed', {})
 
     tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
     tagger.add(tags, DD_TAGS)
@@ -802,11 +802,11 @@ class Config {
   }
 
   _applyOptions (options) {
-    const opts = this._options = this._options || {}
+    const opts = setHiddenProperty(this, '_options', this._options || {})
     const tags = {}
-    this._optsUnprocessed = {}
+    setHiddenProperty(this, '_optsUnprocessed', {})
 
-    options = this.options = Object.assign({ ingestion: {} }, options, opts)
+    options = setHiddenProperty(this, '_optionsArg', Object.assign({ ingestion: {} }, options, opts))
 
     tagger.add(tags, options.tags)
 
@@ -904,7 +904,7 @@ class Config {
 
   _isCiVisibility () {
     return coalesce(
-      this.options.isCiVisibility,
+      this._optionsArg.isCiVisibility,
       this._defaults.isCiVisibility
     )
   }
@@ -920,9 +920,9 @@ class Config {
     const DD_CIVISIBILITY_AGENTLESS_URL = process.env.DD_CIVISIBILITY_AGENTLESS_URL
     const url = DD_CIVISIBILITY_AGENTLESS_URL
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this.options)
+      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
     const DD_AGENT_HOST = coalesce(
-      this.options.hostname,
+      this._optionsArg.hostname,
       process.env.DD_AGENT_HOST,
       process.env.DD_TRACE_AGENT_HOSTNAME,
       '127.0.0.1'
@@ -933,17 +933,17 @@ class Config {
   _getSpanComputePeerService () {
     const DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = validateNamingVersion(
       coalesce(
-        this.options.spanAttributeSchema,
+        this._optionsArg.spanAttributeSchema,
         process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
       )
     )
 
     const peerServiceSet = (
-      this.options.hasOwnProperty('spanComputePeerService') ||
+      this._optionsArg.hasOwnProperty('spanComputePeerService') ||
       process.env.hasOwnProperty('DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED')
     )
     const peerServiceValue = coalesce(
-      this.options.spanComputePeerService,
+      this._optionsArg.spanComputePeerService,
       process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
     )
 
@@ -974,7 +974,7 @@ class Config {
 
   _isTraceStatsComputationEnabled () {
     return coalesce(
-      this.options.stats,
+      this._optionsArg.stats,
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED,
       getIsGCPFunction() || getIsAzureFunction()
     )
@@ -982,7 +982,7 @@ class Config {
 
   _getTraceAgentUrl () {
     return coalesce(
-      this.options.url,
+      this._optionsArg.url,
       process.env.DD_TRACE_AGENT_URL,
       process.env.DD_TRACE_URL,
       null
@@ -991,7 +991,7 @@ class Config {
 
   // handles values calculated from a mixture of options and env vars
   _applyCalculated () {
-    const calc = this._calculated = {}
+    const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
       DD_CIVISIBILITY_AGENTLESS_URL
@@ -1000,7 +1000,7 @@ class Config {
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(calc, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     } else {
-      this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this.options))
+      this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this._optionsArg))
     }
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
@@ -1016,8 +1016,8 @@ class Config {
   }
 
   _applyRemote (options) {
-    const opts = this._remote = this._remote || {}
-    this._remoteUnprocessed = {}
+    const opts = setHiddenProperty(this, '_remote', this._remote || {})
+    setHiddenProperty(this, '_remoteUnprocessed', {})
     const tags = {}
     const headerTags = options.tracing_header_tags
       ? options.tracing_header_tags.map(tag => {
@@ -1184,6 +1184,15 @@ function getAgentUrl (url, options) {
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
   }
+}
+
+function setHiddenProperty (obj, name, value) {
+  Object.defineProperty(obj, name, {
+    value,
+    enumerable: false,
+    writable: true
+  })
+  return obj[name]
 }
 
 module.exports = Config
