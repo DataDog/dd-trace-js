@@ -1,11 +1,16 @@
 const BaseWriter = require('./base')
 
 class LLMObsSpanWriter extends BaseWriter {
-  constructor (site, apiKey, interval, timeout) {
-    super(site, apiKey, interval, timeout)
-    this._eventType = 'span'
-    this._endpoint = '/api/v2/llmobs'
-    this._intake = `llmobs-intake.${this._site}`
+  constructor ({ site, apiKey, interval, timeout }) {
+    super({
+      site,
+      apiKey,
+      interval,
+      timeout,
+      endpoint: '/api/v2/llmobs',
+      intake: `llmobs-intake.${site}`,
+      eventType: 'span'
+    })
   }
 
   makePayload (events) {

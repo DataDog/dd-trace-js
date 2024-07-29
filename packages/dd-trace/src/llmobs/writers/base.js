@@ -6,19 +6,24 @@ const { URL, format } = require('url')
 const logger = require('../../log')
 
 class BaseLLMObsWriter {
-  constructor (site, apiKey, interval, timeout) {
+  constructor ({ site, apiKey, interval, timeout, endpoint, intake, eventType }) {
     this._site = site
     this._apiKey = apiKey
     this._interval = interval || 1000 // 1s
     this._timeout = timeout || 5000 // 5s
+    this._endpoint = endpoint
+    this._intake = intake
+    this._eventType = eventType
 
     this._buffer = []
     this._bufferLimit = 1000
 
-    // to be set by implementors
-    this._endpoint = undefined
-    this._intake = undefined
-    this._eventType = undefined
+    this._url = new URL(format({
+      protocol: 'https:',
+      hostname: this._intake,
+      port: 443,
+      pathname: this._endpoint
+    }))
 
     this._headers = {
       'DD-API-KEY': this._apiKey,
@@ -30,15 +35,6 @@ class BaseLLMObsWriter {
       clearInterval(this._periodic)
       this.flush()
     })
-  }
-
-  get _url () {
-    return new URL(format({
-      protocol: 'https:',
-      hostname: this._intake,
-      port: 443,
-      pathname: this._endpoint
-    }))
   }
 
   append (event) {

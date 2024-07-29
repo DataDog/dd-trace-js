@@ -1,11 +1,16 @@
 const BaseWriter = require('./base')
 
 class LLMObsEvalMetricsWriter extends BaseWriter {
-  constructor (site, apiKey, interval, timeout) {
-    super(site, apiKey, interval, timeout)
-    this._eventType = 'evaluation_metric'
-    this._endpoint = '/api/unstable/llm-obs/v1/eval-metric'
-    this._intake = `api.${this._site}`
+  constructor ({ site, apiKey, interval, timeout }) {
+    super({
+      site,
+      apiKey,
+      interval,
+      timeout,
+      endpoint: '/api/unstable/llm-obs/v1/eval-metric',
+      intake: `api.${site}`,
+      eventType: 'evaluation_metric'
+    })
   }
 
   makePayload (events) {
