@@ -622,7 +622,7 @@ class TextMapPropagator {
 
   static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     const origin = null
-    let samplingPriority = traceFlag // Assuming traceFlag is an integer
+    let samplingPriority = traceFlag
 
     ts = ts?.traceparent || null
 
@@ -696,8 +696,7 @@ class TextMapPropagator {
       const samplingPriorityTsInt = samplingPriorityTs !== undefined ? parseInt(samplingPriorityTs, 10) : null
       let origin = dd.o
       if (origin) {
-      // Assuming _TraceContext.decodeTagVal is a function that decodes "=" to "~"
-        origin = TextMapPropagator.decodeTagVal(origin) // You need to implement this function
+        origin = TextMapPropagator.decodeTagVal(origin)
       }
 
       const lpid = dd.p || '0000000000000000'
