@@ -354,7 +354,7 @@ describe('opentelemetry', () => {
       // Should have three spans
       const [trace] = payload
       assert.strictEqual(trace.length, 3)
-
+      // console.log(33, 'hi')
       // Should have expected span names and ordering
       assert.isTrue(eachEqual(trace, ['web.request', 'otel-sub', 'dd-sub'], span => span.name))
 
