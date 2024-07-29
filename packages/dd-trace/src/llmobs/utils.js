@@ -12,15 +12,8 @@ function validateKind (kind) {
   }
 }
 
-function getName (kind, options = {}, fn) {
-  let primary
-  if (fn) {
-    primary = fn.name || options.name
-  } else {
-    primary = options.name
-  }
-
-  return primary || kind
+function getName (kind, options = {}, fn = () => {}) {
+  return options.name || fn.name || kind
 }
 
 function nearestLLMObsAncestor (span) {
