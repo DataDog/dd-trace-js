@@ -16,7 +16,9 @@ const {
   OUTPUT_VALUE,
   METADATA,
   METRICS,
-  PARENT_ID_KEY
+  PARENT_ID_KEY,
+  INPUT_MESSAGES,
+  OUTPUT_MESSAGES
 } = require('./constants')
 
 const { validateKind, getName, getLLMObsParentId, getMlApp, isLLMSpan, getSessionId } = require('./utils')
@@ -266,8 +268,8 @@ class LLMObs extends NoopLLMObs {
   }
 
   _tagLLMIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+    this._tagMessages(span, inputData, INPUT_MESSAGES)
+    this._tagMessages(span, outputData, OUTPUT_MESSAGES)
   }
 
   _tagEmbeddingIO (span, inputData, outputData) {

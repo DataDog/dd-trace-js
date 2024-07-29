@@ -19,16 +19,8 @@ module.exports = {
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
   INPUT_VALUE: '_ml_obs.meta.input.value',
-  INPUT_PARAMETERS: '_ml_obs.meta.input.parameters',
 
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
-  OUTPUT_VALUE: '_ml_obs.meta.output.value',
-
-  LANGCHAIN_APM_SPAN_NAME: 'langchain.request',
-  OPENAI_APM_SPAN_NAME: 'openai.request',
-
-  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
-  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
-  TOTAL_TOKENS_METRIC_KEY: 'total_tokens'
+  OUTPUT_VALUE: '_ml_obs.meta.output.value'
 }
