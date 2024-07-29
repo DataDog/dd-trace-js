@@ -30,7 +30,8 @@ const {
   TEST_NAME,
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -237,6 +238,38 @@ describe('jest CommonJS', () => {
         assert.include(testOutput, expectedStdout)
         done()
       })
+    })
+  })
+
+  it('works when the repository root is not the same as the working directory', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const test = events.find(event => event.type === 'test').content
+        // The test is in a subproject
+        assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+        assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      })
+
+    childProcess = exec(
+      'node ./node_modules/jest/bin/jest --config config-jest.js --rootDir ci-visibility/subproject',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          PROJECTS: JSON.stringify([{
+            testMatch: ['**/subproject-test*']
+          }])
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
     })
   })
 
