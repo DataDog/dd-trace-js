@@ -10,6 +10,7 @@ const api = require('@opentelemetry/api')
 describe('OTel Context Manager', () => {
   let contextManager
   let db
+
   beforeEach(() => {
     contextManager = new ContextManager()
     api.context.setGlobalContextManager(contextManager)
@@ -20,12 +21,14 @@ describe('OTel Context Manager', () => {
       }
     }
   })
+
   it('should create a new context', () => {
     const key1 = api.createContextKey('My first key')
     const key2 = api.createContextKey('My second key')
     expect(key1.description).to.equal('My first key')
     expect(key2.description).to.equal('My second key')
   })
+
   it('should delete a context', () => {
     const key = api.createContextKey('some key')
     const ctx = api.ROOT_CONTEXT
@@ -38,6 +41,7 @@ describe('OTel Context Manager', () => {
     expect(ctx2.getValue(key)).to.equal('context 2')
     expect(ctx.getValue(key)).to.equal(undefined)
   })
+
   it('should create a new root context', () => {
     const key = api.createContextKey('some key')
     const ctx = api.ROOT_CONTEXT
@@ -45,10 +49,12 @@ describe('OTel Context Manager', () => {
     expect(ctx2.getValue(key)).to.equal('context 2')
     expect(ctx.getValue(key)).to.equal(undefined)
   })
+
   it('should return root context', () => {
     const ctx = api.context.active()
     expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
   })
+
   it('should set active context', () => {
     const key = api.createContextKey('Key to store a value')
     const ctx = api.context.active()
@@ -57,6 +63,7 @@ describe('OTel Context Manager', () => {
       expect(api.context.active().getValue(key)).to.equal('context 2')
     })
   })
+
   it('should set active context on an asynchronous callback and return the result synchronously', async () => {
     const name = await api.context.with(api.context.active(), async () => {
       const row = await db.getSomeValue()
@@ -65,6 +72,7 @@ describe('OTel Context Manager', () => {
 
     expect(name).to.equal('Dummy Name')
   })
+
   it('should set active contexts in nested functions', async () => {
     const key = api.createContextKey('Key to store a value')
     const ctx = api.context.active()
@@ -78,6 +86,7 @@ describe('OTel Context Manager', () => {
     })
     expect(api.context.active().getValue(key)).to.equal(undefined)
   })
+
   it('should not modify contexts, instead it should create new context objects', async () => {
     const key = api.createContextKey('Key to store a value')
 
