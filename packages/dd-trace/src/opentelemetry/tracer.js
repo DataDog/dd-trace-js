@@ -30,7 +30,7 @@ class Tracer {
       spanId: id(),
       parentId: parent._spanId,
       sampling: parent._sampling,
-      baggageItems: { ...parent._baggageItems },
+      baggageItems: Object.assign({}, parent._baggageItems),
       trace: parent._trace,
       tracestate: parent._tracestate
     })
@@ -48,9 +48,10 @@ class Tracer {
       context = api.trace.deleteSpan(context)
     }
     const parentSpan = api.trace.getSpan(context)
+    const parentSpanContext = parentSpan && parentSpan.spanContext()
     let spanContext
-    if (parentSpan) {
-      spanContext = parentSpan._ddSpan
+    if (parentSpanContext && parentSpanContext.traceId) {
+      spanContext = parentSpanContext._ddContext
         ? this._createSpanContextFromParent(parentSpan)
         : this._createSpanContextForNewSpan(context)
     } else {

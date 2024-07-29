@@ -391,29 +391,30 @@ describe('opentelemetry', () => {
     await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
 
     return check(agent, proc, 10000, ({ payload }) => {
-      const trace = payload
-
-      assert.strictEqual(payload.length, 9)
+      assert.strictEqual(payload.length, 2)
+      // combine the traces
+      const trace = payload.flat()
+      assert.strictEqual(trace.length, 9)
 
       // Should have expected span names and ordering
       assert.isTrue(eachEqual(trace, [
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /first-endpoint',
         'GET',
         'middleware - query',
         'middleware - expressInit',
         'request handler - /second-endpoint',
         'GET',
+        'middleware - query',
+        'middleware - expressInit',
+        'request handler - /first-endpoint',
         'GET'
       ],
-      ([span]) => span.name))
+      (span) => span.name))
 
-      assert.isTrue(allEqual(trace, ([span]) => {
+      assert.isTrue(allEqual(trace, (span) => {
         span.trace_id.toString()
       }))
 
-      const [query1, init1, handler1, get1, query2, init2, handler2, get3, get2] = trace
+      const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
       isChildOf(query1, get1)
       isChildOf(init1, get1)
       isChildOf(handler1, get1)
@@ -447,7 +448,7 @@ describe('opentelemetry', () => {
   }
 })
 
-function isChildOf ([childSpan], [parentSpan]) {
+function isChildOf (childSpan, parentSpan) {
   assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
   assert.notStrictEqual(childSpan.span_id.toString(), parentSpan.span_id.toString())
   assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
