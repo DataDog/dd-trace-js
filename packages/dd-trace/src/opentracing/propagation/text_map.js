@@ -3,6 +3,7 @@
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
+const OtelSpanContext = require('../../opentelemetry/span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
@@ -617,6 +618,105 @@ class TextMapPropagator {
     }
 
     return spanContext._traceId.toString(16)
+  }
+
+  static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
+    const origin = null
+    let samplingPriority = traceFlag // Assuming traceFlag is an integer
+
+    ts = ts?.traceparent || null
+
+    if (ts) {
+      const tsList = ts.split(',').map(member => member.trim())
+      ts = tsList.join(',')
+      if (/[^\x20-\x7E]+/.test(ts)) {
+        log.debug(`received invalid tracestate header: ${ts}`)
+      } else {
+        meta.tracestate = ts
+        let tracestateValues
+        try {
+          tracestateValues = TextMapPropagator.getTracestateValues(tsList)
+        } catch (error) {
+          tracestateValues = null
+        }
+
+        if (tracestateValues) {
+          const [samplingPriorityTs, otherPropagatedTags, origin, lpid] = tracestateValues
+          Object.assign(meta, otherPropagatedTags)
+          if (lpid) {
+            meta.LAST_DD_PARENT_ID_KEY = lpid
+          }
+          samplingPriority = TextMapPropagator.getSamplingPriority(traceFlag, samplingPriorityTs, origin)
+        } else {
+          log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
+        }
+      }
+    }
+    const spanContext = new OtelSpanContext({
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
+    })
+
+    spanContext._sampling = { priority: samplingPriority }
+    spanContext._trace = { origin }
+    return spanContext
+  }
+
+  static getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
+    const fromRumWithoutPriority = !tracestateSamplingPriority && origin === 'rum'
+
+    let samplingPriority
+    if (!fromRumWithoutPriority && traceparentSampled === 0 &&
+    (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+      samplingPriority = 0
+    } else if (!fromRumWithoutPriority && traceparentSampled === 1 &&
+    (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+      samplingPriority = 1
+    } else {
+      samplingPriority = tracestateSamplingPriority
+    }
+
+    return samplingPriority
+  }
+
+  static getTracestateValues (tsList) {
+    let dd = null
+    tsList.forEach(listMem => {
+      if (listMem.startsWith('dd=')) {
+        const ddPart = listMem.slice(3)
+        dd = ddPart.split(';').reduce((acc, item) => {
+          const [key, value] = item.split(':', 1)
+          acc[key] = value
+          return acc
+        }, {})
+      }
+    })
+
+    if (dd) {
+      const samplingPriorityTs = dd.s
+      const samplingPriorityTsInt = samplingPriorityTs !== undefined ? parseInt(samplingPriorityTs, 10) : null
+      let origin = dd.o
+      if (origin) {
+      // Assuming _TraceContext.decodeTagVal is a function that decodes "=" to "~"
+        origin = TextMapPropagator.decodeTagVal(origin) // You need to implement this function
+      }
+
+      const lpid = dd.p || '0000000000000000'
+
+      const otherPropagatedTags = Object.keys(dd).reduce((acc, key) => {
+        if (key.startsWith('t.')) {
+          acc[`_dd.p.${key.slice(2)}`] = TextMapPropagator.decodeTagVal(dd[key])
+        }
+        return acc
+      }, {})
+
+      return [samplingPriorityTsInt, otherPropagatedTags, origin, lpid]
+    } else {
+      return [null, {}, null, null]
+    }
+  }
+
+  static decodeTagVal (tagVal) {
+    return tagVal.replace(/~/g, '=')
   }
 }
 

@@ -7,6 +7,7 @@ const Sampler = require('./sampler')
 const Span = require('./span')
 const id = require('../id')
 const SpanContext = require('./span_context')
+const TextMapPropagator = require('../opentracing/propagation/text_map')
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -22,28 +23,36 @@ class Tracer {
     return this._tracerProvider.resource
   }
 
+  _createSpanContextFromParent (parentSpan) {
+    const parent = parentSpan.spanContext()._ddContext
+    return new SpanContext({
+      traceId: parent._traceId,
+      spanId: id(),
+      parentId: parent._spanId,
+      sampling: parent._sampling,
+      baggageItems: { ...parent._baggageItems },
+      trace: parent._trace,
+      tracestate: parent._tracestate
+    })
+  }
+
+  // Extracted method to create span context for a new span
+  _createSpanContextForNewSpan (context) {
+    const { traceId, spanId, traceFlags, traceState } = api.trace.getSpanContext(context)
+    return TextMapPropagator._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
+  }
+
   startSpan (name, options = {}, context = api.context.active()) {
     // remove span from context in case a root span is requested via options
     if (options.root) {
       context = api.trace.deleteSpan(context)
     }
     const parentSpan = api.trace.getSpan(context)
-    const parentSpanContext = parentSpan && parentSpan.spanContext()
-
     let spanContext
-    // TODO: Need a way to get 128-bit trace IDs for the validity check API to work...
-    // if (parent && api.trace.isSpanContextValid(parent)) {
-    if (parentSpanContext && parentSpanContext.traceId) {
-      const parent = parentSpanContext._ddContext
-      spanContext = new SpanContext({
-        traceId: parent._traceId,
-        spanId: id(),
-        parentId: parent._spanId,
-        sampling: parent._sampling,
-        baggageItems: Object.assign({}, parent._baggageItems),
-        trace: parent._trace,
-        tracestate: parent._tracestate
-      })
+    if (parentSpan) {
+      spanContext = parentSpan._ddSpan
+        ? this._createSpanContextFromParent(parentSpan)
+        : this._createSpanContextForNewSpan(context)
     } else {
       spanContext = new SpanContext()
     }
