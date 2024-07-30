@@ -170,7 +170,7 @@ function checkVulnerabilityInRequest (vulnerability, occurrencesAndLocation, cb,
         vulnerabilitiesCount.set(v.type, ++count)
       })
 
-      expect(vulnerabilitiesCount.get(vulnerability)).to.not.be.null
+      expect(vulnerabilitiesCount.get(vulnerability)).to.be.greaterThan(0)
       if (occurrences) {
         expect(vulnerabilitiesCount.get(vulnerability)).to.equal(occurrences)
       }
