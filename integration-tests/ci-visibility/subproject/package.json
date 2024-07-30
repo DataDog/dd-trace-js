@@ -1,0 +1,6 @@
+{
+  "name": "subproject",
+  "private": true,
+  "version": "1.0.0",
+  "description": "app within repo"
+}
