@@ -2,14 +2,6 @@ name: Prepare release proposal
 
 on:
   workflow_dispatch:
-    inputs:
-      release-type:
-        description: 'Release type'
-        required: true
-        type: choice
-        options:
-        - minor
-        - patch
 
 jobs:
   create-proposal:
@@ -50,12 +42,6 @@ jobs:
         run: |
           yarn
 
-      - name: Create proposal branch
-        id: create_branch
-        run: |
-          branch_name=`node _scripts/prepare-release-proposal.js create-branch ${{ github.event.inputs.release-type }}`
-          echo "branch_name=$branch_name" >> $GITHUB_OUTPUT
-
       - name: Install branch-diff
         run: |
           npm i -g @bengl/branch-diff
@@ -68,7 +54,19 @@ jobs:
       - name: Commit branch diffs
         id: commit_branch_diffs
         run: |
-          node _scripts/prepare-release-proposal.js commit-branch-diffs ${{ matrix.base-branch }} ${{ github.event.inputs.release-type }} > branch-diffs.txt
+          node _scripts/prepare-release-proposal.js commit-branch-diffs ${{ matrix.base-branch }} > branch-diffs.txt
+
+      - name: Calculate release type
+        id: calc-release-type
+        run: |
+          release_type=`grep -q "(SEMVER-MINOR)" branch-diffs.txt && echo "minor" || echo "patch"`
+          echo "release-type=$release_type" >> $GITHUB_OUTPUT
+
+      - name: Create proposal branch
+        id: create_branch
+        run: |
+          branch_name=`node _scripts/prepare-release-proposal.js create-branch ${{ steps.calc-release-type.outputs.release-type }}`
+          echo "branch_name=$branch_name" >> $GITHUB_OUTPUT
 
       - name: Push proposal branch
         run: |
@@ -77,7 +75,7 @@ jobs:
       - name: Update package.json
         id: pkg
         run: |
-          content=`node _scripts/prepare-release-proposal.js update-package-json ${{ github.event.inputs.release-type }}`
+          content=`node _scripts/prepare-release-proposal.js update-package-json ${{ steps.calc-release-type.outputs.release-type }}`
           echo "version=$content" >> $GITHUB_OUTPUT
 
       - name: Create PR

@@ -44,26 +44,19 @@ function createReleaseBranch (args) {
 }
 
 function commitBranchDiffs (args) {
-  if (args.length !== 2) {
-    console.log('usage: node prepare-release-proposal.js commit-branch-diffs <release-branch> <release-type>')
+  if (args.length !== 1) {
+    console.log('usage: node prepare-release-proposal.js commit-branch-diffs <release-branch>')
     console.log('release-branches:')
     console.log('  v4.x')
     console.log('  v5.x')
-    console.log('release-types:')
-    console.log('  minor')
-    console.log('  patch')
     return
   }
   const releaseBranch = args[0]
-  const releaseType = args[1]
 
   const excludedLabels = [
     'semver-major',
     `dont-land-on-${releaseBranch}`
   ]
-  if (releaseType === 'patch') {
-    excludedLabels.push('semver-minor')
-  }
 
   const commandCore = `branch-diff --user DataDog --repo test-node-release-rebase \
 --exclude-label=${excludedLabels.join(',')}`
