@@ -52,7 +52,12 @@ class BaseLLMObsWriter {
 
     const events = this._buffer
     this._buffer = []
-    const payload = encodeUnicode(JSON.stringify(this.makePayload(events)))
+    const payload = JSON.stringify(this.makePayload(events), (key, value) => {
+      if (typeof value === 'string') {
+        return encodeUnicode(value) // serialize unicode characters
+      }
+      return value
+    }).replace(/\\\\u/g, '\\u') // remove double escaping
 
     const options = {
       headers: this._headers,
