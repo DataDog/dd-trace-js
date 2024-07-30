@@ -138,6 +138,11 @@ describe('weak-hash-analyzer', () => {
       }
       expect(weakHashAnalyzer._isExcluded(location)).to.be.true
     })
+
+    it('undefined location', () => {
+      const location = undefined
+      expect(weakHashAnalyzer._isExcluded(location)).to.be.false
+    })
   })
 
   describe('full feature', () => {
