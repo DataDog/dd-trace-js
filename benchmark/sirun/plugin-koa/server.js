@@ -1,6 +1,14 @@
 'use strict'
 
-const { PORT, REQUESTS, WITH_FAKE_DB, WITH_INTERNAL_TRACER, WITH_TRACER } = process.env
+const {
+  PORT,
+  REQUESTS,
+  WITH_ASYNC_HOOKS,
+  WITH_COLUMNAR_TRACER,
+  WITH_FAKE_DB,
+  WITH_INTERNAL_TRACER,
+  WITH_TRACER
+} = process.env
 
 let tracer
 let encoder
@@ -17,11 +25,27 @@ if (WITH_TRACER === 'true') {
   tracer.use('koa', { enabled: true, middleware: true })
 }
 
+if (WITH_ASYNC_HOOKS === true) {
+  require('async_hooks').createHook({
+    init () {},
+    before () {},
+    after () {},
+    promiseResolve () {}
+  }).enable()
+}
+
 if (WITH_INTERNAL_TRACER === 'true') {
   require('./internal-tracer')
   encoder = require('./internal-tracer/encoder').encoder
   storage = require('../../../packages/datadog-core').storage
   TraceContext = require('./internal-tracer/context').TraceContext
+}
+
+if (WITH_COLUMNAR_TRACER === 'true') {
+  require('./columnar')
+  encoder = require('./columnar/encoder').encoder
+  storage = require('../../../packages/datadog-core').storage
+  TraceContext = require('./columnar/context').TraceContext
 }
 
 const http = require('http')
@@ -51,6 +75,11 @@ app.use(ctx => {
         const span = traceQuery(query)
         runQuery(query)
         span.finish()
+      } else if (WITH_COLUMNAR_TRACER) {
+        const traceContext = storage.getStore()
+        encoder.encodeMysqlQueryStart(query, traceContext)
+        runQuery(query)
+        encoder.encodeFinish(traceContext)
       } else if (WITH_INTERNAL_TRACER) {
         const store = storage.getStore()
         const parent = store.traceContext
@@ -86,9 +115,9 @@ function startQuery () {
 }
 
 function runQuery () {
-  return new Promise(resolve => {
-    setTimeout(resolve, Math.random() * 5)
-  })
+  // return new Promise(resolve => {
+  //   setTimeout(resolve, Math.random() * 5)
+  // })
 }
 
 function traceQuery (query) {

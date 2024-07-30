@@ -1,7 +1,6 @@
 'use strict'
 
 const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
-const { storage } = require('../../../../packages/datadog-core')
 const { Client } = require('./client')
 const { zeroId } = require('./id')
 const { now } = require('./now')
@@ -9,6 +8,7 @@ const { now } = require('./now')
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const ARRAY_OF_TWO = 0x92
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
+const MAX_COLUMN_LENGTH = 65536
 const flushInterval = 2000
 const noop = () => {}
 const eventTypes = {
@@ -20,6 +20,28 @@ const eventTypes = {
   ADD_TAGS: 6,
   MYSQL_START_SPAN: 8
 }
+const columns = {
+  type: new Int8Array(),
+  time: new BigUint64Array(),
+  traceId: new BigUint64Array(),
+  spanId: new BigUint64Array(),
+  parentId: new BigUint64Array(),
+  component: new Uint16Array(),
+  http_method: new Uint16Array(),
+  http_route: new Uint16Array(),
+  http_url: new Uint16Array(),
+  http_status: new Uint16Array(),
+  error_name: new Uint16Array(),
+  error_message: new Uint16Array(),
+  error_type: new Uint16Array(),
+  sql_query: new Uint16Array(),
+  sql_db: new Uint16Array(),
+  sql_user: new Uint16Array(),
+  sql_host: new Uint16Array(),
+  sql_port: new Uint16Array()
+}
+
+let columnIndex = 0
 
 const float64Array = new Float64Array(1)
 const uInt8Float64Array = new Uint8Array(float64Array.buffer)
@@ -44,101 +66,73 @@ class Encoder {
     return this._eventCount
   }
 
-  encodeWebRequestStart (req, component) {
-    const bytes = this._eventBytes
-    const store = storage.getStore()
+  encodeWebRequestStart (req, component, traceContext) {
+    if (!traceContext) return
 
-    if (!store || !store.traceContext) return
-
-    this._encodeFixArray(bytes, 2)
-    this._encodeByte(bytes, eventTypes.WEB_REQUEST_START)
-    this._encodeFixArray(bytes, 8)
-    this._encodeLong(bytes, now())
-    this._encodeId(bytes, store.traceContext.traceId)
-    this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeId(bytes, store.traceContext.parentId)
-    this._encodeString(bytes, component)
-    this._encodeString(bytes, req.method)
-    this._encodeString(bytes, req.url)
-    this._encodeString(bytes, req.url) // route
+    columns.type[columnIndex] = eventTypes.WEB_REQUEST_START
+    columns.time[columnIndex] = now()
+    columns.traceId[columnIndex] = traceContext.traceId
+    columns.spanId[columnIndex] = traceContext.spanId
+    columns.parentId[columnIndex] = traceContext.parentId || 0n
+    columns.component[columnIndex] = this._cacheString(component)
+    columns.http_method[columnIndex] = this._cacheString(req.method)
+    columns.http_url[columnIndex] = this._cacheString(req.url)
+    columns.http_route[columnIndex] = this._cacheString(req.url)
 
     this._afterEncode()
   }
 
-  encodeWebRequestFinish (res) {
-    const bytes = this._eventBytes
-    const store = storage.getStore()
+  encodeWebRequestFinish (res, traceContext) {
+    if (!traceContext) return
 
-    if (!store || !store.traceContext) return
-
-    this._encodeFixArray(bytes, 2)
-    this._encodeByte(bytes, eventTypes.WEB_REQUEST_FINISH)
-    this._encodeFixArray(bytes, 3)
-    this._encodeLong(bytes, now())
-    this._encodeId(bytes, store.traceContext.traceId)
-    this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeShort(bytes, res.statusCode)
+    columns.type[columnIndex] = eventTypes.WEB_REQUEST_FINISH
+    columns.time[columnIndex] = now()
+    columns.traceId[columnIndex] = traceContext.traceId
+    columns.spanId[columnIndex] = traceContext.spanId
+    columns.http_status[columnIndex] = this._cacheString(res.statusCode)
 
     this._afterEncode()
   }
 
-  encodeMysqlQueryStart (query) {
-    const bytes = this._eventBytes
-    const store = storage.getStore()
+  encodeMysqlQueryStart (query, traceContext) {
+    if (!traceContext) return
 
-    if (!store || !store.traceContext) return
-
-    this._encodeFixArray(bytes, 2)
-    this._encodeByte(bytes, eventTypes.MYSQL_START_SPAN)
-    this._encodeFixArray(bytes, 9)
-    this._encodeLong(bytes, now())
-    this._encodeId(bytes, store.traceContext.traceId)
-    this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeId(bytes, store.traceContext.parentId)
-    this._encodeString(bytes, query.sql)
-    this._encodeString(bytes, query.conf.database)
-    this._encodeString(bytes, query.conf.user)
-    this._encodeString(bytes, query.conf.host)
-    this._encodeString(bytes, query.conf.port)
+    columns.type[columnIndex] = eventTypes.MYSQL_START_SPAN
+    columns.time[columnIndex] = now()
+    columns.traceId[columnIndex] = traceContext.traceId
+    columns.spanId[columnIndex] = traceContext.spanId
+    columns.parentId[columnIndex] = traceContext.parentId || 0n
+    columns.sql_query[columnIndex] = query.sql
+    columns.sql_db[columnIndex] = query.database
+    columns.sql_user[columnIndex] = query.user
+    columns.sql_host[columnIndex] = query.host
+    columns.sql_port[columnIndex] = query.port
 
     this._afterEncode()
   }
 
-  encodeFinish () {
-    const bytes = this._eventBytes
-    const store = storage.getStore()
+  encodeFinish (traceContext) {
+    if (!traceContext) return
 
-    if (!store || !store.traceContext) return
-
-    this._encodeFixArray(bytes, 2)
-    this._encodeByte(bytes, eventTypes.FINISH_SPAN)
-    this._encodeFixArray(bytes, 5)
-    this._encodeLong(bytes, now())
-    this._encodeId(bytes, store.traceContext.traceId)
-    this._encodeId(bytes, store.traceContext.spanId)
-    this._encodeFixMap(bytes, 0)
-    this._encodeFixMap(bytes, 0)
+    columns.type[columnIndex] = eventTypes.FINISH_SPAN
+    columns.time[columnIndex] = now()
+    columns.traceId[columnIndex] = traceContext.traceId
+    columns.spanId[columnIndex] = traceContext.spanId
 
     this._afterEncode()
   }
 
-  encodeError (error) {
-    const bytes = this._eventBytes
-    const store = storage.getStore()
+  encodeError (error, traceContext) {
+    if (!traceContext) return // TODO: support errors without tracing
 
-    if (!store || !store.traceContext) return // TODO: support errors without tracing
-
-    this._encodeFixArray(bytes, 2)
-    this._encodeByte(bytes, eventTypes.ERROR) // implied: name
-    this._encodeFixArray(bytes, error ? 6 : 3)
-    this._encodeLong(bytes, now())
-    this._encodeId(bytes, store.traceContext.traceId)
-    this._encodeId(bytes, store.traceContext.spanId)
+    columns.type[columnIndex] = eventTypes.ERROR
+    columns.traceId[columnIndex] = traceContext.traceId
+    columns.spanId[columnIndex] = traceContext.spanId
 
     if (error) {
-      this._encodeString(bytes, error.name)
-      this._encodeString(bytes, error.message)
-      this._encodeString(bytes, error.stack)
+      columns.error_name[columnIndex] = this._cacheString(error.name)
+      columns.error_message[columnIndex] = this._cacheString(error.message)
+      columns.error_stack[columnIndex] = this._cacheString(error.stack)
     }
 
     this._afterEncode()
@@ -172,14 +166,7 @@ class Encoder {
 
     this._timer = clearTimeout(this._timer)
 
-    // if (process.env.WITH_NATIVE_COLLECTOR) {
-    //   this.flushFfi(data, done)
-    // } else if (process.env.WITH_WASM_COLLECTOR) {
-    //   this.flushWasm(data, done)
-    // } else {
-    //   const path = `/v0.1/events`
-    //   this._client.request({ data, path, count }, done)
-    // }
+    done()
   }
 
   // TODO: Use node:ffi when it lands.
@@ -211,7 +198,7 @@ class Encoder {
     const { collect } = require(libPath)
 
     const data = collect(payload)
-    const path = '/v0.5/traces'
+    const path = `/v0.5/traces`
 
     this._client.request({ data, path, port: 8126 }, done)
   }
@@ -223,8 +210,10 @@ class Encoder {
   _afterEncode () {
     this._eventCount++
 
-    // we can go over the soft limit since the agent has a 50MB hard limit
-    if (this._eventBytes.length > this._limit || this._stringBytes.length > this._limit) {
+    columnIndex++
+
+    // TODO: size limit by calculating columns
+    if (columnIndex > MAX_COLUMN_LENGTH) {
       this.flush()
     } else if (!this._timer) {
       this._timer = setTimeout(() => this.flush(), flushInterval).unref()
@@ -238,6 +227,12 @@ class Encoder {
     this._stringCount = 0
     this._stringBytes.length = 0
     this._stringMap = {}
+
+    for (const key in columns) {
+      columns[key].fill(columns[key].BYTES_PER_ELEMENT < 8 ? 0 : 0n)
+    }
+
+    columnIndex = 0
 
     this._cacheString('')
   }
@@ -468,6 +463,8 @@ class Encoder {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }
+
+    return this._stringMap[value]
   }
 
   _writeArrayPrefix (buffer, offset, count) {
