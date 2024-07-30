@@ -22,11 +22,8 @@ const {
 } = require('./constants')
 
 const {
-  validateKind,
-  getName,
   getLLMObsParentId,
   getMlApp,
-  isLLMSpan,
   getSessionId
 } = require('./utils')
 
