@@ -63,6 +63,7 @@ function getSessionId (span) {
   return sessionId || span.context().toTraceId(true)
 }
 
+// This takes about 1.3 ms for every 30k characters
 function encodeUnicode (str = '') {
   return str.split('').map(char => {
     const code = char.charCodeAt(0)

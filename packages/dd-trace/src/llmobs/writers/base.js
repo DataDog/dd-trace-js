@@ -55,7 +55,6 @@ class BaseLLMObsWriter {
     const payload = encodeUnicode(JSON.stringify(this.makePayload(events)))
 
     const options = {
-      // path: this._endpoint,
       headers: this._headers,
       method: 'POST',
       url: this._url
