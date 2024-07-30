@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  CODE_INJECTION_ANALYZER: require('./code-injection-analyzer'),
   COMMAND_INJECTION_ANALYZER: require('./command-injection-analyzer'),
   HARCODED_PASSWORD_ANALYZER: require('./hardcoded-password-analyzer'),
   HARCODED_SECRET_ANALYZER: require('./hardcoded-secret-analyzer'),
