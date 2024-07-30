@@ -31,7 +31,9 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_SUITE,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -1085,6 +1087,35 @@ versions.forEach(version => {
               })
             })
           }
+        })
+      })
+
+      it('works when the repository root is not the same as the working directory', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const test = events.find(event => event.type === 'test').content
+            // The test is in a subproject
+            assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          })
+
+        childProcess = exec(
+          'node ../../node_modules/.bin/cucumber-js features/*.feature',
+          {
+            cwd: `${cwd}/ci-visibility/subproject`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port)
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
         })
       })
     })
