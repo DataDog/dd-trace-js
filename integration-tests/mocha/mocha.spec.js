@@ -241,7 +241,7 @@ describe('mocha CommonJS', function () {
     })
   })
 
-  it('works when the repository root is not the same as the working directory', (done) => {
+  it('correctly calculates test code owners when working directory is not repository root', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
