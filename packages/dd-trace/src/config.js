@@ -483,7 +483,7 @@ class Config {
     this._setValue(defaults, 'appsec.enabled', undefined)
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
-    this._setValue(defaults, 'appsec.rasp.enabled', false)
+    this._setValue(defaults, 'appsec.rasp.enabled', true)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
