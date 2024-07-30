@@ -1,39 +1,18 @@
 'use strict'
 
-const {
-  SPAN_TYPE
-} = require('../../../../ext/tags')
-const {
-  PROPAGATED_PARENT_ID_KEY,
-  MODEL_NAME,
-  MODEL_PROVIDER,
-  SESSION_ID,
-  ML_APP,
-  SPAN_KIND,
-  INPUT_VALUE,
-  OUTPUT_DOCUMENTS,
-  INPUT_DOCUMENTS,
-  OUTPUT_VALUE,
-  METADATA,
-  METRICS,
-  PARENT_ID_KEY,
-  INPUT_MESSAGES,
-  OUTPUT_MESSAGES
-} = require('./constants')
+const { SPAN_KIND } = require('./constants')
 
 const {
   validateKind,
   getName,
-  getLLMObsParentId,
-  getMlApp,
-  isLLMSpan,
-  getSessionId
+  isLLMSpan
 } = require('./utils')
 const { storage } = require('../../../datadog-core')
 
 const NoopLLMObs = require('./noop')
 const Span = require('../opentracing/span')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
+const LLMObsSpanTagger = require('./tagger')
 
 const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
 const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
@@ -44,6 +23,7 @@ class LLMObs extends NoopLLMObs {
 
     this._config = config
     this._tracer = tracer
+    this._tagger = new LLMObsSpanTagger(config)
 
     this._evaluationWriter = new LLMObsEvalMetricsWriter({
       site: config.site,
@@ -82,26 +62,26 @@ class LLMObs extends NoopLLMObs {
 
     if (inputData || outputData) {
       if (spanKind === 'llm') {
-        this._tagLLMIO(span, inputData, outputData)
+        this._tagger.tagLLMIO(span, inputData, outputData)
       } else if (spanKind === 'embedding') {
-        this._tagEmbeddingIO(span, inputData, outputData)
+        this._tagger.tagEmbeddingIO(span, inputData, outputData)
       } else if (spanKind === 'retrieval') {
-        this._tagRetrievalIO(span, inputData, outputData)
+        this._tagger.tagRetrievalIO(span, inputData, outputData)
       } else {
-        this._tagTextIO(span, inputData, outputData)
+        this._tagger.tagTextIO(span, inputData, outputData)
       }
     }
 
     if (metadata) {
-      this._tagMetadata(span, metadata)
+      this._tagger.tagMetadata(span, metadata)
     }
 
     if (metrics) {
-      this._tagMetrics(span, metrics)
+      this._tagger.tagMetrics(span, metrics)
     }
 
     if (tags) {
-      this._tagSpanTags(span, tags)
+      this._tagger.tagSpanTags(span, tags)
     }
   }
 
@@ -164,12 +144,17 @@ class LLMObs extends NoopLLMObs {
 
     const name = getName(kind, options)
 
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
     const span = this._tracer.startSpan(name, {
-      ...options,
+      ...spanOptions,
       childOf: this._tracer.scope().active()
     })
 
-    this._startLLMObsSpan(span, kind, options)
+    this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
 
     const oldStore = storage.getStore()
     const newStore = span ? span._store : oldStore
@@ -202,17 +187,22 @@ class LLMObs extends NoopLLMObs {
       options = {}
     }
 
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
     if (fn.length > 1) {
-      return this._tracer.trace(name, options, (span, cb) => {
+      return this._tracer.trace(name, spanOptions, (span, cb) => {
         // do some llmobs processing
-        this._startLLMObsSpan(span, kind, options)
+        this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
         return fn(span, cb)
       })
     }
 
-    return this._tracer.trace(name, options, span => {
+    return this._tracer.trace(name, spanOptions, span => {
       // do some llmobs processing
-      this._startLLMObsSpan(span, kind, options)
+      this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
       return fn(span)
     })
   }
@@ -228,20 +218,25 @@ class LLMObs extends NoopLLMObs {
       options = {}
     }
 
+    const {
+      spanOptions,
+      ...llmobsOptions
+    } = this._extractOptions(options)
+
     const llmobsThis = this
 
     function wrapped () {
       const args = arguments
       const span = llmobsThis._tracer.scope().active()
 
-      llmobsThis._startLLMObsSpan(span, kind, options)
+      llmobsThis._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
 
       const result = fn.apply(this, args)
       // do some after function llmobs processing
       return result
     }
 
-    return this._tracer.wrap(name, options, wrapped)
+    return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
   flush () {
@@ -255,147 +250,21 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  _startLLMObsSpan (span, kind, { modelName, modelProvider, sessionId, mlApp }) {
-    span.setTag(SPAN_TYPE, 'llm')
+  _extractOptions (options) {
+    const {
+      modelName,
+      modelProvider,
+      sessionId,
+      mlApp,
+      ...spanOptions
+    } = options
 
-    span.setTag(SPAN_KIND, kind)
-    if (modelName) span.setTag(MODEL_NAME, modelName)
-    if (modelProvider) span.setTag(MODEL_PROVIDER, modelProvider)
-
-    if (!sessionId) sessionId = getSessionId(span)
-    span.setTag(SESSION_ID, sessionId)
-
-    if (!mlApp) mlApp = getMlApp(span, this._config.llmobs.mlApp)
-    span.setTag(ML_APP, mlApp)
-
-    if (!span.context()._tags[PROPAGATED_PARENT_ID_KEY]) {
-      const parentId = getLLMObsParentId(span) || 'undefined'
-      span.setTag(PARENT_ID_KEY, parentId)
-    }
-  }
-
-  _tagLLMIO (span, inputData, outputData) {
-    this._tagMessages(span, inputData, INPUT_MESSAGES)
-    this._tagMessages(span, outputData, OUTPUT_MESSAGES)
-  }
-
-  _tagEmbeddingIO (span, inputData, outputData) {
-    this._tagDocuments(span, inputData, INPUT_DOCUMENTS)
-    this._tagText(span, outputData, OUTPUT_VALUE)
-  }
-
-  _tagRetrievalIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
-  }
-
-  _tagTextIO (span, inputData, outputData) {
-    this._tagText(span, inputData, INPUT_VALUE)
-    this._tagText(span, outputData, OUTPUT_VALUE)
-  }
-
-  _tagText (span, data, key) {
-    if (data) {
-      if (typeof data === 'string') {
-        span.setTag(key, data)
-      } else {
-        try {
-          span.setTag(key, JSON.stringify(data))
-        } catch {
-          // log error
-        }
-      }
-    }
-  }
-
-  _tagMetadata (span, metadata) {
-    try {
-      span.setTag(METADATA, JSON.stringify(metadata))
-    } catch {
-      // log error
-    }
-  }
-
-  _tagMetrics (span, metrics) {
-    try {
-      span.setTag(METRICS, JSON.stringify(metrics))
-    } catch {
-      // log error
-    }
-  }
-
-  _tagSpanTags (span, tags) {}
-
-  _tagDocuments (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
-      }
-
-      try {
-        const documents = data.map(document => {
-          if (typeof document === 'string') {
-            return document
-          }
-
-          const { text, name, id, score } = document
-
-          if (text && typeof text !== 'string') {
-            return undefined
-          }
-
-          if (name && typeof name !== 'string') {
-            return undefined
-          }
-
-          if (id && typeof id !== 'string') {
-            return undefined
-          }
-
-          if (score && typeof score !== 'number') {
-            return undefined
-          }
-
-          return document
-        }).filter(doc => !!doc) // filter out bad documents?
-
-        span.setTag(key, JSON.stringify(documents))
-      } catch {
-        // log error
-      }
-    }
-  }
-
-  _tagMessages (span, data, key) {
-    if (data) {
-      if (!Array.isArray(data)) {
-        data = [data]
-      }
-
-      try {
-        const messages = data.map(message => {
-          if (typeof message === 'string') {
-            return message
-          }
-
-          const content = message.content || ''
-          const role = message.role
-
-          if (typeof content !== 'string') {
-            return undefined
-          }
-
-          if (role && typeof role !== 'string') {
-            return undefined
-          }
-
-          return message
-        }).filter(msg => !!msg) // filter out bad messages?
-
-        span.setTag(key, JSON.stringify(messages))
-      } catch {
-        // log error
-      }
+    return {
+      mlApp,
+      modelName,
+      modelProvider,
+      sessionId,
+      spanOptions
     }
   }
 }

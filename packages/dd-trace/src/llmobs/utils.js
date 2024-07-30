@@ -40,6 +40,7 @@ function getLLMObsParentId (span) {
 }
 
 function isLLMSpan (span) {
+  // TODO(sam.brenner) add openai to this check
   return span?.context()._tags[SPAN_TYPE] === 'llm'
 }
 
@@ -64,7 +65,8 @@ function getSessionId (span) {
 }
 
 // This takes about 1.3 ms for every 30k characters
-function encodeUnicode (str = '') {
+function encodeUnicode (str) {
+  if (!str) return str
   return str.split('').map(char => {
     const code = char.charCodeAt(0)
     if (code > 127) {
