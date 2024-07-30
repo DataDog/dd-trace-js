@@ -12,7 +12,8 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
   TEST_TYPE,
-  TEST_IS_RETRY
+  TEST_IS_RETRY,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // tested with 1.6.0
@@ -201,6 +202,35 @@ versions.forEach((version) => {
             stdio: 'pipe'
           }
         )
+      })
+    })
+
+    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const test = events.find(event => event.type === 'test').content
+          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        })
+
+      childProcess = exec(
+        '../../node_modules/.bin/vitest run',
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            TEST_DIR: './vitest-test.mjs'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
