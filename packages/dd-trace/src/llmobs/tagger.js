@@ -1,5 +1,6 @@
 'use strict'
 
+const logger = require('../log')
 const {
   SPAN_TYPE
 } = require('../../../../ext/tags')
@@ -18,7 +19,8 @@ const {
   METRICS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
-  OUTPUT_MESSAGES
+  OUTPUT_MESSAGES,
+  TAGS
 } = require('./constants')
 
 const {
@@ -75,7 +77,7 @@ class LLMObsTagger {
     try {
       span.setTag(METADATA, JSON.stringify(metadata))
     } catch {
-      // log error
+      logger.warn('Failed to parse span metadata. Metadata key-value pairs must be JSON serializable.')
     }
   }
 
@@ -83,11 +85,21 @@ class LLMObsTagger {
     try {
       span.setTag(METRICS, JSON.stringify(metrics))
     } catch {
-      // log error
+      logger.warn('Failed to parse span metrics. Metrics key-value pairs must be JSON serializable.')
     }
   }
 
-  tagSpanTags (span, tags) {}
+  tagSpanTags (span, tags) {
+    try {
+      const currentTags = span.context().tags[TAGS]
+      if (currentTags) {
+        Object.assign(tags, currentTags)
+      }
+      span.setTag(TAGS, JSON.stringify(tags))
+    } catch {
+      logger.warn('Failed to parse span tags. Tag key-value pairs must be JSON serializable.')
+    }
+  }
 
   _tagText (span, data, key) {
     if (data) {
@@ -97,7 +109,8 @@ class LLMObsTagger {
         try {
           span.setTag(key, JSON.stringify(data))
         } catch {
-          // log error
+          const type = key === INPUT_VALUE ? 'input' : 'output'
+          logger.warn(`Failed to parse ${type} value, must be JSON serializable.`)
         }
       }
     }
@@ -132,7 +145,8 @@ class LLMObsTagger {
 
         span.setTag(key, JSON.stringify(documents))
       } catch {
-        // log error
+        const type = key === INPUT_DOCUMENTS ? 'input' : 'output'
+        logger.warn(`Failed to parse ${type} documents.`)
       }
     }
   }
@@ -165,7 +179,8 @@ class LLMObsTagger {
 
         span.setTag(key, JSON.stringify(messages))
       } catch {
-        // log error
+        const type = key === INPUT_MESSAGES ? 'input' : 'output'
+        logger.warn(`Failed to parse ${type} messages.`)
       }
     }
   }

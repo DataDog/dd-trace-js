@@ -3,13 +3,15 @@
 const { SPAN_KINDS, PARENT_ID_KEY, PROPAGATED_PARENT_ID_KEY, ML_APP, SESSION_ID } = require('./constants')
 const { SPAN_TYPE } = require('../../../../ext/tags')
 
-function validateKind (kind) {
+function validKind (kind) {
   // cases for invalid kind
   // 1. kind is not a string
   // 2. kind is not in SPAN_KINDS
   if (!SPAN_KINDS.includes(kind)) {
-    // log error
+    return false
   }
+
+  return true
 }
 
 function getName (kind, options = {}, fn = () => {}) {
@@ -77,7 +79,7 @@ function encodeUnicode (str) {
 }
 
 module.exports = {
-  validateKind,
+  validKind,
   getName,
   getLLMObsParentId,
   isLLMSpan,

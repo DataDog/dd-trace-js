@@ -3,7 +3,7 @@
 const { SPAN_KIND } = require('./constants')
 
 const {
-  validateKind,
+  validKind,
   getName,
   isLLMSpan
 } = require('./utils')
@@ -15,6 +15,7 @@ const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanTagger = require('./tagger')
 
 const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
+const logger = require('../log')
 const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
 
 class LLMObs extends NoopLLMObs {
@@ -46,17 +47,29 @@ class LLMObs extends NoopLLMObs {
       span = this._tracer.scope().active()
     }
 
-    if (!(span instanceof Span)) {
+    if ((span && !options) && !(span instanceof Span)) {
       options = span
       span = this._tracer.scope().active()
     }
 
-    if (!span) return
-    if (!isLLMSpan(span)) return
-    if (span._duration !== undefined) return
+    if (!span) {
+      logger.warn('No span provided and no active LLMObs-generated span found')
+      return
+    }
+    if (!isLLMSpan(span)) {
+      logger.warn('Span must be an LLMObs-generated span')
+      return
+    }
+    if (span._duration !== undefined) {
+      logger.warn('Cannot annotate a finished span')
+      return
+    }
 
     const spanKind = span.context()._tags[SPAN_KIND]
-    if (!spanKind) return
+    if (!spanKind) {
+      logger.warn('LLMObs span must have a span kind specified')
+      return
+    }
 
     const { inputData, outputData, metadata, metrics, tags } = options
 
@@ -102,20 +115,42 @@ class LLMObs extends NoopLLMObs {
   }
 
   submitEvaluation (llmobsSpanContext, options) {
-    if (!this.enabled) return
+    if (!this.enabled) {
+      logger.warn(
+        'LLMObs.submitEvaluation() called when LLMObs is not enabled. Evaluation metric data will not be sent.'
+      )
+      return
+    }
 
     const { traceId, spanId } = llmobsSpanContext
-    if (!traceId || !spanId) return
+    if (!traceId || !spanId) {
+      logger.warn(
+        'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
+      )
+      return
+    }
 
     const { label, value, tags } = options
     const metricType = options.metricType.toLowerCase()
-    if (!label) return
-    if (!metricType || !['categorical', 'score'].includes(metricType)) return
+    if (!label) {
+      logger.warn('label must be the specified name of the evaluation metric')
+      return
+    }
+    if (!metricType || !['categorical', 'score'].includes(metricType)) {
+      logger.warn('metricType must be one of "categorical" or "score"')
+      return
+    }
 
-    if (metricType === 'categorical' && typeof value !== 'string') return
-    if (metricType === 'score' && typeof value !== 'number') return
+    if (metricType === 'categorical' && typeof value !== 'string') {
+      logger.warn('value must be a string for a categorical metric.')
+      return
+    }
+    if (metricType === 'score' && typeof value !== 'number') {
+      logger.warn('value must be a number for a score metric.')
+      return
+    }
 
-    const evaluationTags = { 'dd-trace.version': TRACER_VERSION, ml_app: this._config.llmobs.mlApp }
+    const evaluationTags = { 'dd-trace.version': TRACER_VERSION, ml_app: this._config.llmobs.mlApp || 'unknown' }
 
     if (tags) {
       for (const key in tags) {
@@ -124,6 +159,8 @@ class LLMObs extends NoopLLMObs {
           evaluationTags[key] = tag
         } else if (typeof tag.toString === 'function') {
           evaluationTags[key] = tag.toString()
+        } else {
+          logger.warn('Failed to parse tags. Tags for evaluation metrics must be strings')
         }
       }
     }
@@ -140,7 +177,7 @@ class LLMObs extends NoopLLMObs {
 
   startSpan (kind, options) {
     if (!this.enabled) return
-    validateKind(kind)
+    if (!validKind(kind)) return
 
     const name = getName(kind, options)
 
@@ -178,7 +215,7 @@ class LLMObs extends NoopLLMObs {
 
   trace (kind, options, fn) {
     if (!this.enabled) return
-    validateKind(kind)
+    if (!validKind(kind)) return
 
     const name = getName(kind, options)
 
@@ -209,7 +246,7 @@ class LLMObs extends NoopLLMObs {
 
   wrap (kind, options, fn) {
     if (!this.enabled) return
-    validateKind(kind)
+    if (!validKind(kind)) return
 
     const name = getName(kind, options, fn)
 
@@ -240,13 +277,16 @@ class LLMObs extends NoopLLMObs {
   }
 
   flush () {
-    if (!this.enabled) return
+    if (!this.enabled) {
+      logger.warn('Flushing when LLMObs is disabled. no spans or evaluation metrics will be sent')
+      return
+    }
 
     try {
       this._tracer._processor._llmobs._writer.flush()
       this._evaluationWriter.flush()
     } catch {
-      // log error
+      logger.warn('Failed to flush LLMObs spans and evaluation metrics')
     }
   }
 
