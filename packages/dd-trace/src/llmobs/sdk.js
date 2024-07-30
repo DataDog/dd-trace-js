@@ -21,7 +21,14 @@ const {
   OUTPUT_MESSAGES
 } = require('./constants')
 
-const { validateKind, getName, getLLMObsParentId, getMlApp, isLLMSpan, getSessionId } = require('./utils')
+const {
+  validateKind,
+  getName,
+  getLLMObsParentId,
+  getMlApp,
+  isLLMSpan,
+  getSessionId
+} = require('./utils')
 const { storage } = require('../../../datadog-core')
 
 const NoopLLMObs = require('./noop')
@@ -38,10 +45,10 @@ class LLMObs extends NoopLLMObs {
     this._config = config
     this._tracer = tracer
 
-    this._evaluationWriter = new LLMObsEvalMetricsWriter(
-      config.site,
-      config.apiKey
-    )
+    this._evaluationWriter = new LLMObsEvalMetricsWriter({
+      site: config.site,
+      apiKey: config.apiKey
+    })
   }
 
   get enabled () {
@@ -263,7 +270,7 @@ class LLMObs extends NoopLLMObs {
 
     if (!span.context()._tags[PROPAGATED_PARENT_ID_KEY]) {
       const parentId = getLLMObsParentId(span) || 'undefined'
-      span.setTag(PARENT_ID_KEY, parentId.toString(10))
+      span.setTag(PARENT_ID_KEY, parentId)
     }
   }
 
@@ -326,32 +333,33 @@ class LLMObs extends NoopLLMObs {
       }
 
       try {
-        span.setTag(key, JSON.stringify(
-          data.map(document => {
-            if (typeof document === 'string') {
-              return document
-            }
-            const { text, name, id, score } = document
-
-            if (text && typeof text !== 'string') {
-              return undefined
-            }
-
-            if (name && typeof name !== 'string') {
-              return undefined
-            }
-
-            if (id && typeof id !== 'string') {
-              return undefined
-            }
-
-            if (score && typeof score !== 'number') {
-              return undefined
-            }
-
+        const documents = data.map(document => {
+          if (typeof document === 'string') {
             return document
-          }).filter(doc => !!doc) // filter out bad documents?
-        ))
+          }
+
+          const { text, name, id, score } = document
+
+          if (text && typeof text !== 'string') {
+            return undefined
+          }
+
+          if (name && typeof name !== 'string') {
+            return undefined
+          }
+
+          if (id && typeof id !== 'string') {
+            return undefined
+          }
+
+          if (score && typeof score !== 'number') {
+            return undefined
+          }
+
+          return document
+        }).filter(doc => !!doc) // filter out bad documents?
+
+        span.setTag(key, JSON.stringify(documents))
       } catch {
         // log error
       }
@@ -365,26 +373,26 @@ class LLMObs extends NoopLLMObs {
       }
 
       try {
-        span.setTag(key, JSON.stringify(
-          data.map(message => {
-            if (typeof message === 'string') {
-              return message
-            }
-
-            const content = message.content || ''
-            const role = message.role
-
-            if (typeof content !== 'string') {
-              return undefined
-            }
-
-            if (role && typeof role !== 'string') {
-              return undefined
-            }
-
+        const messages = data.map(message => {
+          if (typeof message === 'string') {
             return message
-          }).filter(msg => !!msg) // filter out bad messages?
-        ))
+          }
+
+          const content = message.content || ''
+          const role = message.role
+
+          if (typeof content !== 'string') {
+            return undefined
+          }
+
+          if (role && typeof role !== 'string') {
+            return undefined
+          }
+
+          return message
+        }).filter(msg => !!msg) // filter out bad messages?
+
+        span.setTag(key, JSON.stringify(messages))
       } catch {
         // log error
       }

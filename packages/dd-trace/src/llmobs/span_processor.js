@@ -24,7 +24,6 @@ const {
   ERROR_STACK
 } = require('../constants')
 
-const { getMlApp, getLLMObsParentId, getSessionId } = require('./utils')
 const Writer = require('./writers/span')
 
 const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
@@ -33,10 +32,10 @@ const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
-    this._writer = new Writer(
-      config.site,
-      config.apiKey
-    )
+    this._writer = new Writer({
+      site: config.site,
+      apiKey: config.apiKey
+    })
   }
 
   process (span, formattedSpan) {
@@ -58,25 +57,25 @@ class LLMObsSpanProcessor {
       meta.model_provider = this._pop(tags, MODEL_PROVIDER, 'custom').toLowerCase()
     }
     if (tags[METADATA]) {
-      meta.metadata = JSON.stringify(this._pop(tags, METADATA))
+      meta.metadata = JSON.parse(this._pop(tags, METADATA))
     }
     if (spanKind === 'llm' && tags[INPUT_MESSAGES]) {
-      meta.input.messages = JSON.stringify(this._pop(tags, INPUT_MESSAGES))
+      meta.input.messages = JSON.parse(this._pop(tags, INPUT_MESSAGES))
     }
     if (tags[INPUT_VALUE]) {
       meta.input.value = this._pop(tags, INPUT_VALUE)
     }
     if (spanKind === 'llm' && tags[OUTPUT_MESSAGES]) {
-      meta.output.messages = JSON.stringify(this._pop(tags, OUTPUT_MESSAGES))
+      meta.output.messages = JSON.parse(this._pop(tags, OUTPUT_MESSAGES))
     }
     if (spanKind === 'embedding' && tags[INPUT_DOCUMENTS]) {
-      meta.input.documents = JSON.stringify(this._pop(tags, INPUT_DOCUMENTS))
+      meta.input.documents = JSON.parse(this._pop(tags, INPUT_DOCUMENTS))
     }
     if (tags[OUTPUT_VALUE]) {
       meta.output.value = this._pop(tags, OUTPUT_VALUE)
     }
     if (spanKind === 'retrieval' && tags[OUTPUT_DOCUMENTS]) {
-      meta.output.documents = JSON.stringify(this._pop(tags, OUTPUT_DOCUMENTS))
+      meta.output.documents = JSON.parse(this._pop(tags, OUTPUT_DOCUMENTS))
     }
     if (formattedSpan.error) {
       meta[ERROR_MESSAGE] = tags[ERROR_MESSAGE]
@@ -91,15 +90,14 @@ class LLMObsSpanProcessor {
 
     // TODO: remove when not walking up the trace anymore
     // this will be stitched together on the backend
-    const mlApp = getMlApp(span, this._config.llmobs.mlApp)
-    delete tags[ML_APP]
-    const sessionId = getSessionId(span)
-    delete tags[SESSION_ID]
-    const parentId = getLLMObsParentId(span)
-    delete tags[PARENT_ID_KEY]
+
+    const mlApp = this._pop(tags, ML_APP)
+    const sessionId = this._pop(tags, SESSION_ID)
+    const parentId = this._pop(tags, PARENT_ID_KEY)
 
     return {
       trace_id: span.context().toTraceId(true),
+      // trace_id: formattedSpan.trace_id.toString(10),
       span_id: span.context().toSpanId(),
       parent_id: parentId,
       session_id: sessionId,
@@ -126,7 +124,7 @@ class LLMObsSpanProcessor {
     }
     const errType = span.meta[ERROR_TYPE]
     if (errType) tags.error_type = errType
-    const existingTags = this._pop(TAGS)
+    const existingTags = this._pop(TAGS) // JSON.parse?
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value}`)
   }

@@ -34,7 +34,7 @@ function getLLMObsParentId (span) {
   if (parentIdTag) return parentIdTag
 
   const nearest = nearestLLMObsAncestor(span)
-  if (nearest) return nearest.context()._spanId
+  if (nearest) return nearest.context().toSpanId()
 
   return span.context()._tags[PROPAGATED_PARENT_ID_KEY]
 }
@@ -60,7 +60,17 @@ function getSessionId (span) {
   const nearest = nearestLLMObsAncestor(span)
   if (nearest) sessionId = nearest.context()._tags[SESSION_ID]
 
-  return sessionId || span.context()._traceId.toString()
+  return sessionId || span.context().toTraceId(true)
+}
+
+function encodeUnicode (str = '') {
+  return str.split('').map(char => {
+    const code = char.charCodeAt(0)
+    if (code > 127) {
+      return `\\u${code.toString(16).padStart(4, '0')}`
+    }
+    return char
+  }).join('')
 }
 
 module.exports = {
@@ -69,5 +79,6 @@ module.exports = {
   getLLMObsParentId,
   isLLMSpan,
   getMlApp,
-  getSessionId
+  getSessionId,
+  encodeUnicode
 }

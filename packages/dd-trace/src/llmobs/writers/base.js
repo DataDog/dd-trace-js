@@ -5,6 +5,8 @@ const { URL, format } = require('url')
 
 const logger = require('../../log')
 
+const { encodeUnicode } = require('../utils')
+
 class BaseLLMObsWriter {
   constructor ({ site, apiKey, interval, timeout, endpoint, intake, eventType }) {
     this._site = site
@@ -50,7 +52,7 @@ class BaseLLMObsWriter {
 
     const events = this._buffer
     this._buffer = []
-    const payload = JSON.stringify(this.makePayload(events))
+    const payload = encodeUnicode(JSON.stringify(this.makePayload(events)))
 
     const options = {
       // path: this._endpoint,
