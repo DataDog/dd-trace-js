@@ -26,15 +26,14 @@ class ContextManager {
   with (context, fn, thisArg, ...args) {
     const span = trace.getSpan(context)
     const ddScope = tracer.scope()
-    if (span && span._ddSpan) {
-      return ddScope.activate(span._ddSpan, () => {
-        const cb = thisArg == null ? fn : fn.bind(thisArg)
-        return this._store.run(context, cb, ...args)
-      })
+    const run = () => {
+      const cb = thisArg == null ? fn : fn.bind(thisArg)
+      return this._store.run(context, cb, ...args)
     }
-
-    const cb = thisArg == null ? fn : fn.bind(thisArg)
-    return this._store.run(context, cb, ...args)
+    if (span && span._ddSpan) {
+      return ddScope.activate(span._ddSpan, run)
+    }
+    return run()
   }
 
   bind (context, target) {

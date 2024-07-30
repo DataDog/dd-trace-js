@@ -627,31 +627,32 @@ class TextMapPropagator {
     ts = ts?.traceparent || null
 
     if (ts) {
-      const tsList = ts.split(',').map(member => member.trim())
-      ts = tsList.join(',')
-      if (/[^\x20-\x7E]+/.test(ts)) {
-        log.debug(`received invalid tracestate header: ${ts}`)
-      } else {
-        meta.tracestate = ts
-        let tracestateValues
-        try {
-          tracestateValues = TextMapPropagator.getTracestateValues(tsList)
-        } catch (error) {
-          tracestateValues = null
-        }
+      // Use TraceState.fromString to parse the tracestate header
+      const traceState = TraceState.fromString(ts)
+      let ddTraceStateData = null
 
-        if (tracestateValues) {
-          const [samplingPriorityTs, otherPropagatedTags, origin, lpid] = tracestateValues
-          Object.assign(meta, otherPropagatedTags)
-          if (lpid) {
-            meta.LAST_DD_PARENT_ID_KEY = lpid
-          }
-          samplingPriority = TextMapPropagator.getSamplingPriority(traceFlag, samplingPriorityTs, origin)
-        } else {
-          log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
-        }
+      // Extract Datadog specific trace state data
+      traceState.forVendor('dd', (state) => {
+        ddTraceStateData = state
+        return state // You might need to adjust this part based on actual logic needed
+      })
+
+      if (ddTraceStateData) {
+        // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
+        // Extract values as needed, similar to the original logic
+        const samplingPriorityTs = ddTraceStateData.get('s')
+        const origin = ddTraceStateData.get('o')
+        // Convert Map to object for meta
+        const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
+
+        // Update meta and samplingPriority based on extracted values
+        Object.assign(meta, otherPropagatedTags)
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+      } else {
+        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
       }
     }
+
     const spanContext = new OtelSpanContext({
       traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
     })
@@ -661,7 +662,7 @@ class TextMapPropagator {
     return spanContext
   }
 
-  static getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
+  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
     const fromRumWithoutPriority = !tracestateSamplingPriority && origin === 'rum'
 
     let samplingPriority
@@ -676,46 +677,6 @@ class TextMapPropagator {
     }
 
     return samplingPriority
-  }
-
-  static getTracestateValues (tsList) {
-    let dd = null
-    tsList.forEach(listMem => {
-      if (listMem.startsWith('dd=')) {
-        const ddPart = listMem.slice(3)
-        dd = ddPart.split(';').reduce((acc, item) => {
-          const [key, value] = item.split(':', 1)
-          acc[key] = value
-          return acc
-        }, {})
-      }
-    })
-
-    if (dd) {
-      const samplingPriorityTs = dd.s
-      const samplingPriorityTsInt = samplingPriorityTs !== undefined ? parseInt(samplingPriorityTs, 10) : null
-      let origin = dd.o
-      if (origin) {
-        origin = TextMapPropagator.decodeTagVal(origin)
-      }
-
-      const lpid = dd.p || '0000000000000000'
-
-      const otherPropagatedTags = Object.keys(dd).reduce((acc, key) => {
-        if (key.startsWith('t.')) {
-          acc[`_dd.p.${key.slice(2)}`] = TextMapPropagator.decodeTagVal(dd[key])
-        }
-        return acc
-      }, {})
-
-      return [samplingPriorityTsInt, otherPropagatedTags, origin, lpid]
-    } else {
-      return [null, {}, null, null]
-    }
-  }
-
-  static decodeTagVal (tagVal) {
-    return tagVal.replace(/~/g, '=')
   }
 }
 

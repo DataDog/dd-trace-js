@@ -23,22 +23,21 @@ class Tracer {
     return this._tracerProvider.resource
   }
 
-  _createSpanContextFromParent (parentSpan) {
-    const parent = parentSpan.spanContext()._ddContext
+  _createSpanContextFromParent (parentSpanContext) {
     return new SpanContext({
-      traceId: parent._traceId,
+      traceId: parentSpanContext._traceId,
       spanId: id(),
-      parentId: parent._spanId,
-      sampling: parent._sampling,
-      baggageItems: Object.assign({}, parent._baggageItems),
-      trace: parent._trace,
-      tracestate: parent._tracestate
+      parentId: parentSpanContext._spanId,
+      sampling: parentSpanContext._sampling,
+      baggageItems: Object.assign({}, parentSpanContext._baggageItems),
+      trace: parentSpanContext._trace,
+      tracestate: parentSpanContext._tracestate
     })
   }
 
   // Extracted method to create span context for a new span
   _createSpanContextForNewSpan (context) {
-    const { traceId, spanId, traceFlags, traceState } = api.trace.getSpanContext(context)
+    const { traceId, spanId, traceFlags, traceState } = context
     return TextMapPropagator._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
   }
 
@@ -50,10 +49,10 @@ class Tracer {
     const parentSpan = api.trace.getSpan(context)
     const parentSpanContext = parentSpan && parentSpan.spanContext()
     let spanContext
-    if (parentSpanContext && parentSpanContext.traceId) {
+    if (parentSpanContext && api.trace.isSpanContextValid(parentSpanContext)) {
       spanContext = parentSpanContext._ddContext
-        ? this._createSpanContextFromParent(parentSpan)
-        : this._createSpanContextForNewSpan(context)
+        ? this._createSpanContextFromParent(parentSpanContext._ddContext)
+        : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()
     }
