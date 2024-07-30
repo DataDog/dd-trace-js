@@ -258,7 +258,7 @@ class CypressPlugin {
     })
   }
 
-  getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
+  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile }) {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
@@ -282,8 +282,11 @@ class CypressPlugin {
       ...testSpanMetadata
     } = getTestCommonTags(testName, testSuite, this.cypressConfig.version, TEST_FRAMEWORK_NAME)
 
-    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    if (testSourceFile) {
+      testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
+    }
 
+    const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
     if (codeOwners) {
       testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
     }
@@ -480,12 +483,16 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      const skippedTestSpan = this.getTestSpan(cypressTestName, spec.relative)
+      let testSourceFile
+
       if (spec.absolute && this.repositoryRoot) {
-        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
       } else {
-        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+        testSourceFile = spec.relative
       }
+
+      const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
@@ -538,11 +545,21 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
+        let testSourceFile
         if (spec.absolute && this.repositoryRoot) {
-          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
         } else {
-          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+          testSourceFile = spec.relative
         }
+        if (testSourceFile) {
+          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
+        }
+        const codeOwners = this.getTestCodeOwners({ testSuite: spec.relative, testSourceFile })
+
+        if (codeOwners) {
+          finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+        }
+
         finishedTest.testSpan.finish(finishedTest.finishTime)
       })
     })
@@ -591,7 +608,12 @@ class CypressPlugin {
         }
 
         if (!this.activeTestSpan) {
-          this.activeTestSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
+          this.activeTestSpan = this.getTestSpan({
+            testName,
+            testSuite,
+            isUnskippable,
+            isForcedToRun
+          })
         }
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
@@ -657,6 +679,13 @@ class CypressPlugin {
         return null
       }
     }
+  }
+
+  getTestCodeOwners ({ testSuite, testSourceFile }) {
+    if (testSourceFile) {
+      return getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    }
+    return getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
   }
 }
 
