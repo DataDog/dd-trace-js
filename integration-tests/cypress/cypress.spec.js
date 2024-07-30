@@ -30,7 +30,9 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_SUITE,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
@@ -1269,6 +1271,52 @@ moduleTypes.forEach(({
             done()
           }).catch(done)
         })
+      })
+    })
+
+    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      let command
+
+      if (type === 'commonJS') {
+        const commandSuffix = version === '6.7.0'
+          ? '--config-file cypress-config.json --spec "cypress/e2e/*.cy.js"'
+          : ''
+        command = `../../node_modules/.bin/cypress run ${commandSuffix}`
+      } else {
+        command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
+      }
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const test = events.find(event => event.type === 'test').content
+          // The test is in a subproject
+          assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        }, 25000)
+
+      childProcess = exec(
+        command,
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })
