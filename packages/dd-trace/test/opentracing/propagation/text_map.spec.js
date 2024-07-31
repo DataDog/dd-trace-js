@@ -46,7 +46,8 @@ describe('TextMapPropagator', () => {
     textMap = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '456',
-      'ot-baggage-foo': 'bar'
+      'ot-baggage-foo': 'bar',
+      baggage: JSON.stringify({ foo: 'bar' })
     }
     baggageItems = {}
   })
@@ -67,18 +68,18 @@ describe('TextMapPropagator', () => {
       expect(carrier).to.have.property('x-datadog-trace-id', '123')
       expect(carrier).to.have.property('x-datadog-parent-id', '456')
       expect(carrier).to.have.property('ot-baggage-foo', 'bar')
+      expect(carrier).to.have.property('baggage', JSON.stringify({ foo: 'bar' }))
     })
 
     it('should handle non-string values', () => {
       const carrier = {}
-      const spanContext = createContext({
-        baggageItems: {
-          number: 1.23,
-          bool: true,
-          array: ['foo', 'bar'],
-          object: {}
-        }
-      })
+      const baggageItems = {
+        number: 1.23,
+        bool: true,
+        array: ['foo', 'bar'],
+        object: {}
+      }
+      const spanContext = createContext({ baggageItems })
 
       propagator.inject(spanContext, carrier)
 
@@ -86,6 +87,77 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-bool']).to.equal('true')
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
+      expect(carrier).to.have.property('baggage', JSON.stringify(baggageItems))
+    })
+
+    it('should not inject baggage when baggage propagation is disabled', () => {
+      process.env.DD_TRACE_BAGGAGE_ENABLED = false
+      config = new Config()
+      propagator = new TextMapPropagator(config)
+
+      const carrier = {}
+      const baggageItems = {
+        number: 1.23,
+        bool: true,
+        array: ['foo', 'bar'],
+        object: {}
+      }
+      const spanContext = createContext({ baggageItems })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier['ot-baggage-number']).to.equal('1.23')
+      expect(carrier['ot-baggage-bool']).to.equal('true')
+      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
+      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
+      expect(carrier.baggage).to.be.undefined
+    })
+
+    it('should not inject baggage when baggage injection is disabled', () => {
+      process.env.DD_TRACE_BAGGAGE_INJECT_ENABLED = false
+      config = new Config()
+      propagator = new TextMapPropagator(config)
+
+      const carrier = {}
+      const baggageItems = {
+        number: 1.23,
+        bool: true,
+        array: ['foo', 'bar'],
+        object: {}
+      }
+      const spanContext = createContext({ baggageItems })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier['ot-baggage-number']).to.equal('1.23')
+      expect(carrier['ot-baggage-bool']).to.equal('true')
+      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
+      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
+      expect(carrier.baggage).to.be.undefined
+    })
+
+    it('should inject baggage when baggage injection is enabled but propagation is disabled', () => {
+      process.env.DD_TRACE_BAGGAGE_INJECT_ENABLED = true
+      process.env.DD_TRACE_BAGGAGE_ENABLED = false
+      config = new Config()
+      propagator = new TextMapPropagator(config)
+
+      const carrier = {}
+      const baggageItems = {
+        number: 1.23,
+        bool: true,
+        array: ['foo', 'bar'],
+        object: {}
+      }
+      const spanContext = createContext({ baggageItems })
+
+      propagator.inject(spanContext, carrier)
+
+      expect(carrier['ot-baggage-number']).to.equal('1.23')
+      expect(carrier['ot-baggage-bool']).to.equal('true')
+      expect(carrier['ot-baggage-array']).to.equal('foo,bar')
+      expect(carrier['ot-baggage-object']).to.equal('[object Object]')
+      expect(carrier).to.have.property('baggage', JSON.stringify(baggageItems))
     })
 
     it('should inject an existing sampling priority', () => {
@@ -353,6 +425,18 @@ describe('TextMapPropagator', () => {
       expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
       expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
       expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
+      expect(spanContext._baggageItems).to.deep.equal(JSON.parse(carrier.baggage))
+      expect(spanContext._isRemote).to.equal(true)
+    })
+
+    it('should extract a span context from the carrier', () => {
+      const carrier = textMap
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext.toTraceId()).to.equal(carrier['x-datadog-trace-id'])
+      expect(spanContext.toSpanId()).to.equal(carrier['x-datadog-parent-id'])
+      expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
+      expect(spanContext._baggageItems).to.deep.equal(JSON.parse(carrier.baggage))
       expect(spanContext._isRemote).to.equal(true)
     })
 

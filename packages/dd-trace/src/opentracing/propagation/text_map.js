@@ -544,11 +544,14 @@ class TextMapPropagator {
         spanContext._baggageItems[match[1]] = carrier[key]
       }
     })
+    // the code below shouldn't create any changes to spanContext._baggageItems until we deprecate ot-baggage-
     if (this._config.baggageExtract === false) return
     if (this._config.baggageExtract === true || this._config.baggagePropagation === true) {
-      const baggages = JSON.parse(carrier.baggage)
-      for (const [key, value] of Object.entries(baggages)) {
-        spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+      if (carrier.baggage) {
+        const baggages = JSON.parse(carrier.baggage)
+        for (const [key, value] of Object.entries(baggages)) {
+          spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+        }
       }
     }
   }
