@@ -23,7 +23,7 @@
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
 
 /packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/mocha.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/mocha/ @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
