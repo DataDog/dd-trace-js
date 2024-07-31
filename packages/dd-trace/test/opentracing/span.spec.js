@@ -138,7 +138,6 @@ describe('Span', () => {
       _traceId: '123',
       _spanId: '456',
       _baggageItems: { foo: 'bar' },
-      _otelBaggageItems: { foo: 'bar' },
       _trace: {
         started: ['span'],
         finished: [],
@@ -152,7 +151,6 @@ describe('Span', () => {
     expect(span.context()._traceId).to.deep.equal('123')
     expect(span.context()._parentId).to.deep.equal('456')
     expect(span.context()._baggageItems).to.deep.equal({ foo: 'bar' })
-    expect(span.context()._otelBaggageItems).to.deep.equal({ foo: 'bar' })
     expect(span.context()._trace).to.equal(parent._trace)
     expect(span.context()._isRemote).to.equal(false)
   })

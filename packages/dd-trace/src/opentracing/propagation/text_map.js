@@ -53,7 +53,6 @@ class TextMapPropagator {
 
   inject (spanContext, carrier) {
     this._injectBaggageItems(spanContext, carrier)
-    this._injectOtelBaggageItems(spanContext, carrier)
     this._injectDatadog(spanContext, carrier)
     this._injectB3MultipleHeaders(spanContext, carrier)
     this._injectB3SingleHeader(spanContext, carrier)
@@ -111,10 +110,10 @@ class TextMapPropagator {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
-  }
-
-  _injectOtelBaggageItems (spanContext, carrier) {
-    carrier.baggage = JSON.stringify(spanContext._otelBaggageItems)
+    if (this._config.baggageInject === false) return
+    if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
+      carrier.baggage = JSON.stringify(spanContext._baggageItems)
+    }
   }
 
   _injectTags (spanContext, carrier) {
@@ -316,7 +315,6 @@ class TextMapPropagator {
 
     this._extractOrigin(carrier, spanContext)
     this._extractBaggageItems(carrier, spanContext)
-    this._extractOtelBaggageItems(carrier, spanContext)
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
@@ -547,10 +545,13 @@ class TextMapPropagator {
         spanContext._baggageItems[match[1]] = carrier[key]
       }
     })
-  }
-
-  _extractOtelBaggageItems (carrier, spanContext) {
-    spanContext._otelBaggageItems = JSON.parse(carrier.baggage)
+    if (this._config.baggageExtract === false) return
+    if (this._config.baggageExtract === true || this._config.baggagePropagation === true) {
+      const baggages = JSON.parse(carrier.baggage)
+      for (const [key, value] of Object.entries(baggages)) {
+        spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+      }
+    }
   }
 
   _extractSamplingPriority (carrier, spanContext) {
