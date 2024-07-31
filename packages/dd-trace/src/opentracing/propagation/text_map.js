@@ -453,7 +453,6 @@ class TextMapPropagator {
       }
 
       this._extractBaggageItems(carrier, spanContext)
-      this._extractOtelBaggageItems(carrier, spanContext)
       return spanContext
     }
     return null
