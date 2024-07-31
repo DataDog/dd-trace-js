@@ -428,23 +428,29 @@ addHook({
   versions: ['>=6.0.0'],
   file: 'src/WorkerHandler.js'
 }, (workerHandlerPackage) => {
-  shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (message, [testSuiteAbsolutePath]) {
+  shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
     if (!testStartCh.hasSubscribers) {
       return exec.apply(this, arguments)
     }
+    if (!path?.length) {
+      return exec.apply(this, arguments)
+    }
+    const [testSuiteAbsolutePath] = path
+    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
 
-    this.worker.on('message', function (message) {
+    function onMessage (message) {
       if (Array.isArray(message)) {
         const [messageCode, payload] = message
         if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
-          testSessionAsyncResource.runInAsyncScope(() => {
+          testSuiteAsyncResource.runInAsyncScope(() => {
             workerReportTraceCh.publish(payload)
           })
         }
       }
-    })
+    }
 
-    const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
+    this.worker.on('message', onMessage)
+
     testSuiteAsyncResource.runInAsyncScope(() => {
       testSuiteStartCh.publish({
         testSuiteAbsolutePath
@@ -459,12 +465,14 @@ addHook({
           testSuiteAsyncResource.runInAsyncScope(() => {
             testSuiteFinishCh.publish(status)
           })
+          this.worker.off('message', onMessage)
         },
         (err) => {
           testSuiteAsyncResource.runInAsyncScope(() => {
             testSuiteErrorCh.publish(err)
             testSuiteFinishCh.publish('fail')
           })
+          this.worker.off('message', onMessage)
         }
       )
       return promise
@@ -473,6 +481,7 @@ addHook({
         testSuiteErrorCh.publish(err)
         testSuiteFinishCh.publish('fail')
       })
+      this.worker.off('message', onMessage)
       throw err
     }
   })
