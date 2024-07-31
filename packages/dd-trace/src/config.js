@@ -219,7 +219,7 @@ class Config {
     }
 
     console.log(`options.tags within Config constructor: ${options.tags}`)
-    console.log(`DD_TAGS within Config constructor: ${DD_TAGS}`)
+    console.log(`DD_TAGS within Config constructor: ${process.env.DD_TAGS}`)
 
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
