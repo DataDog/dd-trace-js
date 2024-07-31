@@ -566,6 +566,9 @@ class Config {
     this._setValue(defaults, 'url', undefined)
     this._setValue(defaults, 'version', pkg.version)
     this._setValue(defaults, 'instrumentation_config_id', undefined)
+    this._setValue(defaults, 'baggagePropagation', true)
+    this._setValue(defaults, 'baggageInject', true)
+    this._setValue(defaults, 'baggageExtract', true)
   }
 
   _applyEnvironment () {

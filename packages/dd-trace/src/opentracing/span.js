@@ -145,6 +145,27 @@ class DatadogSpan {
     return this._spanContext._baggageItems[key]
   }
 
+  setOtelBaggageItem (key, value) {
+    this._spanContext._otelBaggageItems[key] = value
+    return this
+  }
+
+  getOtelBaggageItem (key) {
+    return this._spanContext._otelBaggageItems[key]
+  }
+
+  getAllOtelBaggageItems () {
+    return this._spanContext._otelBaggageItems
+  }
+
+  delOtelBaggageItem (key) {
+    delete this._spanContext._otelBaggageItems[key]
+  }
+
+  delAllOtelBaggageItems () {
+    this._spanContext._otelBaggageItems = {}
+  }
+
   setTag (key, value) {
     this._addTags({ [key]: value })
     return this
@@ -282,6 +303,7 @@ class DatadogSpan {
         parentId: parent._spanId,
         sampling: parent._sampling,
         baggageItems: Object.assign({}, parent._baggageItems),
+        otelBaggageItems: Object.assign({}, parent._otelBaggageItems),
         trace: parent._trace,
         tracestate: parent._tracestate
       })

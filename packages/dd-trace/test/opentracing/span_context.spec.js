@@ -27,6 +27,7 @@ describe('SpanContext', () => {
       metrics: {},
       sampling: { priority: 2 },
       baggageItems: { foo: 'bar' },
+      otelBaggageItems: { foo: 'bar' },
       noop,
       trace: {
         started: ['span1', 'span2'],
@@ -48,7 +49,7 @@ describe('SpanContext', () => {
       _tags: {},
       _sampling: { priority: 2 },
       _spanSampling: undefined,
-      _baggageItems: { foo: 'bar' },
+      _otelBaggageItems: { foo: 'bar' },
       _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
@@ -77,6 +78,7 @@ describe('SpanContext', () => {
       _sampling: {},
       _spanSampling: undefined,
       _baggageItems: {},
+      _otelBaggageItems: {},
       _noop: null,
       _trace: {
         started: [],
