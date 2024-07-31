@@ -7,6 +7,7 @@ class FetchPlugin extends HttpClientPlugin {
   static get prefix () { return 'tracing:apm:fetch:request' }
 
   bindStart (ctx) {
+    console.log(" =========== starting fetch instrumenting ===============");
     const req = ctx.req
     const options = new URL(req.url)
     const headers = options.headers = Object.fromEntries(req.headers.entries())

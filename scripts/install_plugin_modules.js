@@ -35,6 +35,7 @@ fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
     file = file.replace('.js', '')
 
     if (!filter || filter.includes(file)) {
+      console.log("file name: ", file);
       names.push(file)
     }
   })

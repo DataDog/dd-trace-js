@@ -6,6 +6,7 @@ const { createWrapFetch } = require('./helpers/fetch')
 
 if (globalThis.fetch) {
   const ch = tracingChannel('apm:fetch:request')
+  console.log(" ======= in global fetch ==========");
   const wrapFetch = createWrapFetch(globalThis.Request, ch)
 
   globalThis.fetch = shimmer.wrap(fetch, wrapFetch(fetch))
