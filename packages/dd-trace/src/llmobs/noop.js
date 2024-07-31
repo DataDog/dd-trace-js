@@ -6,6 +6,10 @@ class NoopLLMObs {
     this._tracer = {}
   }
 
+  get enabled () {
+    return false
+  }
+
   enable (options) {}
 
   disable () {}

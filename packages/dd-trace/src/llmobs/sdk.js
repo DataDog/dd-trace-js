@@ -8,6 +8,7 @@ const {
   isLLMSpan
 } = require('./utils')
 const { storage } = require('../../../datadog-core')
+const { isTrue } = require('../util')
 
 const NoopLLMObs = require('./noop')
 const Span = require('../opentracing/span')
@@ -19,11 +20,12 @@ const logger = require('../log')
 const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
 
 class LLMObs extends NoopLLMObs {
-  constructor (tracer, config) {
+  constructor (tracer, llmobsModule, config) {
     super()
 
     this._config = config
     this._tracer = tracer
+    this._llmobsModule = llmobsModule
     this._tagger = new LLMObsSpanTagger(config)
 
     this._evaluationWriter = new LLMObsEvalMetricsWriter({
@@ -36,9 +38,42 @@ class LLMObs extends NoopLLMObs {
     return this._config.llmobs.enabled
   }
 
-  enable (options) {}
+  enable (options) {
+    if (this.enabled) {
+      logger.debug('LLMObs already enabled.')
+      return
+    }
 
-  disable () {}
+    const { mlApp, agentlessEnabled } = options
+
+    const { DD_LLMOBS_ENABLED } = process.env
+
+    const llmobsConfig = {
+      mlApp,
+      agentlessEnabled
+    }
+
+    const enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
+    if (!enabled) {
+      logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
+      return
+    }
+
+    this._config.llmobs.enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
+    this._config.configure({ ...this._config, llmobs: llmobsConfig })
+    this._llmobsModule.enable(this._config)
+  }
+
+  disable () {
+    if (!this.enabled) {
+      logger.debug('LLMObs already disabled.')
+    }
+
+    logger.debug('Disabling LLMObs')
+
+    this._config.llmobs.enabled = false
+    this._llmobsModule.disable()
+  }
 
   annotate (span, options) {
     if (!this.enabled) return
@@ -107,7 +142,7 @@ class LLMObs extends NoopLLMObs {
 
       return {
         traceId: span.context().toTraceId(true),
-        spanId: span.context()._spanId.toString(10)
+        spanId: span.context()._spanId.toString()
       }
     } catch {
       return undefined // invalid span kind

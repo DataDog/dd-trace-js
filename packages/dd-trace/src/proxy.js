@@ -187,7 +187,7 @@ class Tracer extends NoopProxy {
         const prioritySampler = appsecStandalone.configure(config)
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.appsec = new AppsecSdk(this._tracer, config)
-        this.llmobs = new LLMObsSDK(this._tracer, config)
+        this.llmobs = new LLMObsSDK(this._tracer, this._modules.llmobs, config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
