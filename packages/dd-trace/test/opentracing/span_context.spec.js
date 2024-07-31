@@ -48,6 +48,7 @@ describe('SpanContext', () => {
       _tags: {},
       _sampling: { priority: 2 },
       _spanSampling: undefined,
+      _baggageItems: { foo: 'bar' },
       _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
