@@ -218,6 +218,9 @@ class Config {
       iast: options.iast != null ? options.iast : options.experimental?.iast
     }
 
+    console.log(`options.tags within Config constructor: ${options.tags}`)
+    console.log(`DD_TAGS within Config constructor: ${DD_TAGS}`)
+
     // Configure the logger first so it can be used to warn about other configs
     const logConfig = log.getConfig()
     this.debug = logConfig.enabled
@@ -387,11 +390,17 @@ class Config {
     }
 
     this._applyDefaults()
+    console.log(`This.tags after this._applyDefaults() within Config constructor: ${this.tags}`)
     this._applyEnvironment()
+    console.log(`This.tags after this._applyEnvironment() within Config constructor: ${this.tags}`)
     this._applyOptions(options)
+    console.log(`This.tags after this._applyOptions(options) within Config constructor: ${this.tags}`)
     this._applyCalculated()
+    console.log(`This.tags after this._applyCalculated() within Config constructor: ${this.tags}`)
     this._applyRemote({})
+    console.log(`This.tags after this._applyRemote({}) within Config constructor: ${this.tags}`)
     this._merge()
+    console.log(`This.tags after this._merge() within Config constructor: ${this.tags}`)
 
     tagger.add(this.tags, {
       service: this.service,
@@ -399,6 +408,8 @@ class Config {
       version: this.version,
       'runtime-id': runtimeId
     })
+
+    console.log(`This.tags after tagger.add within Config constructor: ${this.tags}`)
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
