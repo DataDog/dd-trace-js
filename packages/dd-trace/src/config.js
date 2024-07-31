@@ -26,6 +26,12 @@ const telemetryCounters = {
   'otel.env.invalid': {}
 }
 
+function print_tags (tags) {
+  for (const tag in tags) {
+    console.log(`Tag key: ${tag}, Tag Value: ${tags[tag]}`)
+  }
+}
+
 function getCounter (event, ddVar, otelVar) {
   const counters = telemetryCounters[event]
   const tags = []
@@ -390,17 +396,33 @@ class Config {
     }
 
     this._applyDefaults()
-    console.log(`This.tags after this._applyDefaults() within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._applyDefaults() within Config constructor')
+    print_tags(this.tags)
+    print_tags(this._defaults.tags)
+
     this._applyEnvironment()
-    console.log(`This.tags after this._applyEnvironment() within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._applyEnvironment() within Config constructor')
+    print_tags(this.tags)
+    print_tags(this._env.tags)
+
     this._applyOptions(options)
-    console.log(`This.tags after this._applyOptions(options) within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._applyOptions(options) within Config constructor')
+    print_tags(this.tags)
+    print_tags(this._options.tags)
+
     this._applyCalculated()
-    console.log(`This.tags after this._applyCalculated() within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._applyCalculated() within Config constructor')
+    print_tags(this.tags)
+    print_tags(this._calculated.tags)
+
     this._applyRemote({})
-    console.log(`This.tags after this._applyRemote({}) within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._applyRemote({}) within Config constructor')
+    print_tags(this.tags)
+    print_tags(this._remote.tags)
+
     this._merge()
-    console.log(`This.tags after this._merge() within Config constructor: ${this.tags}`)
+    console.log('This.tags after this._merge() within Config constructor')
+    print_tags(this.tags)
 
     tagger.add(this.tags, {
       service: this.service,
@@ -409,7 +431,8 @@ class Config {
       'runtime-id': runtimeId
     })
 
-    console.log(`This.tags after tagger.add within Config constructor: ${this.tags}`)
+    console.log('This.tags after tagger.add within Config constructor:')
+    print_tags(this.tags)
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
@@ -676,9 +699,13 @@ class Config {
     setHiddenProperty(this, '_envUnprocessed', {})
 
     tagger.add(tags, OTEL_RESOURCE_ATTRIBUTES, true)
+    console.log('tags before applyEnvironemnt()')
+    print_tags(tags)
     tagger.add(tags, DD_TAGS)
     tagger.add(tags, DD_TRACE_TAGS)
     tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+    console.log('tags after applyEnvironemnt()')
+    print_tags(tags)
 
     this._setValue(env, 'appsec.blockedTemplateHtml', maybeFile(DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML))
     this._envUnprocessed['appsec.blockedTemplateHtml'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
@@ -1166,6 +1193,8 @@ class Config {
     }
 
     this.sampler.sampleRate = this.sampleRate
+    console.log('Config changes after this._merge')
+    console.log(changes)
     updateConfig(changes, this)
   }
 }

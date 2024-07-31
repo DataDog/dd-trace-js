@@ -55,10 +55,18 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
+    function print_tags (tags) {
+      for (const tag in tags) {
+        console.log(`Tag key: ${tag}, Tag Value: ${tags[tag]}`)
+      }
+    }
+
     try {
       console.log(process.env)
       console.log(`options before Config constructor within proxy: ${options}`)
       const config = new Config(options) // TODO: support dynamic code config
+      console.log('tags after initializing config')
+      print_tags(config.tags)
       console.log(config)
       console.log(this)
       telemetry.start(config, this._pluginManager)
