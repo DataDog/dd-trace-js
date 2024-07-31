@@ -732,13 +732,7 @@ declare namespace tracer {
      */
     propagationStyle?: string[] | PropagationStyle
 
-    llmobs?: {
-
-      mlApp: string,
-
-      agentlessEnabled?: boolean,
-
-    }
+    llmobs?: llmobs.LLMObsEnableOptions
   }
 
   /**
@@ -2364,7 +2358,7 @@ declare namespace tracer {
       spanId: string,
     }
   
-    interface LLMObsSpanOptions {
+    interface LLMObsSpanOptions extends SpanOptions{
       /**
        * The name of the traced operation. As a default, the LLM Observability span kind will be used.
        */
@@ -2391,6 +2385,21 @@ declare namespace tracer {
        * If not provided, the default value will be set to mlApp provided during initalization, or `DD_LLMOBS_ML_APP`.
        */
       mlApp?: string,
+    }
+
+    /**
+     * Options for enabling LLM Observability tracing.
+     */
+    interface LLMObsEnableOptions {
+      /**
+       * The name of your ML application.
+       */
+      mlApp?: string,
+
+      /**
+       * Set to `true` to disbale sending data that requires a Datadog Agent.
+       */
+      agentlessEnabled?: boolean,
     }
 
     /** @hidden */
