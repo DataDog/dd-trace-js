@@ -349,14 +349,14 @@ describe('Span', () => {
   describe('getAllBaggageItems', () => {
     it('should get all baggage items', () => {
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
-      expect(span.getAllBaggageItems()).to.deep.equal({})
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({}))
 
       span._spanContext._baggageItems.foo = 'bar'
       span._spanContext._baggageItems.raccoon = 'cute'
-      expect(span.getAllBaggageItems()).to.deep.equal({
+      expect(span.getAllBaggageItems()).to.equal(JSON.stringify({
         foo: 'bar',
         raccoon: 'cute'
-      })
+      }))
     })
   })
 

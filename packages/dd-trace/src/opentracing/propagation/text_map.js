@@ -112,7 +112,12 @@ class TextMapPropagator {
     })
     if (this._config.baggageInject === false) return
     if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
-      carrier.baggage = JSON.stringify(spanContext._baggageItems)
+      const baggages = {}
+      // encoding to be added
+      Object.keys(spanContext._baggageItems).forEach(key => {
+        baggages[String(key).trim()] = String(spanContext._baggageItems[key]).trim()
+      })
+      carrier.baggage = Object.entries(baggages).map(([key, value]) => `${key}=${value}`).join(',')
     }
   }
 
@@ -548,8 +553,9 @@ class TextMapPropagator {
     if (this._config.baggageExtract === false) return
     if (this._config.baggageExtract === true || this._config.baggagePropagation === true) {
       if (carrier.baggage) {
-        const baggages = JSON.parse(carrier.baggage)
-        for (const [key, value] of Object.entries(baggages)) {
+        const baggages = carrier.baggage.split(',')
+        for (const keyValue of baggages) {
+          const [key, value] = keyValue.split('=')
           spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
         }
       }
