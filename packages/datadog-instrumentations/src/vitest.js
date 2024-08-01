@@ -169,7 +169,7 @@ addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/runners.js'
-}, (vitestPackage, frameworkVersion) => {
+}, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
   // test start (only tests that are not marked as skip or todo)
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
@@ -195,8 +195,7 @@ addHook({
       testStartCh.publish({
         testName: getTestName(task),
         testSuiteAbsolutePath: task.file.filepath,
-        isRetry: numAttempt > 0,
-        frameworkVersion
+        isRetry: numAttempt > 0
       })
     })
     return onBeforeTryTask.apply(this, arguments)
