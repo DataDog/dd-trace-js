@@ -72,7 +72,7 @@ function wrapQuery (query) {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = (reusingQuery && pgQuery.callback) || typeof arguments[arguments.length - 1]
+        const callback = (reusingQuery && pgQuery.callback) || arguments[arguments.length - 1]
 
         finish(error)
 
