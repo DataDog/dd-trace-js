@@ -14,13 +14,21 @@ class ContextManager {
 
   active () {
     const activeSpan = tracer.scope().active()
+    const store = this._store.getStore()
+    const context = (activeSpan && activeSpan.context()) || store || ROOT_CONTEXT
 
-    const context = (activeSpan && activeSpan.context()) || this._store.getStore() || ROOT_CONTEXT
-    if (context instanceof DataDogSpanContext) {
-      const newSpanContext = new SpanContext(context)
-      return trace.setSpanContext(ROOT_CONTEXT, newSpanContext)
+    if (!(context instanceof DataDogSpanContext)) {
+      return context
     }
-    return context
+
+    if (!context._otelSpanContext) {
+      const newSpanContext = new SpanContext(context)
+      context._otelSpanContext = newSpanContext
+    }
+    if (store && trace.getSpanContext(store) === context._otelSpanContext) {
+      return store
+    }
+    return trace.setSpanContext(store || ROOT_CONTEXT, context._otelSpanContext)
   }
 
   with (context, fn, thisArg, ...args) {

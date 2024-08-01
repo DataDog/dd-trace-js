@@ -1,5 +1,4 @@
 const tracer = require('dd-trace').init()
-
 const { TracerProvider } = tracer
 const provider = new TracerProvider()
 provider.register()
@@ -28,8 +27,8 @@ registerInstrumentations({
 })
 
 const express = require('express')
-const app = express()
 const http = require('http')
+const app = express()
 const PORT = process.env.SERVER_PORT
 
 app.get('/second-endpoint', (req, res) => {

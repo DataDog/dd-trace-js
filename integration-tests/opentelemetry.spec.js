@@ -398,11 +398,11 @@ describe('opentelemetry', () => {
 
       // Should have expected span names and ordering
       assert.isTrue(eachEqual(trace, [
-        'GET',
+        'GET /second-endpoint',
         'middleware - query',
         'middleware - expressInit',
         'request handler - /second-endpoint',
-        'GET',
+        'GET /first-endpoint',
         'middleware - query',
         'middleware - expressInit',
         'request handler - /first-endpoint',
