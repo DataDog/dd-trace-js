@@ -17,7 +17,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 // tested with 1.6.0
-const versions = ['latest']
+const versions = ['1.6.0', 'latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {

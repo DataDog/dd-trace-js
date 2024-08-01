@@ -32,6 +32,10 @@ function isReporterPackageNew (vitestPackage) {
   return vitestPackage.e?.name === 'BaseSequencer'
 }
 
+function isReporterPackageNewest (vitestPackage) {
+  return vitestPackage.h?.name === 'BaseSequencer'
+}
+
 function getChannelPromise (channelToPublishTo) {
   return new Promise(resolve => {
     sessionAsyncResource.runInAsyncScope(() => {
@@ -146,11 +150,26 @@ function getSortWrapper (sort) {
   }
 }
 
+function getCreateCliWrapper (vitestPackage, frameworkVersion) {
+  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
+    if (!testSessionStartCh.hasSubscribers) {
+      return oldCreateCli.apply(this, arguments)
+    }
+    sessionAsyncResource.runInAsyncScope(() => {
+      const processArgv = process.argv.slice(2).join(' ')
+      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
+    })
+    return oldCreateCli.apply(this, arguments)
+  })
+
+  return vitestPackage
+}
+
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
   file: 'dist/runners.js'
-}, (vitestPackage) => {
+}, (vitestPackage, frameworkVersion) => {
   const { VitestTestRunner } = vitestPackage
   // test start (only tests that are not marked as skip or todo)
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
@@ -176,7 +195,8 @@ addHook({
       testStartCh.publish({
         testName: getTestName(task),
         testSuiteAbsolutePath: task.file.filepath,
-        isRetry: numAttempt > 0
+        isRetry: numAttempt > 0,
+        frameworkVersion
       })
     })
     return onBeforeTryTask.apply(this, arguments)
@@ -206,12 +226,25 @@ addHook({
   return vitestPackage
 })
 
+// There are multiple index* files across different versions of vitest,
+// so we check for the existence of BaseSequencer to determine if we are in the right file
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.0'],
+  versions: ['>=1.6.0 <2.0.0'],
   filePattern: 'dist/vendor/index.*'
 }, (vitestPackage) => {
-  // there are multiple index* files so we have to check the exported values
+  if (isReporterPackage(vitestPackage)) {
+    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
+  }
+
+  return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.0 <2.0.5'],
+  filePattern: 'dist/vendor/index.*'
+}, (vitestPackage) => {
   if (isReporterPackageNew(vitestPackage)) {
     shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
   }
@@ -221,12 +254,11 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
-  filePattern: 'dist/vendor/index.*'
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
-  // there are multiple index* files so we have to check the exported values
-  if (isReporterPackage(vitestPackage)) {
-    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
+  if (isReporterPackageNewest(vitestPackage)) {
+    shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
   }
 
   return vitestPackage
@@ -235,22 +267,15 @@ addHook({
 // Can't specify file because compiled vitest includes hashes in their files
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.0.5'],
   filePattern: 'dist/vendor/cac.*'
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
-    }
-    sessionAsyncResource.runInAsyncScope(() => {
-      const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    })
-    return oldCreateCli.apply(this, arguments)
-  })
+}, getCreateCliWrapper)
 
-  return vitestPackage
-})
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/cac.*'
+}, getCreateCliWrapper)
 
 // test suite start and finish
 // only relevant for workers
@@ -258,7 +283,7 @@ addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
-}, vitestPackage => {
+}, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
@@ -267,7 +292,7 @@ addHook({
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish(testPath[0])
+      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
