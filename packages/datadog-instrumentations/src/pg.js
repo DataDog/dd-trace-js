@@ -53,13 +53,14 @@ function wrapQuery (query) {
     }
 
     return asyncResource.runInAsyncScope(() => {
+      const abortController = new AbortController()
+
       startCh.publish({
         params: this.connectionParameters,
         query: pgQuery,
-        processId
+        processId,
+        abortController
       })
-
-      arguments[0] = pgQuery
 
       const finish = asyncResource.bind(function (error) {
         if (error) {
@@ -67,6 +68,28 @@ function wrapQuery (query) {
         }
         finishCh.publish()
       })
+
+      if (abortController.signal.aborted) {
+        const error = abortController.signal.reason || new Error('Aborted')
+        const reusingQuery = typeof pgQuery.submit === 'function'
+        const callback = (reusingQuery && pgQuery.callback) || typeof arguments[arguments.length - 1]
+
+        finish(error)
+
+        if (typeof callback === 'function') {
+          callback(error)
+
+          if (reusingQuery) {
+            return pgQuery
+          }
+
+          return
+        } else {
+          return Promise.reject(error)
+        }
+      }
+
+      arguments[0] = pgQuery
 
       const retval = query.apply(this, arguments)
       const queryQueue = this.queryQueue || this._queryQueue
