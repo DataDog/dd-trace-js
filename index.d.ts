@@ -2167,12 +2167,15 @@ declare namespace tracer {
   export namespace llmobs {
     export interface LLMObs {
 
+      /**
+       * Whether or not LLM Observability is enabled.
+       */
       enabled: boolean,
 
       /**
        * Enable LLM Observability tracing.
        */
-      enable(options: any): void,
+      enable(options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
@@ -2335,12 +2338,12 @@ declare namespace tracer {
       /**
        * Object of JSON seraliazable key-value metrics pairs, such as `{prompt,completion,total}_tokens`
        */
-      metrics: { [key: string]: any },
+      metrics?: { [key: string]: any },
 
       /**
        * Object of JSON serializable key-value tag pairs to set or update on the LLM Observability span regarding the span's context.
        */
-      tags: { [key: string]: any }
+      tags?: { [key: string]: any }
     }
 
     /**
