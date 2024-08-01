@@ -4,6 +4,7 @@ const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
+const { getProxyModule } = require('./ritm-proxy')
 
 const origRequire = Module.prototype.require
 
@@ -84,7 +85,7 @@ function Hook (modules, options, onrequire) {
       }
 
       if (cacheController.useProxy) {
-        return getProxy(cache[filename].exports, this)
+        return getProxyModule(cache[filename].exports, this)
       } else {
         return cache[filename].exports
       }
@@ -194,40 +195,4 @@ Hook.prototype.unhook = function () {
   if (Object.keys(moduleHooks).length === 0) {
     Hook.reset()
   }
-}
-
-function bindOrProxy (target, proxy, mod) {
-  if (typeof target === 'object') {
-    return getProxy(target, mod)
-  } else if (typeof target === 'function') {
-    return target.bind(proxy)
-  }
-
-  return target
-}
-
-const proxyCache = new WeakMap()
-
-function getProxy (target, mod) {
-  if (!target) return target
-
-  let targetMap = proxyCache.get(target)
-  if (targetMap && targetMap.has(mod)) {
-    return targetMap.get(mod)
-  }
-
-  const proxy = new Proxy(target, {
-    get (target, key) {
-      return key === '__getCallerModule' ? () => mod : bindOrProxy(target[key], proxy, mod)
-    }
-  })
-
-  if (!targetMap) {
-    targetMap = new WeakMap()
-    proxyCache.set(target, targetMap)
-  }
-
-  targetMap.set(mod, proxy)
-
-  return proxy
 }
