@@ -5,7 +5,8 @@ const { SPAN_KIND } = require('./constants')
 const {
   validKind,
   getName,
-  isLLMSpan
+  isLLMSpan,
+  getFunctionArguments
 } = require('./utils')
 const { storage } = require('../../../datadog-core')
 const { isTrue } = require('../util')
@@ -237,7 +238,6 @@ class LLMObs extends NoopLLMObs {
       get (target, key) {
         if (key === 'finish') {
           return function () {
-            // some LLMObs processing
             storage.enterWith(oldStore) // restore context
             return span.finish.apply(this, arguments)
           }
@@ -266,14 +266,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) => {
-        // do some llmobs processing
         this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
         return fn(span, cb)
       })
     }
 
     return this._tracer.trace(name, spanOptions, span => {
-      // do some llmobs processing
       this._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
       return fn(span)
     })
@@ -298,13 +296,14 @@ class LLMObs extends NoopLLMObs {
     const llmobsThis = this
 
     function wrapped () {
-      const args = arguments
       const span = llmobsThis._tracer.scope().active()
 
       llmobsThis._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
+      llmobsThis.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
 
-      const result = fn.apply(this, args)
-      // do some after function llmobs processing
+      const result = fn.apply(this, arguments)
+      llmobsThis.annotate(span, { outputData: result })
+
       return result
     }
 
