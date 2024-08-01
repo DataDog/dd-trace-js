@@ -80,11 +80,12 @@ function encodeUnicode (str) {
 
 function getFunctionArguments (fn, args) {
   const fnString = fn.toString()
-  const argNames = Array.from(
+  const matches = Array.from(
     fnString
       .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
-      .matchAll(/(\w+\s*)(=?[^,]*,?)/g))
-    .map(match => match[1].trim()) || []
+      .matchAll(/(\w+\s*)(=?[^,]*,?)/g)
+  ) || []
+  const argNames = matches.map(match => match[1].trim())
 
   return argNames.reduce((obj, name, idx) => {
     obj[name] = args[idx]
