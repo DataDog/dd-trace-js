@@ -102,7 +102,8 @@ class VitestPlugin extends CiPlugin {
       ).finish()
     })
 
-    this.addSub('ci:vitest:test-suite:start', (testSuiteAbsolutePath) => {
+    this.addSub('ci:vitest:test-suite:start', ({ testSuiteAbsolutePath, frameworkVersion }) => {
+      this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': process.env.DD_CIVISIBILITY_TEST_SESSION_ID,
         'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
