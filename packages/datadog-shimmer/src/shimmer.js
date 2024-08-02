@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../dd-trace/src/log')
+
 // Use a weak map to avoid polluting the wrapped function/method.
 const unwrappers = new WeakMap()
 
@@ -18,7 +20,7 @@ function copyProperties (original, wrapped) {
   }
 }
 
-function wrapFn (original, delegate) {
+const wrapFn = function (original, delegate) {
   assertFunction(delegate)
   assertNotClass(original) // TODO: support constructors of native classes
 
@@ -35,12 +37,99 @@ function wrapFn (original, delegate) {
   return shim
 }
 
+const CALLED = Symbol('__dd_called')
+const RETVAL = Symbol('__dd_retVal')
+const IS_PROMISE = Symbol('__dd_isPromise')
+
+function wasCalled (fn) {
+  return fn[CALLED]
+}
+
+function wasReturned (fn) {
+  return Object.hasOwnProperty(fn, RETVAL) && !fn[RETVAL] === IS_PROMISE
+}
+
+function isPromise (obj) {
+  return obj && typeof obj === 'object' && typeof obj.then === 'function'
+}
+
+const safeWrap = !!process.env.DD_INEJCTION_ENABLED
 function wrapMethod (target, name, wrapper) {
   assertMethod(target, name)
   assertFunction(wrapper)
 
-  const original = target[name]
-  const wrapped = wrapper(original)
+  const origOriginal = target[name]
+  let original = origOriginal
+  if (safeWrap) {
+    // Wrap the original method to track if it was called and if it returned.
+    // We'll need that to determine if an error was thrown by the original method, or by us.
+    // Caveats:
+    //   * If the original method is called recursively, this tracking doesn't work.
+    //   * If the original method is called in a later iteration of the event loop,
+    //     and we throw _then_, then it won't be caught by this.
+    //   * While async errors are dealt with here, errors in callbacks are not. Yet. TODO
+    original = function (...args) {
+      origOriginal[CALLED] = true
+      const retVal = origOriginal.apply(this, args)
+      if (isPromise(retVal)) {
+        retVal.then(val => {
+          origOriginal[RETVAL] = val
+        })
+        origOriginal[RETVAL] = IS_PROMISE
+      } else {
+        origOriginal[RETVAL] = retVal
+      }
+      return retVal
+    }
+  }
+  const origWrapped = wrapper(original)
+  let wrapped = origWrapped
+  if (safeWrap) {
+    wrapped = function (...args) {
+      try {
+        const retVal = origWrapped.apply(this, args)
+        if (isPromise(retVal)) {
+          // It's a promise. We need to wrap it to catch any errors that happen in the promise.
+          return retVal.catch(e => {
+            if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
+              // it was them. throw.
+              throw e
+            } else {
+              // it was us. swallow/log it.
+              log.error(e)
+              if (!wasCalled(origOriginal)) {
+                // original never ran. call it unwrapped.
+                return origOriginal.apply(this, args)
+              } else if (wasReturned(origOriginal)) {
+                // original ran and returned something. return it.
+                return origOriginal[RETVAL]
+              }
+            }
+          })
+        } else {
+          return retVal
+        }
+      } catch (e) {
+        if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
+          // it was them. throw.
+          throw e
+        } else {
+          // it was us. swallow/log it.
+          log.error(e)
+          if (!wasCalled(origOriginal)) {
+            // original never ran. call it unwrapped.
+            return origOriginal.apply(this, args)
+          } else if (wasReturned(origOriginal)) {
+            // original ran and returned something. return it.
+            return origOriginal[RETVAL]
+          }
+        }
+      } finally {
+        delete origOriginal[CALLED]
+        delete origOriginal[RETVAL]
+      }
+    }
+  }
   const descriptor = Object.getOwnPropertyDescriptor(target, name)
 
   const attributes = {
