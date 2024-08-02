@@ -10,6 +10,8 @@ const proxyquire = require('proxyquire')
 const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/path-traversal-analyzer')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
+const { enable: enableFsPlugin, disable: disableFsPlugin } = require('../../../../src/appsec/fs-plugin')
+
 const { prepareTestServerForIast } = require('../utils')
 const fs = require('fs')
 
@@ -161,6 +163,10 @@ describe('path-traversal-analyzer', () => {
 prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
   function runFsMethodTest (description, vulnerableIndex, fn, ...args) {
     describe(description, () => {
+      before(() => enableFsPlugin())
+
+      after(() => disableFsPlugin())
+
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {
           const store = storage.getStore()

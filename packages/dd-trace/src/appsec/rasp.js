@@ -3,11 +3,12 @@
 const { storage } = require('../../../datadog-core')
 const web = require('./../plugins/util/web')
 const addresses = require('./addresses')
-const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart } = require('./channels')
+const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart, fsOperationStart } = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const log = require('../log')
+const { enable: fsPluginEnable, disable: fsPluginDisable } = require('./fs-plugin')
 
 const RULE_TYPES = {
   SSRF: 'ssrf'
@@ -101,7 +102,11 @@ function handleUncaughtExceptionMonitor (err) {
 
 function enable (_config) {
   config = _config
+
+  fsPluginEnable()
+
   httpClientRequestStart.subscribe(analyzeSsrf)
+  fsOperationStart.subscribe(analyzeLfi)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
@@ -113,6 +118,9 @@ function enable (_config) {
 
 function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
+  if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
+
+  fsPluginDisable()
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
@@ -132,6 +140,24 @@ function analyzeSsrf (ctx) {
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController)
+}
+
+function analyzeLfi (ctx) {
+  const store = storage.getStore()
+  if (!store) return
+
+  const { req, fs } = store
+  const path = ctx?.path
+
+  if (!req || !path || !fs) return
+
+  // NOTE 1: only analyze root fs.operations and not excluded (if response is not rendering)
+  // NOTE 2: only call waf if it is an absolute path or it contains ../ in the path
+  if (fs.root && !fs.opExcluded) {
+    console.log('ANALYZE LFI', ctx.operation, ctx)
+
+    // TODO should we use a lfi analysis by req?
+  }
 }
 
 function getGenerateStackTraceAction (actions) {
