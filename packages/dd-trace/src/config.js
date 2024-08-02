@@ -799,7 +799,7 @@ class Config {
     this._setValue(opts, 'appsec.blockedTemplateJson', maybeFile(options.appsec.blockedTemplateJson))
     this._optsUnprocessed['appsec.blockedTemplateJson'] = options.appsec.blockedTemplateJson
     this._setBoolean(opts, 'appsec.enabled', options.appsec.enabled)
-    let eventTracking = options.appsec.eventTracking && options.appsec.eventTracking.mode
+    let eventTracking = options.appsec.eventTracking?.mode
     if (eventTracking) {
       eventTracking = eventTracking.toLowerCase()
       this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
