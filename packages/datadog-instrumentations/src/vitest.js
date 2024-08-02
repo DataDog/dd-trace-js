@@ -121,6 +121,21 @@ function getSortWrapper (sort) {
       this.ctx.config.retry = NUM_FAILED_TEST_RETRIES
     }
 
+    let testCodeCoverageLinesTotal
+
+    if (this.ctx.coverageProvider) {
+      shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
+        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
+
+        try {
+          testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
+        } catch (e) {
+          // ignore errors
+        }
+        return totalCodeCoverage
+      })
+    }
+
     shimmer.wrap(this.ctx, 'exit', exit => async function () {
       let onFinish
 
@@ -136,8 +151,9 @@ function getSortWrapper (sort) {
       sessionAsyncResource.runInAsyncScope(() => {
         testSessionFinishCh.publish({
           status: getSessionStatus(this.state),
-          onFinish,
-          error
+          testCodeCoverageLinesTotal,
+          error,
+          onFinish
         })
       })
 
