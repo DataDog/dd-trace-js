@@ -791,8 +791,8 @@ class Config {
 
     tagger.add(tags, options.tags)
 
-    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec?.apiSecurity?.enabled)
-    this._setUnit(opts, 'appsec.apiSecurity.requestSampling', options.appsec?.apiSecurity?.requestSampling)
+    this._setBoolean(opts, 'appsec.apiSecurity.enabled', options.appsec.apiSecurity?.enabled)
+    this._setUnit(opts, 'appsec.apiSecurity.requestSampling', options.appsec.apiSecurity?.requestSampling)
     this._setValue(opts, 'appsec.blockedTemplateGraphql', maybeFile(options.appsec.blockedTemplateGraphql))
     this._setValue(opts, 'appsec.blockedTemplateHtml', maybeFile(options.appsec.blockedTemplateHtml))
     this._optsUnprocessed['appsec.blockedTemplateHtml'] = options.appsec.blockedTemplateHtml
