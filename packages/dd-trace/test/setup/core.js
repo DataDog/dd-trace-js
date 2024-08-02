@@ -42,3 +42,6 @@ if (global.describe && typeof global.describe.skip !== 'function') {
 }
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+
+process.env.DD_INJECTION_ENABLED = 'true'
+process.env.DD_INJECT_FORCE = 'true'
