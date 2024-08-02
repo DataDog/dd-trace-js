@@ -11,10 +11,10 @@ if (process.env.PG_TEST_NATIVE === 'true') {
 
 describe('pg instrumentation', () => {
   withVersions('pg', 'pg', version => {
-    const queryStartChannel = dc.channel('apm:pg:query:start')
+    const queryClientStartChannel = dc.channel('apm:pg:query:start')
+    const queryPoolStartChannel = dc.channel('datadog:pg:pool:query:start')
 
     let pg
-    let client
     let Query
 
     function abortQuery ({ abortController }) {
@@ -30,28 +30,30 @@ describe('pg instrumentation', () => {
       return agent.load(['pg'])
     })
 
-    Object.keys(clients).forEach(implementation => {
-      describe(implementation, () => {
-        beforeEach(done => {
-          pg = require(`../../../versions/pg@${version}`).get()
-          const Client = clients[implementation](pg)
-          Query = Client.Query
-          client = new Client({
-            host: '127.0.0.1',
-            user: 'postgres',
-            password: 'postgres',
-            database: 'postgres',
-            application_name: 'test'
+    describe('pg.Client', () => {
+      Object.keys(clients).forEach(implementation => {
+        describe(implementation, () => {
+          let client
+
+          beforeEach(done => {
+            pg = require(`../../../versions/pg@${version}`).get()
+            const Client = clients[implementation](pg)
+            Query = Client.Query
+            client = new Client({
+              host: '127.0.0.1',
+              user: 'postgres',
+              password: 'postgres',
+              database: 'postgres',
+              application_name: 'test'
+            })
+
+            client.connect(err => done(err))
           })
 
-          client.connect(err => done(err))
-        })
-
-        describe('pg.Client', () => {
           describe('abortController', () => {
             afterEach(() => {
-              if (queryStartChannel.hasSubscribers) {
-                queryStartChannel.unsubscribe(abortQuery)
+              if (queryClientStartChannel.hasSubscribers) {
+                queryClientStartChannel.unsubscribe(abortQuery)
               }
             })
 
@@ -64,7 +66,7 @@ describe('pg instrumentation', () => {
               })
 
               it('Should abort query', (done) => {
-                queryStartChannel.subscribe(abortQuery)
+                queryClientStartChannel.subscribe(abortQuery)
 
                 client.query('SELECT 1', (err) => {
                   client.end()
@@ -84,7 +86,7 @@ describe('pg instrumentation', () => {
               })
 
               it('Should abort query', async () => {
-                queryStartChannel.subscribe(abortQuery)
+                queryClientStartChannel.subscribe(abortQuery)
 
                 try {
                   await client.query('SELECT 1')
@@ -111,7 +113,7 @@ describe('pg instrumentation', () => {
                 })
 
                 it('Should abort query', (done) => {
-                  queryStartChannel.subscribe(abortQuery)
+                  queryClientStartChannel.subscribe(abortQuery)
                   const query = new Query('SELECT 1')
 
                   client.query(query)
@@ -141,7 +143,7 @@ describe('pg instrumentation', () => {
                 })
 
                 it('Should abort query', (done) => {
-                  queryStartChannel.subscribe(abortQuery)
+                  queryClientStartChannel.subscribe(abortQuery)
                   const query = new Query('SELECT 1')
                   query.callback = err => {
                     if (err && err.message === 'Test') {
@@ -165,7 +167,7 @@ describe('pg instrumentation', () => {
                 })
 
                 it('Should abort query', (done) => {
-                  queryStartChannel.subscribe(abortQuery)
+                  queryClientStartChannel.subscribe(abortQuery)
                   const query = new Query('SELECT 1')
 
                   client.query(query, err => {
@@ -179,6 +181,69 @@ describe('pg instrumentation', () => {
                 })
               })
             })
+          })
+        })
+      })
+    })
+
+    describe('pg.Pool', () => {
+      let pool
+      beforeEach(() => {
+        const { Pool } = require(`../../../versions/pg@${version}`).get()
+
+        pool = new Pool({
+          host: '127.0.0.1',
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres',
+          application_name: 'test'
+        })
+      })
+
+      describe('abortController', () => {
+        afterEach(() => {
+          if (queryPoolStartChannel.hasSubscribers) {
+            queryPoolStartChannel.unsubscribe(abortQuery)
+          }
+        })
+
+        describe('using callback', () => {
+          it('Should not fail if it is not aborted', (done) => {
+            pool.query('SELECT 1', (err) => {
+              done(err)
+            })
+          })
+
+          it('Should abort query', (done) => {
+            queryPoolStartChannel.subscribe(abortQuery)
+
+            pool.query('SELECT 1', (err) => {
+              if (err && err.message === 'Test') {
+                return done()
+              }
+
+              done(new Error('Query was not aborted'))
+            })
+          })
+        })
+
+        describe('using promise', () => {
+          it('Should not fail if it is not aborted', async () => {
+            await pool.query('SELECT 1')
+          })
+
+          it('Should abort query', async () => {
+            queryPoolStartChannel.subscribe(abortQuery)
+
+            try {
+              await pool.query('SELECT 1')
+
+              throw new Error('Query was not aborted')
+            } catch (err) {
+              if (!err || err.message !== 'Test') {
+                throw err
+              }
+            }
           })
         })
       })
