@@ -1,6 +1,7 @@
 'use strict'
 
-const { trace, context } = require('@opentelemetry/api')
+const { trace, context, propagation } = require('@opentelemetry/api')
+const { W3CTraceContextPropagator } = require('@opentelemetry/core')
 
 const tracer = require('../../')
 
@@ -51,6 +52,13 @@ class TracerProvider {
     context.setGlobalContextManager(this._contextManager)
     if (!trace.setGlobalTracerProvider(this)) {
       trace.getTracerProvider().setDelegate(this)
+    }
+    // The default propagator used is the W3C Trace Context propagator, users should be able to pass in others
+    // as needed
+    if (config.propagator) {
+      propagation.setGlobalPropagator(config.propagator)
+    } else {
+      propagation.setGlobalPropagator(new W3CTraceContextPropagator())
     }
   }
 
