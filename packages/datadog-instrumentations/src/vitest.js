@@ -123,7 +123,7 @@ function getSortWrapper (sort) {
 
     let testCodeCoverageLinesTotal
 
-    if (this.ctx.coverageProvider) {
+    if (this.ctx.coverageProvider?.generateCoverage) {
       shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
         const totalCodeCoverage = await generateCoverage.apply(this, arguments)
 
