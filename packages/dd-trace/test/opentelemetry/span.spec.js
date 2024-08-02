@@ -46,7 +46,6 @@ describe('OTel Span', () => {
   it('should expose parent span id', () => {
     tracer.trace('outer', (outer) => {
       const span = makeSpan('name', {})
-
       expect(span.parentSpanId).to.equal(outer.context()._spanId.toString(16))
     })
   })
