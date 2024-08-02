@@ -44,6 +44,7 @@ let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
+let nyc
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -234,16 +235,21 @@ function getExecutionConfiguration (runner, onFinishRequest) {
   })
 }
 
-let nyc
-
-// if this is called, nyc is being used
+// If this is called, nyc is being used to run the tests
 addHook({
   name: 'nyc',
   versions: ['>=17']
 }, (nycPackage) => {
-  // TODO: could we detect if we're in mocha? To avoid this if we are not
   shimmer.wrap(nycPackage.prototype, 'wrap', wrap => async function () {
-    nyc = this
+    // only relevant if `all` is passed
+    try {
+      if (JSON.parse(process.env.NYC_CONFIG).all) {
+        nyc = this
+      }
+    } catch (e) {
+      // ignore errors
+    }
+
     return wrap.apply(this, arguments)
   })
   return nycPackage
@@ -278,9 +284,9 @@ addHook({
 
     getExecutionConfiguration(runner, () => {
       try {
-        if (nyc && nyc.config?.all) {
-          // If nyc is being used, by this point the untested files are already calculated
-          // We can use the async nature of this operation to get the untested coverage
+        if (nyc?.config?.all) {
+          // If nyc is being used, by this point the untested files are already calculated.
+          // We can use the async nature of this operation to get the untested coverage.
           nyc.getCoverageMapFromAllCoverageFiles()
             .then((untestedCoverageMap) => {
               untestedCoverage = untestedCoverageMap
