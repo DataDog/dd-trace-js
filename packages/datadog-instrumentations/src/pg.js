@@ -72,16 +72,28 @@ function wrapQuery (query) {
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = (reusingQuery && pgQuery.callback) || arguments[arguments.length - 1]
+        const callback = arguments[arguments.length - 1]
 
         finish(error)
 
+        if (reusingQuery) {
+          if (typeof callback === 'function') {
+            pgQuery.callback = pgQuery.callback || callback
+          }
+
+          if (pgQuery.callback) {
+            pgQuery.callback(error)
+          } else {
+            process.nextTick(() => {
+              pgQuery.emit('error', error)
+            })
+          }
+
+          return pgQuery
+        }
+
         if (typeof callback === 'function') {
           callback(error)
-
-          if (reusingQuery) {
-            return pgQuery
-          }
 
           return
         } else {
