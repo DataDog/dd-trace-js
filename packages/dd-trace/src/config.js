@@ -404,7 +404,8 @@ class Config {
     this._setValue(defaults, 'appsec.blockedTemplateHtml', undefined)
     this._setValue(defaults, 'appsec.blockedTemplateJson', undefined)
     this._setValue(defaults, 'appsec.enabled', undefined)
-    this._setValue(defaults, 'appsec.eventTracking', { enabled: true, mode: 'safe' })
+    this._setValue(defaults, 'appsec.eventTracking.enabled', true)
+    this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
     this._setValue(defaults, 'appsec.rasp.enabled', true)
@@ -629,10 +630,9 @@ class Config {
     this._envUnprocessed['appsec.blockedTemplateJson'] = DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
     this._setBoolean(env, 'appsec.enabled', DD_APPSEC_ENABLED)
     if (DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING) {
-      this._setValue(env, 'appsec.eventTracking', {
-        enabled: ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()),
-        mode: DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()
-      })
+      this._setValue(env, 'appsec.eventTracking.enabled',
+        ['extended', 'safe'].includes(DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase()))
+      this._setValue(env, 'appsec.eventTracking.mode', DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING.toLowerCase())
     }
     this._setString(env, 'appsec.obfuscatorKeyRegex', DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP)
     this._setString(env, 'appsec.obfuscatorValueRegex', DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP)
@@ -802,10 +802,8 @@ class Config {
     let eventTracking = options.appsec.eventTracking && options.appsec.eventTracking.mode
     if (eventTracking) {
       eventTracking = eventTracking.toLowerCase()
-      this._setValue(opts, 'appsec.eventTracking', {
-        enabled: ['extended', 'safe'].includes(eventTracking),
-        mode: eventTracking
-      })
+      this._setValue(opts, 'appsec.eventTracking.enabled', ['extended', 'safe'].includes(eventTracking))
+      this._setValue(opts, 'appsec.eventTracking.mode', eventTracking)
     }
     this._setString(opts, 'appsec.obfuscatorKeyRegex', options.appsec.obfuscatorKeyRegex)
     this._setString(opts, 'appsec.obfuscatorValueRegex', options.appsec.obfuscatorValueRegex)
