@@ -47,7 +47,7 @@ describe('TextMapPropagator', () => {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '456',
       'ot-baggage-foo': 'bar',
-      baggage: 'foo:bar'
+      baggage: 'foo=bar'
     }
     baggageItems = {}
   })
@@ -87,7 +87,7 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-bool']).to.equal('true')
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
-      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo,bar,object=[object Object]')
+      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo%2Cbar,object=[object%20Object]')
     })
 
     it('should not inject baggage when baggage propagation is disabled', () => {
@@ -157,7 +157,7 @@ describe('TextMapPropagator', () => {
       expect(carrier['ot-baggage-bool']).to.equal('true')
       expect(carrier['ot-baggage-array']).to.equal('foo,bar')
       expect(carrier['ot-baggage-object']).to.equal('[object Object]')
-      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo,bar,object=[object Object]')
+      expect(carrier.baggage).to.be.equal('number=1.23,bool=true,array=foo%2Cbar,object=[object%20Object]')
     })
 
     it('should inject an existing sampling priority', () => {
@@ -427,6 +427,39 @@ describe('TextMapPropagator', () => {
       expect(spanContext._baggageItems.foo).to.equal(carrier['ot-baggage-foo'])
       expect(spanContext._baggageItems).to.deep.equal({ foo: 'bar' })
       expect(spanContext._isRemote).to.equal(true)
+    })
+
+    it('should extract otel baggage items with special characters', () => {
+      process.env.DD_TRACE_BAGGAGE_ENABLED = true
+      config = new Config()
+      propagator = new TextMapPropagator(config)
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'number=1.23,bool=true,array=foo%2Cbar,object=[object%20Object]'
+      }
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._baggageItems).to.deep.equal({
+        number: '1.23',
+        bool: 'true',
+        array: ['foo', 'bar'].toString(),
+        object: String({})
+      })
+    })
+
+    it('should not extract otel baggage items when extraction is disabled', () => {
+      process.env.DD_TRACE_BAGGAGE_EXTRACT_ENABLED = false
+      config = new Config()
+      propagator = new TextMapPropagator(config)
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'number=1.23,bool=true,array=foo%2Cbar,object=[object%20Object]'
+      }
+      const spanContext = propagator.extract(carrier)
+
+      expect(spanContext._baggageItems).to.deep.equal({})
     })
 
     it('should convert signed IDs to unsigned', () => {

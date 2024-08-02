@@ -106,18 +106,25 @@ class TextMapPropagator {
     }
   }
 
+  _encodeOtelBaggageValue (value) {
+    let encoded = ''
+    encoded = value.replaceAll(' ', '%20')
+    encoded = encoded.replaceAll('"', '%22')
+    encoded = encoded.replaceAll(',', '%2C')
+    encoded = encoded.replaceAll(';', '%3B')
+    encoded = encoded.replaceAll('\\', '%5C')
+    return encoded
+  }
+
   _injectBaggageItems (spanContext, carrier) {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
     if (this._config.baggageInject === false) return
     if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
-      const baggages = {}
-      // encoding to be added
-      Object.keys(spanContext._baggageItems).forEach(key => {
-        baggages[String(key).trim()] = String(spanContext._baggageItems[key]).trim()
-      })
-      carrier.baggage = Object.entries(baggages).map(([key, value]) => `${key}=${value}`).join(',')
+      // encoding for keys to be added
+      carrier.baggage = Object.entries(spanContext._baggageItems)
+        .map(([key, value]) => `${String(key)}=${this._encodeOtelBaggageValue(String(value))}`).join(',')
     }
   }
 
@@ -541,6 +548,16 @@ class TextMapPropagator {
     }
   }
 
+  _decodeOtelBaggageValue (value) {
+    let decoded = ''
+    decoded = value.replaceAll('%20', ' ')
+    decoded = decoded.replaceAll('%22', '"')
+    decoded = decoded.replaceAll('%2C', ',')
+    decoded = decoded.replaceAll('%3B', ';')
+    decoded = decoded.replaceAll('%5C', '\\')
+    return decoded
+  }
+
   _extractBaggageItems (carrier, spanContext) {
     Object.keys(carrier).forEach(key => {
       const match = key.match(baggageExpr)
@@ -555,8 +572,10 @@ class TextMapPropagator {
       if (carrier.baggage) {
         const baggages = carrier.baggage.split(',')
         for (const keyValue of baggages) {
-          const [key, value] = keyValue.split('=')
-          spanContext._baggageItems[key] = spanContext._baggageItems[key] || value
+          let [key, value] = keyValue.split('=')
+          key = key.trim()
+          value = value.trim()
+          spanContext._baggageItems[key] = spanContext._baggageItems[key] || this._decodeOtelBaggageValue(value)
         }
       }
     }
