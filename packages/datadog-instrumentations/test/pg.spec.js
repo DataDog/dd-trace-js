@@ -188,6 +188,7 @@ describe('pg instrumentation', () => {
 
     describe('pg.Pool', () => {
       let pool
+
       beforeEach(() => {
         const { Pool } = require(`../../../versions/pg@${version}`).get()
 
