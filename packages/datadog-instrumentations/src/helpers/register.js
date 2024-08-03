@@ -16,6 +16,7 @@ const {
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const latests = require('./latests.json')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = new Set(
@@ -95,7 +96,7 @@ for (const packageName of names) {
           namesAndSuccesses[`${name}@${version}`] = false
         }
 
-        if (matchVersion(version, versions)) {
+        if (matchVersion(version, versions) && matchesLatestSupported(name, version)) {
           // Check if the hook already has a set moduleExport
           if (hook[HOOK_SYMBOL].has(moduleExports)) {
             namesAndSuccesses[`${name}@${version}`] = true
@@ -137,6 +138,17 @@ for (const packageName of names) {
 
     return moduleExports
   })
+}
+
+function matchesLatestSupported (name, version) {
+  if (latests.pinned.includes(name)) {
+    // These ones are deliberately pinned to a specific version. That
+    // means we can skip this check, since it will already have been checked
+    // to be lower than latest.
+    return true
+  }
+  const latest = latests.latests[name]
+  return matchVersion(version, ['<=' + latest])
 }
 
 function matchVersion (version, ranges) {
