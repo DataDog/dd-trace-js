@@ -1,19 +1,29 @@
 'use strict'
 
-const { id, zeroId } = require('./id')
+const id = require('./id')
+const { exporter } = require('./exporter')
 
-class TraceContext {
+class SpanContext {
   constructor (childOf) {
     if (childOf) {
-      this.traceId = childOf.traceId
-      this.spanId = id()
+      this.spanId = id.single()
       this.parentId = childOf.spanId
+      this.segment = childOf.segment
     } else {
-      this.traceId = id()
-      this.spanId = this.traceId
-      this.parentId = zeroId
+      this.spanId = id.single()
+      this.parentId = id.zero
+      this.segment = new Segment(id.double())
     }
   }
 }
 
-module.exports = { TraceContext }
+class Segment {
+  constructor (traceId) {
+    this.traceId = traceId
+    this.segmentId = id.single()
+
+    exporter.segmentStart(this)
+  }
+}
+
+module.exports = { SpanContext }

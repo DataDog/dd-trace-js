@@ -1,4 +1,4 @@
 'use strict'
 
-require('./patch')
-require('./trace')
+require('./contrib/koa/patch')
+require('./contrib/koa/plugin')

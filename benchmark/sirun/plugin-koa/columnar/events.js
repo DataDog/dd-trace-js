@@ -1,0 +1,13 @@
+'use strict'
+
+module.exports = {
+  WEB_REQUEST_START: 1,
+  ERROR: 2,
+  WEB_REQUEST_FINISH: 3,
+  SPAN_START: 4,
+  SPAN_FINISH: 5,
+  ADD_TAG: 6,
+  ADD_METRIC: 7,
+  MYSQL_QUERY_START: 8,
+  SEGMENT_START: 9
+}
