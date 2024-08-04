@@ -13,11 +13,11 @@ class Chunk {
     const length = Buffer.byteLength(value)
     const offset = this.length
 
-    if (length < 0x20) { // fixstr
+    if (length <= 0x1F) { // fixstr
       this.reserve(length + 1)
       this.length += 1
       this.buffer[offset] = length | 0xa0
-    } else if (length < 0x100000000) { // str 32
+    } else if (length <= 0xFFFFFFFF) { // str 32
       this.reserve(length + 5)
       this.length += 5
       this.buffer[offset] = 0xdb
