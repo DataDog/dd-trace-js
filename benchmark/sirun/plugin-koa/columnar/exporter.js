@@ -2,14 +2,9 @@
 
 const { Client } = require('./client')
 const { Strings } = require('./strings')
-const { ExceptionTable } = require('./tables/error')
-const { SpanFinishTable } = require('./tables/span')
-const { MysqlQueryStartTable } = require('./tables/mysql')
-const { WebRequestFinishTable, WebRequestStartTable } = require('./tables/web')
+const tables = require('./tables')
 const { Encoder } = require('./encoder')
 const {
-  ADD_METRIC,
-  ADD_TAG,
   ERROR,
   SEGMENT_START,
   SPAN_FINISH,
@@ -17,8 +12,6 @@ const {
   WEB_REQUEST_FINISH,
   WEB_REQUEST_START
 } = require('./events')
-const { AddMetricTable, AddTagTable } = require('./tables/tag')
-const { SegmentStartTable } = require('./tables/segment')
 
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -35,16 +28,7 @@ class Exporter {
     this._encoder = new Encoder()
     this._strings = strings
     this._types = new Uint16Array(MAX_EVENTS)
-    this._tables = {
-      [ADD_METRIC]: new AddMetricTable(strings),
-      [ADD_TAG]: new AddTagTable(strings),
-      [ERROR]: new ExceptionTable(strings),
-      [MYSQL_QUERY_START]: new MysqlQueryStartTable(strings),
-      [SEGMENT_START]: new SegmentStartTable(strings),
-      [SPAN_FINISH]: new SpanFinishTable(strings),
-      [WEB_REQUEST_FINISH]: new WebRequestFinishTable(strings),
-      [WEB_REQUEST_START]: new WebRequestStartTable(strings)
-    }
+    this._tables = {}
 
     this.reset()
 
@@ -109,9 +93,13 @@ class Exporter {
     }
   }
 
-  _beforeEncode () {
+  _beforeEncode (eventType) {
     if (!this._timer) {
       this._timer = setTimeout(() => this.flush(), flushInterval).unref()
+    }
+
+    if (!this._tables[eventType]) {
+      this._tables[eventType] = new tables[eventType](this._strings)
     }
   }
 
