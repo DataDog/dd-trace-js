@@ -24,7 +24,7 @@ module.exports = {
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
-  get 'azure-functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
   get child_process () { return require('../../../datadog-plugin-child_process/src') },
   get connect () { return require('../../../datadog-plugin-connect/src') },
   get couchbase () { return require('../../../datadog-plugin-couchbase/src') },
