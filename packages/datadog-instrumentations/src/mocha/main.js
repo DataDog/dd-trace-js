@@ -265,9 +265,11 @@ addHook({
 
     getExecutionConfiguration(runner, () => {
       if (getCodeCoverageCh.hasSubscribers) {
-        getCodeCoverageCh.publish((receivedCodeCoverage) => {
-          untestedCoverage = receivedCodeCoverage
-          global.run()
+        getCodeCoverageCh.publish({
+          onDone: (receivedCodeCoverage) => {
+            untestedCoverage = receivedCodeCoverage
+            global.run()
+          }
         })
       } else {
         global.run()

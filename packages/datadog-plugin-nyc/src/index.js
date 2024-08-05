@@ -14,7 +14,7 @@ class NycPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:nyc:get-coverage', (onDone) => {
+    this.addSub('ci:nyc:get-coverage', ({ onDone }) => {
       if (this.nyc?.getCoverageMapFromAllCoverageFiles) {
         this.nyc.getCoverageMapFromAllCoverageFiles()
           .then((untestedCoverageMap) => {
