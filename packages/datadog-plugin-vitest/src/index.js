@@ -7,7 +7,8 @@ const {
   getTestSuitePath,
   getTestSuiteCommonTags,
   TEST_SOURCE_FILE,
-  TEST_IS_RETRY
+  TEST_IS_RETRY,
+  TEST_CODE_COVERAGE_LINES_PCT
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 
@@ -150,12 +151,16 @@ class VitestPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:vitest:session:finish', ({ status, onFinish, error }) => {
+    this.addSub('ci:vitest:session:finish', ({ status, onFinish, error, testCodeCoverageLinesTotal }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
+      }
+      if (testCodeCoverageLinesTotal) {
+        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
+        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_LINES_PCT, testCodeCoverageLinesTotal)
       }
       this.testModuleSpan.finish()
       this.testSessionSpan.finish()
