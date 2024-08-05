@@ -10,24 +10,35 @@ class Chunk {
   }
 
   write (value) {
-    const length = Buffer.byteLength(value)
+    const maxLength = value.length * 4
     const offset = this.length
 
-    if (length <= 0x1F) { // fixstr
-      this.reserve(length + 1)
-      this.length += 1
-      this.buffer[offset] = length | 0xa0
-    } else if (length <= 0xFFFFFFFF) { // str 32
-      this.reserve(length + 5)
+    if (maxLength <= 0xFF) { // str 8
+      this.reserve(maxLength + 2)
+      this.length += 2
+      this.buffer[offset] = 0xd9
+      const written = this.buffer.utf8Write(value, this.length)
+      this.buffer[offset + 1] = written
+      this.length += written
+    } else if (maxLength <= 0xFFFF) { // str 16
+      this.reserve(maxLength + 3)
+      this.length += 3
+      this.buffer[offset] = 0xda
+      const written = this.buffer.utf8Write(value, this.length)
+      this.buffer[offset + 1] = written >> 8
+      this.buffer[offset + 2] = written
+      this.length += written
+    } else if (maxLength <= 0xFFFFFFFF) { // str 32
+      this.reserve(maxLength + 5)
       this.length += 5
       this.buffer[offset] = 0xdb
-      this.buffer[offset + 1] = length >> 24
-      this.buffer[offset + 2] = length >> 16
-      this.buffer[offset + 3] = length >> 8
-      this.buffer[offset + 4] = length
+      const written = this.buffer.utf8Write(value, this.length)
+      this.buffer[offset + 1] = written >> 24
+      this.buffer[offset + 2] = written >> 16
+      this.buffer[offset + 3] = written >> 8
+      this.buffer[offset + 4] = written
+      this.length += written
     }
-
-    this.length += this.buffer.utf8Write(value, this.length, length)
 
     return this.length - offset
   }
