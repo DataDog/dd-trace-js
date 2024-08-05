@@ -106,6 +106,29 @@ class TextMapPropagator {
     }
   }
 
+  _encodeOtelBaggageKey (key) {
+    let encoded = ''
+    encoded = key.replaceAll(' ', '%20')
+    encoded = encoded.replaceAll('"', '%22')
+    encoded = encoded.replaceAll(',', '%2C')
+    encoded = encoded.replaceAll(';', '%3B')
+    encoded = encoded.replaceAll('\\', '%5C')
+    encoded = encoded.replaceAll('(', '%28')
+    encoded = encoded.replaceAll(')', '%29')
+    encoded = encoded.replaceAll('/', '%2F')
+    encoded = encoded.replaceAll(':', '%3A')
+    encoded = encoded.replaceAll('<', '%3C')
+    encoded = encoded.replaceAll('=', '%3D')
+    encoded = encoded.replaceAll('>', '%3E')
+    encoded = encoded.replaceAll('?', '%3F')
+    encoded = encoded.replaceAll('@', '%40')
+    encoded = encoded.replaceAll('[', '%5B')
+    encoded = encoded.replaceAll(']', '%5D')
+    encoded = encoded.replaceAll('{', '%7B')
+    encoded = encoded.replaceAll('}', '%7D')
+    return encoded
+  }
+
   _encodeOtelBaggageValue (value) {
     let encoded = ''
     encoded = value.replaceAll(' ', '%20')
@@ -122,9 +145,9 @@ class TextMapPropagator {
     })
     if (this._config.baggageInject === false) return
     if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
-      // encoding for keys to be added
       carrier.baggage = Object.entries(spanContext._baggageItems)
-        .map(([key, value]) => `${String(key)}=${this._encodeOtelBaggageValue(String(value))}`).join(',')
+        .map(([key, value]) =>
+          `${this._encodeOtelBaggageKey(String(key))}=${this._encodeOtelBaggageValue(String(value))}`).join(',')
     }
   }
 
