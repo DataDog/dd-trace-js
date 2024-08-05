@@ -44,7 +44,6 @@ let knownTests = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
-let nyc
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -67,6 +66,8 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
+
+const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
@@ -235,26 +236,6 @@ function getExecutionConfiguration (runner, onFinishRequest) {
   })
 }
 
-// If this is called, nyc is being used to run the tests
-addHook({
-  name: 'nyc',
-  versions: ['>=17']
-}, (nycPackage) => {
-  shimmer.wrap(nycPackage.prototype, 'wrap', wrap => async function () {
-    // only relevant if `all` is passed
-    try {
-      if (JSON.parse(process.env.NYC_CONFIG).all) {
-        nyc = this
-      }
-    } catch (e) {
-      // ignore errors
-    }
-
-    return wrap.apply(this, arguments)
-  })
-  return nycPackage
-})
-
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
@@ -283,25 +264,12 @@ addHook({
     })
 
     getExecutionConfiguration(runner, () => {
-      try {
-        if (nyc?.config?.all) {
-          // If nyc is being used, by this point the untested files are already calculated.
-          // We can use the async nature of this operation to get the untested coverage.
-          nyc.getCoverageMapFromAllCoverageFiles()
-            .then((untestedCoverageMap) => {
-              untestedCoverage = untestedCoverageMap
-              nyc = null
-              global.run()
-            }).catch(() => {
-              nyc = null
-              global.run()
-            })
-        } else {
-          nyc = null
+      if (getCodeCoverageCh.hasSubscribers) {
+        getCodeCoverageCh.publish((receivedCodeCoverage) => {
+          untestedCoverage = receivedCodeCoverage
           global.run()
-        }
-      } catch (e) {
-        nyc = null
+        })
+      } else {
         global.run()
       }
     })
