@@ -290,14 +290,18 @@ addHook({
           nyc.getCoverageMapFromAllCoverageFiles()
             .then((untestedCoverageMap) => {
               untestedCoverage = untestedCoverageMap
+              nyc = null
               global.run()
             }).catch(() => {
+              nyc = null
               global.run()
             })
         } else {
+          nyc = null
           global.run()
         }
       } catch (e) {
+        nyc = null
         global.run()
       }
     })
