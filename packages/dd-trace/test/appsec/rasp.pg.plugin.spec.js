@@ -29,7 +29,7 @@ describe('RASP', () => {
           database: 'postgres',
           application_name: 'test'
         }
-        let server, axios, app, pg, client
+        let server, axios, app, pg
 
         before(() => {
           return agent.load(['express', 'http', 'pg'], { client: false })
@@ -68,6 +68,8 @@ describe('RASP', () => {
         })
 
         describe('Test using pg.Client', () => {
+          let client
+
           beforeEach((done) => {
             client = new pg.Client(connectionData)
             client.connect(err => done(err))
@@ -94,6 +96,7 @@ describe('RASP', () => {
               const span = getWebSpan(traces)
               assert.notProperty(span.meta, '_dd.appsec.json')
               assert.notProperty(span.meta_struct || {}, '_dd.stack')
+              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
             })
           })
 
@@ -128,6 +131,91 @@ describe('RASP', () => {
             app = async (req, res) => {
               try {
                 await client.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
+              } catch (err) {
+                if (err?.name === 'DatadogRaspAbortError') {
+                  res.statusCode = 500
+                }
+                res.end()
+              }
+            }
+
+            try {
+              await axios.get('/?param=\' OR 1 = 1 --')
+            } catch (e) {
+              return await agent.use((traces) => {
+                const span = getWebSpan(traces)
+                assert.property(span.meta, '_dd.appsec.json')
+                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
+                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+                assert.property(span.meta_struct, '_dd.stack')
+              })
+            }
+
+            assert.fail('Request should be blocked')
+          })
+        })
+
+        describe('Test using pg.Pool', () => {
+          let pool
+
+          beforeEach(() => {
+            pool = new pg.Pool(connectionData)
+          })
+
+          it('Should not detect threat', async () => {
+            app = (req, res) => {
+              pool.query('SELECT ' + req.query.param, (err) => {
+                if (err) {
+                  res.statusCode = 500
+                }
+
+                res.end()
+              })
+            }
+
+            axios.get('/?param=1')
+
+            await agent.use((traces) => {
+              const span = getWebSpan(traces)
+              assert.notProperty(span.meta, '_dd.appsec.json')
+              assert.notProperty(span.meta_struct || {}, '_dd.stack')
+              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+            })
+          })
+
+          it('Should block query with callback', async () => {
+            app = (req, res) => {
+              pool.query(`SELECT * FROM users WHERE id='${req.query.param}'`, (err) => {
+                if (err?.name === 'DatadogRaspAbortError') {
+                  res.statusCode = 500
+                }
+                res.end()
+              })
+            }
+
+            try {
+              await axios.get('/?param=\' OR 1 = 1 --')
+            } catch (e) {
+              return await agent.use((traces) => {
+                const span = getWebSpan(traces)
+                assert.property(span.meta, '_dd.appsec.json')
+                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
+                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
+                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
+                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
+                assert.property(span.meta_struct, '_dd.stack')
+              })
+            }
+
+            assert.fail('Request should be blocked')
+          })
+
+          it('Should block query with promise', async () => {
+            app = async (req, res) => {
+              try {
+                await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
               } catch (err) {
                 if (err?.name === 'DatadogRaspAbortError') {
                   res.statusCode = 500
