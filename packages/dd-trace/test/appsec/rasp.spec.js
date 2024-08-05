@@ -1,7 +1,7 @@
 'use strict'
 
 const proxyquire = require('proxyquire')
-const { httpClientRequestStart } = require('../../src/appsec/channels')
+const { httpClientRequestStart, pgQueryStart } = require('../../src/appsec/channels')
 const addresses = require('../../src/appsec/addresses')
 const { handleUncaughtExceptionMonitor } = require('../../src/appsec/rasp')
 
@@ -164,6 +164,79 @@ describe('RASP', () => {
       datadogCore.storage.getStore.returns({})
 
       httpClientRequestStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+  })
+
+  describe('analyzePgSqlInjection', () => {
+    it('should analyze sql injection', () => {
+      const ctx = {
+        query: {
+          text: 'SELECT 1'
+        }
+      }
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
+
+      pgQueryStart.publish(ctx)
+
+      const persistent = {
+        [addresses.DB_STATEMENT]: 'SELECT 1',
+        [addresses.DB_SYSTEM]: 'postgresql'
+      }
+      sinon.assert.calledOnceWithExactly(waf.run, { persistent }, req, 'sql_injection')
+    })
+
+    it('should not analyze sql injection if rasp is disabled', () => {
+      rasp.disable()
+
+      const ctx = {
+        query: {
+          text: 'SELECT 1'
+        }
+      }
+      const req = {}
+      datadogCore.storage.getStore.returns({ req })
+
+      pgQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no store', () => {
+      const ctx = {
+        query: {
+          text: 'SELECT 1'
+        }
+      }
+      datadogCore.storage.getStore.returns(undefined)
+
+      pgQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no req', () => {
+      const ctx = {
+        query: {
+          text: 'SELECT 1'
+        }
+      }
+      datadogCore.storage.getStore.returns({})
+
+      pgQueryStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
+    it('should not analyze sql injection if no url', () => {
+      const ctx = {
+        query: {}
+      }
+      datadogCore.storage.getStore.returns({})
+
+      pgQueryStart.publish(ctx)
 
       sinon.assert.notCalled(waf.run)
     })

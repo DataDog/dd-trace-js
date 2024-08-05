@@ -3,14 +3,19 @@
 const { storage } = require('../../../datadog-core')
 const web = require('./../plugins/util/web')
 const addresses = require('./addresses')
-const { httpClientRequestStart, setUncaughtExceptionCaptureCallbackStart } = require('./channels')
+const {
+  httpClientRequestStart,
+  setUncaughtExceptionCaptureCallbackStart,
+  pgQueryStart
+} = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const log = require('../log')
 
 const RULE_TYPES = {
-  SSRF: 'ssrf'
+  SSRF: 'ssrf',
+  SQL_INJECTION: 'sql_injection'
 }
 
 class DatadogRaspAbortError extends Error {
@@ -102,6 +107,7 @@ function handleUncaughtExceptionMonitor (err) {
 function enable (_config) {
   config = _config
   httpClientRequestStart.subscribe(analyzeSsrf)
+  pgQueryStart.subscribe(analyzePgSqlInjection)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
@@ -113,6 +119,7 @@ function enable (_config) {
 
 function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
+  if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
@@ -129,6 +136,26 @@ function analyzeSsrf (ctx) {
   }
 
   const result = waf.run({ persistent }, req, RULE_TYPES.SSRF)
+
+  const res = store?.res
+  handleResult(result, req, res, ctx.abortController)
+}
+
+function analyzePgSqlInjection (ctx) {
+  const query = ctx.query?.text
+  if (!query) return
+
+  const store = storage.getStore()
+  const req = store?.req
+
+  if (!req) return
+
+  const persistent = {
+    [addresses.DB_STATEMENT]: query,
+    [addresses.DB_SYSTEM]: 'postgresql' // TODO: Extract to constant
+  }
+
+  const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController)
