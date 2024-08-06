@@ -53,7 +53,7 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter {
-  constructor ({ url, logger, uploadTimeout, env, host, service, version } = {}) {
+  constructor ({ url, logger, uploadTimeout, env, host, service, version, libraryInjected, activation } = {}) {
     this._url = url
     this._logger = logger
 
@@ -65,6 +65,8 @@ class AgentExporter {
     this._host = host
     this._service = service
     this._appVersion = version
+    this._libraryInjected = libraryInjected
+    this._activation = activation
   }
 
   export ({ profiles, start, end, tags }) {
@@ -105,6 +107,11 @@ class AgentExporter {
           kernel_version: os.version()
         },
         profiler: {
+          activation: this._activation,
+          ssi: {
+            enabled: this._libraryInjected,
+            mechanism: this._libraryInjected ? 'injected_agent' : undefined
+          },
           version
         },
         runtime: {
