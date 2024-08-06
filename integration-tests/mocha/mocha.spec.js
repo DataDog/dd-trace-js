@@ -1634,4 +1634,90 @@ describe('mocha CommonJS', function () {
       })
     })
   })
+
+  it('takes into account untested files if "all" is passed to nyc', (done) => {
+    const linePctMatchRegex = /Lines\s*:\s*(\d+)%/
+    let linePctMatch
+    let linesPctFromNyc = 0
+    let codeCoverageWithUntestedFiles = 0
+    let codeCoverageWithoutUntestedFiles = 0
+
+    let eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        codeCoverageWithUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+      })
+
+    childProcess = exec(
+      './node_modules/nyc/bin/nyc.js -r=text-summary --all --nycrc-path ./my-nyc.config.js ' +
+      'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    childProcess.on('exit', () => {
+      linePctMatch = testOutput.match(linePctMatchRegex)
+      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+      assert.equal(
+        linesPctFromNyc,
+        codeCoverageWithUntestedFiles,
+        'nyc --all output does not match the reported coverage'
+      )
+
+      // reset test output for next test session
+      testOutput = ''
+      // we run the same tests without the all flag
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+        'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'inherit'
+        }
+      )
+
+      eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+        })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      childProcess.on('exit', () => {
+        linePctMatch = testOutput.match(linePctMatchRegex)
+        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+        assert.equal(
+          linesPctFromNyc,
+          codeCoverageWithoutUntestedFiles,
+          'nyc output does not match the reported coverage (no --all flag)'
+        )
+
+        eventsPromise.then(() => {
+          assert.isAbove(codeCoverageWithoutUntestedFiles, codeCoverageWithUntestedFiles)
+          done()
+        }).catch(done)
+      })
+    })
+  })
 })
