@@ -69,6 +69,7 @@ module.exports = {
   get 'node:http2' () { return require('../../../datadog-plugin-http2/src') },
   get 'node:https' () { return require('../../../datadog-plugin-http/src') },
   get 'node:net' () { return require('../../../datadog-plugin-net/src') },
+  get nyc () { return require('../../../datadog-plugin-nyc/src') },
   get oracledb () { return require('../../../datadog-plugin-oracledb/src') },
   get openai () { return require('../../../datadog-plugin-openai/src') },
   get paperplane () { return require('../../../datadog-plugin-paperplane/src') },
