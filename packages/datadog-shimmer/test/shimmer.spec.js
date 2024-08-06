@@ -227,6 +227,103 @@ describe('shimmer', () => {
     it('should not throw when unwrapping a method that was not wrapped', () => {
       expect(() => shimmer.unwrap({ a: () => {} }, 'a')).to.not.throw()
     })
+
+    describe('safe mode', () => {
+      before(() => {
+        shimmer.setSafe(true)
+      })
+
+      after(() => {
+        shimmer.setSafe(false)
+      })
+
+      describe('sync', () => {
+        it('should not throw when wrapper code is throwing', () => {
+          const obj = { count: () => 3 }
+
+          shimmer.wrap(obj, 'count', () => {
+            return () => {
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', () => {
+          const obj = { count: () => 3 }
+
+          shimmer.wrap(obj, 'count', (count) => {
+            return () => {
+              count()
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+      })
+
+      describe('async', () => {
+        it('should not throw when wrapper code is throwing', async () => {
+          const obj = { count: async () => await Promise.resolve(3) }
+
+          shimmer.wrap(obj, 'count', () => {
+            return () => {
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', async () => {
+          const obj = { count: async () => await Promise.resolve(3) }
+
+          shimmer.wrap(obj, 'count', (count) => {
+            return async () => {
+              await count()
+              throw new Error('wrapper error')
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+      })
+      // describe('callback', () => {
+      //   it('should not throw when wrapper code is throwing', (done) => {
+      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
+
+      //     shimmer.wrap(obj, 'count', () => {
+      //       return () => {
+      //         throw new Error('wrapper error')
+      //       }
+      //     })
+
+      //     obj.count((err, res) => {
+      //       expect(res).to.equal(3)
+      //       done()
+      //     })
+      //   })
+      //   it('should not throw when wrapper code calls cb with error', async () => {
+      //     const obj = { count: cb => setImmediate(() => cb(null, 3)) }
+
+      //     shimmer.wrap(obj, 'count', (count) => {
+      //       return (cb) => {
+      //         count((err, val) => {
+      //           cb(new Error('wrapper error'))
+      //         })
+      //       }
+      //     })
+
+      //     obj.count((err, res) => {
+      //       expect(err).to.be.undefined
+      //       expect(res).to.equal(3)
+      //       done()
+      //     })
+      //   })
+      // })
+    })
   })
 
   describe('with a function', () => {
