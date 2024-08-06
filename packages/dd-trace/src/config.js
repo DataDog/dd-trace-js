@@ -1143,17 +1143,18 @@ class Config {
     for (const name in this._defaults) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
-        const origin = origins[i]
-        const unprocessed = unprocessedValues[i]
+        const value = container[name]
 
-        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (get(this, name) === container[name] && has(this, name)) break
+        if ((value !== null && value !== undefined) || container === this._defaults) {
+          if (get(this, name) === value && has(this, name)) break
 
-          let value = container[name]
           set(this, name, value)
-          value = unprocessed[name] || value
 
-          changes.push({ name, value, origin })
+          changes.push({
+            name,
+            value: unprocessedValues[i][name] || value,
+            origin: origins[i]
+          })
 
           break
         }
