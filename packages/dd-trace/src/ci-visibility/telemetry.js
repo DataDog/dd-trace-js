@@ -17,6 +17,14 @@ const formattedTags = {
 // If tag value is true, then only tag key is added to the array.
 function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((acc, tagKey) => {
+    if (tagKey === 'statusCode') {
+      const statusCode = tagsDictionary[tagKey]
+      if (is400StatusCode(statusCode)) {
+        acc.push(`status_code:${statusCode}`)
+      }
+      acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
+      return acc
+    }
     const formattedTagKey = formattedTags[tagKey] || tagKey
     if (tagsDictionary[tagKey] === true) {
       acc.push(formattedTagKey)
@@ -74,6 +82,10 @@ const TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS = 'itr_skippable_tests.request_errors
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES = 'itr_skippable_tests.response_suites'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS = 'itr_skippable_tests.response_tests'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES = 'itr_skippable_tests.response_bytes'
+
+function is400StatusCode (statusCode) {
+  return statusCode >= 400 && statusCode < 500
+}
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (statusCode >= 400 && statusCode < 500) {
