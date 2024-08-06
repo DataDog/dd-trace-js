@@ -236,8 +236,7 @@ class TextMapPropagator {
   }
 
   _hasParentIdInTags (spanContext) {
-    return tags.DD_PARENT_ID in spanContext._trace.tags &&
-      spanContext._trace.tags[tags.DD_PARENT_ID] !== zeroTraceId
+    return tags.DD_PARENT_ID in spanContext._trace.tags
   }
 
   _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
@@ -444,10 +443,6 @@ class TextMapPropagator {
           }
         }
       })
-
-      if (!spanContext._trace.tags[tags.DD_PARENT_ID]) {
-        spanContext._trace.tags[tags.DD_PARENT_ID] = zeroTraceId
-      }
 
       this._extractBaggageItems(carrier, spanContext)
       return spanContext
