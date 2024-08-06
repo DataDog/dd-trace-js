@@ -9,20 +9,18 @@ const { assert } = require('chai')
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
-  let axios, sandbox, cwd, appPort, appFile, agent, proc, stdioHandler
-
-  // function stdOutputHandler (data) {
-  //   stdioHandler && stdioHandler(data)
-  // }
+  let axios, sandbox, cwd, appPort, appFile, agent, proc
 
   before(async () => {
     sandbox = await createSandbox(
       ['express', 'pg'],
       false,
       [path.join(__dirname, 'resources')])
+
     appPort = await getPort()
     cwd = sandbox.folder
     appFile = path.join(cwd, 'resources', 'postgress-app', 'index.js')
+
     axios = Axios.create({
       baseURL: `http://localhost:${appPort}`
     })
@@ -60,11 +58,13 @@ describe('RASP - sql_injection - integration', () => {
       }
 
       assert.strictEqual(e.response.status, 403)
-      await agent.assertMessageReceived(({ headers, payload }) => {
+      return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
         assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
       })
     }
+
+    throw new Error('Request should be blocked')
   })
 
   it('should block using pg.Pool and unhandled promise', async () => {
@@ -76,10 +76,12 @@ describe('RASP - sql_injection - integration', () => {
       }
 
       assert.strictEqual(e.response.status, 403)
-      await agent.assertMessageReceived(({ headers, payload }) => {
+      return await agent.assertMessageReceived(({ headers, payload }) => {
         assert.property(payload[0][0].meta, '_dd.appsec.json')
         assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
       })
     }
+
+    throw new Error('Request should be blocked')
   })
 })

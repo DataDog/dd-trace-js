@@ -4,10 +4,7 @@ const { httpClientRequestStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
-const {
-  RULE_TYPES,
-  handleResult
-} = require('./utils')
+const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
 

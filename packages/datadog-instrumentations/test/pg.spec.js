@@ -39,6 +39,7 @@ describe('pg instrumentation', () => {
             pg = require(`../../../versions/pg@${version}`).get()
             const Client = clients[implementation](pg)
             Query = Client.Query
+
             client = new Client({
               host: '127.0.0.1',
               user: 'postgres',
@@ -48,6 +49,10 @@ describe('pg instrumentation', () => {
             })
 
             client.connect(err => done(err))
+          })
+
+          afterEach(() => {
+            client.end()
           })
 
           describe('abortController', () => {
@@ -60,7 +65,6 @@ describe('pg instrumentation', () => {
             describe('using callback', () => {
               it('Should not fail if it is not aborted', (done) => {
                 client.query('SELECT 1', (err) => {
-                  client.end()
                   done(err)
                 })
               })
@@ -69,9 +73,9 @@ describe('pg instrumentation', () => {
                 queryClientStartChannel.subscribe(abortQuery)
 
                 client.query('SELECT 1', (err) => {
-                  client.end()
                   if (err && err.message === 'Test') {
-                    return done()
+                    done()
+                    return
                   }
 
                   done(new Error('Query was not aborted'))
@@ -82,7 +86,6 @@ describe('pg instrumentation', () => {
             describe('using promise', () => {
               it('Should not fail if it is not aborted', async () => {
                 await client.query('SELECT 1')
-                client.end()
               })
 
               it('Should abort query', async () => {
@@ -90,13 +93,15 @@ describe('pg instrumentation', () => {
 
                 try {
                   await client.query('SELECT 1')
-
-                  throw new Error('Query was not aborted')
                 } catch (err) {
                   if (!err || err.message !== 'Test') {
                     throw err
                   }
+
+                  return
                 }
+
+                throw new Error('Query was not aborted')
               })
             })
 
@@ -104,16 +109,17 @@ describe('pg instrumentation', () => {
               describe('without callback', () => {
                 it('Should not fail if it is not aborted', (done) => {
                   const query = new Query('SELECT 1')
+
                   client.query(query)
 
                   query.on('end', () => {
-                    client.end()
                     done()
                   })
                 })
 
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
+
                   const query = new Query('SELECT 1')
 
                   client.query(query)
@@ -144,6 +150,7 @@ describe('pg instrumentation', () => {
 
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
+
                   const query = new Query('SELECT 1')
                   query.callback = err => {
                     if (err && err.message === 'Test') {
@@ -161,6 +168,7 @@ describe('pg instrumentation', () => {
               describe('with callback in query parameter', () => {
                 it('Should not fail if it is not aborted', (done) => {
                   const query = new Query('SELECT 1')
+
                   client.query(query, (err) => {
                     done(err)
                   })
@@ -168,6 +176,7 @@ describe('pg instrumentation', () => {
 
                 it('Should abort query', (done) => {
                   queryClientStartChannel.subscribe(abortQuery)
+
                   const query = new Query('SELECT 1')
 
                   client.query(query, err => {
@@ -220,7 +229,8 @@ describe('pg instrumentation', () => {
 
             pool.query('SELECT 1', (err) => {
               if (err && err.message === 'Test') {
-                return done()
+                done()
+                return
               }
 
               done(new Error('Query was not aborted'))
@@ -238,13 +248,15 @@ describe('pg instrumentation', () => {
 
             try {
               await pool.query('SELECT 1')
-
-              throw new Error('Query was not aborted')
             } catch (err) {
               if (!err || err.message !== 'Test') {
                 throw err
               }
+
+              return
             }
+
+            throw new Error('Query was not aborted')
           })
         })
       })

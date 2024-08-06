@@ -148,6 +148,7 @@ function wrapPoolQuery (query) {
 
     return asyncResource.runInAsyncScope(() => {
       const abortController = new AbortController()
+
       startPoolQueryCh.publish({
         query: pgQuery,
         abortController
@@ -158,12 +159,6 @@ function wrapPoolQuery (query) {
       })
 
       const cb = arguments[arguments.length - 1]
-      if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
-          finish()
-          return cb.apply(this, arguments)
-        })
-      }
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
@@ -171,10 +166,18 @@ function wrapPoolQuery (query) {
 
         if (typeof cb === 'function') {
           cb(error)
+
           return
         } else {
           return Promise.reject(error)
         }
+      }
+
+      if (typeof cb === 'function') {
+        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
+          finish()
+          return cb.apply(this, arguments)
+        })
       }
 
       const retval = query.apply(this, arguments)

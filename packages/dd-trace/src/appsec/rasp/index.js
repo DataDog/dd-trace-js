@@ -7,10 +7,7 @@ const log = require('../../log')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 
-const {
-  setAbortOnUncaughtException,
-  DatadogRaspAbortError
-} = require('./utils')
+const { setAbortOnUncaughtException, DatadogRaspAbortError } = require('./utils')
 
 function removeAllListeners (emitter, event) {
   const listeners = emitter.listeners(event)

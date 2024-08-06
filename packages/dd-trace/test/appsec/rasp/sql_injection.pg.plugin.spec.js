@@ -6,19 +6,9 @@ const Config = require('../../../src/config')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
-  function getWebSpan (traces) {
-    for (const trace of traces) {
-      for (const span of trace) {
-        if (span.type === 'web') {
-          return span
-        }
-      }
-    }
-    throw new Error('web span not found')
-  }
-
   withVersions('pg', 'express', expressVersion => {
     withVersions('pg', 'pg', pgVersion => {
       describe('sql injection with pg', () => {
@@ -92,12 +82,7 @@ describe('RASP - sql_injection', () => {
 
             axios.get('/?param=1')
 
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.notProperty(span.meta, '_dd.appsec.json')
-              assert.notProperty(span.meta_struct || {}, '_dd.stack')
-              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-            })
+            await checkRaspExecutedAndNotThreat(agent)
           })
 
           it('Should block query with callback', async () => {
@@ -113,15 +98,7 @@ describe('RASP - sql_injection', () => {
             try {
               await axios.get('/?param=\' OR 1 = 1 --')
             } catch (e) {
-              return await agent.use((traces) => {
-                const span = getWebSpan(traces)
-                assert.property(span.meta, '_dd.appsec.json')
-                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
-                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-                assert.property(span.meta_struct, '_dd.stack')
-              })
+              return await checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
 
             assert.fail('Request should be blocked')
@@ -142,15 +119,7 @@ describe('RASP - sql_injection', () => {
             try {
               await axios.get('/?param=\' OR 1 = 1 --')
             } catch (e) {
-              return await agent.use((traces) => {
-                const span = getWebSpan(traces)
-                assert.property(span.meta, '_dd.appsec.json')
-                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
-                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-                assert.property(span.meta_struct, '_dd.stack')
-              })
+              return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
 
             assert.fail('Request should be blocked')
@@ -177,12 +146,7 @@ describe('RASP - sql_injection', () => {
 
             axios.get('/?param=1')
 
-            await agent.use((traces) => {
-              const span = getWebSpan(traces)
-              assert.notProperty(span.meta, '_dd.appsec.json')
-              assert.notProperty(span.meta_struct || {}, '_dd.stack')
-              assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-            })
+            await checkRaspExecutedAndNotThreat(agent)
           })
 
           it('Should block query with callback', async () => {
@@ -198,15 +162,7 @@ describe('RASP - sql_injection', () => {
             try {
               await axios.get('/?param=\' OR 1 = 1 --')
             } catch (e) {
-              return await agent.use((traces) => {
-                const span = getWebSpan(traces)
-                assert.property(span.meta, '_dd.appsec.json')
-                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
-                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-                assert.property(span.meta_struct, '_dd.stack')
-              })
+              return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
 
             assert.fail('Request should be blocked')
@@ -227,15 +183,7 @@ describe('RASP - sql_injection', () => {
             try {
               await axios.get('/?param=\' OR 1 = 1 --')
             } catch (e) {
-              return await agent.use((traces) => {
-                const span = getWebSpan(traces)
-                assert.property(span.meta, '_dd.appsec.json')
-                assert(span.meta['_dd.appsec.json'].includes('rasp-sqli-rule-id-2'))
-                assert.equal(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
-                assert(span.metrics['_dd.appsec.rasp.duration'] > 0)
-                assert(span.metrics['_dd.appsec.rasp.duration_ext'] > 0)
-                assert.property(span.meta_struct, '_dd.stack')
-              })
+              return checkRaspExecutedAndHasThreat(agent, 'rasp-sqli-rule-id-2')
             }
 
             assert.fail('Request should be blocked')
