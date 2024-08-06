@@ -8,7 +8,7 @@ const dc = require('dc-polyfill')
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure-functions:http')
 
-addHook({ name: '@azure/functions' }, AzureFunctions => {
+addHook({ name: '@azure/functions', versions: ['>=4'] }, AzureFunctions => {
   console.log(" ==== adding hook to package ==== ");
   const { app } = AzureFunctions
   console.log(" ==== starting to wrap azure func==== ");
