@@ -6,7 +6,9 @@ const addresses = require('./addresses')
 const {
   httpClientRequestStart,
   setUncaughtExceptionCaptureCallbackStart,
-  pgQueryStart
+  pgQueryStart,
+  pgPoolQueryStart,
+  pgPoolQueryFinish
 } = require('./channels')
 const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
@@ -108,6 +110,8 @@ function enable (_config) {
   config = _config
   httpClientRequestStart.subscribe(analyzeSsrf)
   pgQueryStart.subscribe(analyzePgSqlInjection)
+  pgPoolQueryStart.subscribe(analyzePgSqlInjectionInPool)
+  pgPoolQueryFinish.subscribe(pgPoolFinish)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
   abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
@@ -120,6 +124,8 @@ function enable (_config) {
 function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
   if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
+  if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.subscribe(analyzePgSqlInjectionInPool)
+  if (pgPoolQueryFinish.hasSubscribers) pgPoolQueryFinish.subscribe(pgPoolFinish)
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }
@@ -146,9 +152,11 @@ function analyzePgSqlInjection (ctx) {
   if (!query) return
 
   const store = storage.getStore()
-  const req = store?.req
+  if (!store) return
 
-  if (!req) return
+  const { raspSqlAnalyzed, req } = store
+
+  if (!req || raspSqlAnalyzed) return
 
   const persistent = {
     [addresses.DB_STATEMENT]: query,
@@ -159,6 +167,23 @@ function analyzePgSqlInjection (ctx) {
 
   const res = store?.res
   handleResult(result, req, res, ctx.abortController)
+}
+
+function analyzePgSqlInjectionInPool (ctx) {
+  const parentStore = storage.getStore()
+  if (!parentStore) return
+
+  analyzePgSqlInjection(ctx, parentStore)
+
+  storage.enterWith({ ...parentStore, raspSqlAnalyzed: true, raspSqlParentStore: parentStore })
+}
+
+function pgPoolFinish () {
+  const store = storage.getStore()
+  if (!store) return
+  if (!store.raspSqlParentStore) return
+
+  storage.enterWith(store.raspSqlParentStore)
 }
 
 function getGenerateStackTraceAction (actions) {
