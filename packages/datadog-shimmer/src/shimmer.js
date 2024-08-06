@@ -46,14 +46,18 @@ function wasCalled (fn) {
 }
 
 function wasReturned (fn) {
-  return Object.hasOwnProperty(fn, RETVAL) && !fn[RETVAL] === IS_PROMISE
+  return Reflect.has(fn, RETVAL) && fn[RETVAL] !== IS_PROMISE
 }
 
 function isPromise (obj) {
   return obj && typeof obj === 'object' && typeof obj.then === 'function'
 }
 
-const safeWrap = !!process.env.DD_INEJCTION_ENABLED
+let safeWrap = !!process.env.DD_INEJCTION_ENABLED
+function setSafe (value) {
+  safeWrap = value
+}
+
 function wrapMethod (target, name, wrapper) {
   assertMethod(target, name)
   assertFunction(wrapper)
@@ -65,9 +69,19 @@ function wrapMethod (target, name, wrapper) {
     // We'll need that to determine if an error was thrown by the original method, or by us.
     // Caveats:
     //   * If the original method is called recursively, this tracking doesn't work.
+    //     A less naive implementation would use a stack, or even just use
+    //     AsyncLocalStorage.
     //   * If the original method is called in a later iteration of the event loop,
     //     and we throw _then_, then it won't be caught by this.
-    //   * While async errors are dealt with here, errors in callbacks are not. Yet. TODO
+    //   * While async errors are dealt with here, errors in callbacks are not. This
+    //     is because we don't necessarily know _for sure_ that any function arguments
+    //     are wrapped by us. We could wrap them all anyway and just make that assumption,
+    //     or just assume that the last argument is always a callback set by us if it's a
+    //     function, but those don't seem like things we can rely on. We could add a
+    //     `shimmer.markCallbackAsWrapped()` function that's a no-op outside safe-mode,
+    //     but that means modifying every instrumentation. Even then, the complexity of
+    //     this code increases because then we'd need to effectively do the reverse of
+    //     what we're doing for synchronous functions.
     original = function (...args) {
       origOriginal[CALLED] = true
       const retVal = origOriginal.apply(this, args)
@@ -85,48 +99,40 @@ function wrapMethod (target, name, wrapper) {
   const origWrapped = wrapper(original)
   let wrapped = origWrapped
   if (safeWrap) {
+    const handleError = function (e, args) {
+      if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
+        // it was them. throw.
+        throw e
+      } else {
+        // it was us. swallow/log it.
+        log.error(e)
+        if (!wasCalled(origOriginal)) {
+          // original never ran. call it unwrapped.
+          return origOriginal.apply(this, args)
+        } else if (wasReturned(origOriginal)) {
+          // original ran and returned something. return it.
+          return origOriginal[RETVAL]
+        }
+      }
+    }
     wrapped = function (...args) {
       try {
         const retVal = origWrapped.apply(this, args)
         if (isPromise(retVal)) {
           // It's a promise. We need to wrap it to catch any errors that happen in the promise.
-          return retVal.catch(e => {
-            if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
-              // it was them. throw.
-              throw e
-            } else {
-              // it was us. swallow/log it.
-              log.error(e)
-              if (!wasCalled(origOriginal)) {
-                // original never ran. call it unwrapped.
-                return origOriginal.apply(this, args)
-              } else if (wasReturned(origOriginal)) {
-                // original ran and returned something. return it.
-                return origOriginal[RETVAL]
-              }
-            }
+          return retVal.catch(function (e) {
+            return handleError.call(this, e, args)
           })
         } else {
           return retVal
         }
       } catch (e) {
-        if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
-          // it was them. throw.
-          throw e
-        } else {
-          // it was us. swallow/log it.
-          log.error(e)
-          if (!wasCalled(origOriginal)) {
-            // original never ran. call it unwrapped.
-            return origOriginal.apply(this, args)
-          } else if (wasReturned(origOriginal)) {
-            // original ran and returned something. return it.
-            return origOriginal[RETVAL]
-          }
-        }
+        return handleError.call(this, e)
       } finally {
         delete origOriginal[CALLED]
-        delete origOriginal[RETVAL]
+        if (origOriginal[RETVAL] !== IS_PROMISE) {
+          delete origOriginal[RETVAL]
+        }
       }
     }
   }
@@ -247,5 +253,6 @@ module.exports = {
   wrap,
   massWrap,
   unwrap,
-  massUnwrap
+  massUnwrap,
+  setSafe
 }
