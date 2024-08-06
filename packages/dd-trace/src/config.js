@@ -441,6 +441,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'injectionEnabled', [])
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
@@ -459,8 +460,6 @@ class Config {
     this._setValue(defaults, 'profiling.enabled', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.ssi', false)
-    this._setValue(defaults, 'profiling.heuristicsEnabled', false)
     this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
@@ -681,6 +680,7 @@ class Config {
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
@@ -696,18 +696,18 @@ class Config {
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
-    this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
+    const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
+    const profilingEnabled = isTrue(profilingEnabledEnv)
+      ? 'enabled'
+      : isFalse(profilingEnabledEnv)
+        ? 'disabled'
+        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
-    if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED) {
-      this._setBoolean(env, 'profiling.ssi', true)
-      if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED.split(',').includes('profiler')) {
-        this._setBoolean(env, 'profiling.heuristicsEnabled', true)
-      }
-      if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
-        // This is only used in testing to not have to wait 30s
-        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
-      }
+    if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
+      // This is only used in testing to not have to wait 30s
+      this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
     }
 
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
@@ -857,7 +857,14 @@ class Config {
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setBoolean(opts, 'plugins', options.plugins)
     this._setString(opts, 'port', options.port)
-    this._setBoolean(opts, 'profiling.enabled', options.profiling)
+    const strProfiling = String(options.profiling)
+    this._setString(opts, 'profiling.enabled',
+      ['true', 'enabled'].includes(strProfiling)
+        ? 'enabled'
+        : ['false', 'disabled'].includes(strProfiling)
+            ? 'disabled'
+            : strProfiling === 'auto' ? 'auto' : undefined
+    )
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
@@ -1013,7 +1020,8 @@ class Config {
 
     const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
     const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
-    if (iastEnabled || profilingEnabled || this._env['profiling.heuristicsEnabled']) {
+    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
+    if (iastEnabled || ['auto', 'enabled'].includes(profilingEnabled) || injectionIncludesProfiler) {
       this._setBoolean(calc, 'telemetry.logCollection', true)
     }
   }
