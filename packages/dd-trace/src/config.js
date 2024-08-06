@@ -29,14 +29,14 @@ const telemetryCounters = {
 function getCounter (event, ddVar, otelVar) {
   const counters = telemetryCounters[event]
   const tags = []
-  const ddVarPrefix = 'config.datadog:'
-  const otelVarPrefix = 'config.opentelemetry:'
+  const ddVarPrefix = 'config_datadog:'
+  const otelVarPrefix = 'config_opentelemetry:'
   if (ddVar) {
-    ddVar = ddVarPrefix + ddVar
+    ddVar = ddVarPrefix + ddVar.toLowerCase()
     tags.push(ddVar)
   }
   if (otelVar) {
-    otelVar = otelVarPrefix + otelVar
+    otelVar = otelVarPrefix + otelVar.toLowerCase()
     tags.push(otelVar)
   }
 
@@ -408,7 +408,7 @@ class Config {
     this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
-    this._setValue(defaults, 'appsec.rasp.enabled', false)
+    this._setValue(defaults, 'appsec.rasp.enabled', true)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)

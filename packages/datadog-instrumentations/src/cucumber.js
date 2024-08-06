@@ -28,6 +28,8 @@ const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
+const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
 const {
   getCoveredFilenamesFromCoverage,
   resetCoverage,
@@ -356,10 +358,18 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
 
     const success = await start.apply(this, arguments)
 
+    let untestedCoverage
+    if (getCodeCoverageCh.hasSubscribers) {
+      untestedCoverage = await getChannelPromise(getCodeCoverageCh)
+    }
+
     let testCodeCoverageLinesTotal
 
     if (global.__coverage__) {
       try {
+        if (untestedCoverage) {
+          originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
       } catch (e) {
         // ignore errors
