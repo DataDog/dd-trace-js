@@ -7,40 +7,6 @@ const dc = require('dc-polyfill')
 // If the process lives for at least 30 seconds, it's considered long-lived
 const DEFAULT_LONG_LIVED_THRESHOLD = 30000
 
-const EnablementChoice = {
-  MANUALLY_ENABLED: Symbol('SSITelemetry.EnablementChoice.MANUALLY_ENABLED'),
-  SSI_ENABLED: Symbol('SSITelemetry.EnablementChoice.SSI_ENABLED'),
-  SSI_NOT_ENABLED: Symbol('SSITelemetry.EnablementChoice.SSI_NOT_ENABLED'),
-  DISABLED: Symbol('SSITelemetry.EnablementChoice.DISABLED')
-}
-Object.freeze(EnablementChoice)
-
-function getEnablementChoiceFromConfig (config) {
-  if (config.ssi === false || config.enabled === false) {
-    return EnablementChoice.DISABLED
-  } else if (config.heuristicsEnabled === true) {
-    return EnablementChoice.SSI_ENABLED
-  } else if (config.enabled === true) {
-    return EnablementChoice.MANUALLY_ENABLED
-  } else {
-    return EnablementChoice.SSI_NOT_ENABLED
-  }
-}
-
-function enablementChoiceToTagValue (enablementChoice) {
-  switch (enablementChoice) {
-    case EnablementChoice.MANUALLY_ENABLED:
-      return 'manually_enabled'
-    case EnablementChoice.SSI_ENABLED:
-      return 'ssi_enabled'
-    case EnablementChoice.SSI_NOT_ENABLED:
-      return 'not_enabled'
-    case EnablementChoice.DISABLED:
-      // Can't emit this one as a tag
-      throw new Error('Invalid enablement choice')
-  }
-}
-
 /**
  * This class embodies the SSI profiler-triggering heuristics and also emits telemetry metrics about
  * the profiler behavior under SSI. It emits the following metrics:
@@ -56,9 +22,23 @@ function enablementChoiceToTagValue (enablementChoice) {
  */
 class SSIHeuristics {
   constructor (config) {
-    this.enablementChoice = getEnablementChoiceFromConfig(config)
+    const injectionIncludesProfiler = config.injectionEnabled.includes('profiler')
+    this._heuristicsActive = injectionIncludesProfiler || config.profiling.enabled === 'auto'
+    this._emitsTelemetry = config.injectionEnabled.length > 0 && config.profiling.enabled !== 'disabled'
 
-    const longLivedThreshold = config.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
+    if (this._emitsTelemetry) {
+      if (config.profiling.enabled === 'enabled') {
+        this.enablementChoice = 'manually_enabled'
+      } else if (injectionIncludesProfiler) {
+        this.enablementChoice = 'ssi_enabled'
+      } else if (config.profiling.enabled === 'auto') {
+        this.enablementChoice = 'auto_enabled'
+      } else {
+        this.enablementChoice = 'ssi_not_enabled'
+      }
+    }
+
+    const longLivedThreshold = config.profiling.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
     if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
       throw new Error('Long-lived threshold must be a positive number')
     }
@@ -69,12 +49,16 @@ class SSIHeuristics {
     this.shortLived = true
   }
 
-  enabled () {
-    return this.enablementChoice !== EnablementChoice.DISABLED
+  get emitsTelemetry () {
+    return this._emitsTelemetry
+  }
+
+  get heuristicsActive () {
+    return this._heuristicsActive
   }
 
   start () {
-    if (this.enabled()) {
+    if (this.heuristicsActive || this.emitsTelemetry) {
       // Used to determine short-livedness of the process. We could use the process start time as the
       // reference point, but the tracer initialization point is more relevant, as we couldn't be
       // collecting profiles earlier anyway. The difference is not particularly significant if the
@@ -85,13 +69,17 @@ class SSIHeuristics {
       }, this.longLivedThreshold).unref()
 
       this._onSpanCreated = this._onSpanCreated.bind(this)
-      this._onProfileSubmitted = this._onProfileSubmitted.bind(this)
-      this._onMockProfileSubmitted = this._onMockProfileSubmitted.bind(this)
-      this._onAppClosing = this._onAppClosing.bind(this)
-
       dc.subscribe('dd-trace:span:start', this._onSpanCreated)
-      dc.subscribe('datadog:profiling:profile-submitted', this._onProfileSubmitted)
-      dc.subscribe('datadog:profiling:mock-profile-submitted', this._onMockProfileSubmitted)
+
+      if (this.emitsTelemetry) {
+        this._onProfileSubmitted = this._onProfileSubmitted.bind(this)
+        this._onMockProfileSubmitted = this._onMockProfileSubmitted.bind(this)
+
+        dc.subscribe('datadog:profiling:profile-submitted', this._onProfileSubmitted)
+        dc.subscribe('datadog:profiling:mock-profile-submitted', this._onMockProfileSubmitted)
+      }
+
+      this._onAppClosing = this._onAppClosing.bind(this)
       dc.subscribe('datadog:telemetry:app-closing', this._onAppClosing)
     }
   }
@@ -152,7 +140,7 @@ class SSIHeuristics {
 
     const tags = [
       'installation:ssi',
-      `enablement_choice:${enablementChoiceToTagValue(this.enablementChoice)}`,
+      `enablement_choice:${this.enablementChoice}`,
       `has_sent_profiles:${this.hasSentProfiles}`,
       `heuristic_hypothetical_decision:${decision.join('_')}`
     ]
@@ -163,9 +151,9 @@ class SSIHeuristics {
     if (
       !this._emittedRuntimeId &&
       decision[0] === 'triggered' &&
-      // When enablement choice is SSI_ENABLED, hasSentProfiles can transition from false to true when the
+      // When heuristics are active, hasSentProfiles can transition from false to true when the
       // profiler gets started and the first profile is submitted, so we have to wait for it.
-      (this.enablementChoice !== EnablementChoice.SSI_ENABLED || this.hasSentProfiles)
+      (!this.heuristicsActive || this.hasSentProfiles)
     ) {
       // Tags won't change anymore, so we can emit the runtime ID metric now.
       this._emittedRuntimeId = true
@@ -174,17 +162,20 @@ class SSIHeuristics {
   }
 
   _onAppClosing () {
-    this._ensureProfileMetrics()
-    // Last ditch effort to emit a runtime ID count metric
-    if (!this._emittedRuntimeId) {
-      this._emittedRuntimeId = true
-      this._runtimeIdCount.inc()
-    }
-    // So we have the metrics in the final state
-    this._profileCount.inc(0)
+    if (this.emitsTelemetry) {
+      this._ensureProfileMetrics()
+      // Last ditch effort to emit a runtime ID count metric
+      if (!this._emittedRuntimeId) {
+        this._emittedRuntimeId = true
+        this._runtimeIdCount.inc()
+      }
+      // So we have the metrics in the final state
+      this._profileCount.inc(0)
 
-    dc.unsubscribe('datadog:profiling:profile-submitted', this._onProfileSubmitted)
-    dc.unsubscribe('datadog:profiling:mock-profile-submitted', this._onMockProfileSubmitted)
+      dc.unsubscribe('datadog:profiling:profile-submitted', this._onProfileSubmitted)
+      dc.unsubscribe('datadog:profiling:mock-profile-submitted', this._onMockProfileSubmitted)
+    }
+
     dc.unsubscribe('datadog:telemetry:app-closing', this._onAppClosing)
     if (this.noSpan) {
       dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
@@ -192,4 +183,4 @@ class SSIHeuristics {
   }
 }
 
-module.exports = { SSIHeuristics, EnablementChoice }
+module.exports = { SSIHeuristics }

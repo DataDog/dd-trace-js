@@ -39,7 +39,6 @@ describe('config', () => {
     const config = new Config()
 
     expect(config).to.deep.include({
-      enabled: true,
       service: 'node',
       flushInterval: 65 * 1000
     })
@@ -60,7 +59,6 @@ describe('config', () => {
 
   it('should support configuration options', () => {
     const options = {
-      enabled: false,
       service: 'test',
       version: '1.2.3-test.0',
       logger: nullLogger,
@@ -72,7 +70,6 @@ describe('config', () => {
 
     const config = new Config(options)
 
-    expect(config.enabled).to.equal(options.enabled)
     expect(config.service).to.equal(options.service)
     expect(config.host).to.be.a('string')
     expect(config.version).to.equal(options.version)

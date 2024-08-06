@@ -232,13 +232,6 @@ describe('profiler', function () {
       expect(tags).to.have.property('foo', 'foo')
     })
 
-    it('should not start when disabled', async () => {
-      await profiler._start({ profilers, exporters, enabled: false })
-
-      sinon.assert.notCalled(wallProfiler.start)
-      sinon.assert.notCalled(spaceProfiler.start)
-    })
-
     it('should log exporter errors', async () => {
       exporter.export.rejects(new Error('boom'))
 
