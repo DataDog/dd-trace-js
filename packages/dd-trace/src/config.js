@@ -762,12 +762,7 @@ class Config {
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
-    const hasTelemetryLogsUsingFeatures =
-      env['iast.enabled'] || env['profiling.enabled'] || env['profiling.heuristicsEnabled']
-        ? true
-        : undefined
-    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
-      hasTelemetryLogsUsingFeatures))
+    this._setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -885,10 +880,6 @@ class Config {
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
-    const hasTelemetryLogsUsingFeatures =
-      (options.iast && (options.iast === true || options.iast?.enabled === true)) ||
-      (options.profiling && options.profiling === true)
-    this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
@@ -1018,6 +1009,12 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
+    }
+
+    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
+    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
+    if (iastEnabled || profilingEnabled || this._env['profiling.heuristicsEnabled']) {
+      this._setBoolean(calc, 'telemetry.logCollection', true)
     }
   }
 
