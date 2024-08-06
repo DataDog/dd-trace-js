@@ -51,7 +51,6 @@ function formatSpan (span) {
     parent_id: spanContext._parentId || id('0'),
     name: String(spanContext._name),
     resource: String(spanContext._name),
-    baggage: spanContext._baggageItems,
     error: 0,
     meta: {},
     meta_struct: span.meta_struct,
