@@ -179,7 +179,7 @@ class CypressPlugin {
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
     this.testConfiguration = {
@@ -321,7 +321,8 @@ class CypressPlugin {
     incrementCountMetric(name, {
       testLevel,
       testFramework: 'cypress',
-      isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+      isUnsupportedCIProvider: !this.ciProviderName,
+      provider: this.ciProviderName,
       ...tags
     })
   }

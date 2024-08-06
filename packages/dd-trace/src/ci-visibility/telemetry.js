@@ -19,7 +19,7 @@ function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
-      if (is400StatusCode(statusCode)) {
+      if (isStatusCode400(statusCode)) {
         acc.push(`status_code:${statusCode}`)
       }
       acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
@@ -83,7 +83,7 @@ const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES = 'itr_skippable_tests.respo
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS = 'itr_skippable_tests.response_tests'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES = 'itr_skippable_tests.response_bytes'
 
-function is400StatusCode (statusCode) {
+function isStatusCode400 (statusCode) {
   return statusCode >= 400 && statusCode < 500
 }
 

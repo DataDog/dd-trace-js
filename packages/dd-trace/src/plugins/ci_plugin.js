@@ -145,7 +145,8 @@ module.exports = class CiPlugin extends Plugin {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          isUnsupportedCIProvider: !this.ciProviderName,
+          provider: this.ciProviderName,
           ...tags
         })
       },
@@ -179,7 +180,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
