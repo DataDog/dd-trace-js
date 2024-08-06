@@ -982,7 +982,7 @@ class Config {
   }
 
   // handles values calculated from a mixture of options and env vars
-  _applyCalculated () {
+  _applyCalculated (options) {
     const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
