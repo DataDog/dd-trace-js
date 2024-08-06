@@ -1,15 +1,15 @@
 'use strict'
 
 const Axios = require('axios')
-const agent = require('../plugins/agent')
-const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const agent = require('../../plugins/agent')
+const appsec = require('../../../src/appsec')
+const Config = require('../../../src/config')
 const path = require('path')
 const { assert } = require('chai')
 
 function noop () {}
 
-describe('RASP', () => {
+describe('RASP - ssrf', () => {
   function getWebSpan (traces) {
     for (const trace of traces) {
       for (const span of trace) {
@@ -29,7 +29,7 @@ describe('RASP', () => {
     })
 
     before((done) => {
-      const express = require(`../../../../versions/express@${expressVersion}`).get()
+      const express = require(`../../../../../versions/express@${expressVersion}`).get()
       const expressApp = express()
 
       expressApp.get('/', (req, res) => {
@@ -137,7 +137,7 @@ describe('RASP', () => {
           let axiosToTest
 
           beforeEach(() => {
-            axiosToTest = require(`../../../../versions/axios@${axiosVersion}`).get()
+            axiosToTest = require(`../../../../../versions/axios@${axiosVersion}`).get()
           })
 
           it('Should not detect threat', async () => {

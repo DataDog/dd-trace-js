@@ -1,13 +1,13 @@
 'use strict'
 
-const agent = require('../plugins/agent')
-const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const agent = require('../../plugins/agent')
+const appsec = require('../../../src/appsec')
+const Config = require('../../../src/config')
 const path = require('path')
 const Axios = require('axios')
 const { assert } = require('chai')
 
-describe('RASP', () => {
+describe('RASP - sql_injection', () => {
   function getWebSpan (traces) {
     for (const trace of traces) {
       for (const span of trace) {
@@ -36,8 +36,8 @@ describe('RASP', () => {
         })
 
         before(done => {
-          const express = require(`../../../../versions/express@${expressVersion}`).get()
-          pg = require(`../../../../versions/pg@${pgVersion}`).get()
+          const express = require(`../../../../../versions/express@${expressVersion}`).get()
+          pg = require(`../../../../../versions/pg@${pgVersion}`).get()
           const expressApp = express()
 
           expressApp.get('/', (req, res) => {
