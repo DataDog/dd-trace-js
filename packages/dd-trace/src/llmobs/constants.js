@@ -12,6 +12,7 @@ module.exports = {
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
   TAGS: '_ml_obs.tags',
+  NAME: '_ml_obs.name',
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
@@ -22,5 +23,9 @@ module.exports = {
 
   OUTPUT_DOCUMENTS: '_ml_obs.meta.output.documents',
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
-  OUTPUT_VALUE: '_ml_obs.meta.output.value'
+  OUTPUT_VALUE: '_ml_obs.meta.output.value',
+
+  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
+  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
+  TOTAL_TOKENS_METRIC_KEY: 'total_tokens'
 }

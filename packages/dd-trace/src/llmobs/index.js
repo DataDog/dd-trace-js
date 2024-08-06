@@ -1,11 +1,25 @@
 'use strict'
 
-function enable () {
-  // subscribe to various DCs
+const { handleSpanStart, handleSpanEnd, handleSpanError, registerPlugins } = require('./integrations')
+const {
+  llmobsSpanStartCh,
+  llmobsSpanEndCh,
+  llmobsSpanErrorCh
+} = require('./integrations/channels')
+
+// TODO(sam.brenner) integration enablement can happen here too
+
+function enable (config) {
+  registerPlugins(config)
+  llmobsSpanStartCh.subscribe(handleSpanStart)
+  llmobsSpanEndCh.subscribe(handleSpanEnd)
+  llmobsSpanErrorCh.subscribe(handleSpanError)
 }
 
 function disable () {
-  // unsubscribe from various DCs
+  if (llmobsSpanStartCh.hasSubscribers) llmobsSpanStartCh.ubsubscribe(handleSpanStart)
+  if (llmobsSpanEndCh.hasSubscribers) llmobsSpanEndCh.unsubscribe(handleSpanEnd)
+  if (llmobsSpanErrorCh.hasSubscribers) llmobsSpanErrorCh.unsubscribe(handleSpanError)
 }
 
 module.exports = { enable, disable }

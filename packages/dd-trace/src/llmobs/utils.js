@@ -42,8 +42,7 @@ function getLLMObsParentId (span) {
 }
 
 function isLLMSpan (span) {
-  // TODO(sam.brenner) add openai to this check
-  return span?.context()._tags[SPAN_TYPE] === 'llm'
+  return ['llm', 'openai'].includes(span?.context()._tags[SPAN_TYPE])
 }
 
 function getMlApp (span, defaultMlApp) {

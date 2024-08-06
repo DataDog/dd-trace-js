@@ -20,7 +20,8 @@ const {
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
-  TAGS
+  TAGS,
+  NAME
 } = require('./constants')
 
 const {
@@ -34,8 +35,9 @@ class LLMObsTagger {
     this._config = config
   }
 
-  setLLMObsSpanTags (span, kind, { modelName, modelProvider, sessionId, mlApp }) {
+  setLLMObsSpanTags (span, kind, { modelName, modelProvider, sessionId, mlApp }, name) {
     span.setTag(SPAN_TYPE, 'llm')
+    if (name) span.setTag(NAME, name)
 
     span.setTag(SPAN_KIND, kind)
     if (modelName) span.setTag(MODEL_NAME, modelName)
