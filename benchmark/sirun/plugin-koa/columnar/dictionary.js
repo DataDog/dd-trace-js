@@ -1,14 +1,18 @@
 'use strict'
 
-const Chunk = require('../../../../packages/dd-trace/src/encode/chunk')
+const Chunk = require('./msgpack/chunk')
 
-class Strings {
+class Dictionary {
   constructor () {
     this.length = 0
 
     this._bytes = new Chunk()
 
     this.reset()
+  }
+
+  get byteLength () {
+    return this._bytes.length
   }
 
   get data () {
@@ -34,4 +38,4 @@ class Strings {
   }
 }
 
-module.exports = { Strings }
+module.exports = { Dictionary }

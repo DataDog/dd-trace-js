@@ -3,8 +3,8 @@
 const { Table } = require('../table')
 
 class AddTagTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       segment_id: BigUint64Array,
       span_id: BigUint64Array,
       key: Uint16Array,
@@ -17,16 +17,16 @@ class AddTagTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.key[this.length] = this._strings.get(key)
-    this.columns.value[this.length] = this._strings.get(value)
+    this.columns.key[this.length] = this._cache(key)
+    this.columns.value[this.length] = this._cache(value)
 
     this.length++
   }
 }
 
 class AddMetricTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       segment_id: BigUint64Array,
       span_id: BigUint64Array,
       key: Uint16Array,
@@ -39,7 +39,7 @@ class AddMetricTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.key[this.length] = this._strings.get(key)
+    this.columns.key[this.length] = this._cache(key)
     this.columns.value[this.length] = value
 
     this.length++

@@ -3,6 +3,7 @@
 const id = require('./id')
 const { exporter } = require('./exporter')
 
+// TODO: Should this be Core API's SpanController?
 class SpanContext {
   constructor (childOf) {
     if (childOf) {
@@ -26,4 +27,4 @@ class Segment {
   }
 }
 
-module.exports = { SpanContext }
+module.exports = { SpanContext, Segment }

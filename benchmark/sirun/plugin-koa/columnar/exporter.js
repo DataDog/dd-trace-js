@@ -1,17 +1,18 @@
 'use strict'
 
 const { Client } = require('./client')
-const { Strings } = require('./strings')
 const tables = require('./tables')
 const { Encoder } = require('./encoder')
 const {
   ERROR,
+  EVENT_TYPE,
   SEGMENT_START,
   SPAN_FINISH,
   MYSQL_QUERY_START,
   WEB_REQUEST_FINISH,
   WEB_REQUEST_START
 } = require('./events')
+const { EventTypeTable } = require('./tables/event')
 
 // const service = process.env.DD_SERVICE || 'unnamed-node-app'
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -21,14 +22,13 @@ const noop = () => {}
 
 class Exporter {
   constructor (limit = SOFT_LIMIT) {
-    const strings = new Strings()
-
     this._limit = limit
     this._client = new Client()
     this._encoder = new Encoder()
-    this._strings = strings
     this._types = new Uint16Array(MAX_EVENTS)
-    this._tables = {}
+    this._tables = {
+      [EVENT_TYPE]: new EventTypeTable()
+    }
 
     this.reset()
 
@@ -74,8 +74,9 @@ class Exporter {
   flush (done = noop) {
     if (this._eventCount === 0) return
 
-    const types = this._types.subarray(0, this._eventCount)
-    const data = this._encoder.encode(this._strings, types, this._tables)
+    const data = this._encoder.encode(this._tables)
+
+    // console.log(data.length)
 
     this.reset()
 
@@ -86,10 +87,9 @@ class Exporter {
 
   reset () {
     this._eventCount = 0
-    this._strings.reset()
 
     for (const table of Object.values(this._tables)) {
-      table.length = 0
+      table.reset()
     }
   }
 
@@ -99,17 +99,19 @@ class Exporter {
     }
 
     if (!this._tables[eventType]) {
-      this._tables[eventType] = new tables[eventType](this._strings)
+      this._tables[eventType] = new tables[eventType]()
     }
   }
 
   _afterEncode (eventType) {
-    this._types[this._eventCount++] = eventType
+    this._tables[EVENT_TYPE].insert(eventType)
 
-    if (this._eventCount >= MAX_EVENTS) {
+    if (++this._eventCount >= MAX_EVENTS) {
       this.flush()
     }
   }
 }
 
-module.exports = { Exporter, exporter: new Exporter() }
+const exporter = new Exporter()
+
+module.exports = { Exporter, exporter }

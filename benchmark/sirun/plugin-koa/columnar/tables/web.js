@@ -3,8 +3,8 @@
 const { Table } = require('../table')
 
 class WebRequestStartTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       ticks: BigUint64Array,
       segment_id: BigUint64Array,
       span_id: BigUint64Array,
@@ -23,18 +23,18 @@ class WebRequestStartTable extends Table {
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
     this.columns.parent_id[this.length] = spanContext.parentId
-    this.columns.component[this.length] = this._strings.get(component)
-    this.columns.http_method[this.length] = this._strings.get(req.method)
-    this.columns.http_url[this.length] = this._strings.get(req.url)
-    this.columns.http_route[this.length] = this._strings.get(req.url)
+    this.columns.component[this.length] = this._cache(component)
+    this.columns.http_method[this.length] = this._cache(req.method)
+    this.columns.http_url[this.length] = this._cache(req.url)
+    this.columns.http_route[this.length] = this._cache(req.url)
 
     this.length++
   }
 }
 
 class WebRequestFinishTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       ticks: BigUint64Array,
       segment_id: BigUint64Array,
       span_id: BigUint64Array,

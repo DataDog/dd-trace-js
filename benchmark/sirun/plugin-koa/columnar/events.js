@@ -9,5 +9,6 @@ module.exports = {
   ADD_TAG: 6,
   ADD_METRIC: 7,
   MYSQL_QUERY_START: 8,
-  SEGMENT_START: 9
+  SEGMENT_START: 9,
+  EVENT_TYPE: 10
 }

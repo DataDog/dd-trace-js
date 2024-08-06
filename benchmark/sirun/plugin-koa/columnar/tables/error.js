@@ -3,8 +3,8 @@
 const { Table } = require('../table')
 
 class ExceptionTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       segment_id: BigUint64Array,
       span_id: BigUint64Array,
       error_name: Uint16Array,
@@ -18,9 +18,9 @@ class ExceptionTable extends Table {
 
     this.columns.segment_id[this.length] = spanContext.segment.segmentId
     this.columns.span_id[this.length] = spanContext.spanId
-    this.columns.error_name[this.length] = this._strings.get(error?.name)
-    this.columns.error_message[this.length] = this._strings.get(error?.message)
-    this.columns.error_stack[this.length] = this._strings.get(error?.stack)
+    this.columns.error_name[this.length] = this._cache(error?.name)
+    this.columns.error_message[this.length] = this._cache(error?.message)
+    this.columns.error_stack[this.length] = this._cache(error?.stack)
 
     this.length++
   }

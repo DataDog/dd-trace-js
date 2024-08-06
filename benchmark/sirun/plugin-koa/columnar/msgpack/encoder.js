@@ -8,7 +8,7 @@ float64Array[0] = -1
 const bigEndian = uInt8Float64Array[7] === 0
 
 class MsgpackEncoder {
-  copy (bytes, value) {
+  encodeRaw (bytes, value) {
     bytes.set(value)
   }
 

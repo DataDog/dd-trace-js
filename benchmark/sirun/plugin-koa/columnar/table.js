@@ -1,35 +1,44 @@
 'use strict'
 
+const { Dictionary } = require('./dictionary')
+
 class Table {
-  constructor (strings, columnTypes) {
+  constructor (columnTypes) {
     this.columns = {}
+    this.dictionary = new Dictionary()
     this.length = 0
+    this.width = 0
 
     this._capacity = 1024
-    this._strings = strings
 
     for (const [name, TypedArray] of Object.entries(columnTypes)) {
-      const buffer = new ArrayBuffer(this._capacity, { maxByteLength: 2 ** 32 })
-
-      this.columns[name] = new TypedArray(buffer)
+      this.columns[name] = new TypedArray(this._capacity)
+      this.width += TypedArray.BYTES_PER_ELEMENT
     }
   }
 
   get byteLength () {
-    const rowLength = Object.values(this.columns)
-      .reduce((a, b) => a + b.BYTES_PER_ELEMENT, 0)
+    return this.length * this.width
+  }
 
-    return this.length * rowLength
+  reset () {
+    this.length = 0
+    this.dictionary.reset()
   }
 
   reserve (count = 1) {
     if (this.length + count > this._capacity) {
       this._capacity = this._capacity * 2
 
-      for (const column of Object.values(this.columns)) {
-        column.buffer.resize(this._capacity * column.buffer.BYTES_PER_ELEMENT)
+      for (const [name, column] of Object.entries(this.columns)) {
+        this.columns[name] = new column.constructor(this._capacity)
+        this.columns[name].set(column)
       }
     }
+  }
+
+  _cache (value) {
+    return this.dictionary.get(value)
   }
 }
 

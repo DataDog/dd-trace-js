@@ -3,8 +3,8 @@
 const { Table } = require('../table')
 
 class SpanFinishTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       ticks: BigUint64Array,
       segment_id: BigUint64Array,
       span_id: BigUint64Array

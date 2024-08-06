@@ -1,6 +1,6 @@
 'use strict'
 
-const DEFAULT_MIN_SIZE = 2 * 1024 * 1024 // 2MB
+const DEFAULT_MIN_SIZE = 1 * 1024 * 1024 // 2MB
 
 class Chunk {
   constructor (minSize = DEFAULT_MIN_SIZE) {
@@ -48,7 +48,7 @@ class Chunk {
   }
 
   set (typedArray) {
-    typedArray = new Uint8Array(typedArray.buffer)
+    typedArray = new Uint8Array(typedArray.buffer, 0, typedArray.byteLength)
 
     this.reserve(typedArray.byteLength)
 

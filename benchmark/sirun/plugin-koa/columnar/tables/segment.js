@@ -3,8 +3,8 @@
 const { Table } = require('../table')
 
 class SegmentStartTable extends Table {
-  constructor (strings) {
-    super(strings, {
+  constructor () {
+    super({
       time: BigUint64Array,
       ticks: BigUint64Array,
       trace_id_hi: BigUint64Array,
