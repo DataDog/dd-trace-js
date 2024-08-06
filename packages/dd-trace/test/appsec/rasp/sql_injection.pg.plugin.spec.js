@@ -47,7 +47,7 @@ describe('RASP - sql_injection', () => {
           appsec.enable(new Config({
             appsec: {
               enabled: true,
-              rules: path.join(__dirname, 'rasp_rules.json'),
+              rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
               rasp: { enabled: true }
             }
           }))
