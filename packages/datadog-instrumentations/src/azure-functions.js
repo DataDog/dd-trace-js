@@ -12,17 +12,15 @@ addHook({ name: '@azure/functions', versions: ['>=4'] }, AzureFunctions => {
   console.log(" ==== adding hook to package ==== ");
   const { app } = AzureFunctions
 
-  shimmer.wrap(app, 'http', function (name, options) {
-    console.log(" ==== wrapping azure sync func==== ");
-    options.handler = function (...args) {
-      return azureFunctionsChannel.traceSync(options.handler, { name, options }, this, ...args)
-    }
-  });
-
-  shimmer.wrap(app, 'http', function (name, options) {
-    console.log(" ==== wrapping azure async func ==== ");
-    options.handler = function (...args) {
-      return azureFunctionsChannel.tracePromise(options.handler, { name, options }, this, ...args)
-    }
-  });
+  try{
+    shimmer.wrap(app, 'http', function (name, options) {
+      console.log(" ==== wrapping azure async func ==== ");
+      options.handler = function (...args) {
+        console.log(" ==== inside of handler ==== ");
+        return azureFunctionsChannel.tracePromise(options.handler, { name, options }, this, ...args)
+      }
+    });
+  }catch(error){
+    console.error("error: ", error);
+  }
 })
