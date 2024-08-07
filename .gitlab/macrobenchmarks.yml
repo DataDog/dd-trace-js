@@ -65,3 +65,9 @@ only-tracing:
   extends: .macrobenchmarks
   variables:
     DD_BENCHMARKS_CONFIGURATION: only-tracing
+
+only-tracing-nightly:
+  extends: .macrobenchmarks
+  variables:
+    DD_BENCHMARKS_CONFIGURATION: only-tracing
+    NODE_VERSION: nightly
