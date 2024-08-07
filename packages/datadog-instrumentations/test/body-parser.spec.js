@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { storage } = require('../../datadog-core')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
@@ -69,6 +70,21 @@ withVersions('body-parser', 'body-parser', version => {
       expect(res.data).to.be.equal('BLOCKED')
 
       bodyParserReadCh.unsubscribe(blockRequest)
+    })
+
+    it('should propagate the async context', async () => {
+      const store = {}
+      function noop () {
+        console.log(storage.getStore())
+      }
+      bodyParserReadCh.subscribe(noop)
+
+      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+
+      expect(middlewareProcessBodyStub).to.be.calledOnce
+      expect(res.data).to.be.equal('DONE')
+
+      bodyParserReadCh.unsubscribe(noop)
     })
   })
 })
