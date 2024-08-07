@@ -11,9 +11,18 @@ const azureFunctionsChannel = dc.tracingChannel('datadog:azure-functions:http')
 addHook({ name: '@azure/functions', versions: ['>=4'] }, AzureFunctions => {
   console.log(" ==== adding hook to package ==== ");
   const { app } = AzureFunctions
-  console.log(" ==== starting to wrap azure func==== ");
+
   shimmer.wrap(app, 'http', function (name, options) {
-    console.log(" ==== wrapping azure func==== ");
-    options.handler = azureFunctionsChannel.traceSync(options.handler, options, { name, options })
+    console.log(" ==== wrapping azure sync func==== ");
+    options.handler = function (...args) {
+      return azureFunctionsChannel.traceSync(options.handler, { name, options }, this, ...args)
+    }
+  });
+
+  shimmer.wrap(app, 'http', function (name, options) {
+    console.log(" ==== wrapping azure async func ==== ");
+    options.handler = function (...args) {
+      return azureFunctionsChannel.tracePromise(options.handler, { name, options }, this, ...args)
+    }
   });
 })
