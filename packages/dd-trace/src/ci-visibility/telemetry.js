@@ -83,6 +83,12 @@ const TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS = 'itr_skippable_tests.request_errors
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES = 'itr_skippable_tests.response_suites'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS = 'itr_skippable_tests.response_tests'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES = 'itr_skippable_tests.response_bytes'
+// early flake detection
+const TELEMETRY_KNOWN_TESTS = 'early_flake_detection.request'
+const TELEMETRY_KNOWN_TESTS_MS = 'early_flake_detection.request_ms'
+const TELEMETRY_KNOWN_TESTS_ERRORS = 'early_flake_detection.request_errors'
+const TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS = 'early_flake_detection.response_tests'
+const TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES = 'early_flake_detection.response_bytes'
 
 function isStatusCode400 (statusCode) {
   return statusCode >= 400 && statusCode < 500
@@ -139,5 +145,9 @@ module.exports = {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
-  getErrorTypeFromStatusCode
+  TELEMETRY_KNOWN_TESTS,
+  TELEMETRY_KNOWN_TESTS_MS,
+  TELEMETRY_KNOWN_TESTS_ERRORS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
 }
