@@ -29,14 +29,14 @@ const telemetryCounters = {
 function getCounter (event, ddVar, otelVar) {
   const counters = telemetryCounters[event]
   const tags = []
-  const ddVarPrefix = 'config_datadog:'
-  const otelVarPrefix = 'config_opentelemetry:'
+  const ddVarPrefix = 'config.datadog:'
+  const otelVarPrefix = 'config.opentelemetry:'
   if (ddVar) {
-    ddVar = ddVarPrefix + ddVar.toLowerCase()
+    ddVar = ddVarPrefix + ddVar
     tags.push(ddVar)
   }
   if (otelVar) {
-    otelVar = otelVarPrefix + otelVar.toLowerCase()
+    otelVar = otelVarPrefix + otelVar
     tags.push(otelVar)
   }
 
@@ -408,7 +408,7 @@ class Config {
     this._setValue(defaults, 'appsec.eventTracking.mode', 'safe')
     this._setValue(defaults, 'appsec.obfuscatorKeyRegex', defaultWafObfuscatorKeyRegex)
     this._setValue(defaults, 'appsec.obfuscatorValueRegex', defaultWafObfuscatorValueRegex)
-    this._setValue(defaults, 'appsec.rasp.enabled', true)
+    this._setValue(defaults, 'appsec.rasp.enabled', false)
     this._setValue(defaults, 'appsec.rateLimit', 100)
     this._setValue(defaults, 'appsec.rules', undefined)
     this._setValue(defaults, 'appsec.sca.enabled', null)
@@ -982,7 +982,7 @@ class Config {
   }
 
   // handles values calculated from a mixture of options and env vars
-  _applyCalculated (options) {
+  _applyCalculated () {
     const calc = setHiddenProperty(this, '_calculated', {})
 
     const {
@@ -993,7 +993,7 @@ class Config {
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
       this._setValue(calc, 'url', new URL(DD_CIVISIBILITY_AGENTLESS_URL))
     } else {
-      this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), options))
+      this._setValue(calc, 'url', getAgentUrl(this._getTraceAgentUrl(), this._optionsArg))
     }
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
@@ -1009,11 +1009,11 @@ class Config {
     const defaultPropagationStyle = this._getDefaultPropagationStyle(this._optionsArg)
     this._setValue(calc, 'tracePropagationStyle.inject', propagationStyle(
       'inject',
-      options.tracePropagationStyle
+      this._optionsArg.tracePropagationStyle
     ))
     this._setValue(calc, 'tracePropagationStyle.extract', propagationStyle(
       'extract',
-      options.tracePropagationStyle
+      this._optionsArg.tracePropagationStyle
     ))
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
