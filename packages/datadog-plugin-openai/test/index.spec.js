@@ -150,6 +150,7 @@ describe('Plugin', () => {
         afterEach(() => {
           nock.cleanAll()
         })
+
         it('should maintain the context with a non-streamed call', async () => {
           nock('https://api.openai.com:443')
             .post('/v1/completions')
