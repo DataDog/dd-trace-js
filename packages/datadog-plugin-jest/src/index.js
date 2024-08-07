@@ -20,7 +20,9 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  JEST_DISPLAY_NAME
+  JEST_DISPLAY_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -294,7 +296,9 @@ class JestPlugin extends CiPlugin {
         'test',
         {
           hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-          isNew: spanTags[TEST_IS_NEW] === 'true'
+          isNew: spanTags[TEST_IS_NEW] === 'true',
+          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+          browserDriver: spanTags[TEST_BROWSER_DRIVER]
         }
       )
 

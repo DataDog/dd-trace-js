@@ -11,7 +11,9 @@ const formattedTags = {
   isSuitesSkippingEnabled: 'itrskip_enabled',
   hasCodeOwners: 'has_code_owners',
   isUnsupportedCIProvider: 'is_unsupported_ci',
-  isNew: 'is_new'
+  isNew: 'is_new',
+  isRum: 'is_rum',
+  browserDriver: 'browser_driver'
 }
 
 // Transform tags dictionary to array of strings.

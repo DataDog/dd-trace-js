@@ -27,7 +27,9 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_SUITE,
-  MOCHA_IS_PARALLEL
+  MOCHA_IS_PARALLEL,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -191,7 +193,9 @@ class MochaPlugin extends CiPlugin {
           'test',
           {
             hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true'
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
 
@@ -238,7 +242,9 @@ class MochaPlugin extends CiPlugin {
           'test',
           {
             hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true'
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
 

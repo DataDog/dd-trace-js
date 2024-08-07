@@ -671,7 +671,9 @@ class CypressPlugin {
         }
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
           hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
-          isNew
+          isNew,
+          isRum: isRUMActive,
+          browserDriver: 'cypress'
         })
         this.activeTestSpan = null
 

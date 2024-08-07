@@ -37,7 +37,9 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 
@@ -285,12 +287,15 @@ class CucumberPlugin extends CiPlugin {
 
       span.finish()
       if (!isStep) {
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
           {
-            hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
-            isNew
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew,
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
           }
         )
         finishAllTraceSpans(span)

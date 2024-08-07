@@ -169,7 +169,8 @@ class PlaywrightPlugin extends CiPlugin {
         'test',
         {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
-          isNew
+          isNew,
+          browserDriver: 'playwright'
         }
       )
       span.finish()
