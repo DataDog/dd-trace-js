@@ -15,7 +15,7 @@ class AgentExporter {
     }))
 
     const headers = {}
-    if (stats.enabled || appsec && appsec.standalone && appsec.standalone.enabled) { {
+    if (stats.enabled || appsec && appsec.standalone && appsec.standalone.enabled) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 
