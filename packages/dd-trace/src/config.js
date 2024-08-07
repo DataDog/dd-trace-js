@@ -838,6 +838,9 @@ class Config {
     this._optsUnprocessed['appsec.stackTrace.maxStackTraces'] = options.appsec.stackTrace?.maxStackTraces
     this._setValue(opts, 'appsec.wafTimeout', maybeInt(options.appsec.wafTimeout))
     this._optsUnprocessed['appsec.wafTimeout'] = options.appsec.wafTimeout
+    this._setValue(opts, 'baggageInject', options.baggageInjectEnabled)
+    this._setValue(opts, 'baggageExtract', options.baggageExtractEnabled)
+    this._setValue(opts, 'baggagePropagation', options.baggagePropagationEnabled)
     this._setBoolean(opts, 'clientIpEnabled', options.clientIpEnabled)
     this._setString(opts, 'clientIpHeader', options.clientIpHeader)
     this._setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
