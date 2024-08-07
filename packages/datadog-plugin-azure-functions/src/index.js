@@ -4,6 +4,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static get id () {
     return 'azure-functions'
   }
+  static get prefix () { return 'tracing:datadog:azure-functions:http' }
 
   start ({ name, options }) {
     console.log("==== starting span =====");
@@ -25,8 +26,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
   error () {}
 
   asyncEnd () {
-    // should never happen
     console.log("async end");
+    this.activeSpan?.finish();
   }
 }
 
