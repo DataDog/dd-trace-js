@@ -160,8 +160,6 @@ class PlaywrightPlugin extends CiPlugin {
         stepSpan.finish(stepStartTime + stepDuration)
       })
 
-      span.finish()
-
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -169,8 +167,12 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          isNew
+        }
       )
+      span.finish()
 
       finishAllTraceSpans(span)
     })

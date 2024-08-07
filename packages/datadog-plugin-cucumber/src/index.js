@@ -288,7 +288,10 @@ class CucumberPlugin extends CiPlugin {
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+            isNew
+          }
         )
         finishAllTraceSpans(span)
         // If it's a worker, flushing is cheap, as it's just sending data to the main process

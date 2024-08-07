@@ -287,12 +287,18 @@ class JestPlugin extends CiPlugin {
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
-      span.finish()
+
+      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+          isNew: spanTags[TEST_IS_NEW] === 'true'
+        }
       )
+
+      span.finish()
       finishAllTraceSpans(span)
     })
 

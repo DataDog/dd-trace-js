@@ -669,8 +669,12 @@ class CypressPlugin {
           }
           // test spans are finished at after:spec
         }
+        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
+          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          isNew
+        })
         this.activeTestSpan = null
-        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
+
         return null
       },
       'dd:addTags': (tags) => {

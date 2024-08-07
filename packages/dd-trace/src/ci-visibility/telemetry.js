@@ -10,7 +10,8 @@ const formattedTags = {
   isCodeCoverageEnabled: 'coverage_enabled',
   isSuitesSkippingEnabled: 'itrskip_enabled',
   hasCodeOwners: 'has_code_owners',
-  isUnsupportedCIProvider: 'is_unsupported_ci'
+  isUnsupportedCIProvider: 'is_unsupported_ci',
+  isNew: 'is_new'
 }
 
 // Transform tags dictionary to array of strings.
