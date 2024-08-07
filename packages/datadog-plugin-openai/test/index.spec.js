@@ -146,7 +146,7 @@ describe('Plugin', () => {
         })
       })
 
-      describe.only('maintains context', () => {
+      describe('maintains context', () => {
         afterEach(() => {
           nock.cleanAll()
         })
