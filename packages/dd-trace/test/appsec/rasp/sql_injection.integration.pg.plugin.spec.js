@@ -11,7 +11,8 @@ const { assert } = require('chai')
 describe('RASP - sql_injection - integration', () => {
   let axios, sandbox, cwd, appPort, appFile, agent, proc
 
-  before(async () => {
+  before(async function () {
+    this.timeout(60000)
     sandbox = await createSandbox(
       ['express', 'pg'],
       false,
@@ -26,7 +27,8 @@ describe('RASP - sql_injection - integration', () => {
     })
   })
 
-  after(async () => {
+  after(async function () {
+    this.timeout(60000)
     await sandbox.remove()
   })
 
