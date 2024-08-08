@@ -21,6 +21,11 @@ function copyProperties (original, wrapped) {
 }
 
 const wrapFn = function (original, delegate) {
+  if (safeMode) {
+    const target = { func: original }
+    wrapMethod(target, 'func', delegate)
+    return target.func
+  }
   assertFunction(delegate)
   assertNotClass(original) // TODO: support constructors of native classes
 
