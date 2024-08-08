@@ -10,13 +10,13 @@ class AzureFunctionsPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { name, options } = ctx
     console.log('==== starting span =====')
-    const span = this.startSpan('azure-inbound-web', {
+    const span = this.startSpan('azure-function', {
       service: this.config.service || this._tracerConfig.service,
       resource: name,
       type: 'system',
       meta: {
-        'azure-functions.name': name,
-        'azure-functions.trigger': options.trigger
+        'aas.function.name': name,
+        'aas.functions.trigger': options.trigger
       }
     }, false)
 
@@ -34,14 +34,12 @@ class AzureFunctionsPlugin extends TracingPlugin {
     if (ctx.error) {
       const error = ctx.error
       const span = ctx.currentStore.span
-      console.log('!!! ctx context error: ', error)
       span.setTag('error', error)
     }
   }
 
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
-    // console.log('--- active span: ', span)
     console.log('async end')
     span.finish()
   }
