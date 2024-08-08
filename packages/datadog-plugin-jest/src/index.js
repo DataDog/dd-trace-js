@@ -20,7 +20,9 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  JEST_DISPLAY_NAME
+  JEST_DISPLAY_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -32,7 +34,8 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
@@ -128,6 +131,8 @@ class JestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
 
       this.tracer._exporter.flush(() => {
         if (onDone) {
@@ -287,12 +292,20 @@ class JestPlugin extends CiPlugin {
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
-      span.finish()
+
+      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+          isNew: spanTags[TEST_IS_NEW] === 'true',
+          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+          browserDriver: spanTags[TEST_BROWSER_DRIVER]
+        }
       )
+
+      span.finish()
       finishAllTraceSpans(span)
     })
 
