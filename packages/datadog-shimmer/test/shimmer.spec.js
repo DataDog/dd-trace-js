@@ -230,6 +230,7 @@ describe('shimmer', () => {
 
     describe('safe mode', () => {
       let obj
+
       before(() => {
         shimmer.setSafe(true)
       })
@@ -318,12 +319,12 @@ describe('shimmer', () => {
         })
 
         it('should not throw when wrapper code is throwing', async () => {
-          shimmer.wrap(obj, 'count', () => {
-            return () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
               if (x === 2) {
                 throw new Error('wrapper error')
               }
-              throw new Error('wrapper error')
+              return await count.apply(this, arguments)
             }
           })
 
@@ -368,7 +369,7 @@ describe('shimmer', () => {
         it('should not throw when wrapper code is throwing mid-recursion', async () => {
           shimmer.wrap(obj, 'count', (count) => {
             return async function (x) {
-              const returnValue = await count.apply(this, args)
+              const returnValue = await count.apply(this, arguments)
               if (x === 2) {
                 throw new Error('wrapper error')
               }
@@ -382,7 +383,7 @@ describe('shimmer', () => {
         it('should not throw when wrapper code is throwing after return', async () => {
           shimmer.wrap(obj, 'count', (count) => {
             return async function (x) {
-              const returnValue = await count.apply(this, args)
+              const returnValue = await count.apply(this, arguments)
               if (x === 3) {
                 throw new Error('wrapper error')
               }
