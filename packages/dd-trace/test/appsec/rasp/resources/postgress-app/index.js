@@ -23,7 +23,7 @@ const port = process.env.APP_PORT || 3000
 
 app.get('/sqli/client/uncaught-promise', async (req, res) => {
   const client = new pg.Client(connectionData)
-  client.connect()
+  await client.connect()
 
   try {
     await client.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
