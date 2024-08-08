@@ -69,6 +69,24 @@ describe('RASP - sql_injection - integration', () => {
     throw new Error('Request should be blocked')
   })
 
+  it('should block using pg.Client and unhandled query object', async () => {
+    try {
+      await axios.get('/sqli/client/uncaught-query-error?param=\' OR 1 = 1 --')
+    } catch (e) {
+      if (!e.response) {
+        throw e
+      }
+
+      assert.strictEqual(e.response.status, 403)
+      return await agent.assertMessageReceived(({ headers, payload }) => {
+        assert.property(payload[0][0].meta, '_dd.appsec.json')
+        assert.include(payload[0][0].meta['_dd.appsec.json'], '"rasp-sqli-rule-id-2"')
+      })
+    }
+
+    throw new Error('Request should be blocked')
+  })
+
   it('should block using pg.Pool and unhandled promise', async () => {
     try {
       await axios.get('/sqli/pool/uncaught-promise?param=\' OR 1 = 1 --')

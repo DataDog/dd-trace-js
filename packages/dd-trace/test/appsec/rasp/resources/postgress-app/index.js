@@ -34,6 +34,17 @@ app.get('/sqli/client/uncaught-promise', async (req, res) => {
   res.end('OK')
 })
 
+app.get('/sqli/client/uncaught-query-error', async (req, res) => {
+  const client = new pg.Client(connectionData)
+  await client.connect()
+  const query = new pg.Query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
+  client.query(query)
+
+  query.on('end', () => {
+    res.end('OK')
+  })
+})
+
 app.get('/sqli/pool/uncaught-promise', async (req, res) => {
   await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
   res.end('OK')
