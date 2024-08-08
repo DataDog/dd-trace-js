@@ -64,6 +64,7 @@ function wrapMethod (target, name, wrapper) {
 
   const origOriginal = target[name]
   let original = origOriginal
+  let wrapped = wrapper(original)
   if (safeWrap) {
     // Wrap the original method to track if it was called and if it returned.
     // We'll need that to determine if an error was thrown by the original method, or by us.
@@ -82,56 +83,59 @@ function wrapMethod (target, name, wrapper) {
     //     but that means modifying every instrumentation. Even then, the complexity of
     //     this code increases because then we'd need to effectively do the reverse of
     //     what we're doing for synchronous functions.
-    original = function (...args) {
-      origOriginal[CALLED] = true
-      const retVal = origOriginal.apply(this, args)
-      if (isPromise(retVal)) {
-        retVal.then(val => {
-          origOriginal[RETVAL] = val
-        })
-        origOriginal[RETVAL] = IS_PROMISE
-      } else {
-        origOriginal[RETVAL] = retVal
-      }
-      return retVal
-    }
-  }
-  const origWrapped = wrapper(original)
-  let wrapped = origWrapped
-  if (safeWrap) {
-    const handleError = function (e, args) {
-      if (wasCalled(origOriginal) && !wasReturned(origOriginal)) {
-        // it was them. throw.
-        throw e
-      } else {
-        // it was us. swallow/log it.
-        log.error(e)
-        if (!wasCalled(origOriginal)) {
-          // original never ran. call it unwrapped.
-          return origOriginal.apply(this, args)
-        } else if (wasReturned(origOriginal)) {
-          // original ran and returned something. return it.
-          return origOriginal[RETVAL]
+    wrapped = function (...args) {
+      // TODO this should be wrapped _once_, not on every invocation!
+      // It's here inside this closure so that it has access to holder, which
+      // needs to exist per-invocation. Instead, some invocation-specific variable
+      // should be passed around, perhaps via some WeakMap or something.
+      let holder = {}
+      const wrapWrapped = wrapper(function (...args) {
+        holder[CALLED] = true
+        const retVal = origOriginal.apply(this, args)
+        if (isPromise(retVal)) {
+          retVal.then(val => {
+            holder[RETVAL] = val
+          })
+          holder[RETVAL] = IS_PROMISE
+        } else {
+          holder[RETVAL] = retVal
+        }
+        return retVal
+      })
+
+      const handleError = function (e, args) {
+        if (wasCalled(holder) && !wasReturned(holder)) {
+          // it was them. throw.
+          throw e
+        } else {
+          // it was us. swallow/log it.
+          log.error(e)
+          if (!wasCalled(holder)) {
+            // original never ran. call it unwrapped.
+            return origOriginal.apply(this, args)
+          } else if (wasReturned(holder)) {
+            // original ran and returned something. return it.
+            return holder[RETVAL]
+          }
         }
       }
-    }
-    wrapped = function (...args) {
+
       try {
-        const retVal = origWrapped.apply(this, args)
+        const retVal = wrapWrapped.apply(this, args)
         if (isPromise(retVal)) {
           // It's a promise. We need to wrap it to catch any errors that happen in the promise.
-          return retVal.catch(function (e) {
+          return retVal.catch((e) => {
             return handleError.call(this, e, args)
           })
         } else {
           return retVal
         }
       } catch (e) {
-        return handleError.call(this, e)
+        return handleError.call(this, e, args)
       } finally {
-        delete origOriginal[CALLED]
-        if (origOriginal[RETVAL] !== IS_PROMISE) {
-          delete origOriginal[RETVAL]
+        delete holder[CALLED]
+        if (holder[RETVAL] !== IS_PROMISE) {
+          delete holder[RETVAL]
         }
       }
     }

@@ -229,6 +229,7 @@ describe('shimmer', () => {
     })
 
     describe('safe mode', () => {
+      let obj
       before(() => {
         shimmer.setSafe(true)
       })
@@ -238,9 +239,11 @@ describe('shimmer', () => {
       })
 
       describe('sync', () => {
-        it('should not throw when wrapper code is throwing', () => {
-          const obj = { count: () => 3 }
+        beforeEach(() => {
+          obj = { count: () => 3 }
+        })
 
+        it('should not throw when wrapper code is throwing', () => {
           shimmer.wrap(obj, 'count', () => {
             return () => {
               throw new Error('wrapper error')
@@ -251,8 +254,6 @@ describe('shimmer', () => {
         })
 
         it('should not throw when wrapper code is throwing after return', () => {
-          const obj = { count: () => 3 }
-
           shimmer.wrap(obj, 'count', (count) => {
             return () => {
               count()
@@ -264,12 +265,64 @@ describe('shimmer', () => {
         })
       })
 
-      describe('async', () => {
-        it('should not throw when wrapper code is throwing', async () => {
-          const obj = { count: async () => await Promise.resolve(3) }
+      describe('sync recursive', () => {
+        beforeEach(() => {
+          obj = { count: (x = 1) => x === 3 ? 3 : obj.count(x + 1) }
+        })
 
+        it('should not throw when wrapper code is throwing', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return count.apply(this, arguments)
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing mid-recursion', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              const returnValue = count.apply(this, arguments)
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return function (x) {
+              const returnValue = count.apply(this, arguments)
+              if (x === 3) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(obj.count()).to.equal(3)
+        })
+      })
+
+      describe('async', () => {
+        beforeEach(() => {
+          obj = { count: async () => await Promise.resolve(3) }
+        })
+
+        it('should not throw when wrapper code is throwing', async () => {
           shimmer.wrap(obj, 'count', () => {
             return () => {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
               throw new Error('wrapper error')
             }
           })
@@ -278,12 +331,62 @@ describe('shimmer', () => {
         })
 
         it('should not throw when wrapper code is throwing after return', async () => {
-          const obj = { count: async () => await Promise.resolve(3) }
-
           shimmer.wrap(obj, 'count', (count) => {
             return async () => {
               await count()
               throw new Error('wrapper error')
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+      })
+
+      describe('async recursion', () => {
+        beforeEach(() => {
+          obj = {
+            async count (x = 1) {
+              if (x === 3) return await Promise.resolve(3)
+              else return await obj.count(x + 1)
+            }
+          }
+        })
+
+        it('should not throw when wrapper code is throwing', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return await count.apply(this, arguments)
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing mid-recursion', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              const returnValue = await count.apply(this, args)
+              if (x === 2) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
+            }
+          })
+
+          expect(await obj.count()).to.equal(3)
+        })
+
+        it('should not throw when wrapper code is throwing after return', async () => {
+          shimmer.wrap(obj, 'count', (count) => {
+            return async function (x) {
+              const returnValue = await count.apply(this, args)
+              if (x === 3) {
+                throw new Error('wrapper error')
+              }
+              return returnValue
             }
           })
 
