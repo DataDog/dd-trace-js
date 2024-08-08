@@ -63,7 +63,7 @@ function wrapMethod (target, name, wrapper) {
   assertFunction(wrapper)
 
   const origOriginal = target[name]
-  let original = origOriginal
+  const original = origOriginal
   let wrapped = wrapper(original)
   if (safeWrap) {
     // Wrap the original method to track if it was called and if it returned.
@@ -105,7 +105,7 @@ function wrapMethod (target, name, wrapper) {
       // It's here inside this closure so that it has access to holder, which
       // needs to exist per-invocation. Instead, some invocation-specific variable
       // should be passed around, perhaps via some WeakMap or something.
-      let holder = {}
+      const holder = {}
       holderForWrapped = holder
 
       const handleError = function (e, args) {
