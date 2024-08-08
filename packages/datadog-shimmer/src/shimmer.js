@@ -130,11 +130,6 @@ function wrapMethod (target, name, wrapper) {
         }
       } catch (e) {
         return handleError.call(this, e, args, holder)
-      } finally {
-        delete holder[CALLED]
-        if (holder[RETVAL] !== IS_PROMISE) {
-          delete holder[RETVAL]
-        }
       }
     }
   }
