@@ -69,9 +69,6 @@ function wrapMethod (target, name, wrapper) {
     // Wrap the original method to track if it was called and if it returned.
     // We'll need that to determine if an error was thrown by the original method, or by us.
     // Caveats:
-    //   * If the original method is called recursively, this tracking doesn't work.
-    //     A less naive implementation would use a stack, or even just use
-    //     AsyncLocalStorage.
     //   * If the original method is called in a later iteration of the event loop,
     //     and we throw _then_, then it won't be caught by this.
     //   * While async errors are dealt with here, errors in callbacks are not. This
@@ -100,43 +97,39 @@ function wrapMethod (target, name, wrapper) {
       return retVal
     })
 
-    wrapped = function (...args) {
-      // TODO this should be wrapped _once_, not on every invocation!
-      // It's here inside this closure so that it has access to holder, which
-      // needs to exist per-invocation. Instead, some invocation-specific variable
-      // should be passed around, perhaps via some WeakMap or something.
-      const holder = {}
-      holderForWrapped = holder
-
-      const handleError = function (e, args) {
-        if (wasCalled(holder) && !wasReturned(holder)) {
-          // it was them. throw.
-          throw e
-        } else {
-          // it was us. swallow/log it.
-          log.error(e)
-          if (!wasCalled(holder)) {
-            // original never ran. call it unwrapped.
-            return origOriginal.apply(this, args)
-          } else if (wasReturned(holder)) {
-            // original ran and returned something. return it.
-            return holder[RETVAL]
-          }
+    const handleError = function (e, args, holder) {
+      if (wasCalled(holder) && !wasReturned(holder)) {
+        // it was them. throw.
+        throw e
+      } else {
+        // it was us. swallow/log it.
+        log.error(e)
+        if (!wasCalled(holder)) {
+          // original never ran. call it unwrapped.
+          return origOriginal.apply(this, args)
+        } else if (wasReturned(holder)) {
+          // original ran and returned something. return it.
+          return holder[RETVAL]
         }
       }
+    }
+
+    wrapped = function (...args) {
+      const holder = {}
+      holderForWrapped = holder
 
       try {
         const retVal = wrapWrapped.apply(this, args)
         if (isPromise(retVal)) {
           // It's a promise. We need to wrap it to catch any errors that happen in the promise.
           return retVal.catch((e) => {
-            return handleError.call(this, e, args)
+            return handleError.call(this, e, args, holder)
           })
         } else {
           return retVal
         }
       } catch (e) {
-        return handleError.call(this, e, args)
+        return handleError.call(this, e, args, holder)
       } finally {
         delete holder[CALLED]
         if (holder[RETVAL] !== IS_PROMISE) {
