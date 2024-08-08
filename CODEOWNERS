@@ -18,6 +18,7 @@
 /packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-vitest/ @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/git.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
