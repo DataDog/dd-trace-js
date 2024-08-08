@@ -44,7 +44,8 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   incrementCountMetric,
-  distributionMetric
+  distributionMetric,
+  TELEMETRY_ITR_SKIPPED
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const {
@@ -364,6 +365,7 @@ class CypressPlugin {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
         this.itrCorrelationId = correlationId
+        incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
     }
 
