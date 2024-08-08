@@ -14,7 +14,8 @@ const {
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
-  TELEMETRY_EVENT_FINISHED
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 // Milliseconds that we subtract from the error test duration
@@ -184,6 +185,7 @@ class VitestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       this.tracer._exporter.flush(onFinish)
     })
   }

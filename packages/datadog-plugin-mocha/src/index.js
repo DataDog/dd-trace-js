@@ -40,7 +40,8 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
@@ -306,6 +307,7 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
+        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()

@@ -34,7 +34,8 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
@@ -130,6 +131,8 @@ class JestPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
 
       this.tracer._exporter.flush(() => {
         if (onDone) {

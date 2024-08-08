@@ -146,7 +146,6 @@ module.exports = class CiPlugin extends Plugin {
           testLevel,
           testFramework,
           isUnsupportedCIProvider: !this.ciProviderName,
-          provider: this.ciProviderName,
           ...tags
         })
       },

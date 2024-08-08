@@ -47,6 +47,7 @@ function distributionMetric (name, tags, measure) {
 }
 
 // CI Visibility telemetry events
+const TELEMETRY_TEST_SESSION = 'test_session'
 const TELEMETRY_EVENT_CREATED = 'event_created'
 const TELEMETRY_EVENT_FINISHED = 'event_finished'
 const TELEMETRY_CODE_COVERAGE_STARTED = 'code_coverage_started'
@@ -109,6 +110,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
   TELEMETRY_CODE_COVERAGE_STARTED,

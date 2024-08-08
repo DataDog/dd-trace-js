@@ -45,7 +45,8 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   incrementCountMetric,
   distributionMetric,
-  TELEMETRY_ITR_SKIPPED
+  TELEMETRY_ITR_SKIPPED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const {
@@ -323,7 +324,6 @@ class CypressPlugin {
       testLevel,
       testFramework: 'cypress',
       isUnsupportedCIProvider: !this.ciProviderName,
-      provider: this.ciProviderName,
       ...tags
     })
   }
@@ -439,6 +439,9 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      incrementCountMetric(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName
+      })
 
       finishAllTraceSpans(this.testSessionSpan)
     }
