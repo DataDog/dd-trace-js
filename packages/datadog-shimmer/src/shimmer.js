@@ -83,25 +83,30 @@ function wrapMethod (target, name, wrapper) {
     //     but that means modifying every instrumentation. Even then, the complexity of
     //     this code increases because then we'd need to effectively do the reverse of
     //     what we're doing for synchronous functions.
+
+    let holderForWrapped
+    const wrapWrapped = wrapper(function (...args) {
+      const holder = holderForWrapped
+      holder[CALLED] = true
+      const retVal = origOriginal.apply(this, args)
+      if (isPromise(retVal)) {
+        retVal.then(val => {
+          holder[RETVAL] = val
+        })
+        holder[RETVAL] = IS_PROMISE
+      } else {
+        holder[RETVAL] = retVal
+      }
+      return retVal
+    })
+
     wrapped = function (...args) {
       // TODO this should be wrapped _once_, not on every invocation!
       // It's here inside this closure so that it has access to holder, which
       // needs to exist per-invocation. Instead, some invocation-specific variable
       // should be passed around, perhaps via some WeakMap or something.
       let holder = {}
-      const wrapWrapped = wrapper(function (...args) {
-        holder[CALLED] = true
-        const retVal = origOriginal.apply(this, args)
-        if (isPromise(retVal)) {
-          retVal.then(val => {
-            holder[RETVAL] = val
-          })
-          holder[RETVAL] = IS_PROMISE
-        } else {
-          holder[RETVAL] = retVal
-        }
-        return retVal
-      })
+      holderForWrapped = holder
 
       const handleError = function (e, args) {
         if (wasCalled(holder) && !wasReturned(holder)) {
