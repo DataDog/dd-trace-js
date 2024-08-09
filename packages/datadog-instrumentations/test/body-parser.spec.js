@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { storage } = require('../../datadog-core')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
@@ -10,7 +11,7 @@ withVersions('body-parser', 'body-parser', version => {
     let port, server, middlewareProcessBodyStub
 
     before(() => {
-      return agent.load(['express', 'body-parser'], { client: false })
+      return agent.load(['http', 'express', 'body-parser'], { client: false })
     })
 
     before((done) => {
@@ -69,6 +70,28 @@ withVersions('body-parser', 'body-parser', version => {
       expect(res.data).to.be.equal('BLOCKED')
 
       bodyParserReadCh.unsubscribe(blockRequest)
+    })
+
+    it('should not lose the http async context', async () => {
+      let store
+      let payload
+
+      function handler (data) {
+        store = storage.getStore()
+        payload = data
+      }
+      bodyParserReadCh.subscribe(handler)
+
+      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+
+      expect(store).to.have.property('req', payload.req)
+      expect(store).to.have.property('res', payload.res)
+      expect(store).to.have.property('span')
+
+      expect(middlewareProcessBodyStub).to.be.calledOnce
+      expect(res.data).to.be.equal('DONE')
+
+      bodyParserReadCh.unsubscribe(handler)
     })
   })
 })

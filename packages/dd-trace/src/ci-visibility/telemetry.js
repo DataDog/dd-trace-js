@@ -10,13 +10,24 @@ const formattedTags = {
   isCodeCoverageEnabled: 'coverage_enabled',
   isSuitesSkippingEnabled: 'itrskip_enabled',
   hasCodeOwners: 'has_code_owners',
-  isUnsupportedCIProvider: 'is_unsupported_ci'
+  isUnsupportedCIProvider: 'is_unsupported_ci',
+  isNew: 'is_new',
+  isRum: 'is_rum',
+  browserDriver: 'browser_driver'
 }
 
 // Transform tags dictionary to array of strings.
 // If tag value is true, then only tag key is added to the array.
 function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((acc, tagKey) => {
+    if (tagKey === 'statusCode') {
+      const statusCode = tagsDictionary[tagKey]
+      if (isStatusCode400(statusCode)) {
+        acc.push(`status_code:${statusCode}`)
+      }
+      acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
+      return acc
+    }
     const formattedTagKey = formattedTags[tagKey] || tagKey
     if (tagsDictionary[tagKey] === true) {
       acc.push(formattedTagKey)
@@ -36,6 +47,7 @@ function distributionMetric (name, tags, measure) {
 }
 
 // CI Visibility telemetry events
+const TELEMETRY_TEST_SESSION = 'test_session'
 const TELEMETRY_EVENT_CREATED = 'event_created'
 const TELEMETRY_EVENT_FINISHED = 'event_finished'
 const TELEMETRY_CODE_COVERAGE_STARTED = 'code_coverage_started'
@@ -74,6 +86,16 @@ const TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS = 'itr_skippable_tests.request_errors
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES = 'itr_skippable_tests.response_suites'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS = 'itr_skippable_tests.response_tests'
 const TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES = 'itr_skippable_tests.response_bytes'
+// early flake detection
+const TELEMETRY_KNOWN_TESTS = 'early_flake_detection.request'
+const TELEMETRY_KNOWN_TESTS_MS = 'early_flake_detection.request_ms'
+const TELEMETRY_KNOWN_TESTS_ERRORS = 'early_flake_detection.request_errors'
+const TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS = 'early_flake_detection.response_tests'
+const TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES = 'early_flake_detection.response_bytes'
+
+function isStatusCode400 (statusCode) {
+  return statusCode >= 400 && statusCode < 500
+}
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (statusCode >= 400 && statusCode < 500) {
@@ -88,6 +110,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
   TELEMETRY_CODE_COVERAGE_STARTED,
@@ -126,5 +149,9 @@ module.exports = {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
-  getErrorTypeFromStatusCode
+  TELEMETRY_KNOWN_TESTS,
+  TELEMETRY_KNOWN_TESTS_MS,
+  TELEMETRY_KNOWN_TESTS_ERRORS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
 }

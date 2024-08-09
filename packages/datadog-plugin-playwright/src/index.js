@@ -14,7 +14,8 @@ const {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -59,6 +60,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
@@ -160,8 +162,6 @@ class PlaywrightPlugin extends CiPlugin {
         stepSpan.finish(stepStartTime + stepDuration)
       })
 
-      span.finish()
-
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -169,8 +169,13 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          isNew,
+          browserDriver: 'playwright'
+        }
       )
+      span.finish()
 
       finishAllTraceSpans(span)
     })

@@ -25,6 +25,7 @@ const propagationFns = [
   'sliceStr',
   'substrStr',
   'substringStr',
+  'templateLiteralEndingWithNumberParams',
   'toLowerCaseStr',
   'toUpperCaseStr',
   'trimEndStr',
@@ -135,7 +136,8 @@ describe('TaintTracking', () => {
       'arrayProtoJoin',
       'concatSuffix',
       'concatTaintedStr',
-      'insertStr'
+      'insertStr',
+      'templateLiteralEndingWithNumberParams'
     ]
     propagationFns.forEach((propFn) => {
       if (filtered.includes(propFn)) return
