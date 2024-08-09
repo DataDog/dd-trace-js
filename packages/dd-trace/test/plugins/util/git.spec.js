@@ -26,7 +26,7 @@ const {
   CI_WORKSPACE_PATH
 } = require('../../../src/plugins/util/tags')
 
-const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
+const { getGitMetadata, unshallowRepository, GitClient } = proxyquire('../../../src/plugins/util/git',
   {
     child_process: {
       execFileSync: execFileSyncStub
@@ -377,4 +377,8 @@ describe('user credentials', () => {
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('ssh://host.xz:port/path/to/repo.git/')
   })
+})
+
+describe('GitClient', () => {
+
 })

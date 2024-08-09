@@ -2,7 +2,7 @@
 
 const URL = require('url').URL
 
-const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+const { GitClient } = require('../../../../dd-trace/src/plugins/util/git')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -63,6 +63,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
         resolve(canUseCiVisProtocol)
       }
     })
+
+    this.gitClient = new GitClient()
 
     process.once('beforeExit', () => {
       if (this._writer) {
@@ -205,15 +207,19 @@ class CiVisibilityExporter extends AgentInfoExporter {
     }
   }
 
+  // get a git client here and bail out if git is not available?
   sendGitMetadata (repositoryUrl) {
     if (!this._config.isGitUploadEnabled) {
       return
+    }
+    if (!this.gitClient.isGitAvailable) {
+      return this._resolveGit(new Error('git is not available'))
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return
       }
-      sendGitMetadataRequest(
+      this.gitClient.sendGitMetadata(
         this._getApiUrl(),
         { isEvpProxy: !!this._isUsingEvpProxy, evpProxyPrefix: this.evpProxyPrefix },
         repositoryUrl,
