@@ -61,9 +61,13 @@ function commitBranchDiffs (args) {
   const commandCore = `branch-diff --user DataDog --repo test-node-release-rebase \
 --exclude-label=${excludedLabels.join(',')}`
 
-  const releaseNotesDraft = execSync(`${commandCore} ${releaseBranch} master`).toString()
+  const releaseNotesCommand = `${commandCore} ${releaseBranch} master`
+  console.log('command for release notes', releaseNotesCommand)
+  const releaseNotesDraft = execSync(releaseNotesCommand).toString()
 
-  execSync(`${commandCore} --format=sha --reverse ${releaseBranch} master | xargs git cherry-pick`)
+  const cherryPickCommand = `${commandCore} --format=sha --reverse ${releaseBranch} master | xargs git cherry-pick`
+  console.log('command for cherry picks', cherryPickCommand)
+  execSync(cherryPickCommand)
 
   console.log(releaseNotesDraft)
 }
