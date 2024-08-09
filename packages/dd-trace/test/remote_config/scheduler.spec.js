@@ -1,6 +1,6 @@
 'use strict'
 
-const Scheduler = require('../../../src/appsec/remote_config/scheduler')
+const Scheduler = require('../../src/remote_config/scheduler')
 
 const INTERVAL = 5e3
 

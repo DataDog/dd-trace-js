@@ -1,7 +1,7 @@
 'use strict'
 
-const RemoteConfigCapabilities = require('../../../src/appsec/remote_config/capabilities')
-const { kPreUpdate } = require('../../../src/appsec/remote_config/manager')
+const RemoteConfigCapabilities = require('../../src/remote_config/capabilities')
+const { kPreUpdate } = require('../../src/remote_config/manager')
 
 let config
 let rc
@@ -41,7 +41,7 @@ describe('Remote Config index', () => {
       disable: sinon.spy()
     }
 
-    remoteConfig = proxyquire('../src/appsec/remote_config', {
+    remoteConfig = proxyquire('../src/remote_config', {
       './manager': RemoteConfigManager,
       '../rule_manager': RuleManager,
       '../api_security_sampler': apiSecuritySampler,

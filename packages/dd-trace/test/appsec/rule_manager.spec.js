@@ -2,7 +2,7 @@
 
 const { loadRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
-const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
+const { ACKNOWLEDGED } = require('../../src/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')

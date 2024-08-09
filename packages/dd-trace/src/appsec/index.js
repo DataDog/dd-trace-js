@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const RuleManager = require('./rule_manager')
-const remoteConfig = require('./remote_config')
+const remoteConfig = require('../remote_config')
 const {
   bodyParser,
   cookieParser,
