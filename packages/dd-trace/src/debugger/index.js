@@ -1,0 +1,58 @@
+'use strict'
+
+const { join } = require('node:path')
+const { Worker, MessageChannel } = require('node:worker_threads')
+const log = require('../log')
+
+let worker = null
+let configChannel = null
+
+module.exports = {
+  start,
+  configure
+}
+
+function start (config, rc) {
+  if (worker !== null) return
+
+  log.debug('Starting Dynamic Instrumentation client...')
+
+  rc.on('LIVE_DEBUGGING', (action, conf) => {
+    rcChannel.port2.postMessage({ action, conf })
+  })
+
+  const rcChannel = new MessageChannel()
+  configChannel = new MessageChannel()
+
+  worker = new Worker(
+    join(__dirname, 'devtools_client', 'index.js'),
+    {
+      execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
+      workerData: { config, rcPort: rcChannel.port1, configPort: configChannel.port1 },
+      transferList: [rcChannel.port1, configChannel.port1]
+    }
+  )
+
+  worker.unref()
+
+  worker.on('online', () => {
+    log.debug(`Dynamic Instrumentation worker thread started successfully (thread id: ${worker.threadId})`)
+  })
+
+  // TODO: Is there a standard format og loggering errors from the tracer?
+  worker.on('error', (err) => log.error(err))
+
+  // TODO: How should we handle exits?
+  worker.on('exit', (code) => {
+    if (code === 0) {
+      log.debug(`Dynamic Instrumentation worker thread exited with code ${code}`)
+    } else {
+      log.error(`Dynamic Instrumentation worker thread exited with unexpected code: ${code}`)
+    }
+  })
+}
+
+function configure (config) {
+  if (configChannel === null) return
+  configChannel.port2.postMessage(config)
+}
