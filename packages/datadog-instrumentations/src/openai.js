@@ -2,7 +2,8 @@
 
 const {
   channel,
-  addHook
+  addHook,
+  AsyncResource
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
@@ -114,29 +115,32 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
         return fn.apply(this, arguments)
       }
 
-      startCh.publish({
-        methodName,
-        args: arguments,
-        basePath: this.basePath,
-        apiKey: this.configuration.apiKey
-      })
+      const asyncResource = new AsyncResource('bound-anonymous-fn')
+      return asyncResource.runInAsyncScope(() => {
+        startCh.publish({
+          methodName,
+          args: arguments,
+          basePath: this.basePath,
+          apiKey: this.configuration.apiKey
+        })
 
-      return fn.apply(this, arguments)
-        .then((response) => {
-          finish({
-            headers: response.headers,
-            body: response.data,
-            path: response.request.path,
-            method: response.request.method
+        return fn.apply(this, arguments)
+          .then((response) => {
+            finish({
+              headers: response.headers,
+              body: response.data,
+              path: response.request.path,
+              method: response.request.method
+            })
+
+            return response
           })
+          .catch(error => {
+            finish(undefined, error)
 
-          return response
-        })
-        .catch(error => {
-          finish(undefined, error)
-
-          throw error
-        })
+            throw error
+          })
+      })
     })
   }
 
@@ -213,61 +217,63 @@ function convertBufferstoObjects (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options, n) {
+function wrapStreamIterator (response, options, n, resource) {
   let processChunksAsBuffers = false
   let chunks = []
   return function (itr) {
     return function () {
       const iterator = itr.apply(this, arguments)
       shimmer.wrap(iterator, 'next', next => function () {
-        return next.apply(this, arguments)
-          .then(res => {
-            const { done, value: chunk } = res
+        return resource.runInAsyncScope(() => {
+          return next.apply(this, arguments)
+            .then(res => {
+              const { done, value: chunk } = res
 
-            if (chunk) {
-              chunks.push(chunk)
-              if (chunk instanceof Buffer) {
+              if (chunk) {
+                chunks.push(chunk)
+                if (chunk instanceof Buffer) {
                 // this operation should be safe
                 // if one chunk is a buffer (versus a plain object), the rest should be as well
-                processChunksAsBuffers = true
-              }
-            }
-
-            if (done) {
-              let body = {}
-              chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
-
-              if (chunks) {
-                if (processChunksAsBuffers) {
-                  chunks = convertBufferstoObjects(chunks)
+                  processChunksAsBuffers = true
                 }
+              }
 
-                if (chunks.length) {
+              if (done) {
+                let body = {}
+                chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
+
+                if (chunks) {
+                  if (processChunksAsBuffers) {
+                    chunks = convertBufferstoObjects(chunks)
+                  }
+
+                  if (chunks.length) {
                   // define the initial body having all the content outside of choices from the first chunk
                   // this will include import data like created, id, model, etc.
-                  body = { ...chunks[0], choices: Array.from({ length: n }) }
-                  // start from the first chunk, and add its choices into the body
-                  for (let i = 0; i < chunks.length; i++) {
-                    addStreamedChunk(body, chunks[i])
+                    body = { ...chunks[0], choices: Array.from({ length: n }) }
+                    // start from the first chunk, and add its choices into the body
+                    for (let i = 0; i < chunks.length; i++) {
+                      addStreamedChunk(body, chunks[i])
+                    }
                   }
                 }
+
+                finish({
+                  headers: response.headers,
+                  body,
+                  path: response.url,
+                  method: options.method
+                })
               }
 
-              finish({
-                headers: response.headers,
-                body,
-                path: response.url,
-                method: options.method
-              })
-            }
+              return res
+            })
+            .catch(err => {
+              finish(undefined, err)
 
-            return res
-          })
-          .catch(err => {
-            finish(undefined, err)
-
-            throw err
-          })
+              throw err
+            })
+        })
       })
       return iterator
     }
@@ -284,6 +290,8 @@ for (const shim of V4_PACKAGE_SHIMS) {
         if (!startCh.hasSubscribers) {
           return methodFn.apply(this, arguments)
         }
+
+        const asyncResource = new AsyncResource('bound-anonymous-fn')
 
         // The OpenAI library lets you set `stream: true` on the options arg to any method
         // However, we only want to handle streamed responses in specific cases
@@ -303,54 +311,56 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
         const client = this._client || this.client
 
-        startCh.publish({
-          methodName: `${baseResource}.${methodName}`,
-          args: arguments,
-          basePath: client.baseURL,
-          apiKey: client.apiKey
-        })
+        return asyncResource.runInAsyncScope(() => {
+          startCh.publish({
+            methodName: `${baseResource}.${methodName}`,
+            args: arguments,
+            basePath: client.baseURL,
+            apiKey: client.apiKey
+          })
 
-        const apiProm = methodFn.apply(this, arguments)
+          const apiProm = methodFn.apply(this, arguments)
 
-        // wrapping `parse` avoids problematic wrapping of `then` when trying to call
-        // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-        shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
-          return origApiPromParse.apply(this, arguments)
+          // wrapping `parse` avoids problematic wrapping of `then` when trying to call
+          // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
+          shimmer.wrap(apiProm, 'parse', origApiPromParse => asyncResource.bind(function () {
+            return origApiPromParse.apply(this, arguments)
             // the original response is wrapped in a promise, so we need to unwrap it
-            .then(body => Promise.all([this.responsePromise, body]))
-            .then(([{ response, options }, body]) => {
-              if (stream) {
-                if (body.iterator) {
-                  shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
+              .then(body => Promise.all([this.responsePromise, body]))
+              .then(([{ response, options }, body]) => {
+                if (stream) {
+                  if (body.iterator) {
+                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, asyncResource))
+                  } else {
+                    shimmer.wrap(
+                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, asyncResource)
+                    )
+                  }
                 } else {
-                  shimmer.wrap(
-                    body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
-                  )
+                  finish({
+                    headers: response.headers,
+                    body,
+                    path: response.url,
+                    method: options.method
+                  })
                 }
-              } else {
-                finish({
-                  headers: response.headers,
-                  body,
-                  path: response.url,
-                  method: options.method
-                })
-              }
 
-              return body
-            })
-            .catch(error => {
-              finish(undefined, error)
+                return body
+              })
+              .catch(error => {
+                finish(undefined, error)
 
-              throw error
-            })
-            .finally(() => {
+                throw error
+              })
+              .finally(() => {
               // maybe we don't want to unwrap here in case the promise is re-used?
               // other hand: we want to avoid resource leakage
-              shimmer.unwrap(apiProm, 'parse')
-            })
-        })
+                shimmer.unwrap(apiProm, 'parse')
+              })
+          }))
 
-        return apiProm
+          return apiProm
+        })
       })
     }
     return exports
