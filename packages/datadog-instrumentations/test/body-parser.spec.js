@@ -1,6 +1,5 @@
 'use strict'
 
-const { assert } = require('chai')
 const dc = require('dc-polyfill')
 const axios = require('axios')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -74,12 +73,11 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should not lose the http async context', async () => {
-      function handler () {
+      function handler ({ req, res }) {
         const store = storage.getStore()
-        assert(store)
-        assert(store.req)
-        assert(store.res)
-        assert(store.span)
+        expect(store).to.have.property('req', req)
+        expect(store).to.have.property('res', res)
+        expect(store).to.have.property('span')
       }
       bodyParserReadCh.subscribe(handler)
 
