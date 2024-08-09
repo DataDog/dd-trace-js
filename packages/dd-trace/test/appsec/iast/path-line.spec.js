@@ -45,8 +45,8 @@ describe('path-line', function () {
     mockPath = {}
     mockProcess = {}
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
-      path: mockPath,
-      process: mockProcess
+      'node:path': mockPath,
+      'node:process': mockProcess
     })
   })
 
