@@ -72,19 +72,22 @@ withVersions('body-parser', 'body-parser', version => {
       bodyParserReadCh.unsubscribe(blockRequest)
     })
 
-    it('should propagate the async context', async () => {
-      const store = {}
-      function noop () {
-        console.log(storage.getStore())
+    it('should not lose the http async context', async () => {
+      function handler () {
+        const store = storage.getStore()
+        assert(store)
+        assert(store.req)
+        assert(store.res)
+        assert(store.span)
       }
-      bodyParserReadCh.subscribe(noop)
+      bodyParserReadCh.subscribe(handler)
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
 
       expect(middlewareProcessBodyStub).to.be.calledOnce
       expect(res.data).to.be.equal('DONE')
 
-      bodyParserReadCh.unsubscribe(noop)
+      bodyParserReadCh.unsubscribe(handler)
     })
   })
 })
