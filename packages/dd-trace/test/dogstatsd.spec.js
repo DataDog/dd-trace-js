@@ -63,7 +63,7 @@ describe('dogstatsd', () => {
     })
 
     const dogstatsd = proxyquire('../src/dogstatsd', {
-      dgram,
+      'node:dgram': dgram,
       'node:dns': dns
     })
     DogStatsDClient = dogstatsd.DogStatsDClient

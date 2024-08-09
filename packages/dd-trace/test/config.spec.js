@@ -1651,8 +1651,8 @@ describe('Config', () => {
     const Config = proxyquire('../src/config', {
       './pkg': pkg,
       './log': log,
-      fs,
-      os
+      'node:fs': fs,
+      'node:os': os
     })
 
     const config = new Config({
