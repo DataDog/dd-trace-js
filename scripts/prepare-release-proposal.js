@@ -58,7 +58,7 @@ function commitBranchDiffs (args) {
     `dont-land-on-${releaseBranch}`
   ]
 
-  const commandCore = `branch-diff --user DataDog --repo test-node-release-rebase \
+  const commandCore = `branch-diff --user DataDog --repo dd-trace-js \
 --exclude-label=${excludedLabels.join(',')}`
 
   const releaseNotesCommand = `${commandCore} ${releaseBranch} master`
