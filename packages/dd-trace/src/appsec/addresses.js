@@ -22,5 +22,7 @@ module.exports = {
   USER_ID: 'usr.id',
   WAF_CONTEXT_PROCESSOR: 'waf.context.processor',
 
-  HTTP_OUTGOING_URL: 'server.io.net.url'
+  HTTP_OUTGOING_URL: 'server.io.net.url',
+  DB_STATEMENT: 'server.db.statement',
+  DB_SYSTEM: 'server.db.system'
 }
