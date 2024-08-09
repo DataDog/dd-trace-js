@@ -124,6 +124,8 @@ function extractTags (trace, span) {
     registerExtraService(tags['service.name'])
   }
 
+  extractHttpResource(trace, tags)
+
   for (const tag in tags) {
     switch (tag) {
       case 'service.name':
@@ -206,6 +208,18 @@ function extractError (trace, error) {
     addTag(trace.meta, trace.metrics, ERROR_MESSAGE, error.message || error.code)
     addTag(trace.meta, trace.metrics, ERROR_TYPE, error.name)
     addTag(trace.meta, trace.metrics, ERROR_STACK, error.stack)
+  }
+}
+
+function extractHttpResource (trace, tags) {
+  if (tags['resource.name']) return
+  if (tags['http.route']) {
+    addTag(trace, {}, 'resource', [
+      tags['http.method'],
+      tags['http.route']
+    ].filter(v => v).join(' '))
+  } else if (tags['http.method']) {
+    addTag(trace, {}, 'resource', tags['http.method'])
   }
 }
 
