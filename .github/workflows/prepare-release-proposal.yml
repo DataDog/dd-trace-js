@@ -54,7 +54,7 @@ jobs:
       - name: Configure branch-diff
         run: |
           mkdir -p ~/.config/changelog-maker
-          echo "{\"token\":\"${{secrets.GITHUB_TOKEN}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
+          echo "{\"token\":\"${{secrets.GH_ACCESS_TOKEN_RELEASE}}\",\"user\":\"${{github.actor}}\"}" > ~/.config/changelog-maker/config.json
 
       - name: Commit branch diffs
         id: commit_branch_diffs
