@@ -11,7 +11,7 @@ withVersions('body-parser', 'body-parser', version => {
     let port, server, middlewareProcessBodyStub
 
     before(() => {
-      return agent.load(['express', 'body-parser'], { client: false })
+      return agent.load(['http', 'express', 'body-parser'], { client: false })
     })
 
     before((done) => {
