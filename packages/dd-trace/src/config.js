@@ -294,7 +294,7 @@ class Config {
     this._applyDefaults()
     this._applyEnvironment()
     this._applyOptions(options)
-    this._applyCalculated(options)
+    this._applyCalculated()
     this._applyRemote({})
     this._merge()
 
@@ -354,7 +354,7 @@ class Config {
     }
 
     // TODO: test
-    this._applyCalculated(options)
+    this._applyCalculated()
     this._merge()
   }
 
