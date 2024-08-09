@@ -3,6 +3,7 @@ const os = require('os')
 const path = require('path')
 const fs = require('fs')
 
+const request = require('../../../src/exporters/common/request')
 const log = require('../../log')
 const {
   GIT_COMMIT_SHA,
@@ -18,17 +19,51 @@ const {
   GIT_COMMIT_AUTHOR_NAME,
   CI_WORKSPACE_PATH
 } = require('./tags')
+const { filterSensitiveInfoFromRepository } = require('./url')
+const { storage } = require('../../../../datadog-core')
 const {
   incrementCountMetric,
   distributionMetric,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS,
+  TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS,
+  TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES,
   TELEMETRY_GIT_COMMAND,
   TELEMETRY_GIT_COMMAND_MS,
   TELEMETRY_GIT_COMMAND_ERRORS
-} = require('../../ci-visibility/telemetry')
-const { filterSensitiveInfoFromRepository } = require('./url')
-const { storage } = require('../../../../datadog-core')
+} = require('../../../ci-visibility/telemetry')
 
 const GIT_REV_LIST_MAX_BUFFER = 12 * 1024 * 1024 // 12MB
+
+const isValidSha1 = (sha) => /^[0-9a-f]{40}$/.test(sha)
+const isValidSha256 = (sha) => /^[0-9a-f]{64}$/.test(sha)
+
+function getCommonRequestOptions (url) {
+  return {
+    method: 'POST',
+    headers: {
+      'dd-api-key': process.env.DATADOG_API_KEY || process.env.DD_API_KEY
+    },
+    timeout: 15000,
+    url
+  }
+}
+
+function validateCommits (commits) {
+  return commits.map(({ id: commitSha, type }) => {
+    if (type !== 'commit') {
+      throw new Error('Invalid commit type response')
+    }
+    if (isValidSha1(commitSha) || isValidSha256(commitSha)) {
+      return commitSha.replace(/[^0-9a-f]+/g, '')
+    }
+    throw new Error('Invalid commit format')
+  })
+}
 
 function isDirectory (path) {
   try {
@@ -74,6 +109,48 @@ function sanitizedExec (
     return ''
   } finally {
     storage.enterWith(store)
+  }
+}
+
+// If there is ciMetadata, it takes precedence.
+function getGitMetadata (ciMetadata) {
+  const {
+    commitSHA,
+    branch,
+    repositoryUrl,
+    tag,
+    commitMessage,
+    authorName: ciAuthorName,
+    authorEmail: ciAuthorEmail,
+    ciWorkspacePath
+  } = ciMetadata
+
+  // With stdio: 'pipe', errors in this command will not be output to the parent process,
+  // so if `git` is not present in the env, we won't show a warning to the user.
+  const [
+    authorName,
+    authorEmail,
+    authorDate,
+    committerName,
+    committerEmail,
+    committerDate
+  ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+
+  return {
+    [GIT_REPOSITORY_URL]:
+      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
+    [GIT_COMMIT_MESSAGE]:
+      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
+    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
+    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
+    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
+    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
+    [GIT_COMMIT_COMMITTER_NAME]: committerName,
+    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
+    [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
+    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
+    [GIT_TAG]: tag,
+    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
   }
 }
 
@@ -315,47 +392,245 @@ class GitClient {
     }
     distributionMetric(TELEMETRY_GIT_COMMAND_MS, { command: 'unshallow' }, Date.now() - start)
   }
-}
 
-// If there is ciMetadata, it takes precedence.
-function getGitMetadata (ciMetadata) {
-  const {
-    commitSHA,
-    branch,
+  getCommitsToUpload ({ url, repositoryUrl, latestCommits, isEvpProxy, evpProxyPrefix }, callback) {
+    const commonOptions = getCommonRequestOptions(url)
+
+    const options = {
+      ...commonOptions,
+      headers: {
+        ...commonOptions.headers,
+        'Content-Type': 'application/json'
+      },
+      path: '/api/v2/git/repository/search_commits'
+    }
+
+    if (isEvpProxy) {
+      options.path = `${evpProxyPrefix}/api/v2/git/repository/search_commits`
+      options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+      delete options.headers['dd-api-key']
+    }
+
+    const localCommitData = JSON.stringify({
+      meta: {
+        repository_url: repositoryUrl
+      },
+      data: latestCommits.map(commit => ({
+        id: commit,
+        type: 'commit'
+      }))
+    })
+
+
+    incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS)
+    const startTime = Date.now()
+
+    request(localCommitData, options, (err, response, statusCode) => {
+      distributionMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_MS, {}, Date.now() - startTime)
+      if (err) {
+        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { statusCode })
+        const error = new Error(`Error fetching commits to exclude: ${err.message}`)
+        return callback(error)
+      }
+      let alreadySeenCommits
+      try {
+        alreadySeenCommits = validateCommits(JSON.parse(response).data)
+      } catch (e) {
+        incrementCountMetric(TELEMETRY_GIT_REQUESTS_SEARCH_COMMITS_ERRORS, { errorType: 'network' })
+        return callback(new Error(`Can't parse commits to exclude response: ${e.message}`))
+      }
+      log.debug(`There are ${alreadySeenCommits.length} commits to exclude.`)
+      const commitsToInclude = latestCommits.filter((commit) => !alreadySeenCommits.includes(commit))
+      log.debug(`There are ${commitsToInclude.length} commits to include.`)
+
+      if (!commitsToInclude.length) {
+        return callback(null, [])
+      }
+
+      const commitsToUpload = this.getCommitsRevList(alreadySeenCommits, commitsToInclude)
+
+      if (commitsToUpload === null) {
+        return callback(new Error('git rev-list failed'))
+      }
+
+      callback(null, commitsToUpload)
+    })
+  }
+
+  generateAndUploadPackFiles ({
+    url,
+    isEvpProxy,
+    evpProxyPrefix,
+    commitsToUpload,
     repositoryUrl,
-    tag,
-    commitMessage,
-    authorName: ciAuthorName,
-    authorEmail: ciAuthorEmail,
-    ciWorkspacePath
-  } = ciMetadata
+    headCommit
+  }, callback) {
+    log.debug(`There are ${commitsToUpload.length} commits to upload`)
 
-  // With stdio: 'pipe', errors in this command will not be output to the parent process,
-  // so if `git` is not present in the env, we won't show a warning to the user.
-  const [
-    authorName,
-    authorEmail,
-    authorDate,
-    committerName,
-    committerEmail,
-    committerDate
-  ] = sanitizedExec('git', ['show', '-s', '--format=%an,%ae,%aI,%cn,%ce,%cI']).split(',')
+    const packFilesToUpload = this.generatePackFilesForCommits(commitsToUpload)
 
-  return {
-    [GIT_REPOSITORY_URL]:
-      filterSensitiveInfoFromRepository(repositoryUrl || sanitizedExec('git', ['ls-remote', '--get-url'])),
-    [GIT_COMMIT_MESSAGE]:
-      commitMessage || sanitizedExec('git', ['show', '-s', '--format=%s']),
-    [GIT_COMMIT_AUTHOR_DATE]: authorDate,
-    [GIT_COMMIT_AUTHOR_NAME]: ciAuthorName || authorName,
-    [GIT_COMMIT_AUTHOR_EMAIL]: ciAuthorEmail || authorEmail,
-    [GIT_COMMIT_COMMITTER_DATE]: committerDate,
-    [GIT_COMMIT_COMMITTER_NAME]: committerName,
-    [GIT_COMMIT_COMMITTER_EMAIL]: committerEmail,
-    [GIT_BRANCH]: branch || sanitizedExec('git', ['rev-parse', '--abbrev-ref', 'HEAD']),
-    [GIT_COMMIT_SHA]: commitSHA || sanitizedExec('git', ['rev-parse', 'HEAD']),
-    [GIT_TAG]: tag,
-    [CI_WORKSPACE_PATH]: ciWorkspacePath || sanitizedExec('git', ['rev-parse', '--show-toplevel'])
+    log.debug(`Uploading ${packFilesToUpload.length} packfiles.`)
+
+    if (!packFilesToUpload.length) {
+      return callback(new Error('Failed to generate packfiles'))
+    }
+
+    distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_NUM, {}, packFilesToUpload.length)
+    let packFileIndex = 0
+    let totalUploadedBytes = 0
+    // This uploads packfiles sequentially
+    const uploadPackFileCallback = (err, byteLength) => {
+      totalUploadedBytes += byteLength
+      if (err || packFileIndex === packFilesToUpload.length) {
+        distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_BYTES, {}, totalUploadedBytes)
+        return callback(err)
+      }
+      return this.uploadPackFile(
+        {
+          packFileToUpload: packFilesToUpload[packFileIndex++],
+          url,
+          isEvpProxy,
+          evpProxyPrefix,
+          repositoryUrl,
+          headCommit
+        },
+        uploadPackFileCallback
+      )
+    }
+
+    this.uploadPackFile(
+      {
+        packFileToUpload: packFilesToUpload[packFileIndex++],
+        url,
+        isEvpProxy,
+        evpProxyPrefix,
+        repositoryUrl,
+        headCommit
+      },
+      uploadPackFileCallback
+    )
+  }
+
+  uploadPackFile ({ url, isEvpProxy, evpProxyPrefix, packFileToUpload, repositoryUrl, headCommit }, callback) {
+    const form = new FormData()
+
+    const pushedSha = JSON.stringify({
+      data: {
+        id: headCommit,
+        type: 'commit'
+      },
+      meta: {
+        repository_url: repositoryUrl
+      }
+    })
+
+    form.append('pushedSha', pushedSha, { contentType: 'application/json' })
+
+    try {
+      const packFileContent = fs.readFileSync(packFileToUpload)
+      // The original filename includes a random prefix, so we remove it here
+      const [, filename] = path.basename(packFileToUpload).split('-')
+      form.append('packfile', packFileContent, {
+        filename,
+        contentType: 'application/octet-stream'
+      })
+    } catch (e) {
+      callback(new Error(`Could not read "${packFileToUpload}"`))
+      return
+    }
+
+    const commonOptions = getCommonRequestOptions(url)
+
+    const options = {
+      ...commonOptions,
+      path: '/api/v2/git/repository/packfile',
+      headers: {
+        ...commonOptions.headers,
+        ...form.getHeaders()
+      }
+    }
+
+    if (isEvpProxy) {
+      options.path = `${evpProxyPrefix}/api/v2/git/repository/packfile`
+      options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+      delete options.headers['dd-api-key']
+    }
+
+    incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES)
+
+    const uploadSize = form.size()
+
+    const startTime = Date.now()
+    request(form, options, (err, _, statusCode) => {
+      distributionMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_MS, {}, Date.now() - startTime)
+      if (err) {
+        incrementCountMetric(TELEMETRY_GIT_REQUESTS_OBJECT_PACKFILES_ERRORS, { statusCode })
+        const error = new Error(`Could not upload packfiles: status code ${statusCode}: ${err.message}`)
+        return callback(error, uploadSize)
+      }
+      callback(null, uploadSize)
+    })
+  }
+
+  uploadGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+    let repositoryUrl = configRepositoryUrl
+    if (!repositoryUrl) {
+      repositoryUrl = this.getRepositoryUrl()
+    }
+
+    log.debug(`Uploading git history for repository ${repositoryUrl}`)
+
+    if (!repositoryUrl) {
+      return callback(new Error('Repository URL is empty'))
+    }
+
+    let latestCommits = this.getLatestCommits()
+    log.debug(`There were ${latestCommits.length} commits since last month.`)
+
+    const getOnFinishGetCommitsToUpload = (hasCheckedShallow) => (err, commitsToUpload) => {
+      if (err) {
+        return callback(err)
+      }
+
+      if (!commitsToUpload.length) {
+        log.debug('No commits to upload')
+        return callback(null)
+      }
+
+      // If it has already unshallowed or the clone is not shallow, we move on
+      if (hasCheckedShallow || !this.isShallowRepository()) {
+        const [headCommit] = latestCommits
+        return this.generateAndUploadPackFiles({
+          url,
+          isEvpProxy,
+          evpProxyPrefix,
+          commitsToUpload,
+          repositoryUrl,
+          headCommit
+        }, callback)
+      }
+      // Otherwise we unshallow and get commits to upload again
+      log.debug('It is shallow clone, unshallowing...')
+      this.unshallowRepository()
+
+      // The latest commits change after unshallowing
+      latestCommits = this.getLatestCommits()
+      this.getCommitsToUpload({
+        url,
+        repositoryUrl,
+        latestCommits,
+        isEvpProxy,
+        evpProxyPrefix
+      }, getOnFinishGetCommitsToUpload(true))
+    }
+
+    this.getCommitsToUpload({
+      url,
+      repositoryUrl,
+      latestCommits,
+      isEvpProxy,
+      evpProxyPrefix
+    }, getOnFinishGetCommitsToUpload(false))
   }
 }
 

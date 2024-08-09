@@ -3,7 +3,6 @@
 const URL = require('url').URL
 
 const { GitClient } = require('../../../../dd-trace/src/plugins/util/git')
-const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -220,7 +219,7 @@ class CiVisibilityExporter extends AgentInfoExporter {
       if (!canUseCiVisProtocol) {
         return
       }
-      sendGitMetadataRequest(
+      this.gitClient.sendGitMetadata(
         this._getApiUrl(),
         { isEvpProxy: !!this._isUsingEvpProxy, evpProxyPrefix: this.evpProxyPrefix },
         repositoryUrl,
