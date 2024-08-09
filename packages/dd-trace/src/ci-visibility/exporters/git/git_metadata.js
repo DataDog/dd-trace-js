@@ -11,7 +11,8 @@ const {
   generatePackFilesForCommits,
   getCommitsRevList,
   isShallowRepository,
-  unshallowRepository
+  unshallowRepository,
+  isGitAvailable
 } = require('../../../plugins/util/git')
 
 const {
@@ -242,6 +243,9 @@ function generateAndUploadPackFiles ({
  * This function uploads git metadata to CI Visibility's backend.
 */
 function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryUrl, callback) {
+  if (!isGitAvailable()) {
+    return callback(new Error('Git is not available'))
+  }
   let repositoryUrl = configRepositoryUrl
   if (!repositoryUrl) {
     repositoryUrl = getRepositoryUrl()
