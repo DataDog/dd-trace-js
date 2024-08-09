@@ -325,17 +325,20 @@ describe('git_metadata', () => {
   })
 
   it('should not crash if git is missing', (done) => {
+    const oldPath = process.env.PATH
+    // git will not be found
+    process.env.PATH = ''
+
     const scope = nock('https://api.test.com')
       .post('/api/v2/git/repository/search_commits')
       .reply(200, JSON.stringify({ data: [] }))
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    getRepositoryUrlStub.returns('')
-
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Repository URL is empty')
+      expect(err.message).to.contain('Git is not available')
       expect(scope.isDone()).to.be.false
+      process.env.PATH = oldPath
       done()
     })
   })
