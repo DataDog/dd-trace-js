@@ -223,6 +223,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.property('spanAttributeSchema', 'v0')
     expect(config).to.have.property('spanComputePeerService', false)
+    expect(config).to.have.property('spanOriginEnabled', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', false)
     expect(config).to.have.property('instrumentation_config_id', undefined)
     expect(config).to.have.deep.property('serviceMapping', {})
@@ -350,6 +351,7 @@ describe('Config', () => {
       { name: 'site', value: 'datadoghq.com', origin: 'default' },
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
+      { name: 'spanOriginEnabled', value: false, origin: 'default' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
       { name: 'startupLogs', value: false, origin: 'default' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
@@ -445,6 +447,7 @@ describe('Config', () => {
     process.env.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_INTERNAL_ERRORS_ENABLED = 'true'
     process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_SPAN_ORIGIN_ENABLED = 'true'
     process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = 'true'
     process.env.DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED = true
@@ -509,6 +512,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
     expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanOriginEnabled', true)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.property('instrumentation_config_id', 'abcdef123')
@@ -636,6 +640,7 @@ describe('Config', () => {
       },
       { name: 'service', value: 'service', origin: 'env_var' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
+      { name: 'spanOriginEnabled', value: true, origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
       { name: 'telemetry.logCollection', value: true, origin: 'env_var' },
@@ -739,6 +744,7 @@ describe('Config', () => {
       ],
       spanAttributeSchema: 'v1',
       spanComputePeerService: true,
+      spanOriginEnabled: false,
       spanRemoveIntegrationFromService: true,
       peerServiceMapping: {
         d: 'dd'
@@ -815,6 +821,7 @@ describe('Config', () => {
     expect(config).to.have.property('logLevel', logLevel)
     expect(config).to.have.property('traceId128BitGenerationEnabled', true)
     expect(config).to.have.property('traceId128BitLoggingEnabled', true)
+    expect(config).to.have.property('spanOriginEnabled', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })
@@ -899,6 +906,7 @@ describe('Config', () => {
       { name: 'site', value: 'datadoghq.eu', origin: 'code' },
       { name: 'spanAttributeSchema', value: 'v1', origin: 'code' },
       { name: 'spanComputePeerService', value: true, origin: 'calculated' },
+      { name: 'spanOriginEnabled', value: false, origin: 'code' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'telemetry.logCollection', value: true, origin: 'code' },
@@ -1116,7 +1124,8 @@ describe('Config', () => {
         traceparent: false,
         runtimeId: false,
         exporter: 'agent',
-        enableGetRumData: false
+        enableGetRumData: false,
+        spanOriginEnabled: false
       },
       appsec: {
         enabled: true,
@@ -1177,6 +1186,7 @@ describe('Config', () => {
     expect(config.tags).to.include({ service: 'test', version: '1.0.0', env: 'development' })
     expect(config).to.have.deep.property('serviceMapping', { b: 'bb' })
     expect(config).to.have.property('spanAttributeSchema', 'v1')
+    expect(config).to.have.property('spanOriginEnabled', false)
     expect(config).to.have.property('spanRemoveIntegrationFromService', true)
     expect(config).to.have.property('spanComputePeerService', true)
     expect(config).to.have.deep.property('peerServiceMapping', { d: 'dd' })

@@ -2,9 +2,15 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const {
+  getSpanOriginTags: getSpanOriginTagsFromCallsite,
+  getTopUserLandCallsite
+} = require('../../dd-trace/src/plugins/util/stacktrace')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
+
+const kSpanOriginTagsSym = Symbol('kSpanOriginTagsSym')
 
 const parsingResources = new WeakMap()
 
@@ -26,6 +32,8 @@ function wrapFastify (fastify, hasParsingEvents) {
       app.addHook('onRequest', preParsing)
       app.addHook('preHandler', preValidation)
     }
+
+    app.addHook('onRoute', onRoute)
 
     app.addHook = wrapAddHook(app.addHook)
 
@@ -86,8 +94,9 @@ function onRequest (request, reply, done) {
 
   const req = getReq(request)
   const res = getRes(reply)
+  const tags = getSpanOriginTags(request)
 
-  handleChannel.publish({ req, res })
+  handleChannel.publish({ req, res, tags })
 
   return done()
 }
@@ -142,12 +151,23 @@ function getRes (reply) {
   return reply && (reply.raw || reply.res || reply)
 }
 
+function getSpanOriginTags (request) {
+  return request?.routeOptions?.config?.[kSpanOriginTagsSym]
+}
+
 function publishError (error, req) {
   if (error) {
     errorChannel.publish({ error, req })
   }
 
   return error
+}
+
+function onRoute (routeOptions) {
+  const tags = getSpanOriginTagsFromCallsite(getTopUserLandCallsite())
+  if (!tags) return
+  if (!routeOptions.config) routeOptions.config = {}
+  routeOptions.config[kSpanOriginTagsSym] = tags
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
