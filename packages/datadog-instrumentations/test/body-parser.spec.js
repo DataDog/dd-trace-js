@@ -73,15 +73,20 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should not lose the http async context', async () => {
-      function handler ({ req, res }) {
-        const store = storage.getStore()
-        expect(store).to.have.property('req', req)
-        expect(store).to.have.property('res', res)
-        expect(store).to.have.property('span')
+      let store
+      let payload
+
+      function handler (data) {
+        store = storage.getStore()
+        payload = data
       }
       bodyParserReadCh.subscribe(handler)
 
       const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+
+      expect(store).to.have.property('req', payload.req)
+      expect(store).to.have.property('res', payload.res)
+      expect(store).to.have.property('span')
 
       expect(middlewareProcessBodyStub).to.be.calledOnce
       expect(res.data).to.be.equal('DONE')
