@@ -39,7 +39,7 @@ describe('Ritm', () => {
     utilHook = Hook('util')
     aHook = Hook('module-a')
     bHook = Hook('module-b')
-    httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
+    httpHook = new Hook(['node:http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
