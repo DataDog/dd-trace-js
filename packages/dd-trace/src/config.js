@@ -358,10 +358,10 @@ class Config {
     this._merge()
   }
 
-  _getDefaultPropagationStyle () {
+  _getDefaultPropagationStyle (options) {
     // TODO: Remove the experimental env vars as a major?
     const DD_TRACE_B3_ENABLED = coalesce(
-      this._optionsArg.experimental && this._optionsArg.experimental.b3,
+      options.experimental && options.experimental.b3,
       process.env.DD_TRACE_EXPERIMENTAL_B3_ENABLED,
       false
     )
@@ -1006,7 +1006,7 @@ class Config {
       calc.isIntelligentTestRunnerEnabled && !isFalse(this._isCiVisibilityGitUploadEnabled()))
     this._setBoolean(calc, 'spanComputePeerService', this._getSpanComputePeerService())
     this._setBoolean(calc, 'stats.enabled', this._isTraceStatsComputationEnabled())
-    const defaultPropagationStyle = this._getDefaultPropagationStyle()
+    const defaultPropagationStyle = this._getDefaultPropagationStyle(this._optionsArg)
     this._setValue(calc, 'tracePropagationStyle.inject', propagationStyle(
       'inject',
       this._optionsArg.tracePropagationStyle
