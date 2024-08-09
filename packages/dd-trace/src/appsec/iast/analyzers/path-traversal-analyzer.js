@@ -28,8 +28,10 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
   }
 
   onConfigure () {
+    this.useModuleProxyFor('fs')
+
     this.addSub('apm:fs:operation:start', (obj) => {
-      if (ignoredOperations.includes(obj.operation)) return
+      if (ignoredOperations.includes(obj.operation) || !obj.caller) return
 
       const pathArguments = []
       if (obj.dest) {

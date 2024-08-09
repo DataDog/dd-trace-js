@@ -4,6 +4,7 @@ const path = require('path')
 const Module = require('module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
+const { getProxyModule } = require('./ritm-proxy')
 
 const origRequire = Module.prototype.require
 
@@ -17,6 +18,7 @@ let patching = Object.create(null)
 let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
+const moduleLoadCachedStartChannel = dc.channel('dd-trace:moduleLoadCachedStart')
 
 function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
@@ -73,7 +75,20 @@ function Hook (modules, options, onrequire) {
         return require.cache[filename].exports
       }
 
-      return cache[filename].exports
+      const cacheController = {
+        request,
+        filename,
+        useProxy: false
+      }
+      if (moduleLoadCachedStartChannel.hasSubscribers) {
+        moduleLoadCachedStartChannel.publish({ module: this, cacheController })
+      }
+
+      if (cacheController.useProxy) {
+        return getProxyModule(cache[filename].exports, this)
+      } else {
+        return cache[filename].exports
+      }
     }
 
     // Check if this module has a patcher in-progress already.
