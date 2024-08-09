@@ -77,6 +77,18 @@ function isDirectory (path) {
   }
 }
 
+function isGitAvailable () {
+  const isWindows = os.platform() === 'win32'
+  const command = isWindows ? 'where' : 'which'
+  try {
+    cp.execFileSync(command, ['git'], { stdio: 'pipe' })
+    return true
+  } catch (e) {
+    incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
+    return false
+  }
+}
+
 function isShallowRepository () {
   return sanitizedExec(
     'git',
@@ -342,5 +354,6 @@ module.exports = {
   getCommitsRevList,
   GIT_REV_LIST_MAX_BUFFER,
   isShallowRepository,
-  unshallowRepository
+  unshallowRepository,
+  isGitAvailable
 }

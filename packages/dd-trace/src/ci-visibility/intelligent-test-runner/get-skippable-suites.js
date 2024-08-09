@@ -8,8 +8,7 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_SUITES,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
-  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
-  getErrorTypeFromStatusCode
+  TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES
 } = require('../../ci-visibility/telemetry')
 
 function getSkippableSuites ({
@@ -83,8 +82,7 @@ function getSkippableSuites ({
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
-      const errorType = getErrorTypeFromStatusCode(statusCode)
-      incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS, { errorType })
+      incrementCountMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_ERRORS, { statusCode })
       done(err)
     } else {
       let skippableSuites = []

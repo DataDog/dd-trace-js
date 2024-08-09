@@ -27,6 +27,7 @@ class DatadogSpanContext {
       finished: [],
       tags: {}
     }
+    this._otelSpanContext = undefined
   }
 
   toTraceId (get128bitId = false) {

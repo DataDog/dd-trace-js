@@ -7,7 +7,7 @@ const os = require('os')
 const fs = require('fs')
 const path = require('path')
 
-const { GIT_REV_LIST_MAX_BUFFER } = require('../../../src/plugins/util/git')
+const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')
 const execFileSyncStub = sinon.stub().returns('')
 
@@ -376,5 +376,27 @@ describe('user credentials', () => {
     const metadata = getGitMetadata({})
     expect(metadata[GIT_REPOSITORY_URL])
       .to.equal('ssh://host.xz:port/path/to/repo.git/')
+  })
+})
+
+describe('isGitAvailable', () => {
+  let originalPath
+
+  beforeEach(() => {
+    originalPath = process.env.PATH
+  })
+
+  afterEach(() => {
+    process.env.PATH = originalPath
+  })
+
+  it('returns true if git is available', () => {
+    expect(isGitAvailable()).to.be.true
+  })
+
+  it('returns false if git is not available', () => {
+    process.env.PATH = ''
+
+    expect(isGitAvailable()).to.be.false
   })
 })

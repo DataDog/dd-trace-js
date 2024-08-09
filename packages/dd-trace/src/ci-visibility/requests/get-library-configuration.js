@@ -7,8 +7,7 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_MS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
-  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
-  getErrorTypeFromStatusCode
+  TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE
 } = require('../telemetry')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
@@ -81,8 +80,7 @@ function getLibraryConfiguration ({
   request(data, options, (err, res, statusCode) => {
     distributionMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_MS, {}, Date.now() - startTime)
     if (err) {
-      const errorType = getErrorTypeFromStatusCode(statusCode)
-      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { errorType })
+      incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS, { statusCode })
       done(err)
     } else {
       try {

@@ -19,6 +19,7 @@ onboarding_tests_installer:
   parallel:
     matrix:
       - ONBOARDING_FILTER_WEBLOG: [test-app-nodejs,test-app-nodejs-container]
+        SCENARIO: [ INSTALLER_AUTO_INJECTION, SIMPLE_AUTO_INJECTION_PROFILING ]
 
 onboarding_tests_k8s_injection:
   variables:
