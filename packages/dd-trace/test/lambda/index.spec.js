@@ -2,7 +2,6 @@
 
 const path = require('path')
 
-const ritm = require('../../src/lambda/runtime/ritm')
 const agent = require('../plugins/agent')
 
 const oldEnv = process.env
@@ -33,7 +32,7 @@ const restoreEnv = () => {
  */
 const loadAgent = ({ exporter = 'agent' } = {}) => {
   // Make sure the hook is re-registered
-  ritm.registerLambdaHook()
+  require('../../src/lambda')
   return agent.load(null, [], {
     experimental: {
       exporter
@@ -50,6 +49,8 @@ const closeAgent = () => {
   // In testing, the patch needs to be deleted from the require cache,
   // in order to allow multiple handlers being patched properly.
   delete require.cache[require.resolve('../../src/lambda/runtime/patch.js')]
+  delete require.cache[require.resolve('../../src/lambda')]
+
   agent.close({ ritmReset: true })
 }
 
@@ -198,6 +199,21 @@ describe('lambda', () => {
         })
       })
       await checkTraces
+    })
+
+    it('doesnt patch lambda when instrumentation is disabled', async () => {
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const handlerBefore = require(_handlerPath).handler
+
+      // Set the desired handler to patch
+      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'lambda'
+      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+      // Register hook for patching
+      await loadAgent()
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const handlerAfter = require(_handlerPath).handler
+      expect(handlerBefore).to.equal(handlerAfter)
     })
   })
 
