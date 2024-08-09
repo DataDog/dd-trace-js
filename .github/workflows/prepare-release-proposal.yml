@@ -41,6 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
           yarn
+          git checkout yarn.lock
 
       - name: Install branch-diff
         run: |
