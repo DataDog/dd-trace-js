@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { channel, addHook } = require('./helpers/instrument')
+const { channel, addHook, AsyncResource } = require('./helpers/instrument')
 
 const bodyParserReadCh = channel('datadog:body-parser:read:finish')
 
@@ -23,7 +23,19 @@ function publishRequestBodyAndNext (req, res, next) {
 addHook({
   name: 'body-parser',
   file: 'lib/read.js',
-  versions: ['>=1.4.0']
+  versions: ['>=1.4.0 <1.20.0']
+}, read => {
+  return shimmer.wrap(read, function (req, res, next) {
+    const nextResource = new AsyncResource('bound-anonymous-fn')
+    arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
+    return read.apply(this, arguments)
+  })
+})
+
+addHook({
+  name: 'body-parser',
+  file: 'lib/read.js',
+  versions: ['>=1.20.0']
 }, read => {
   return shimmer.wrap(read, function (req, res, next) {
     arguments[2] = publishRequestBodyAndNext(req, res, next)
