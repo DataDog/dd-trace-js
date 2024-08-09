@@ -39,8 +39,8 @@ describe('Config', () => {
       './pkg': pkg,
       './log': log,
       './telemetry': { updateConfig },
-      fs,
-      os
+      'node:fs:': fs,
+      'node:os': os
     })
   }
 
