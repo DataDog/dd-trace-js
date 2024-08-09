@@ -1,6 +1,6 @@
-const { spawn } = require('child_process')
+const { spawn } = require('node:child_process')
 const { assert } = require('chai')
-const path = require('path')
+const path = require('node:path')
 
 describe('serverless', () => {
   it('mini agent spawned and receives traces', async () => {

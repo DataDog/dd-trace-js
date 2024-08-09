@@ -6,7 +6,7 @@ const { expect } = require('chai')
 
 require('../../').init()
 
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 
 const api = require('@opentelemetry/api')
 const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')

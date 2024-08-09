@@ -2,7 +2,7 @@
 
 require('../../../dd-trace/test/setup/tap')
 
-const { executionAsyncId } = require('async_hooks')
+const { executionAsyncId } = require('node:async_hooks')
 const { expect } = require('chai')
 const { storage } = require('../../../datadog-core')
 const { AsyncResource } = require('../../src/helpers/instrument')

@@ -1,8 +1,8 @@
 'use strict'
 
 const express = require('express')
-const path = require('path')
-const fs = require('fs')
+const path = require('node:path')
+const fs = require('node:fs')
 const diffRecent = require('./diff-recent')
 const {
   getBuildNumsFromGithub,

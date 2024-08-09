@@ -2,10 +2,10 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const http = require('http')
+const http = require('node:http')
 const multer = require('multer')
 const upload = multer()
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 const { FakeAgent } = require('./helpers')
 

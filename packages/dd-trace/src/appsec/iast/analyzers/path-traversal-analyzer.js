@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const InjectionAnalyzer = require('./injection-analyzer')
 const { getIastContext } = require('../iast-context')

@@ -4,9 +4,9 @@ const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
 const agent = require('../../../plugins/agent')
 const semver = require('semver')
-const os = require('os')
-const path = require('path')
-const fs = require('fs')
+const os = require('node:os')
+const path = require('node:path')
+const fs = require('node:fs')
 const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {

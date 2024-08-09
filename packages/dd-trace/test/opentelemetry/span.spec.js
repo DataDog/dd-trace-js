@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const sinon = require('sinon')
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 const { timeOrigin } = performance
 const { timeInputToHrTime } = require('@opentelemetry/core')
 

@@ -4,7 +4,7 @@ const Config = require('../src/config')
 const { channel } = require('dc-polyfill')
 const express = require('express')
 const getPort = require('get-port')
-const http = require('http')
+const http = require('node:http')
 const upload = require('multer')()
 const proxyquire = require('proxyquire').noCallThru()
 

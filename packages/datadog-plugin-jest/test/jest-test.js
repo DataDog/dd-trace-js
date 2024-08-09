@@ -1,4 +1,4 @@
-const http = require('http')
+const http = require('node:http')
 const tracer = require('dd-trace')
 
 describe('jest-test-suite', () => {

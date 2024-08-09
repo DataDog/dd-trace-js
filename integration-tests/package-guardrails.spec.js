@@ -4,9 +4,9 @@ const {
   useSandbox,
   sandboxCwd
 } = require('./helpers')
-const path = require('path')
-const fs = require('fs')
-const assert = require('assert')
+const path = require('node:path')
+const fs = require('node:fs')
+const assert = require('node:assert')
 
 const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'

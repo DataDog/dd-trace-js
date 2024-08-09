@@ -1,4 +1,4 @@
-const assert = require('assert')
+const assert = require('node:assert')
 const { When, Then } = require('@cucumber/cucumber')
 class Greeter {
   sayGreetings () {

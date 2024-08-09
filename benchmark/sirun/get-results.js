@@ -2,8 +2,8 @@
 
 /* eslint-disable no-console */
 
-const https = require('https')
-const { execSync } = require('child_process')
+const https = require('node:https')
+const { execSync } = require('node:child_process')
 
 const { CIRCLE_TOKEN, GITHUB_STATUS_TOKEN } = process.env
 

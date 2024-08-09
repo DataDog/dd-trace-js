@@ -65,7 +65,7 @@ describe('weak-cipher-analyzer', () => {
 
   prepareTestServerForIast('full feature', (testThatRequestHasVulnerability) => {
     testThatRequestHasVulnerability(() => {
-      const crypto = require('crypto')
+      const crypto = require('node:crypto')
       const key = '1111111111111111'
       const iv = 'abcdefgh'
       crypto.createCipheriv(VULNERABLE_CIPHER, key, iv)

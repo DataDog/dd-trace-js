@@ -4,9 +4,9 @@ const { expect } = require('chai')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const net = require('net')
+const net = require('node:net')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const EventEmitter = require('events')
+const EventEmitter = require('node:events')
 
 const ddpv = require('mocha/package.json').version
 

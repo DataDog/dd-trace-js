@@ -1,6 +1,6 @@
 'use strict'
 
-const childProcess = require('child_process')
+const childProcess = require('node:child_process')
 const readline = require('readline')
 
 function exec (...args) {

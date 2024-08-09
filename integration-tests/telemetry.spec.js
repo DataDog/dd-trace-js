@@ -1,7 +1,7 @@
 'use strict'
 
 const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
-const path = require('path')
+const path = require('node:path')
 
 describe('telemetry', () => {
   describe('dependencies', () => {

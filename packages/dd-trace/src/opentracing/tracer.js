@@ -1,6 +1,6 @@
 'use strict'
 
-const os = require('os')
+const os = require('node:os')
 const Span = require('./span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')

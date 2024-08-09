@@ -1,5 +1,5 @@
 const tracer = require('dd-trace')
-const path = require('path')
+const path = require('node:path')
 
 tracer.init({
   debug: true,

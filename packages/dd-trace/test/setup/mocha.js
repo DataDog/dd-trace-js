@@ -2,8 +2,8 @@
 
 require('./core')
 
-const os = require('os')
-const path = require('path')
+const os = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const externals = require('../plugins/externals.json')
 const runtimeMetrics = require('../../src/runtime_metrics')
@@ -248,14 +248,14 @@ function withVersions (plugin, modules, range, cb) {
               .filter(x => x && x !== 'undefined')
               .join(os.platform() === 'win32' ? ';' : ':')
 
-            require('module').Module._initPaths()
+            require('node:module').Module._initPaths()
           })
 
           cb(v.test, moduleName, v.version)
 
           after(() => {
             process.env.NODE_PATH = nodePath
-            require('module').Module._initPaths()
+            require('node:module').Module._initPaths()
           })
         })
       })

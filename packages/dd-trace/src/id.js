@@ -1,6 +1,6 @@
 'use strict'
 
-const { randomFillSync } = require('crypto')
+const { randomFillSync } = require('node:crypto')
 
 const UINT_MAX = 4294967296
 

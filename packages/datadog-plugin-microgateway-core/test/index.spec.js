@@ -1,8 +1,8 @@
 'use strict'
 
 const axios = require('axios')
-const http = require('http')
-const os = require('os')
+const http = require('node:http')
+const os = require('node:os')
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
 const proxy = require('./proxy')

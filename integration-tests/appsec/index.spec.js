@@ -1,7 +1,7 @@
 'use strict'
 
 const getPort = require('get-port')
-const path = require('path')
+const path = require('node:path')
 const Axios = require('axios')
 const { assert } = require('chai')
 const { createSandbox, FakeAgent, spawnProc } = require('../helpers')

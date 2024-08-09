@@ -4,9 +4,9 @@
 
 const semver = require('semver')
 const packageJson = require('../package.json')
-const path = require('path')
-const { execSync } = require('child_process')
-const { readFileSync, writeFileSync } = require('fs')
+const path = require('node:path')
+const { execSync } = require('node:child_process')
+const { readFileSync, writeFileSync } = require('node:fs')
 
 function helpAndExit () {
   console.log('usage: node prepare-release-proposal.js <action>')

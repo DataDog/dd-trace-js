@@ -2,7 +2,7 @@
 
 const { Int64BE } = require('int64-buffer') // TODO remove dependency
 
-const { AssertionError } = require('assert')
+const { AssertionError } = require('node:assert')
 const { AsyncResource } = require('../../../datadog-instrumentations/src/helpers/instrument')
 
 const Nomenclature = require('../../src/service-naming')

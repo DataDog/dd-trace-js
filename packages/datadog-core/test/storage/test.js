@@ -1,12 +1,12 @@
 'use strict'
 
 const { expect } = require('chai')
-const { inspect } = require('util')
+const { inspect } = require('node:util')
 const {
   AsyncResource,
   executionAsyncId,
   executionAsyncResource
-} = require('async_hooks')
+} = require('node:async_hooks')
 
 module.exports = factory => {
   let storage

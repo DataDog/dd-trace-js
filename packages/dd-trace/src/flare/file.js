@@ -1,6 +1,6 @@
 'use strict'
 
-const { Writable } = require('stream')
+const { Writable } = require('node:stream')
 
 const INITIAL_SIZE = 64 * 1024
 

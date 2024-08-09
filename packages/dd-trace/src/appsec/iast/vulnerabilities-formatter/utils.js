@@ -1,6 +1,6 @@
 'use strict'
 
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const { DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./evidence-redaction/sensitive-regex')
 
 const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')

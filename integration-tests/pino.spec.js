@@ -2,9 +2,9 @@
 'use strict'
 
 const { FakeAgent, spawnProc, createSandbox, curl } = require('./helpers')
-const path = require('path')
+const path = require('node:path')
 const { assert } = require('chai')
-const { once } = require('events')
+const { once } = require('node:events')
 
 describe('pino test', () => {
   let agent

@@ -6,11 +6,11 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const axios = require('axios')
-const http = require('http')
+const http = require('node:http')
 const dc = require('dc-polyfill')
 const plugin = require('../src')
 
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 
 describe('Plugin', () => {
   let tracer

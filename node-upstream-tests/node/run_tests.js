@@ -2,8 +2,8 @@
 
 /* eslint-disable no-console */
 
-const childProcess = require('child_process')
-const path = require('path')
+const childProcess = require('node:child_process')
+const path = require('node:path')
 const fsUtils = require('./fs_utils')
 
 const NODE_BIN = process.env.NODE_BIN || '/usr/bin/node'

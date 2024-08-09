@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const opentracing = require('opentracing')
-const os = require('os')
+const os = require('node:os')
 const SpanContext = require('../../src/opentracing/span_context')
 const Reference = opentracing.Reference
 

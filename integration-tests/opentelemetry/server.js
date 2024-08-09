@@ -13,7 +13,7 @@ const otelTracer = ot.trace.getTracer(
   'my-service-tracer'
 )
 
-const http = require('http')
+const http = require('node:http')
 
 const server = http.createServer()
 

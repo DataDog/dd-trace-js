@@ -2,9 +2,9 @@
 
 const tracer = require('../../').init() // dd-trace
 
-const assert = require('assert')
+const assert = require('node:assert')
 const express = require('express')
-const http = require('http')
+const http = require('node:http')
 require('knex') // has dead code paths for multiple instrumented packages
 
 const app = express()

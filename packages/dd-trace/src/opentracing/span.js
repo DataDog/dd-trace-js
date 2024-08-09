@@ -1,7 +1,7 @@
 'use strict'
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
 const semver = require('semver')

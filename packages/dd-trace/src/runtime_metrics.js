@@ -2,12 +2,12 @@
 
 // TODO: capture every second and flush every 10 seconds
 
-const v8 = require('v8')
-const os = require('os')
+const v8 = require('node:v8')
+const os = require('node:os')
 const { DogStatsDClient } = require('./dogstatsd')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { performance } = require('perf_hooks')
+const { performance } = require('node:perf_hooks')
 
 const INTERVAL = 10 * 1000
 

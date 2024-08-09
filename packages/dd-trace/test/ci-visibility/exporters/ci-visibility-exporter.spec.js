@@ -2,9 +2,9 @@
 
 require('../../../../dd-trace/test/setup/tap')
 
-const cp = require('child_process')
-const fs = require('fs')
-const zlib = require('zlib')
+const cp = require('node:child_process')
+const fs = require('node:fs')
+const zlib = require('node:zlib')
 
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const nock = require('nock')

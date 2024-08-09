@@ -2,9 +2,9 @@
 /* eslint-disable no-console, no-fallthrough */
 'use strict'
 
-const path = require('path')
-const { writeFileSync } = require('fs')
-const { execSync } = require('child_process')
+const path = require('node:path')
+const { writeFileSync } = require('node:fs')
+const { execSync } = require('node:child_process')
 
 const ddtracePath = path.join(__dirname, '..')
 const defaultTestPath = process.env.DD_ST_PATH || path.join(ddtracePath, '..', 'system-tests')

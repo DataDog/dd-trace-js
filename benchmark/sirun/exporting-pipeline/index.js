@@ -6,7 +6,7 @@ const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
-const hostname = require('os').hostname()
+const hostname = require('node:os').hostname()
 
 const config = {
   url: 'http://localhost:8126',

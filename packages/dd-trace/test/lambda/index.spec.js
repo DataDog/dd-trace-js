@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const ritm = require('../../src/lambda/runtime/ritm')
 const agent = require('../plugins/agent')

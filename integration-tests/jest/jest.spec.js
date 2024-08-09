@@ -1,7 +1,7 @@
 'use strict'
 
-const { fork, exec } = require('child_process')
-const path = require('path')
+const { fork, exec } = require('node:child_process')
+const path = require('node:path')
 
 const { assert } = require('chai')
 

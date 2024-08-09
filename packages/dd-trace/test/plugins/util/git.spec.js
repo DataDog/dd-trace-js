@@ -2,10 +2,10 @@
 
 require('../../setup/tap')
 
-const { execSync } = require('child_process')
-const os = require('os')
-const fs = require('fs')
-const path = require('path')
+const { execSync } = require('node:child_process')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')

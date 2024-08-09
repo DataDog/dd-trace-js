@@ -1,6 +1,6 @@
 'use strict'
 
-const { exec } = require('child_process')
+const { exec } = require('node:child_process')
 
 const getPort = require('get-port')
 const semver = require('semver')

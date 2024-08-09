@@ -1,6 +1,6 @@
 'use strict'
 
-const Writable = require('stream').Writable
+const Writable = require('node:stream').Writable
 const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {

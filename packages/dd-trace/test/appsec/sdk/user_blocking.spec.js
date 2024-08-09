@@ -6,7 +6,7 @@ const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const Config = require('../../../src/config')
 const axios = require('axios')
-const path = require('path')
+const path = require('node:path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
 
@@ -166,7 +166,7 @@ describe('user_blocking', () => {
 
     before(async () => {
       await agent.load('http')
-      http = require('http')
+      http = require('node:http')
     })
 
     before(done => {

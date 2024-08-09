@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const process = require('process')
+const path = require('node:path')
+const process = require('node:process')
 const { calculateDDBasePath } = require('../../util')
 const { getCallSiteList } = require('../stack_trace')
 const pathLine = {

@@ -1,7 +1,7 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const path = require('path')
+const path = require('node:path')
 const semver = require('semver')
 const Hook = require('./hook')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')

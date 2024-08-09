@@ -2,7 +2,7 @@
 
 require('./setup/tap')
 
-const os = require('os')
+const os = require('node:os')
 const tracerVersion = require('../../../package.json').version
 
 describe('startup logging', () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-const fs = require('fs')
-const assert = require('assert')
+const fs = require('node:fs')
+const assert = require('node:assert')
 
 const ddPlugin = require('../../esbuild') // dd-trace/esbuild
 const esbuild = require('esbuild')

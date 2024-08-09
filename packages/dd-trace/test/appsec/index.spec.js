@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
 const proxyquire = require('proxyquire')
 const waf = require('../../src/appsec/waf')
 const RuleManager = require('../../src/appsec/rule_manager')
@@ -1039,7 +1039,7 @@ describe('IP blocking', function () {
   before(() => {
     return agent.load('http')
       .then(() => {
-        http = require('http')
+        http = require('node:http')
       })
   })
 

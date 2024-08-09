@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const { trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const DataDogSpanContext = require('../opentracing/span_context')
 

@@ -2,7 +2,7 @@
 
 require('../../setup/tap')
 
-const path = require('path')
+const path = require('node:path')
 const istanbul = require('istanbul-lib-coverage')
 
 const {

@@ -2,8 +2,8 @@
 
 require('../../setup/tap')
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const proxyquire = require('proxyquire')
 const execFileSyncStub = sinon.stub().returns('')

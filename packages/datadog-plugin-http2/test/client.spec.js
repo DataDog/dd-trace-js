@@ -1,8 +1,8 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 const tags = require('../../../ext/tags')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))

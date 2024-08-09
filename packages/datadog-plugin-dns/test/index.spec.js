@@ -1,7 +1,7 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { promisify } = require('util')
+const { promisify } = require('node:util')
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 

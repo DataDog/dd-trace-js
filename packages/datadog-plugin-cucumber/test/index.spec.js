@@ -1,6 +1,6 @@
 'use strict'
-const path = require('path')
-const { PassThrough } = require('stream')
+const path = require('node:path')
+const { PassThrough } = require('node:stream')
 const semver = require('semver')
 
 const proxyquire = require('proxyquire').noPreserveCache()

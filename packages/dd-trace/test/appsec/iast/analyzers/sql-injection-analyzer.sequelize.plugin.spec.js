@@ -1,8 +1,8 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')

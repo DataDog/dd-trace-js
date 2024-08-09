@@ -2,9 +2,9 @@
 
 const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
-const path = require('path')
-const os = require('os')
-const fs = require('fs')
+const path = require('node:path')
+const os = require('node:os')
+const fs = require('node:fs')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 describe('Code injection vulnerability', () => {

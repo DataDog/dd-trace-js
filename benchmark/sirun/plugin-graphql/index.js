@@ -20,7 +20,7 @@ if (Number(process.env.WITH_ASYNC_HOOKS)) {
     ? { init () {} }
     : { init () {}, before () {}, after () {}, destroy () {} }
 
-  require('async_hooks').createHook(hook).enable()
+  require('node:async_hooks').createHook(hook).enable()
 }
 
 const graphql = require('../../../versions/graphql').get()

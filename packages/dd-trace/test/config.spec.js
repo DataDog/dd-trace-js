@@ -3,7 +3,7 @@
 require('./setup/tap')
 
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
+const { readFileSync } = require('node:fs')
 const sinon = require('sinon')
 
 describe('Config', () => {

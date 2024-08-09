@@ -1,9 +1,9 @@
 'use strict'
 
 const axios = require('axios')
-const http = require('http')
+const http = require('node:http')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { AsyncLocalStorage } = require('async_hooks')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)

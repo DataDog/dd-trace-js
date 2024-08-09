@@ -12,12 +12,12 @@ describe('command injection analyzer', () => {
         const store = storage.getStore()
         const iastContext = iastContextFunctions.getIastContext(store)
         const command = newTaintedString(iastContext, 'ls -la', 'param', 'Request')
-        const childProcess = require('child_process')
+        const childProcess = require('node:child_process')
         childProcess.execSync(command)
       }, 'COMMAND_INJECTION')
 
       testThatRequestHasNoVulnerability(() => {
-        const childProcess = require('child_process')
+        const childProcess = require('node:child_process')
         childProcess.execSync('ls -la')
       }, 'COMMAND_INJECTION')
     })

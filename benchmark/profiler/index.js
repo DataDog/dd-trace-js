@@ -7,8 +7,8 @@ const axios = require('axios')
 const chalk = require('chalk')
 const getPort = require('get-port')
 const Table = require('cli-table3')
-const URL = require('url').URL
-const { spawn } = require('child_process')
+const URL = require('node:url').URL
+const { spawn } = require('node:child_process')
 
 main()
 

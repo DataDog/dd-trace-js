@@ -27,10 +27,10 @@ for (const instrumentation of Object.values(instrumentations)) {
 }
 
 const INSTRUMENTED = Object.keys(instrumentations)
-const RAW_BUILTINS = require('module').builtinModules
+const RAW_BUILTINS = require('node:module').builtinModules
 const CHANNEL = 'dd-trace:bundler:load'
-const path = require('path')
-const fs = require('fs')
+const path = require('node:path')
+const fs = require('node:fs')
 
 const builtins = new Set()
 

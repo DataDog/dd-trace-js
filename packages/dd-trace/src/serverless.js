@@ -10,7 +10,7 @@ function maybeStartServerlessMiniAgent (config) {
 
   const rustBinaryPath = getRustBinaryPath(config)
 
-  const fs = require('fs')
+  const fs = require('node:fs')
 
   log.debug(`Trying to spawn the Serverless Mini Agent at path: ${rustBinaryPath}`)
 
@@ -21,7 +21,7 @@ function maybeStartServerlessMiniAgent (config) {
     return
   }
   try {
-    require('child_process').spawn(rustBinaryPath, { stdio: 'inherit' })
+    require('node:child_process').spawn(rustBinaryPath, { stdio: 'inherit' })
   } catch (err) {
     log.error(`Error spawning mini agent process: ${err}`)
   }

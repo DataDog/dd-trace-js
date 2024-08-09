@@ -3,7 +3,7 @@
 const dc = require('dc-polyfill')
 const semver = require('semver')
 const instrumentations = require('./instrumentations')
-const { AsyncResource } = require('async_hooks')
+const { AsyncResource } = require('node:async_hooks')
 
 const channelMap = {}
 exports.channel = function (name) {

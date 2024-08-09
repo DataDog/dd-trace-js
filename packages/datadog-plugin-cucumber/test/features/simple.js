@@ -27,7 +27,7 @@ Before('@hooks-fail', function () {
 When('run', () => {})
 
 When('integration', function () {
-  const http = require('http')
+  const http = require('node:http')
   return new Promise(resolve => {
     http.request('http://test:123', () => {
       resolve()

@@ -1,10 +1,10 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const agent = require('../../dd-trace/test/plugins/agent')
 const getPort = require('get-port')
 const semver = require('semver')
-const Readable = require('stream').Readable
+const Readable = require('node:stream').Readable
 const getService = require('./service')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')

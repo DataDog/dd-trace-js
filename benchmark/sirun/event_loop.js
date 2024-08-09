@@ -1,6 +1,6 @@
 'use strict'
 
-const { monitorEventLoopDelay } = require('perf_hooks')
+const { monitorEventLoopDelay } = require('node:perf_hooks')
 const StatsD = require('./statsd')
 const statsd = new StatsD()
 

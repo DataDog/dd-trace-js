@@ -3,7 +3,7 @@
 
 const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
-const { randomBytes } = require('crypto')
+const { randomBytes } = require('node:crypto')
 
 describe('EventBridge', () => {
   let span

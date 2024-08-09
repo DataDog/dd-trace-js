@@ -1,8 +1,8 @@
 'use strict'
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 const tags = require('../../../ext/tags')
 const { expect } = require('chai')
 const { storage } = require('../../datadog-core')
@@ -31,12 +31,12 @@ describe('Plugin', () => {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-          server = require('https').createServer({ key, cert }, app)
+          server = require('node:https').createServer({ key, cert }, app)
         } else if (pluginToBeLoaded === 'node:https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
           server = require('node:https').createServer({ key, cert }, app)
         } else if (pluginToBeLoaded === 'http') {
-          server = require('http').createServer(app)
+          server = require('node:http').createServer(app)
         } else {
           server = require('node:http').createServer(app)
         }
@@ -860,8 +860,8 @@ describe('Plugin', () => {
             require('node:http')
             require('node:https')
           } else {
-            require('http')
-            require('https')
+            require('node:http')
+            require('node:https')
           }
 
           const app = express()

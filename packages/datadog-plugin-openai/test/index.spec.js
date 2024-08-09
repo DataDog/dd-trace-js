@@ -1,12 +1,12 @@
 'use strict'
 
-const fs = require('fs')
-const Path = require('path')
+const fs = require('node:fs')
+const Path = require('node:path')
 const { expect } = require('chai')
 const semver = require('semver')
 const nock = require('nock')
 const sinon = require('sinon')
-const { spawn } = require('child_process')
+const { spawn } = require('node:child_process')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')

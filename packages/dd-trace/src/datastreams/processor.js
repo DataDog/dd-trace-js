@@ -1,4 +1,4 @@
-const os = require('os')
+const os = require('node:os')
 const pkg = require('../../../../package.json')
 // Message pack int encoding is done in big endian, but data streams uses little endian
 const Uint64 = require('int64-buffer').Uint64BE
@@ -7,7 +7,7 @@ const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
-const { types } = require('util')
+const { types } = require('node:util')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')

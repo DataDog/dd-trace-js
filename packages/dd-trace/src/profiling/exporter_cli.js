@@ -6,8 +6,8 @@ const { FileExporter } = require('./exporters/file')
 const { SourceMapper, heap, encode } = require('@datadog/pprof')
 const { ConsoleLogger } = require('./loggers/console')
 const { tagger } = require('./tagger')
-const fs = require('fs')
-const { fileURLToPath } = require('url')
+const fs = require('node:fs')
+const { fileURLToPath } = require('node:url')
 
 const logger = new ConsoleLogger()
 const timeoutMs = 10 * 1000

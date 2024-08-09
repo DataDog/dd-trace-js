@@ -1,4 +1,4 @@
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const app = require('express')()
 
 for (let i = 0; i < 100; i++) {

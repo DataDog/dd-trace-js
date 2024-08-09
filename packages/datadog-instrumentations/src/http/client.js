@@ -2,7 +2,7 @@
 
 /* eslint-disable no-fallthrough */
 
-const url = require('url')
+const url = require('node:url')
 const { channel, addHook } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 

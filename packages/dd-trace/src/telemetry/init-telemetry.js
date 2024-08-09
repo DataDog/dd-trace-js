@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('fs')
-const { spawn } = require('child_process')
+const fs = require('node:fs')
+const { spawn } = require('node:child_process')
 const tracerVersion = require('../../../../package.json').version
 const log = require('../log')
 

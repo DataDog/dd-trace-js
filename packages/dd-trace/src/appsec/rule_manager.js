@@ -1,6 +1,6 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
 

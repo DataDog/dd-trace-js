@@ -4,8 +4,8 @@
 
 'use strict'
 
-const chproc = require('child_process')
-const path = require('path')
+const chproc = require('node:child_process')
+const path = require('node:path')
 
 const CWD = process.cwd()
 const TEST_DIR = path.join(__dirname, 'esbuild')

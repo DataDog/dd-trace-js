@@ -60,7 +60,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          http = require('http')
+          http = require('node:http')
           paperplane = require(`../../../versions/paperplane@${version}`).get()
         })
 

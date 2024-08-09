@@ -4,7 +4,7 @@ require('./setup/tap')
 
 const dc = require('dc-polyfill')
 const { assert } = require('chai')
-const Module = require('module')
+const Module = require('node:module')
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
@@ -53,7 +53,7 @@ describe('Ritm', () => {
   })
 
   it('should shim util', () => {
-    require('util')
+    require('node:util')
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
   })
@@ -66,7 +66,7 @@ describe('Ritm', () => {
   })
 
   it('should fall back to monkey patched module', () => {
-    assert.equal(require('http').foo, 1, 'normal hooking still works')
+    assert.equal(require('node:http').foo, 1, 'normal hooking still works')
 
     const fnCore = require('@azure/functions-core')
     assert.ok(fnCore, 'requiring monkey patched in module works')

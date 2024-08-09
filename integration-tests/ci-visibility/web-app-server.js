@@ -1,5 +1,5 @@
 // File to spin an HTTP server that returns an HTML for playwright to visit
-const http = require('http')
+const http = require('node:http')
 const coverage = require('../ci-visibility/fixtures/coverage.json')
 
 module.exports = http.createServer((req, res) => {

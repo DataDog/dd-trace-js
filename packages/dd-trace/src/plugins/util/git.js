@@ -1,7 +1,7 @@
-const cp = require('child_process')
-const os = require('os')
-const path = require('path')
-const fs = require('fs')
+const cp = require('node:child_process')
+const os = require('node:os')
+const path = require('node:path')
+const fs = require('node:fs')
 
 const log = require('../../log')
 const {

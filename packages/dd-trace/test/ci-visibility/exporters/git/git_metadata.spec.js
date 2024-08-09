@@ -2,8 +2,8 @@
 
 require('../../../../../dd-trace/test/setup/tap')
 const nock = require('nock')
-const os = require('os')
-const fs = require('fs')
+const os = require('node:os')
+const fs = require('node:fs')
 const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 const proxyquire = require('proxyquire').noPreserveCache()

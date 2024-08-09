@@ -1,6 +1,6 @@
 const proxyquire = require('proxyquire')
-const path = require('path')
-const os = require('os')
+const path = require('node:path')
+const os = require('node:os')
 const { expect } = require('chai')
 
 class CallSiteMock {
