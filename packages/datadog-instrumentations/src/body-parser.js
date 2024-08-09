@@ -27,7 +27,7 @@ addHook({
 }, read => {
   return shimmer.wrap(read, function (req, res, next) {
     const nextResource = new AsyncResource('bound-anonymous-fn')
-    arguments[2] = nextResource.bind(publishRequestBodyAndNext(req, res, next))
+    arguments[2] = publishRequestBodyAndNext(req, res, next)
     return read.apply(this, arguments)
   })
 })
