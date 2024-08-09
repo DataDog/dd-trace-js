@@ -417,6 +417,9 @@ class Config {
     this._setValue(defaults, 'appsec.stackTrace.maxDepth', 32)
     this._setValue(defaults, 'appsec.stackTrace.maxStackTraces', 2)
     this._setValue(defaults, 'appsec.wafTimeout', 5e3) // µs
+    this._setValue(defaults, 'baggageInject', undefined)
+    this._setValue(defaults, 'baggageExtract', undefined)
+    this._setValue(defaults, 'baggagePropagation', true)
     this._setValue(defaults, 'clientIpEnabled', false)
     this._setValue(defaults, 'clientIpHeader', null)
     this._setValue(defaults, 'dbmPropagationMode', 'disabled')
@@ -571,6 +574,9 @@ class Config {
       DD_TRACE_AGENT_HOSTNAME,
       DD_TRACE_AGENT_PORT,
       DD_TRACE_AGENT_PROTOCOL_VERSION,
+      DD_TRACE_BAGGAGE_ENABLED,
+      DD_TRACE_BAGGAGE_EXTRACT_ENABLED,
+      DD_TRACE_BAGGAGE_INJECT_ENABLED,
       DD_TRACE_CLIENT_IP_ENABLED,
       DD_TRACE_CLIENT_IP_HEADER,
       DD_TRACE_EXPERIMENTAL_EXPORTER,
@@ -650,6 +656,9 @@ class Config {
     this._envUnprocessed['appsec.stackTrace.maxStackTraces'] = DD_APPSEC_MAX_STACK_TRACES
     this._setValue(env, 'appsec.wafTimeout', maybeInt(DD_APPSEC_WAF_TIMEOUT))
     this._envUnprocessed['appsec.wafTimeout'] = DD_APPSEC_WAF_TIMEOUT
+    this._setBoolean(env, 'baggageInject', DD_TRACE_BAGGAGE_INJECT_ENABLED)
+    this._setBoolean(env, 'baggageExtract', DD_TRACE_BAGGAGE_EXTRACT_ENABLED)
+    this._setBoolean(env, 'baggagePropagation', DD_TRACE_BAGGAGE_ENABLED)
     this._setBoolean(env, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     this._setString(env, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER)
     this._setString(env, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)

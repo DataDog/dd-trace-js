@@ -107,10 +107,49 @@ class TextMapPropagator {
     }
   }
 
+  _encodeOtelBaggageKey (key) {
+    let encoded = ''
+    encoded = key.replaceAll(' ', '%20')
+    encoded = encoded.replaceAll('"', '%22')
+    encoded = encoded.replaceAll(',', '%2C')
+    encoded = encoded.replaceAll(';', '%3B')
+    encoded = encoded.replaceAll('\\', '%5C')
+    encoded = encoded.replaceAll('(', '%28')
+    encoded = encoded.replaceAll(')', '%29')
+    encoded = encoded.replaceAll('/', '%2F')
+    encoded = encoded.replaceAll(':', '%3A')
+    encoded = encoded.replaceAll('<', '%3C')
+    encoded = encoded.replaceAll('=', '%3D')
+    encoded = encoded.replaceAll('>', '%3E')
+    encoded = encoded.replaceAll('?', '%3F')
+    encoded = encoded.replaceAll('@', '%40')
+    encoded = encoded.replaceAll('[', '%5B')
+    encoded = encoded.replaceAll(']', '%5D')
+    encoded = encoded.replaceAll('{', '%7B')
+    encoded = encoded.replaceAll('}', '%7D')
+    return encoded
+  }
+
+  _encodeOtelBaggageValue (value) {
+    let encoded = ''
+    encoded = value.replaceAll(' ', '%20')
+    encoded = encoded.replaceAll('"', '%22')
+    encoded = encoded.replaceAll(',', '%2C')
+    encoded = encoded.replaceAll(';', '%3B')
+    encoded = encoded.replaceAll('\\', '%5C')
+    return encoded
+  }
+
   _injectBaggageItems (spanContext, carrier) {
     spanContext._baggageItems && Object.keys(spanContext._baggageItems).forEach(key => {
       carrier[baggagePrefix + key] = String(spanContext._baggageItems[key])
     })
+    if (this._config.baggageInject === false) return
+    if (this._config.baggageInject === true || this._config.baggagePropagation === true) {
+      carrier.baggage = Object.entries(spanContext._baggageItems)
+        .map(([key, value]) =>
+          `${this._encodeOtelBaggageKey(String(key))}=${this._encodeOtelBaggageValue(String(value))}`).join(',')
+    }
   }
 
   _injectTags (spanContext, carrier) {
@@ -533,6 +572,16 @@ class TextMapPropagator {
     }
   }
 
+  _decodeOtelBaggageValue (value) {
+    let decoded = ''
+    decoded = value.replaceAll('%20', ' ')
+    decoded = decoded.replaceAll('%22', '"')
+    decoded = decoded.replaceAll('%2C', ',')
+    decoded = decoded.replaceAll('%3B', ';')
+    decoded = decoded.replaceAll('%5C', '\\')
+    return decoded
+  }
+
   _extractBaggageItems (carrier, spanContext) {
     Object.keys(carrier).forEach(key => {
       const match = key.match(baggageExpr)
@@ -541,6 +590,19 @@ class TextMapPropagator {
         spanContext._baggageItems[match[1]] = carrier[key]
       }
     })
+    // the code below shouldn't create any changes to spanContext._baggageItems until we deprecate ot-baggage-
+    if (this._config.baggageExtract === false) return
+    if (this._config.baggageExtract === true || this._config.baggagePropagation === true) {
+      if (carrier.baggage) {
+        const baggages = carrier.baggage.split(',')
+        for (const keyValue of baggages) {
+          let [key, value] = keyValue.split('=')
+          key = key.trim()
+          value = value.trim()
+          spanContext._baggageItems[key] = spanContext._baggageItems[key] || this._decodeOtelBaggageValue(value)
+        }
+      }
+    }
   }
 
   _extractSamplingPriority (carrier, spanContext) {
