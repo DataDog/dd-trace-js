@@ -166,23 +166,7 @@ describe('Plugin', () => {
                 finish_reason: 'length'
               }],
               usage: { prompt_tokens: 3, completion_tokens: 16, total_tokens: 19 }
-            }, [
-              'Date', 'Mon, 15 May 2023 17:24:22 GMT',
-              'Content-Type', 'application/json',
-              'Content-Length', '349',
-              'Connection', 'close',
-              'openai-model', 'text-davinci-002',
-              'openai-organization', 'kill-9',
-              'openai-processing-ms', '442',
-              'openai-version', '2020-10-01',
-              'x-ratelimit-limit-requests', '3000',
-              'x-ratelimit-limit-tokens', '250000',
-              'x-ratelimit-remaining-requests', '2999',
-              'x-ratelimit-remaining-tokens', '249984',
-              'x-ratelimit-reset-requests', '20ms',
-              'x-ratelimit-reset-tokens', '3ms',
-              'x-request-id', '7df89d8afe7bf24dc04e2c4dd4962d7f'
-            ])
+            })
 
           await tracer.trace('outer', async (outerSpan) => {
             const params = {
@@ -198,12 +182,12 @@ describe('Plugin', () => {
               expect(result.data.id).to.eql('cmpl-7GWDlQbOrAYGmeFZtoRdOEjDXDexM')
             }
 
-            tracer.trace('child of outer', () => {
-              const currentSpan = tracer.scope().active()
-              expect(currentSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+            tracer.trace('child of outer', innerSpan => {
+              expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
             })
           })
         })
+
         if (semver.intersects('>4.1.0', version)) {
           it('should maintain the context with a streamed call', async () => {
             nock('https://api.openai.com:443')
@@ -228,9 +212,8 @@ describe('Plugin', () => {
                 expect(part.choices[0]).to.have.property('delta')
               }
 
-              tracer.trace('child of outer', () => {
-                const currentSpan = tracer.scope().active()
-                expect(currentSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
+              tracer.trace('child of outer', innerSpan => {
+                expect(innerSpan.context()._parentId).to.equal(outerSpan.context()._spanId)
               })
             })
           })
