@@ -20,6 +20,13 @@ function copyProperties (original, wrapped) {
   }
 }
 
+function wrapFunction (original, wrapper) {
+  // TODO This needs to be re-done so that this and wrapMethod are distinct.
+  const target = { func: original }
+  wrapMethod(target, 'func', wrapper)
+  return target.func
+}
+
 const wrapFn = function (original, delegate) {
   if (safeMode) {
     const target = { func: original }
@@ -284,6 +291,7 @@ function assertNotClass (target) {
 
 module.exports = {
   wrap,
+  wrapFunction,
   massWrap,
   unwrap,
   massUnwrap,

@@ -92,7 +92,7 @@ function wrapUnifiedCommand (command, operation, name) {
     }
     return instrument(operation, command, this, arguments, server, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
 function wrapConnectionCommand (command, operation, name, instrumentFn = instrument) {
@@ -109,7 +109,7 @@ function wrapConnectionCommand (command, operation, name, instrumentFn = instrum
     ns = `${ns.db}.${ns.collection}`
     return instrumentFn(operation, command, this, arguments, topology, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
 function wrapQuery (query, operation, name) {
@@ -123,7 +123,7 @@ function wrapQuery (query, operation, name) {
     return instrument(operation, query, this, arguments, pool, ns, ops)
   }
 
-  return shimmer.wrap(query, wrapped)
+  return wrapped
 }
 
 function wrapCursor (cursor, operation, name) {
@@ -135,7 +135,7 @@ function wrapCursor (cursor, operation, name) {
     const ns = this.ns
     return instrument(operation, cursor, this, arguments, pool, ns, {}, { name })
   }
-  return shimmer.wrap(cursor, wrapped)
+  return wrapped
 }
 
 function wrapCommand (command, operation, name) {
@@ -145,7 +145,7 @@ function wrapCommand (command, operation, name) {
     }
     return instrument(operation, command, this, arguments, this, ns, ops, { name })
   }
-  return shimmer.wrap(command, wrapped)
+  return wrapped
 }
 
 function instrument (operation, command, ctx, args, server, ns, ops, options = {}) {
