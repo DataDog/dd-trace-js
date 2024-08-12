@@ -25,7 +25,19 @@ function wrapFunction (original, wrapper) {
   // TODO This needs to be re-done so that this and wrapMethod are distinct.
   const target = { func: original }
   wrapMethod(target, 'func', wrapper)
-  return target.func
+  let delegate = target.func
+
+  const shim = function shim () {
+    return delegate.apply(this, arguments)
+  }
+
+  unwrappers.set(shim, () => {
+    delegate = original
+  })
+
+  copyProperties(original, shim)
+
+  return shim
 }
 
 const wrapFn = function (original, delegate) {

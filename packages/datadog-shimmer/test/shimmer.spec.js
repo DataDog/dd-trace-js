@@ -431,10 +431,13 @@ describe('shimmer', () => {
   })
 
   describe('with a function', () => {
+    it('should not work with a wrap()', () => {
+      expect(() => shimmer.wrap(() => {}, () => {})).to.throw()
+    })
     it('should wrap the function', () => {
       const count = inc => inc
 
-      const wrapped = shimmer.wrap(count, inc => count(inc) + 1)
+      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
 
       expect(wrapped).to.not.equal(count)
       expect(wrapped(1)).to.equal(2)
@@ -445,7 +448,7 @@ describe('shimmer', () => {
         this.value = start
       }
 
-      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+      const WrappedCounter = shimmer.wrapFunction(Counter, Counter => function (...args) {
         Counter.apply(this, arguments)
         this.value++
       })
@@ -463,7 +466,7 @@ describe('shimmer', () => {
         }
       }
 
-      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
         'Target is a native class constructor and cannot be wrapped.'
       )
     })
@@ -477,7 +480,7 @@ describe('shimmer', () => {
 
       Counter.toString = 'invalid'
 
-      expect(() => shimmer.wrap(Counter, function () {})).to.throw(
+      expect(() => shimmer.wrapFunction(Counter, Counter => function () {})).to.throw(
         'Target is a native class constructor and cannot be wrapped.'
       )
     })
@@ -492,7 +495,7 @@ describe('shimmer', () => {
       count.foo = 'foo'
       count[sym] = 'sym'
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
       const bar = Object.getOwnPropertyDescriptor(wrapped, 'bar')
 
       expect(wrapped).to.have.property('foo', 'foo')
@@ -505,7 +508,7 @@ describe('shimmer', () => {
     it('should preserve the original function length', () => {
       const count = (a, b, c) => {}
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.length(3)
     })
@@ -513,7 +516,7 @@ describe('shimmer', () => {
     it('should preserve the original function name', () => {
       const count = function count (a, b, c) {}
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.property('name', 'count')
     })
@@ -523,7 +526,7 @@ describe('shimmer', () => {
 
       Object.getPrototypeOf(count).test = 'test'
 
-      const wrapped = shimmer.wrap(count, () => {})
+      const wrapped = shimmer.wrapFunction(count, count => () => {})
 
       expect(wrapped).to.have.property('test', 'test')
       expect(Object.getOwnPropertyNames(wrapped)).to.not.include('test')
@@ -532,7 +535,7 @@ describe('shimmer', () => {
     it('should unwrap a function', () => {
       const count = inc => inc
 
-      const wrapped = shimmer.wrap(count, inc => count(inc) + 1)
+      const wrapped = shimmer.wrapFunction(count, count => inc => count(inc) + 1)
 
       shimmer.unwrap(wrapped)
 
@@ -544,7 +547,7 @@ describe('shimmer', () => {
         this.value = start
       }
 
-      const WrappedCounter = shimmer.wrap(Counter, function (...args) {
+      const WrappedCounter = shimmer.wrapFunction(Counter, Counter => function (...args) {
         Counter.apply(this, arguments)
         this.value++
       })
