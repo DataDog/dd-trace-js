@@ -114,6 +114,10 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
+      if (!ch.start.hasSubscribers) {
+        return fn.apply(this, arguments)
+      }
+
       const ctx = {
         methodName,
         args: arguments,
@@ -205,56 +209,56 @@ function wrapStreamIterator (response, options, n, resource) {
     return function () {
       const iterator = itr.apply(this, arguments)
       shimmer.wrap(iterator, 'next', next => function () {
-        return resource.runInAsyncScope(() => {
-          return next.apply(this, arguments)
-            .then(res => {
-              const { done, value: chunk } = res
+        return next.apply(this, arguments)
+          .then(res => {
+            const { done, value: chunk } = res
 
-              if (chunk) {
-                chunks.push(chunk)
-                if (chunk instanceof Buffer) {
+            if (chunk) {
+              chunks.push(chunk)
+              if (chunk instanceof Buffer) {
                 // this operation should be safe
                 // if one chunk is a buffer (versus a plain object), the rest should be as well
-                  processChunksAsBuffers = true
-                }
+                processChunksAsBuffers = true
               }
+            }
 
-              if (done) {
-                let body = {}
-                chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
+            if (done) {
+              let body = {}
+              chunks = chunks.filter(chunk => chunk != null) // filter null or undefined values
 
-                if (chunks) {
-                  if (processChunksAsBuffers) {
-                    chunks = convertBufferstoObjects(chunks)
-                  }
+              if (chunks) {
+                if (processChunksAsBuffers) {
+                  chunks = convertBufferstoObjects(chunks)
+                }
 
-                  if (chunks.length) {
+                if (chunks.length) {
                   // define the initial body having all the content outside of choices from the first chunk
                   // this will include import data like created, id, model, etc.
-                    body = { ...chunks[0], choices: Array.from({ length: n }) }
-                    // start from the first chunk, and add its choices into the body
-                    for (let i = 0; i < chunks.length; i++) {
-                      addStreamedChunk(body, chunks[i])
-                    }
+                  body = { ...chunks[0], choices: Array.from({ length: n }) }
+                  // start from the first chunk, and add its choices into the body
+                  for (let i = 0; i < chunks.length; i++) {
+                    addStreamedChunk(body, chunks[i])
                   }
                 }
-
-                finish({
-                  headers: response.headers,
-                  body,
-                  path: response.url,
-                  method: options.method
-                })
               }
 
-              return res
-            })
-            .catch(err => {
-              finish(undefined, err)
+              finish({
+                headers: response.headers,
+                data: body,
+                request: {
+                  path: response.url,
+                  method: options.method
+                }
+              })
+            }
 
-              throw err
-            })
-        })
+            return res
+          })
+          .catch(err => {
+            finish(undefined, err)
+
+            throw err
+          })
       })
       return iterator
     }
@@ -268,7 +272,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
     for (const methodName of methods) {
       shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-        if (!startCh.hasSubscribers) {
+        if (!ch.start.hasSubscribers) {
           return methodFn.apply(this, arguments)
         }
 
@@ -292,14 +296,14 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
         const client = this._client || this.client
 
-        return asyncResource.runInAsyncScope(() => {
-          startCh.publish({
-            methodName: `${baseResource}.${methodName}`,
-            args: arguments,
-            basePath: client.baseURL,
-            apiKey: client.apiKey
-          })
+        const ctx = {
+          methodName: `${baseResource}.${methodName}`,
+          args: arguments,
+          basePath: client.baseURL,
+          apiKey: client.apiKey
+        }
 
+        return ch.start.runStores(ctx, () => {
           const apiProm = methodFn.apply(this, arguments)
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
@@ -311,25 +315,27 @@ for (const shim of V4_PACKAGE_SHIMS) {
               .then(([{ response, options }, body]) => {
                 if (stream) {
                   if (body.iterator) {
-                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, asyncResource))
+                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
                   } else {
                     shimmer.wrap(
-                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, asyncResource)
+                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
                     )
                   }
                 } else {
-                  finish({
+                  finish(ctx, {
                     headers: response.headers,
-                    body,
-                    path: response.url,
-                    method: options.method
+                    data: body,
+                    request: {
+                      path: response.url,
+                      method: options.method
+                    }
                   })
                 }
 
                 return body
               })
               .catch(error => {
-                finish(undefined, error)
+                finish(ctx, undefined, error)
 
                 throw error
               })
@@ -348,12 +354,14 @@ for (const shim of V4_PACKAGE_SHIMS) {
   })
 }
 
-function finish (response, error) {
+function finish (ctx, response, error) {
   if (error) {
-    errorCh.publish({ error })
+    ctx.error = error
+    ch.error.publish(ctx)
   }
 
-  finishCh.publish(response)
+  ctx.result = response
+  ch.asyncEnd.publish(ctx)
 }
 
 function getOption (args, option, defaultValue) {

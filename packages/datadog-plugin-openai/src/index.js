@@ -201,7 +201,11 @@ class OpenApiPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const { result } = ctx
-    const span = this.activeSpan
+    const store = ctx.currentStore
+
+    const span = store?.span
+    if (!span) return
+
     const error = !!span.context()._tags.error
 
     let headers, body, method, path
@@ -219,7 +223,6 @@ class OpenApiPlugin extends TracingPlugin {
 
     body = coerceResponseBody(body, methodName)
 
-    const store = storage.getStore()
     const openai = store.openai
 
     if (!error && (path?.startsWith('https://') || path?.startsWith('http://'))) {
@@ -251,9 +254,9 @@ class OpenApiPlugin extends TracingPlugin {
     if (body) responseDataExtractionByMethod(methodName, tags, body, openai)
     span.addTags(tags)
 
+    span.finish()
     this.sendLog(methodName, span, tags, store, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
-    return super.finish()
   }
 
   sendMetrics (headers, body, endpoint, duration, error, spanTags) {
