@@ -94,14 +94,14 @@ class OpenApiPlugin extends TracingPlugin {
       }
     }, false)
 
-    const openai = Object.create(null)
+    const openaiStore = Object.create(null)
 
     const tags = {} // The remaining tags are added one at a time
 
     // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
     if (payload.prompt) {
       const prompt = payload.prompt
-      openai.prompt = prompt
+      openaiStore.prompt = prompt
       if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
         // This is a single prompt, either String or [Number]
         tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
@@ -117,7 +117,7 @@ class OpenApiPlugin extends TracingPlugin {
     if (payload.input) {
       const normalized = normalizeStringOrTokenArray(payload.input, false)
       tags['openai.request.input'] = truncateText(normalized)
-      openai.input = normalized
+      openaiStore.input = normalized
     }
 
     // createChatCompletion, createCompletion
@@ -144,12 +144,12 @@ class OpenApiPlugin extends TracingPlugin {
       case 'images.edit':
       case 'createImageVariation':
       case 'images.createVariation':
-        commonCreateImageRequestExtraction(tags, payload, openai)
+        commonCreateImageRequestExtraction(tags, payload, openaiStore)
         break
 
       case 'createChatCompletion':
       case 'chat.completions.create':
-        createChatCompletionRequestExtraction(tags, payload, openai)
+        createChatCompletionRequestExtraction(tags, payload, openaiStore)
         break
 
       case 'createFile':
@@ -163,7 +163,7 @@ class OpenApiPlugin extends TracingPlugin {
       case 'audio.transcriptions.create':
       case 'createTranslation':
       case 'audio.translations.create':
-        commonCreateAudioRequestExtraction(tags, payload, openai)
+        commonCreateAudioRequestExtraction(tags, payload, openaiStore)
         break
 
       case 'retrieveModel':
@@ -187,14 +187,13 @@ class OpenApiPlugin extends TracingPlugin {
 
       case 'createEdit':
       case 'edits.create':
-        createEditRequestExtraction(tags, payload, openai)
+        createEditRequestExtraction(tags, payload, openaiStore)
         break
     }
 
     span.addTags(tags)
 
-    ctx.parentStore = store
-    ctx.currentStore = { ...store, span, openai }
+    ctx.currentStore = { ...store, span, openai: openaiStore }
 
     return ctx.currentStore
   }
@@ -223,7 +222,7 @@ class OpenApiPlugin extends TracingPlugin {
 
     body = coerceResponseBody(body, methodName)
 
-    const openai = store.openai
+    const openaiStore = store.openai
 
     if (!error && (path?.startsWith('https://') || path?.startsWith('http://'))) {
       // basic checking for if the path was set as a full URL
@@ -251,11 +250,11 @@ class OpenApiPlugin extends TracingPlugin {
           'openai.response.created_at': body.created_at
         }
 
-    if (body) responseDataExtractionByMethod(methodName, tags, body, openai)
+    responseDataExtractionByMethod(methodName, tags, body, openaiStore)
     span.addTags(tags)
 
     span.finish()
-    this.sendLog(methodName, span, tags, store, error)
+    this.sendLog(methodName, span, tags, openaiStore, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
   }
 
@@ -320,15 +319,15 @@ class OpenApiPlugin extends TracingPlugin {
     }
   }
 
-  sendLog (methodName, span, tags, store, error) {
-    if (!store) return
-    if (!Object.keys(store).length) return
+  sendLog (methodName, span, tags, openaiStore, error) {
+    if (!openaiStore) return
+    if (!Object.keys(openaiStore).length) return
     if (!this.sampler.isSampled()) return
 
     const log = {
       status: error ? 'error' : 'info',
       message: `sampled ${methodName}`,
-      ...store
+      ...openaiStore
     }
 
     this.logger.log(log, span, tags)
@@ -412,21 +411,21 @@ function countTokens (content, model) {
   }
 }
 
-function createEditRequestExtraction (tags, payload, store) {
+function createEditRequestExtraction (tags, payload, openaiStore) {
   const instruction = payload.instruction
   tags['openai.request.instruction'] = instruction
-  store.instruction = instruction
+  openaiStore.instruction = instruction
 }
 
 function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
 
-function createChatCompletionRequestExtraction (tags, payload, store) {
+function createChatCompletionRequestExtraction (tags, payload, openaiStore) {
   const messages = payload.messages
   if (!defensiveArrayLength(messages)) return
 
-  store.messages = payload.messages
+  openaiStore.messages = payload.messages
   for (let i = 0; i < payload.messages.length; i++) {
     const message = payload.messages[i]
     tagChatCompletionRequestContent(message.content, i, tags)
@@ -436,20 +435,20 @@ function createChatCompletionRequestExtraction (tags, payload, store) {
   }
 }
 
-function commonCreateImageRequestExtraction (tags, payload, store) {
+function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
   // createImageEdit, createImageVariation
   const img = payload.file || payload.image
   if (img !== null && typeof img === 'object' && img.path) {
     const file = path.basename(img.path)
     tags['openai.request.image'] = file
-    store.file = file
+    openaiStore.file = file
   }
 
   // createImageEdit
   if (payload.mask !== null && typeof payload.mask === 'object' && payload.mask.path) {
     const mask = path.basename(payload.mask.path)
     tags['openai.request.mask'] = mask
-    store.mask = mask
+    openaiStore.mask = mask
   }
 
   tags['openai.request.size'] = payload.size
@@ -457,7 +456,7 @@ function commonCreateImageRequestExtraction (tags, payload, store) {
   tags['openai.request.language'] = payload.language
 }
 
-function responseDataExtractionByMethod (methodName, tags, body, store) {
+function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
   switch (methodName) {
     case 'createModeration':
     case 'moderations.create':
@@ -470,7 +469,7 @@ function responseDataExtractionByMethod (methodName, tags, body, store) {
     case 'chat.completions.create':
     case 'createEdit':
     case 'edits.create':
-      commonCreateResponseExtraction(tags, body, store, methodName)
+      commonCreateResponseExtraction(tags, body, openaiStore, methodName)
       break
 
     case 'listFiles':
@@ -486,7 +485,7 @@ function responseDataExtractionByMethod (methodName, tags, body, store) {
 
     case 'createEmbedding':
     case 'embeddings.create':
-      createEmbeddingResponseExtraction(tags, body)
+      createEmbeddingResponseExtraction(tags, body, openaiStore)
       break
 
     case 'createFile':
@@ -641,14 +640,14 @@ function deleteFileResponseExtraction (tags, body) {
   tags['openai.response.id'] = body.id
 }
 
-function commonCreateAudioRequestExtraction (tags, body, store) {
+function commonCreateAudioRequestExtraction (tags, body, openaiStore) {
   tags['openai.request.response_format'] = body.response_format
   tags['openai.request.language'] = body.language
 
   if (body.file !== null && typeof body.file === 'object' && body.file.path) {
     const filename = path.basename(body.file.path)
     tags['openai.request.filename'] = filename
-    store.file = filename
+    openaiStore.file = filename
   }
 }
 
@@ -671,8 +670,8 @@ function createRetrieveFileResponseExtraction (tags, body) {
   tags['openai.response.status_details'] = body.status_details
 }
 
-function createEmbeddingResponseExtraction (tags, body) {
-  usageExtraction(tags, body)
+function createEmbeddingResponseExtraction (tags, body, openaiStore) {
+  usageExtraction(tags, body, openaiStore)
 
   if (!body.data) return
 
@@ -706,14 +705,14 @@ function createModerationResponseExtraction (tags, body) {
 }
 
 // createCompletion, createChatCompletion, createEdit
-function commonCreateResponseExtraction (tags, body, store, methodName) {
-  usageExtraction(tags, body, methodName)
+function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
+  usageExtraction(tags, body, methodName, openaiStore)
 
   if (!body.choices) return
 
   tags['openai.response.choices_count'] = body.choices.length
 
-  store.choices = body.choices
+  openaiStore.choices = body.choices
 
   for (let choiceIdx = 0; choiceIdx < body.choices.length; choiceIdx++) {
     const choice = body.choices[choiceIdx]
@@ -747,7 +746,7 @@ function commonCreateResponseExtraction (tags, body, store, methodName) {
 }
 
 // createCompletion, createChatCompletion, createEdit, createEmbedding
-function usageExtraction (tags, body, methodName) {
+function usageExtraction (tags, body, methodName, openaiStore) {
   let promptTokens = 0
   let completionTokens = 0
   let totalTokens = 0
@@ -755,14 +754,14 @@ function usageExtraction (tags, body, methodName) {
     promptTokens = body.usage.prompt_tokens
     completionTokens = body.usage.completion_tokens
     totalTokens = body.usage.total_tokens
-  } else if (['chat.completions.create', 'completions.create'].includes(methodName)) {
+  } else if (body.model && ['chat.completions.create', 'completions.create'].includes(methodName)) {
     // estimate tokens based on method name for completions and chat completions
     const { model } = body
     let promptEstimated = false
     let completionEstimated = false
 
     // prompt tokens
-    const payload = storage.getStore().openai
+    const payload = openaiStore
     const promptTokensCount = countPromptTokens(methodName, payload, model)
     promptTokens = promptTokensCount.promptTokens
     promptEstimated = promptTokensCount.promptEstimated

@@ -1,15 +1,7 @@
 'use strict'
 
-const {
-  channel,
-  addHook,
-  AsyncResource
-} = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-
-const startCh = channel('apm:openai:request:start')
-const finishCh = channel('apm:openai:request:finish')
-const errorCh = channel('apm:openai:request:error')
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 const ch = tracingChannel('apm:openai:request')
@@ -202,7 +194,7 @@ function convertBufferstoObjects (chunks = []) {
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
  */
-function wrapStreamIterator (response, options, n, resource) {
+function wrapStreamIterator (response, options, n, ctx) {
   let processChunksAsBuffers = false
   let chunks = []
   return function (itr) {
@@ -242,7 +234,7 @@ function wrapStreamIterator (response, options, n, resource) {
                 }
               }
 
-              finish({
+              finish(ctx, {
                 headers: response.headers,
                 data: body,
                 request: {
@@ -276,8 +268,6 @@ for (const shim of V4_PACKAGE_SHIMS) {
           return methodFn.apply(this, arguments)
         }
 
-        const asyncResource = new AsyncResource('bound-anonymous-fn')
-
         // The OpenAI library lets you set `stream: true` on the options arg to any method
         // However, we only want to handle streamed responses in specific cases
         // chat.completions and completions
@@ -308,17 +298,17 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
           // wrapping `parse` avoids problematic wrapping of `then` when trying to call
           // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-          shimmer.wrap(apiProm, 'parse', origApiPromParse => asyncResource.bind(function () {
+          shimmer.wrap(apiProm, 'parse', origApiPromParse => function () {
             return origApiPromParse.apply(this, arguments)
             // the original response is wrapped in a promise, so we need to unwrap it
               .then(body => Promise.all([this.responsePromise, body]))
               .then(([{ response, options }, body]) => {
                 if (stream) {
                   if (body.iterator) {
-                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n))
+                    shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, n, ctx))
                   } else {
                     shimmer.wrap(
-                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n)
+                      body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, n, ctx)
                     )
                   }
                 } else {
@@ -344,7 +334,7 @@ for (const shim of V4_PACKAGE_SHIMS) {
               // other hand: we want to avoid resource leakage
                 shimmer.unwrap(apiProm, 'parse')
               })
-          }))
+          })
 
           return apiProm
         })
