@@ -11,6 +11,9 @@ const startCh = channel('apm:openai:request:start')
 const finishCh = channel('apm:openai:request:finish')
 const errorCh = channel('apm:openai:request:error')
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+const ch = tracingChannel('apm:openai:request')
+
 const V4_PACKAGE_SHIMS = [
   {
     file: 'resources/chat/completions.js',
@@ -111,36 +114,14 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 
   for (const methodName of methodNames) {
     shimmer.wrap(exports.OpenAIApi.prototype, methodName, fn => function () {
-      if (!startCh.hasSubscribers) {
-        return fn.apply(this, arguments)
+      const ctx = {
+        methodName,
+        args: arguments,
+        basePath: this.basePath,
+        apiKey: this.configuration.apiKey
       }
 
-      const asyncResource = new AsyncResource('bound-anonymous-fn')
-      return asyncResource.runInAsyncScope(() => {
-        startCh.publish({
-          methodName,
-          args: arguments,
-          basePath: this.basePath,
-          apiKey: this.configuration.apiKey
-        })
-
-        return fn.apply(this, arguments)
-          .then((response) => {
-            finish({
-              headers: response.headers,
-              body: response.data,
-              path: response.request.path,
-              method: response.request.method
-            })
-
-            return response
-          })
-          .catch(error => {
-            finish(undefined, error)
-
-            throw error
-          })
-      })
+      return ch.tracePromise(fn, ctx, this, ...arguments)
     })
   }
 

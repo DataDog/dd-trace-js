@@ -31,6 +31,9 @@ class OpenApiPlugin extends TracingPlugin {
   static get id () { return 'openai' }
   static get operation () { return 'request' }
   static get system () { return 'openai' }
+  static get prefix () {
+    return 'tracing:apm:openai:request'
+  }
 
   constructor (...args) {
     super(...args)
@@ -55,8 +58,10 @@ class OpenApiPlugin extends TracingPlugin {
     super.configure(config)
   }
 
-  start ({ methodName, args, basePath, apiKey }) {
+  bindStart (ctx) {
+    const { methodName, args, basePath, apiKey } = ctx
     const payload = normalizeRequestPayload(methodName, args)
+    const store = storage.getStore() || {}
 
     const span = this.startSpan('openai.request', {
       service: this.config.service,
@@ -87,18 +92,16 @@ class OpenApiPlugin extends TracingPlugin {
         'openai.request.user': payload.user,
         'openai.request.file_id': payload.file_id // deleteFile, retrieveFile, downloadFile
       }
-    })
+    }, false)
 
-    const fullStore = storage.getStore() || {} // certain request body fields are later used for logs
-    const store = Object.create(null)
-    fullStore.openai = store // namespacing these fields
+    const openai = Object.create(null)
 
     const tags = {} // The remaining tags are added one at a time
 
     // createChatCompletion, createCompletion, createImage, createImageEdit, createTranscription, createTranslation
     if (payload.prompt) {
       const prompt = payload.prompt
-      store.prompt = prompt
+      openai.prompt = prompt
       if (typeof prompt === 'string' || (Array.isArray(prompt) && typeof prompt[0] === 'number')) {
         // This is a single prompt, either String or [Number]
         tags['openai.request.prompt'] = normalizeStringOrTokenArray(prompt, true)
@@ -114,7 +117,7 @@ class OpenApiPlugin extends TracingPlugin {
     if (payload.input) {
       const normalized = normalizeStringOrTokenArray(payload.input, false)
       tags['openai.request.input'] = truncateText(normalized)
-      store.input = normalized
+      openai.input = normalized
     }
 
     // createChatCompletion, createCompletion
@@ -141,12 +144,12 @@ class OpenApiPlugin extends TracingPlugin {
       case 'images.edit':
       case 'createImageVariation':
       case 'images.createVariation':
-        commonCreateImageRequestExtraction(tags, payload, store)
+        commonCreateImageRequestExtraction(tags, payload, openai)
         break
 
       case 'createChatCompletion':
       case 'chat.completions.create':
-        createChatCompletionRequestExtraction(tags, payload, store)
+        createChatCompletionRequestExtraction(tags, payload, openai)
         break
 
       case 'createFile':
@@ -160,7 +163,7 @@ class OpenApiPlugin extends TracingPlugin {
       case 'audio.transcriptions.create':
       case 'createTranslation':
       case 'audio.translations.create':
-        commonCreateAudioRequestExtraction(tags, payload, store)
+        commonCreateAudioRequestExtraction(tags, payload, openai)
         break
 
       case 'retrieveModel':
@@ -184,23 +187,29 @@ class OpenApiPlugin extends TracingPlugin {
 
       case 'createEdit':
       case 'edits.create':
-        createEditRequestExtraction(tags, payload, store)
+        createEditRequestExtraction(tags, payload, openai)
         break
     }
 
     span.addTags(tags)
+
+    ctx.parentStore = store
+    ctx.currentStore = { ...store, span, openai }
+
+    return ctx.currentStore
   }
 
-  finish (response) {
+  asyncEnd (ctx) {
+    const { result } = ctx
     const span = this.activeSpan
     const error = !!span.context()._tags.error
 
     let headers, body, method, path
     if (!error) {
-      headers = response.headers
-      body = response.body
-      method = response.method
-      path = response.path
+      headers = result.headers
+      body = result.data
+      method = result.request.method
+      path = result.request.path
     }
 
     if (!error && headers?.constructor.name === 'Headers') {
@@ -210,10 +219,10 @@ class OpenApiPlugin extends TracingPlugin {
 
     body = coerceResponseBody(body, methodName)
 
-    const fullStore = storage.getStore()
-    const store = fullStore.openai
+    const store = storage.getStore()
+    const openai = store.openai
 
-    if (!error && (path.startsWith('https://') || path.startsWith('http://'))) {
+    if (!error && (path?.startsWith('https://') || path?.startsWith('http://'))) {
       // basic checking for if the path was set as a full URL
       // not using a full regex as it will likely be "https://api.openai.com/..."
       path = new URL(path).pathname
@@ -239,12 +248,12 @@ class OpenApiPlugin extends TracingPlugin {
           'openai.response.created_at': body.created_at
         }
 
-    responseDataExtractionByMethod(methodName, tags, body, store)
+    if (body) responseDataExtractionByMethod(methodName, tags, body, openai)
     span.addTags(tags)
 
-    super.finish()
     this.sendLog(methodName, span, tags, store, error)
     this.sendMetrics(headers, body, endpoint, span._duration, error, tags)
+    return super.finish()
   }
 
   sendMetrics (headers, body, endpoint, duration, error, spanTags) {
