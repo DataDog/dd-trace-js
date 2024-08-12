@@ -1836,6 +1836,7 @@ declare namespace tracer {
     export interface TracerProvider extends otel.TracerProvider {
       /**
        * Construct a new TracerProvider to register with @opentelemetry/api
+       *
        * @param config Configuration object for the TracerProvider
        * @returns TracerProvider A TracerProvider instance
        */
