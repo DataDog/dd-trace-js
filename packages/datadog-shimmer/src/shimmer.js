@@ -21,6 +21,7 @@ function copyProperties (original, wrapped) {
 }
 
 function wrapFunction (original, wrapper) {
+  assertNotClass(original)
   // TODO This needs to be re-done so that this and wrapMethod are distinct.
   const target = { func: original }
   wrapMethod(target, 'func', wrapper)
@@ -28,25 +29,7 @@ function wrapFunction (original, wrapper) {
 }
 
 const wrapFn = function (original, delegate) {
-  if (safeMode) {
-    const target = { func: original }
-    wrapMethod(target, 'func', delegate)
-    return target.func
-  }
-  assertFunction(delegate)
-  assertNotClass(original) // TODO: support constructors of native classes
-
-  const shim = function shim () {
-    return delegate.apply(this, arguments)
-  }
-
-  unwrappers.set(shim, () => {
-    delegate = original
-  })
-
-  copyProperties(original, shim)
-
-  return shim
+  throw new Error('calling `wrap()` with 2 args is deprecated. Use wrapFunction instead.')
 }
 
 // This is only used in safe mode. It's a simple state machine to track if the

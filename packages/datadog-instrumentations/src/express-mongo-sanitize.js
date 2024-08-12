@@ -30,7 +30,7 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
         return middleware.apply(this, arguments)
       }
 
-      const wrappedNext = shimmer.wrap(next, function () {
+      const wrappedNext = shimmer.wrapFunction(next, next => function () {
         sanitizeMiddlewareFinished.publish({
           sanitizedProperties: propertiesToSanitize,
           req
