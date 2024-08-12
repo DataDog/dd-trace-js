@@ -2235,6 +2235,18 @@ declare namespace tracer {
       wrap<T = (...args: any[]) => any> (kind: llmobs.spanKind, options: llmobs.LLMObsSpanOptions, fn: T): T
 
       /**
+       * Decorate a function in a javascript runtime that supports function decorators.
+       * Note that this is **not** supported in the Node.js runtime, but is in TypeScript.
+       * 
+       * In TypeScript, this decorator is only supported in contexts where general TypeScript
+       * function decorators are supported.
+       * 
+       * @param kind The kind of span to start.
+       * @param options Optional LLM Observability span options.
+       */
+      decorate (kind: llmobs.spanKind, options?: llmobs.LLMObsSpanOptions): any
+
+      /**
        * Returns a representation of a span to export its span and trace IDs.
        * If no span is provided, the current LLMObs-type span will be used.
        * @param span Optional span to export.

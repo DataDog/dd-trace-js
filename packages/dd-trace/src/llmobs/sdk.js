@@ -310,6 +310,16 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
+  decorate (kind, options) {
+    const llmobsThis = this
+    return function (target, ctx) {
+      if (ctx.kind === 'method') {
+        // override name if specified on options
+        return llmobsThis.wrap(kind, { name: ctx.name, ...options }, target)
+      }
+    }
+  }
+
   flush () {
     if (!this.enabled) {
       logger.warn('Flushing when LLMObs is disabled. no spans or evaluation metrics will be sent')
