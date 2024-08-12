@@ -10,25 +10,25 @@ const npmArgv = (() => {
   }
 })()
 
-let path, Module
+let path // , Module
 try {
   path = require('node:path')
-  Module = require('node:module')
+  // Module = require('node:module')
 } catch (e) {
   // If using a Node version pre-14, the `node:` protocol is not available
   // with require() so we fall back to not using it, and patch require to
   // accept it so that other imports with the prefix will work
   path = require('path')
-  Module = require('module')
+  // Module = require('module')
 
-  const origRequire = Module.prototype.require
-  const wrappedRequire = (request) => {
-    if (request.startsWith('node:')) {
-      request = request.replace(/^node:/, '')
-    }
-    return origRequire.call(this, request)
-  }
-  Module.prototype.require = wrappedRequire
+  // const origRequire = Module.prototype.require
+  // const wrappedRequire = (request) => {
+  //   if (request.startsWith('node:')) {
+  //     request = request.replace(/^node:/, '')
+  //   }
+  //   return origRequire.call(this, request)
+  // }
+  // Module.prototype.require = wrappedRequire
 }
 
 const requirePackageJson = require('../packages/dd-trace/src/require-package-json.js')
