@@ -1,7 +1,24 @@
 'use strict'
 
-const path = require('node:path')
-const Module = require('node:module')
+let path, Module
+try {
+  path = require('node:path')
+  Module = require('node:module')
+} catch (e) {
+  // If using a Node version pre-14, the `node:` protocol is not available
+  // with require() so we fall back to not using it, and patch require to
+  // accept it so that other imports with the prefix will work
+  path = require('path')
+  Module = require('module')
+
+  const origRequire = Module.prototype.require
+  const wrappedRequire = (request) => {
+    request = request.replace(/^node:/, '')
+    return origRequire.call(this, request)
+  }
+  Module.prototype.require = wrappedRequire
+}
+
 const semver = require('semver')
 const log = require('./packages/dd-trace/src/log')
 const { isTrue } = require('./packages/dd-trace/src/util')
