@@ -23,7 +23,9 @@ try {
 
   const origRequire = Module.prototype.require
   const wrappedRequire = (request) => {
-    request = request.replace(/^node:/, '')
+    if (request.startsWith('node:')) {
+      request = request.replace(/^node:/, '')
+    }
     return origRequire.call(this, request)
   }
   Module.prototype.require = wrappedRequire
