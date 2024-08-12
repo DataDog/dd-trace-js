@@ -90,7 +90,14 @@ for (const packageName of names) {
       }
 
       if (matchesFile) {
-        const version = moduleVersion || getVersion(moduleBaseDir)
+        let version = moduleVersion
+        try {
+          version = version || getVersion(moduleBaseDir)
+        } catch (e) {
+          log.error(`Error getting version for "${name}": ${e.message}`)
+          log.error(e)
+          continue
+        }
         if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
           namesAndSuccesses[`${name}@${version}`] = false
         }
