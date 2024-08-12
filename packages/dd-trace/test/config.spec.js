@@ -618,7 +618,7 @@ describe('Config', () => {
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
-      { name: 'profiling.enabled', value: 'enabled', origin: 'env_var' },
+      { name: 'profiling.enabled', value: 'true', origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },

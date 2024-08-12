@@ -698,9 +698,9 @@ class Config {
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
     const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
     const profilingEnabled = isTrue(profilingEnabledEnv)
-      ? 'enabled'
+      ? 'true'
       : isFalse(profilingEnabledEnv)
-        ? 'disabled'
+        ? 'false'
         : profilingEnabledEnv === 'auto' ? 'auto' : undefined
     this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
@@ -858,13 +858,9 @@ class Config {
     this._setBoolean(opts, 'plugins', options.plugins)
     this._setString(opts, 'port', options.port)
     const strProfiling = String(options.profiling)
-    this._setString(opts, 'profiling.enabled',
-      ['true', 'enabled'].includes(strProfiling)
-        ? 'enabled'
-        : ['false', 'disabled'].includes(strProfiling)
-            ? 'disabled'
-            : strProfiling === 'auto' ? 'auto' : undefined
-    )
+    if (['true', 'false', 'auto'].includes(strProfiling)) {
+      this._setString(opts, 'profiling.enabled', strProfiling)
+    }
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
@@ -1021,7 +1017,7 @@ class Config {
     const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
     const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
     const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
-    if (iastEnabled || ['auto', 'enabled'].includes(profilingEnabled) || injectionIncludesProfiler) {
+    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
       this._setBoolean(calc, 'telemetry.logCollection', true)
     }
   }

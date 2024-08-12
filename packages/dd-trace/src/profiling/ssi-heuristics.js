@@ -24,10 +24,10 @@ class SSIHeuristics {
   constructor (config) {
     const injectionIncludesProfiler = config.injectionEnabled.includes('profiler')
     this._heuristicsActive = injectionIncludesProfiler || config.profiling.enabled === 'auto'
-    this._emitsTelemetry = config.injectionEnabled.length > 0 && config.profiling.enabled !== 'disabled'
+    this._emitsTelemetry = config.injectionEnabled.length > 0 && config.profiling.enabled !== 'false'
 
     if (this._emitsTelemetry) {
-      if (config.profiling.enabled === 'enabled') {
+      if (config.profiling.enabled === 'true') {
         this.enablementChoice = 'manually_enabled'
       } else if (injectionIncludesProfiler) {
         this.enablementChoice = 'ssi_enabled'

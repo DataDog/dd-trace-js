@@ -117,11 +117,11 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      if (config.profiling.enabled !== 'disabled') {
+      if (config.profiling.enabled !== 'false') {
         const ssiHeuristics = new SSIHeuristics(config)
         ssiHeuristics.start()
         let mockProfiler = null
-        if (config.profiling.enabled === 'enabled') {
+        if (config.profiling.enabled === 'true') {
           this._profilerStarted = this._startProfiler(config)
         } else if (ssiHeuristics.emitsTelemetry) {
           // Start a mock profiler that emits mock profile-submitted events for the telemetry.

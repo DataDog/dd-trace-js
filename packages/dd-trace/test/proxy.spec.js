@@ -490,7 +490,7 @@ describe('TracerProxy', () => {
       })
 
       it('should load profiler when configured', () => {
-        config.profiling = { enabled: 'enabled' }
+        config.profiling = { enabled: 'true' }
 
         proxy.init()
 
@@ -498,7 +498,7 @@ describe('TracerProxy', () => {
       })
 
       it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { enabled: 'enabled' }
+        config.profiling = { enabled: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
