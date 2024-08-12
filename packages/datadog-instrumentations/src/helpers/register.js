@@ -98,7 +98,7 @@ for (const packageName of names) {
           log.error(e)
           continue
         }
-        if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
+        if (typeof namesAndSuccesses[`${name}@${version}`] === 'undefined') {
           namesAndSuccesses[`${name}@${version}`] = false
         }
 
