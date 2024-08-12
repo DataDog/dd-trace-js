@@ -97,7 +97,7 @@ function wrapHandler (handler) {
     if (!req) return handler.apply(this, arguments)
 
     enterChannel.publish({ req })
-    
+
     return handler.apply(this, arguments)
   }
 }
