@@ -1,0 +1,17 @@
+name: Remove prerelease branch on release
+
+on:
+  push:
+    branches: [v4.x, v5.x]
+
+jobs:
+  remove-prerelease-branch:
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
+
+        - name: Remove prerelease branch
+          run: |
+            git push origin --delete ${{ github.event.ref }}-proposal
