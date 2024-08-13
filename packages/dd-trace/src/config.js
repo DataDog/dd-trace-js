@@ -354,7 +354,7 @@ class Config {
     }
 
     // TODO: test
-    this._applyCalculated()
+    this._applyCalculated(options)
     this._merge()
   }
 
