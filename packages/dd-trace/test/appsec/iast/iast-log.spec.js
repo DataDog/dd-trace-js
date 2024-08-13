@@ -82,7 +82,7 @@ describe('IAST log', () => {
       iastLog.errorAndPublish('error')
 
       expect(log.error).to.be.calledOnceWith('error')
-      expect(telemetryLog.publish).to.be.calledOnceWith({ message: 'error', level: 'ERROR' })
+      expect(telemetryLog.publish).to.not.be.called // handled by log.error()
     })
 
     it('should chain multiple error calls', () => {
@@ -92,7 +92,7 @@ describe('IAST log', () => {
       expect(log.error.getCall(0).args[0]).to.be.eq('error')
       expect(log.error.getCall(1).args[0]).to.be.eq('errorAndPublish')
       expect(log.error.getCall(2).args[0]).to.be.eq('error2')
-      expect(telemetryLog.publish).to.be.calledOnceWith({ message: 'errorAndPublish', level: 'ERROR' })
+      expect(telemetryLog.publish).to.not.be.called // handled by log.error()
     })
   })
 })

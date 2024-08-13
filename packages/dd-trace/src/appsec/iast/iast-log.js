@@ -78,7 +78,8 @@ const iastLog = {
 
   errorAndPublish (data) {
     this.error(data)
-    return this.publish(data, 'ERROR')
+    // publish is done automatically by log.error()
+    return this
   }
 }
 
