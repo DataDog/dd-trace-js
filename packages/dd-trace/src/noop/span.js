@@ -16,6 +16,9 @@ class NoopSpan {
   setOperationName (name) { return this }
   setBaggageItem (key, value) { return this }
   getBaggageItem (key) {}
+  getAllBaggageItems () {}
+  removeBaggageItem () {}
+  removeAllBaggageItems () {}
   setTag (key, value) { return this }
   addTags (keyValueMap) { return this }
   addLink (link) { return this }

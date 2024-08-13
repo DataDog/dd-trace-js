@@ -236,6 +236,27 @@ class Span {
     return this
   }
 
+  setBaggageItem (key, value) {
+    this._ddSpan._spanContext._baggageItems[key] = value
+    return this
+  }
+
+  getBaggageItem (key) {
+    return this._ddSpan._spanContext._baggageItems[key]
+  }
+
+  getAllBaggageItems () {
+    return JSON.stringify(this._ddSpan._spanContext._baggageItems)
+  }
+
+  removeBaggageItem (key) {
+    delete this._ddSpan._spanContext._baggageItems[key]
+  }
+
+  removeAllBaggageItems () {
+    this._ddSpan._spanContext._baggageItems = {}
+  }
+
   end (timeInput) {
     if (this.ended) {
       api.diag.error('You can only call end() on a span once.')
