@@ -278,8 +278,8 @@ class LLMObs extends NoopLLMObs {
   }
 
   wrap (kind, options, fn) {
-    if (!this.enabled) return
-    if (!validKind(kind)) return
+    if (!this.enabled) return fn
+    if (!validKind(kind)) return fn
 
     const name = getName(kind, options, fn)
 
@@ -313,10 +313,10 @@ class LLMObs extends NoopLLMObs {
   decorate (kind, options) {
     const llmobsThis = this
     return function (target, ctx) {
-      if (ctx.kind === 'method') {
-        // override name if specified on options
-        return llmobsThis.wrap(kind, { name: ctx.name, ...options }, target)
-      }
+      if (!llmobsThis.enabled || ctx.kind !== 'method') return target
+
+      // override name if specified on options
+      return llmobsThis.wrap(kind, { name: ctx.name, ...options }, target)
     }
   }
 
