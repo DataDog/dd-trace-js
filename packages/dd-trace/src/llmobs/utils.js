@@ -2,6 +2,7 @@
 
 const { SPAN_KINDS, PARENT_ID_KEY, PROPAGATED_PARENT_ID_KEY, ML_APP, SESSION_ID } = require('./constants')
 const { SPAN_TYPE } = require('../../../../ext/tags')
+const { isTrue, isFalse } = require('../util')
 
 function validKind (kind) {
   // cases for invalid kind
@@ -79,17 +80,70 @@ function encodeUnicode (str) {
 
 function getFunctionArguments (fn, args) {
   const fnString = fn.toString()
-  const matches = Array.from(
-    fnString
-      .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
-      .matchAll(/(\w+\s*)(=?[^,]*,?)/g)
-  ) || []
-  const argNames = matches.map(match => match[1].trim())
+  const matches = Array
+    .from(
+      fnString
+        .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
+        .matchAll(/(?:\s*(\w+)\s*(?:=\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\S+))?)\s*(?=,|$)/g) || []
+    )
+    .map(match => {
+      const name = match[1].trim()
+      const value = match[2]?.trim()
+      return [name, value]
+    })
 
-  return argNames.reduce((obj, name, idx) => {
-    obj[name] = args[idx]
+  const defaultValues = {}
+  const argNames = matches.map(([name, value]) => {
+    defaultValues[name] = parseStringValue(value)
+    return name
+  })
+
+  const argsObject = argNames.reduce((obj, name, idx) => {
+    obj[name] = merge(args[idx], defaultValues[name])
     return obj
   }, {})
+
+  if (Object.entries(argsObject).length === 1) return Object.values(argsObject)[0]
+  return argsObject
+}
+
+function parseStringValue (str) {
+  if (!str) return str
+
+  const bool = isTrue(str) ? true : isFalse(str) ? false : undefined
+  if (bool) return bool
+
+  const number = parseFloat(str)
+  if (!isNaN(number)) return number
+
+  const validJsonStr = str.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":')
+  try {
+    return JSON.parse(validJsonStr)
+  } catch {
+    if (
+      (str.startsWith("'") && str.endsWith("'")) ||
+      (str.startsWith('`') && str.endsWith('`'))
+    ) {
+      return str.slice(1, -1)
+    }
+
+    if (str === 'undefined') return undefined
+    return str
+  }
+}
+function merge (value, defaultValue) {
+  if (!value) return defaultValue
+  if (typeof value !== typeof defaultValue) return value
+
+  const maybeEntries = Object.entries(value)
+  if (!maybeEntries.length) return value
+
+  const merged = {}
+  maybeEntries.forEach(([k, v]) => {
+    merged[k] = merge(v, defaultValue[k])
+  })
+
+  return { ...defaultValue, ...merged }
 }
 
 module.exports = {
