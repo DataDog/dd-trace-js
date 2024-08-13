@@ -29,6 +29,10 @@ if (!disabledInstrumentations.has('fetch')) {
   require('../fetch')
 }
 
+if (!disabledInstrumentations.has('process')) {
+  require('../process')
+}
+
 const HOOK_SYMBOL = Symbol('hookExportsMap')
 
 if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
@@ -86,7 +90,14 @@ for (const packageName of names) {
       }
 
       if (matchesFile) {
-        const version = moduleVersion || getVersion(moduleBaseDir)
+        let version = moduleVersion
+        try {
+          version = version || getVersion(moduleBaseDir)
+        } catch (e) {
+          log.error(`Error getting version for "${name}": ${e.message}`)
+          log.error(e)
+          continue
+        }
         if (!Object.hasOwnProperty(namesAndSuccesses, name)) {
           namesAndSuccesses[`${name}@${version}`] = false
         }

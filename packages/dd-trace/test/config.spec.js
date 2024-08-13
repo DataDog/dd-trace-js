@@ -233,7 +233,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.enableGetRumData', false)
     expect(config).to.have.nested.property('appsec.enabled', undefined)
     expect(config).to.have.nested.property('appsec.rules', undefined)
-    expect(config).to.have.nested.property('appsec.rasp.enabled', false)
+    expect(config).to.have.nested.property('appsec.rasp.enabled', true)
     expect(config).to.have.nested.property('appsec.rateLimit', 100)
     expect(config).to.have.nested.property('appsec.stackTrace.enabled', true)
     expect(config).to.have.nested.property('appsec.stackTrace.maxDepth', 32)
@@ -279,7 +279,7 @@ describe('Config', () => {
         value: '(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=[^;]|"\\s*:\\s*"[^"]+")|bearer\\s+[a-z0-9\\._\\-]+|token:[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=-]+\\.ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*[a-z0-9\\/\\.+]{100,}',
         origin: 'default'
       },
-      { name: 'appsec.rasp.enabled', value: false, origin: 'default' },
+      { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
       { name: 'appsec.sca.enabled', value: null, origin: 'default' },
@@ -451,7 +451,7 @@ describe('Config', () => {
     process.env.DD_APPSEC_ENABLED = 'true'
     process.env.DD_APPSEC_MAX_STACK_TRACES = '5'
     process.env.DD_APPSEC_MAX_STACK_TRACE_DEPTH = '42'
-    process.env.DD_APPSEC_RASP_ENABLED = 'true'
+    process.env.DD_APPSEC_RASP_ENABLED = 'false'
     process.env.DD_APPSEC_RULES = RULES_JSON_PATH
     process.env.DD_APPSEC_STACK_TRACE_ENABLED = 'false'
     process.env.DD_APPSEC_TRACE_RATE_LIMIT = '42'
@@ -544,7 +544,7 @@ describe('Config', () => {
     expect(config).to.have.nested.property('experimental.exporter', 'log')
     expect(config).to.have.nested.property('experimental.enableGetRumData', true)
     expect(config).to.have.nested.property('appsec.enabled', true)
-    expect(config).to.have.nested.property('appsec.rasp.enabled', true)
+    expect(config).to.have.nested.property('appsec.rasp.enabled', false)
     expect(config).to.have.nested.property('appsec.rules', RULES_JSON_PATH)
     expect(config).to.have.nested.property('appsec.rateLimit', 42)
     expect(config).to.have.nested.property('appsec.stackTrace.enabled', false)
@@ -588,7 +588,7 @@ describe('Config', () => {
       { name: 'appsec.obfuscatorKeyRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.obfuscatorValueRegex', value: '.*', origin: 'env_var' },
       { name: 'appsec.rateLimit', value: '42', origin: 'env_var' },
-      { name: 'appsec.rasp.enabled', value: true, origin: 'env_var' },
+      { name: 'appsec.rasp.enabled', value: false, origin: 'env_var' },
       { name: 'appsec.rules', value: RULES_JSON_PATH, origin: 'env_var' },
       { name: 'appsec.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'appsec.stackTrace.maxDepth', value: '42', origin: 'env_var' },
@@ -1231,6 +1231,9 @@ describe('Config', () => {
         apiSecurity: {
           enabled: true,
           requestSampling: 1.0
+        },
+        rasp: {
+          enabled: false
         }
       },
       iast: {
@@ -1261,6 +1264,9 @@ describe('Config', () => {
           apiSecurity: {
             enabled: false,
             requestSampling: 0.5
+          },
+          rasp: {
+            enabled: true
           }
         },
         iast: {

@@ -12,18 +12,25 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
   TEST_STATUS,
   TEST_TYPE,
-  TEST_IS_RETRY
+  TEST_IS_RETRY,
+  TEST_CODE_OWNERS,
+  TEST_CODE_COVERAGE_LINES_PCT
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
-// tested with 1.6.0
-const versions = ['latest']
+const versions = ['1.6.0', 'latest']
+
+const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
-    let sandbox, cwd, receiver, childProcess
+    let sandbox, cwd, receiver, childProcess, testOutput
 
     before(async function () {
-      sandbox = await createSandbox([`vitest@${version}`], true)
+      sandbox = await createSandbox([
+        `vitest@${version}`,
+        `@vitest/coverage-istanbul@${version}`,
+        `@vitest/coverage-v8@${version}`
+      ], true)
       cwd = sandbox.folder
     })
 
@@ -36,6 +43,7 @@ versions.forEach((version) => {
     })
 
     afterEach(async () => {
+      testOutput = ''
       childProcess.kill()
       await receiver.stop()
     })
@@ -203,5 +211,88 @@ versions.forEach((version) => {
         )
       })
     })
+
+    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const test = events.find(event => event.type === 'test').content
+          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        })
+
+      childProcess = exec(
+        '../../node_modules/.bin/vitest run',
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            TEST_DIR: './vitest-test.mjs'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    // only works for >=2.0.0
+    if (version === 'latest') {
+      const coverageProviders = ['v8', 'istanbul']
+
+      coverageProviders.forEach((coverageProvider) => {
+        it(`reports code coverage for ${coverageProvider} provider`, (done) => {
+          let codeCoverageExtracted
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+
+              codeCoverageExtracted = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: coverageProvider,
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test*'
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => {
+              const linePctMatch = testOutput.match(linePctMatchRegex)
+              const linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+              assert.equal(
+                linesPctFromNyc,
+                codeCoverageExtracted,
+                'coverage reported by vitest does not match extracted coverage'
+              )
+              done()
+            }).catch(done)
+          })
+        })
+      })
+    }
   })
 })

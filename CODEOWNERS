@@ -18,12 +18,13 @@
 /packages/datadog-plugin-playwright/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-vitest/ @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/git.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/ci_plugin.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/ci-visibility/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
 
 /packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/mocha.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/mocha/ @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries

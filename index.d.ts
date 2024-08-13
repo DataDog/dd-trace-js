@@ -1841,9 +1841,10 @@ declare namespace tracer {
       /**
        * Construct a new TracerProvider to register with @opentelemetry/api
        *
+       * @param config Configuration object for the TracerProvider
        * @returns TracerProvider A TracerProvider instance
        */
-      new(): TracerProvider;
+      new(config?: Record<string, unknown>): TracerProvider;
 
       /**
        * Returns a Tracer, creating one if one with the given name and version is

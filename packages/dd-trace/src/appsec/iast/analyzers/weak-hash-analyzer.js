@@ -47,6 +47,8 @@ class WeakHashAnalyzer extends Analyzer {
   }
 
   _isExcluded (location) {
+    if (!location) return false
+
     return EXCLUDED_LOCATIONS.some(excludedLocation => {
       return location.path.includes(excludedLocation)
     })

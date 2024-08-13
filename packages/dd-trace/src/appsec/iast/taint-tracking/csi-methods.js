@@ -14,7 +14,8 @@ const csiMethods = [
   { src: 'toUpperCase', dst: 'stringCase' },
   { src: 'trim' },
   { src: 'trimEnd' },
-  { src: 'trimStart', dst: 'trim' }
+  { src: 'trimStart', dst: 'trim' },
+  { src: 'eval', allowedWithoutCallee: true }
 ]
 
 module.exports = {

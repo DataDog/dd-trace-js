@@ -31,7 +31,9 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_SUITE,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -62,7 +64,7 @@ versions.forEach(version => {
   }) => {
     // TODO: add esm tests
     describe(`cucumber@${version} ${type}`, () => {
-      let sandbox, cwd, receiver, childProcess
+      let sandbox, cwd, receiver, childProcess, testOutput
 
       before(async function () {
         // add an explicit timeout to make tests less flaky
@@ -85,6 +87,7 @@ versions.forEach(version => {
       })
 
       afterEach(async () => {
+        testOutput = ''
         childProcess.kill()
         await receiver.stop()
       })
@@ -269,7 +272,6 @@ versions.forEach(version => {
               )
             })
             it('can report code coverage', (done) => {
-              let testOutput
               const libraryConfigRequestPromise = receiver.payloadReceived(
                 ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
               )
@@ -1085,6 +1087,137 @@ versions.forEach(version => {
               })
             })
           }
+        })
+      })
+
+      it('correctly calculates test code owners when working directory is not repository root', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const test = events.find(event => event.type === 'test').content
+            // The test is in a subproject
+            assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          })
+
+        childProcess = exec(
+          'node ../../node_modules/.bin/cucumber-js features/*.feature',
+          {
+            cwd: `${cwd}/ci-visibility/subproject`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port)
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('takes into account untested files if "all" is passed to nyc', (done) => {
+        const linesPctMatchRegex = /Lines\s*:\s*([\d.]+)%/
+        let linesPctMatch
+        let linesPctFromNyc = 0
+        let codeCoverageWithUntestedFiles = 0
+        let codeCoverageWithoutUntestedFiles = 0
+
+        let eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            codeCoverageWithUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+          })
+
+        childProcess = exec(
+          './node_modules/nyc/bin/nyc.js --all -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+          'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NYC_INCLUDE: JSON.stringify(
+                [
+                  'ci-visibility/features/**',
+                  'ci-visibility/features-esm/**'
+                ]
+              )
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        childProcess.on('exit', () => {
+          linesPctMatch = testOutput.match(linesPctMatchRegex)
+          linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+
+          assert.equal(
+            linesPctFromNyc,
+            codeCoverageWithUntestedFiles,
+            'nyc --all output does not match the reported coverage'
+          )
+
+          // reset test output for next test session
+          testOutput = ''
+          // we run the same tests without the all flag
+          childProcess = exec(
+            './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+            'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NYC_INCLUDE: JSON.stringify(
+                  [
+                    'ci-visibility/features/**',
+                    'ci-visibility/features-esm/**'
+                  ]
+                )
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+            })
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          childProcess.on('exit', () => {
+            linesPctMatch = testOutput.match(linesPctMatchRegex)
+            linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+
+            assert.equal(
+              linesPctFromNyc,
+              codeCoverageWithoutUntestedFiles,
+              'nyc output does not match the reported coverage (no --all flag)'
+            )
+
+            eventsPromise.then(() => {
+              assert.isAbove(codeCoverageWithoutUntestedFiles, codeCoverageWithUntestedFiles)
+              done()
+            }).catch(done)
+          })
         })
       })
     })

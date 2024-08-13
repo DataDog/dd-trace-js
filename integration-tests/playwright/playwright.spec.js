@@ -20,7 +20,9 @@ const {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_SUITE,
+  TEST_CODE_OWNERS
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -568,6 +570,38 @@ versions.forEach((version) => {
         receiverPromise
           .then(() => done())
           .catch(done)
+      })
+    })
+
+    it('correctly calculates test code owners when working directory is not repository root', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const test = events.find(event => event.type === 'test').content
+          // The test is in a subproject
+          assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+          assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+        })
+
+      childProcess = exec(
+        '../../node_modules/.bin/playwright test',
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            PW_RUNNER_DEBUG: '1',
+            TEST_DIR: '.'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
       })
     })
   })

@@ -24,11 +24,11 @@ class SpanContext {
   }
 
   get traceId () {
-    return this._ddContext._traceId.toString(16)
+    return this._ddContext.toTraceId(true)
   }
 
   get spanId () {
-    return this._ddContext._spanId.toString(16)
+    return this._ddContext.toSpanId(true)
   }
 
   get traceFlags () {

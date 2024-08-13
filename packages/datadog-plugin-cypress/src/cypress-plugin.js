@@ -44,7 +44,9 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   incrementCountMetric,
-  distributionMetric
+  distributionMetric,
+  TELEMETRY_ITR_SKIPPED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const {
@@ -179,7 +181,7 @@ class CypressPlugin {
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
     this.testConfiguration = {
@@ -258,7 +260,7 @@ class CypressPlugin {
     })
   }
 
-  getTestSpan (testName, testSuite, isUnskippable, isForcedToRun) {
+  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile }) {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
@@ -282,8 +284,11 @@ class CypressPlugin {
       ...testSpanMetadata
     } = getTestCommonTags(testName, testSuite, this.cypressConfig.version, TEST_FRAMEWORK_NAME)
 
-    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    if (testSourceFile) {
+      testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
+    }
 
+    const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
     if (codeOwners) {
       testSpanMetadata[TEST_CODE_OWNERS] = codeOwners
     }
@@ -318,7 +323,7 @@ class CypressPlugin {
     incrementCountMetric(name, {
       testLevel,
       testFramework: 'cypress',
-      isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+      isUnsupportedCIProvider: !this.ciProviderName,
       ...tags
     })
   }
@@ -360,6 +365,7 @@ class CypressPlugin {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
         this.itrCorrelationId = correlationId
+        incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
     }
 
@@ -433,6 +439,9 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      incrementCountMetric(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName
+      })
 
       finishAllTraceSpans(this.testSessionSpan)
     }
@@ -480,12 +489,16 @@ class CypressPlugin {
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
-      const skippedTestSpan = this.getTestSpan(cypressTestName, spec.relative)
+      let testSourceFile
+
       if (spec.absolute && this.repositoryRoot) {
-        skippedTestSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+        testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
       } else {
-        skippedTestSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+        testSourceFile = spec.relative
       }
+
+      const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
         skippedTestSpan.setTag(TEST_SKIPPED_BY_ITR, 'true')
@@ -538,11 +551,21 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
+        let testSourceFile
         if (spec.absolute && this.repositoryRoot) {
-          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, getTestSuitePath(spec.absolute, this.repositoryRoot))
+          testSourceFile = getTestSuitePath(spec.absolute, this.repositoryRoot)
         } else {
-          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, spec.relative)
+          testSourceFile = spec.relative
         }
+        if (testSourceFile) {
+          finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
+        }
+        const codeOwners = this.getTestCodeOwners({ testSuite: spec.relative, testSourceFile })
+
+        if (codeOwners) {
+          finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+        }
+
         finishedTest.testSpan.finish(finishedTest.finishTime)
       })
     })
@@ -591,7 +614,12 @@ class CypressPlugin {
         }
 
         if (!this.activeTestSpan) {
-          this.activeTestSpan = this.getTestSpan(testName, testSuite, isUnskippable, isForcedToRun)
+          this.activeTestSpan = this.getTestSpan({
+            testName,
+            testSuite,
+            isUnskippable,
+            isForcedToRun
+          })
         }
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
@@ -646,8 +674,14 @@ class CypressPlugin {
           }
           // test spans are finished at after:spec
         }
+        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
+          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          isNew,
+          isRum: isRUMActive,
+          browserDriver: 'cypress'
+        })
         this.activeTestSpan = null
-        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
+
         return null
       },
       'dd:addTags': (tags) => {
@@ -657,6 +691,13 @@ class CypressPlugin {
         return null
       }
     }
+  }
+
+  getTestCodeOwners ({ testSuite, testSourceFile }) {
+    if (testSourceFile) {
+      return getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    }
+    return getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
   }
 }
 

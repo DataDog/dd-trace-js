@@ -16,7 +16,8 @@ const {
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -144,7 +145,7 @@ module.exports = class CiPlugin extends Plugin {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          isUnsupportedCIProvider: !this.ciProviderName,
           ...tags
         })
       },
@@ -178,7 +179,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -207,7 +208,13 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
-    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }

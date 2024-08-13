@@ -1,7 +1,7 @@
 {
   "version": "2.2",
   "metadata": {
-    "rules_version": "1.12.0"
+    "rules_version": "1.13.0"
   },
   "rules": [
     {
@@ -6286,6 +6286,55 @@
       ]
     },
     {
+      "id": "rasp-932-100",
+      "name": "Shell injection exploit",
+      "enabled": false,
+      "tags": {
+        "type": "command_injection",
+        "category": "vulnerability_trigger",
+        "cwe": "77",
+        "capec": "1000/152/248/88",
+        "confidence": "0",
+        "module": "rasp"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "resource": [
+              {
+                "address": "server.sys.shell.cmd"
+              }
+            ],
+            "params": [
+              {
+                "address": "server.request.query"
+              },
+              {
+                "address": "server.request.body"
+              },
+              {
+                "address": "server.request.path_params"
+              },
+              {
+                "address": "grpc.server.request.message"
+              },
+              {
+                "address": "graphql.server.all_resolvers"
+              },
+              {
+                "address": "graphql.server.resolver"
+              }
+            ]
+          },
+          "operator": "shi_detector"
+        }
+      ],
+      "transformers": [],
+      "on_match": [
+        "stack_trace"
+      ]
+    },
+    {
       "id": "rasp-934-100",
       "name": "Server-side request forgery exploit",
       "enabled": false,
@@ -8389,6 +8438,57 @@
   ],
   "processors": [
     {
+      "id": "http-endpoint-fingerprint",
+      "generator": "http_endpoint_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "method": [
+              {
+                "address": "server.request.method"
+              }
+            ],
+            "uri_raw": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "body": [
+              {
+                "address": "server.request.body"
+              }
+            ],
+            "query": [
+              {
+                "address": "server.request.query"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.endpoint"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
       "id": "extract-content",
       "generator": "extract_schema",
       "conditions": [
@@ -8532,6 +8632,124 @@
             "tags": {
               "category": "pii"
             }
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "http-header-fingerprint",
+      "generator": "http_header_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "headers": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.header"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "http-network-fingerprint",
+      "generator": "http_network_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "headers": [
+              {
+                "address": "server.request.headers.no_cookies"
+              }
+            ],
+            "output": "_dd.appsec.fp.http.network"
+          }
+        ]
+      },
+      "evaluate": false,
+      "output": true
+    },
+    {
+      "id": "session-fingerprint",
+      "generator": "session_fingerprint",
+      "conditions": [
+        {
+          "operator": "exists",
+          "parameters": {
+            "inputs": [
+              {
+                "address": "waf.context.event"
+              },
+              {
+                "address": "server.business_logic.users.login.failure"
+              },
+              {
+                "address": "server.business_logic.users.login.success"
+              }
+            ]
+          }
+        }
+      ],
+      "parameters": {
+        "mappings": [
+          {
+            "cookies": [
+              {
+                "address": "server.request.cookies"
+              }
+            ],
+            "session_id": [
+              {
+                "address": "usr.session_id"
+              }
+            ],
+            "user_id": [
+              {
+                "address": "usr.id"
+              }
+            ],
+            "output": "_dd.appsec.fp.session"
           }
         ]
       },

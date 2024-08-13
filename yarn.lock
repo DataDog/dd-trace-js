@@ -263,18 +263,18 @@
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@2.3.1":
-  version "2.3.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.3.1.tgz#f9d6d858df88f7a8b6e38f0c07e46fca5394da72"
-  integrity sha512-3pmt5G1Ai/+MPyxP7wBerIu/zH/BnAHxEu/EAMr+77IMpK5m7THPDUoWrPRCWcgFBfn0pK5DR7gRItG0wX3e0g==
+"@datadog/native-iast-rewriter@2.4.1":
+  version "2.4.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.4.1.tgz#e8211f78c818906513fb96a549374da0382c7623"
+  integrity sha512-j3auTmyyn63e2y+SL28CGNy/l+jXQyh+pxqoGTacWaY5FW/dvo5nGQepAismgJ3qJ8VhQfVWRdxBSiT7wu9clw==
   dependencies:
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@3.0.0":
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.0.0.tgz#a0be16f49f49c2a5917d08e5986c0fc6c877ed13"
-  integrity sha512-V+25+edlNCQSNRUvL45IajN+CFEjii9NbjfSMG6HRHbH/zeLL9FCNE+GU88dwB1bqXKNpBdrIxsfgTN65Yq9tA==
+"@datadog/native-iast-taint-tracking@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.1.0.tgz#7b2ed7f8fad212d65e5ab03bcdea8b42a3051b2e"
+  integrity sha512-rw6qSjmxmu1yFHVvZLXFt/rVq2tUZXocNogPLB8n7MPpA0jijNGb109WokWw5ITImiW91GcGDuBW6elJDVKouQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -657,12 +657,17 @@
   resolved "https://registry.npmjs.org/@types/json5/-/json5-0.0.29.tgz"
   integrity sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==
 
-"@types/node@>=13.7.0", "@types/node@>=18":
-  version "20.10.6"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.10.6.tgz#a3ec84c22965802bf763da55b2394424f22bfbb5"
-  integrity sha512-Vac8H+NlRNNlAmDfGUP7b5h/KA+AtWIzuXy0E6OyP8f1tCLYAtPvKRRDJjAPqhpCb0t6U2j7/xqAuLEebW2kiw==
+"@types/node@>=13.7.0":
+  version "20.14.11"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.14.11.tgz#09b300423343460455043ddd4d0ded6ac579b74b"
+  integrity sha512-kprQpL8MMeszbz6ojB5/tU8PLN4kesnN8Gjzw349rDlNgsSzg90lAVj3llK99Dh7JON+t9AuscPPFW6mPbTnSA==
   dependencies:
     undici-types "~5.26.4"
+
+"@types/node@^16.18.103":
+  version "16.18.103"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-16.18.103.tgz#5557c7c32a766fddbec4b933b1d5c365f89b20a4"
+  integrity sha512-gOAcUSik1nR/CRC3BsK8kr6tbmNIOTpvb1sT+v5Nmmys+Ho8YtnIHP90wEsVK4hTcHndOqPVIlehEGEA5y31bA==
 
 "@types/prop-types@*":
   version "15.7.5"
