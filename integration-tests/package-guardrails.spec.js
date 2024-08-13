@@ -64,7 +64,9 @@ false
     })
     context('when fastify is latest and logging enabled', () => {
       useSandbox(['fastify'])
-      it('should instrument the package', () => runTest('true\n'))
+      useEnv({ DD_TRACE_DEBUG })
+      it('should instrument the package', () =>
+        runTest('Application instrumentation bootstrapping complete\ntrue\n'))
     })
   })
 
