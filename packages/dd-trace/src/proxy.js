@@ -14,7 +14,6 @@ const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
@@ -163,13 +162,6 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(e)
-      if (telemetryLog.hasSubscribers) {
-        telemetryLog.publish({
-          message: e.message,
-          level: 'ERROR',
-          stack_trace: e.stack
-        })
-      }
     }
   }
 

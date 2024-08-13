@@ -5,7 +5,6 @@ const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const dc = require('dc-polyfill')
-const telemetryLog = dc.channel('datadog:telemetry:log')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 
@@ -19,13 +18,6 @@ function maybeSourceMap (sourceMap, SourceMapper, debug) {
 function logError (logger, err) {
   if (logger) {
     logger.error(err)
-  }
-  if (telemetryLog.hasSubscribers) {
-    telemetryLog.publish({
-      message: err.message,
-      level: 'ERROR',
-      stack_trace: err.stack
-    })
   }
 }
 
