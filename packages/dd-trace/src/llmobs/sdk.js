@@ -68,6 +68,7 @@ class LLMObs extends NoopLLMObs {
   disable () {
     if (!this.enabled) {
       logger.debug('LLMObs already disabled.')
+      return
     }
 
     logger.debug('Disabling LLMObs')
