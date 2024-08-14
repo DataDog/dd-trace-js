@@ -441,6 +441,7 @@ class Config {
     this._setValue(defaults, 'iast.redactionValuePattern', null)
     this._setValue(defaults, 'iast.requestSampling', 30)
     this._setValue(defaults, 'iast.telemetryVerbosity', 'INFORMATION')
+    this._setValue(defaults, 'injectionEnabled', [])
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
@@ -459,8 +460,6 @@ class Config {
     this._setValue(defaults, 'profiling.enabled', undefined)
     this._setValue(defaults, 'profiling.exporters', 'agent')
     this._setValue(defaults, 'profiling.sourceMap', true)
-    this._setValue(defaults, 'profiling.ssi', false)
-    this._setValue(defaults, 'profiling.heuristicsEnabled', false)
     this._setValue(defaults, 'profiling.longLivedThreshold', undefined)
     this._setValue(defaults, 'protocolVersion', '0.4')
     this._setValue(defaults, 'queryStringObfuscation', qsRegex)
@@ -681,6 +680,7 @@ class Config {
     }
     this._envUnprocessed['iast.requestSampling'] = DD_IAST_REQUEST_SAMPLING
     this._setString(env, 'iast.telemetryVerbosity', DD_IAST_TELEMETRY_VERBOSITY)
+    this._setArray(env, 'injectionEnabled', DD_INJECTION_ENABLED)
     this._setBoolean(env, 'isAzureFunction', getIsAzureFunction())
     this._setBoolean(env, 'isGCPFunction', getIsGCPFunction())
     this._setBoolean(env, 'logInjection', DD_LOGS_INJECTION)
@@ -696,18 +696,18 @@ class Config {
       this._envUnprocessed.peerServiceMapping = DD_TRACE_PEER_SERVICE_MAPPING
     }
     this._setString(env, 'port', DD_TRACE_AGENT_PORT)
-    this._setBoolean(env, 'profiling.enabled', coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED))
+    const profilingEnabledEnv = coalesce(DD_EXPERIMENTAL_PROFILING_ENABLED, DD_PROFILING_ENABLED)
+    const profilingEnabled = isTrue(profilingEnabledEnv)
+      ? 'true'
+      : isFalse(profilingEnabledEnv)
+        ? 'false'
+        : profilingEnabledEnv === 'auto' ? 'auto' : undefined
+    this._setString(env, 'profiling.enabled', profilingEnabled)
     this._setString(env, 'profiling.exporters', DD_PROFILING_EXPORTERS)
     this._setBoolean(env, 'profiling.sourceMap', DD_PROFILING_SOURCE_MAP && !isFalse(DD_PROFILING_SOURCE_MAP))
-    if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED) {
-      this._setBoolean(env, 'profiling.ssi', true)
-      if (DD_PROFILING_ENABLED === 'auto' || DD_INJECTION_ENABLED.split(',').includes('profiler')) {
-        this._setBoolean(env, 'profiling.heuristicsEnabled', true)
-      }
-      if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
-        // This is only used in testing to not have to wait 30s
-        this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
-      }
+    if (DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD) {
+      // This is only used in testing to not have to wait 30s
+      this._setValue(env, 'profiling.longLivedThreshold', Number(DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD))
     }
 
     this._setString(env, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
@@ -762,12 +762,7 @@ class Config {
     this._setBoolean(env, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     this._setValue(env, 'telemetry.heartbeatInterval', maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000)))
     this._envUnprocessed['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
-    const hasTelemetryLogsUsingFeatures =
-      env['iast.enabled'] || env['profiling.enabled'] || env['profiling.heuristicsEnabled']
-        ? true
-        : undefined
-    this._setBoolean(env, 'telemetry.logCollection', coalesce(DD_TELEMETRY_LOG_COLLECTION_ENABLED,
-      hasTelemetryLogsUsingFeatures))
+    this._setBoolean(env, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     this._setBoolean(env, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
     this._setBoolean(env, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     this._setBoolean(env, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
@@ -862,7 +857,10 @@ class Config {
     this._setValue(opts, 'peerServiceMapping', options.peerServiceMapping)
     this._setBoolean(opts, 'plugins', options.plugins)
     this._setString(opts, 'port', options.port)
-    this._setBoolean(opts, 'profiling.enabled', options.profiling)
+    const strProfiling = String(options.profiling)
+    if (['true', 'false', 'auto'].includes(strProfiling)) {
+      this._setString(opts, 'profiling.enabled', strProfiling)
+    }
     this._setString(opts, 'protocolVersion', options.protocolVersion)
     if (options.remoteConfig) {
       this._setValue(opts, 'remoteConfig.pollInterval', maybeFloat(options.remoteConfig.pollInterval))
@@ -885,10 +883,6 @@ class Config {
     this._setBoolean(opts, 'spanRemoveIntegrationFromService', options.spanRemoveIntegrationFromService)
     this._setBoolean(opts, 'startupLogs', options.startupLogs)
     this._setTags(opts, 'tags', tags)
-    const hasTelemetryLogsUsingFeatures =
-      (options.iast && (options.iast === true || options.iast?.enabled === true)) ||
-      (options.profiling && options.profiling === true)
-    this._setBoolean(opts, 'telemetry.logCollection', hasTelemetryLogsUsingFeatures)
     this._setBoolean(opts, 'traceId128BitGenerationEnabled', options.traceId128BitGenerationEnabled)
     this._setBoolean(opts, 'traceId128BitLoggingEnabled', options.traceId128BitLoggingEnabled)
     this._setString(opts, 'version', options.version || tags.version)
@@ -1019,6 +1013,13 @@ class Config {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
     }
+
+    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
+    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
+    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
+    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
+      this._setBoolean(calc, 'telemetry.logCollection', true)
+    }
   }
 
   _applyRemote (options) {
@@ -1143,17 +1144,18 @@ class Config {
     for (const name in this._defaults) {
       for (let i = 0; i < containers.length; i++) {
         const container = containers[i]
-        const origin = origins[i]
-        const unprocessed = unprocessedValues[i]
+        const value = container[name]
 
-        if ((container[name] !== null && container[name] !== undefined) || container === this._defaults) {
-          if (get(this, name) === container[name] && has(this, name)) break
+        if ((value !== null && value !== undefined) || container === this._defaults) {
+          if (get(this, name) === value && has(this, name)) break
 
-          let value = container[name]
           set(this, name, value)
-          value = unprocessed[name] || value
 
-          changes.push({ name, value, origin })
+          changes.push({
+            name,
+            value: unprocessedValues[i][name] || value,
+            origin: origins[i]
+          })
 
           break
         }
