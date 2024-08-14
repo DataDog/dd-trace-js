@@ -33,10 +33,6 @@ function getBlockWithRedirectData (rootSpan, actionParameters) {
     Location: actionParameters.location
   }
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
   return { headers, statusCode }
 }
 
@@ -91,10 +87,6 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
     'Content-Length': Buffer.byteLength(body)
   }
 
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
   return { body, statusCode, headers }
 }
 
@@ -114,6 +106,10 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 
   const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
 
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
   for (const headerName of res.getHeaderNames()) {
     res.removeHeader(headerName)
   }
@@ -126,7 +122,8 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
 }
 
 function getBlockingAction (actions) {
-  return actions?.block_request || actions?.redirect_request
+  // waf only returns one action, but it prioritizes redirect over block
+  return actions?.redirect_request || actions?.block_request
 }
 
 function setTemplates (config) {
