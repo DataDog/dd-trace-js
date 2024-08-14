@@ -77,7 +77,7 @@ addHook({ name: 'ldapjs', versions: ['>=2'] }, ldapjs => {
     if (callbackIndex > -1) {
       const callback = arguments[callbackIndex]
       // eslint-disable-next-line n/handle-callback-err
-      arguments[callbackIndex] = shimmer.wrap(callback, callback => function (err, corkedEmitter) {
+      arguments[callbackIndex] = shimmer.wrapFunction(callback, callback => function (err, corkedEmitter) {
         if (corkedEmitter !== null && typeof corkedEmitter === 'object' && typeof corkedEmitter.on === 'function') {
           wrapEmitter(corkedEmitter)
         }
