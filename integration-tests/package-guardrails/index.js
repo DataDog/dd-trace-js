@@ -12,5 +12,5 @@ try {
 } catch (e) {
   const fastify = require('fastify')
 
-  console.log(fastify.toString().startsWith('function fastifyWithTrace'))
+  console.log(fastify.toString().startsWith('function shim'))
 }
