@@ -23,7 +23,6 @@ class Config {
       DD_PROFILING_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_CPU_ENABLED,
       DD_PROFILING_DEBUG_SOURCE_MAPS,
-      DD_PROFILING_ENABLED,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED,
       DD_PROFILING_EXPERIMENTAL_CPU_ENABLED,
@@ -49,7 +48,6 @@ class Config {
       DD_VERSION
     } = process.env
 
-    const enabled = isTrue(coalesce(options.enabled, DD_PROFILING_ENABLED, true))
     const env = coalesce(options.env, DD_ENV)
     const service = options.service || DD_SERVICE || 'node'
     const host = os.hostname()
@@ -64,8 +62,6 @@ class Config {
     const pprofPrefix = coalesce(options.pprofPrefix,
       DD_PROFILING_PPROF_PREFIX, '')
 
-    this.enabled = enabled
-    this.heuristicsEnabled = options.heuristicsEnabled
     this.service = service
     this.env = env
     this.host = host
