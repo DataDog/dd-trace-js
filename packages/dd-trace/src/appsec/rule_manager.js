@@ -149,7 +149,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       if (newActions.modified) {
         appliedActions = newActions
         const action = concatArrays(newActions).find(action => action.id === 'block')
-       blocking.setDefaultBlockingActionParameters(action?.parameters)
+        blocking.setDefaultBlockingActionParameters(action?.parameters)
       }
     } catch (err) {
       newApplyState = ERROR

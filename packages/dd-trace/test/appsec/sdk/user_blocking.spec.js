@@ -233,6 +233,7 @@ describe('user_blocking', () => {
         // reset to default, other tests may have changed it with RC
         blocking.setDefaultBlockingActionParameters(undefined)
       })
+
       afterEach(() => {
         // reset to default
         blocking.setDefaultBlockingActionParameters(undefined)
@@ -285,10 +286,6 @@ describe('user_blocking', () => {
           expect(ret).to.be.true
         }
         agent.use(traces => {
-          console.log({
-            'appsec.blocked': traces[0][0].meta['appsec.blocked'],
-            'http.status_code': traces[0][0].meta['http.status_code']
-          })
           expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
           expect(traces[0][0].meta).to.have.property('http.status_code', '302')
         }).then(done).catch(done)

@@ -56,8 +56,8 @@ describe('AppSec Rule Manager', () => {
 
       expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
       expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly({
-        "location": "/error",
-        "status_code": 302
+        location: '/error',
+        status_code: 302
       })
     })
   })
