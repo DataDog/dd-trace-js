@@ -9,6 +9,7 @@ const axios = require('axios')
 const path = require('path')
 const waf = require('../../../src/appsec/waf')
 const { USER_ID } = require('../../../src/appsec/addresses')
+const blocking = require('../../../src/appsec/blocking')
 
 const resultActions = {
   block_request: {
@@ -228,6 +229,15 @@ describe('user_blocking', () => {
     })
 
     describe('blockRequest', () => {
+      beforeEach(() => {
+        // reset to default, other tests may have changed it with RC
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+      afterEach(() => {
+        // reset to default
+        blocking.setDefaultBlockingActionParameters(undefined)
+      })
+
       it('should set the proper tags', (done) => {
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest(req, res)
@@ -263,6 +273,26 @@ describe('user_blocking', () => {
           expect(traces[0][0].meta).to.have.property('http.status_code', '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
+      })
+
+      it('should block using redirect data if it is configured', (done) => {
+        blocking.setDefaultBlockingActionParameters({
+          location: '/redirected',
+          status_code: 302
+        })
+        controller = (req, res) => {
+          const ret = tracer.appsec.blockRequest(req, res)
+          expect(ret).to.be.true
+        }
+        agent.use(traces => {
+          console.log({
+            'appsec.blocked': traces[0][0].meta['appsec.blocked'],
+            'http.status_code': traces[0][0].meta['http.status_code']
+          })
+          expect(traces[0][0].meta).to.have.property('appsec.blocked', 'true')
+          expect(traces[0][0].meta).to.have.property('http.status_code', '302')
+        }).then(done).catch(done)
+        axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
       })
     })
   })

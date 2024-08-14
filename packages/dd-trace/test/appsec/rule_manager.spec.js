@@ -1,11 +1,14 @@
 'use strict'
 
+const path = require('path')
+const fs = require('fs')
 const { loadRules, clearAllRules, updateWafFromRC } = require('../../src/appsec/rule_manager')
 const Config = require('../../src/config')
 const { ACKNOWLEDGED } = require('../../src/appsec/remote_config/apply_states')
 
 const rules = require('../../src/appsec/recommended.json')
 const waf = require('../../src/appsec/waf')
+const blocking = require('../../src/appsec/blocking')
 
 describe('AppSec Rule Manager', () => {
   let config
@@ -17,11 +20,14 @@ describe('AppSec Rule Manager', () => {
     sinon.stub(waf, 'init').callThrough()
     sinon.stub(waf, 'destroy').callThrough()
     sinon.stub(waf, 'update').callThrough()
+
+    sinon.stub(blocking, 'setDefaultBlockingActionParameters').callThrough()
   })
 
   afterEach(() => {
     sinon.restore()
     clearAllRules()
+    blocking.setDefaultBlockingActionParameters(undefined) // reset blocking action
   })
 
   describe('loadRules', () => {
@@ -38,6 +44,21 @@ describe('AppSec Rule Manager', () => {
 
       config.appsec.rules = './bad-formatted-rules.json'
       expect(() => { loadRules(config.appsec) }).to.throw()
+    })
+
+    it('should call updateBlockingConfiguration with proper params', () => {
+      const rulesPath = path.join(__dirname, './blocking-actions-rules.json')
+      const testRules = JSON.parse(fs.readFileSync(rulesPath))
+
+      config.appsec.rules = rulesPath
+
+      loadRules(config.appsec)
+
+      expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
+      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly({
+        "location": "/error",
+        "status_code": 302
+      })
     })
   })
 
