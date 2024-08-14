@@ -91,6 +91,10 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
 }
 
 function getBlockingData (req, specificType, rootSpan, actionParameters) {
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
+
   if (actionParameters?.location) {
     return getBlockWithRedirectData(rootSpan, actionParameters)
   } else {
@@ -105,10 +109,6 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
   }
 
   const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
-
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
 
   for (const headerName of res.getHeaderNames()) {
     res.removeHeader(headerName)
