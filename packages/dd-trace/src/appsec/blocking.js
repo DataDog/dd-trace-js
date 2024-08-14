@@ -8,6 +8,7 @@ const detectedSpecificEndpoints = {}
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
+let defaultBlockingActionParameters
 
 const responseBlockedSet = new WeakSet()
 
@@ -105,7 +106,7 @@ function getBlockingData (req, specificType, rootSpan, actionParameters) {
   }
 }
 
-function block (req, res, rootSpan, abortController, actionParameters) {
+function block (req, res, rootSpan, abortController, actionParameters = defaultBlockingActionParameters) {
   if (res.headersSent) {
     log.warn('Cannot send blocking response when headers have already been sent')
     return
@@ -152,6 +153,10 @@ function isBlocked (res) {
   return responseBlockedSet.has(res)
 }
 
+function setDefaultBlockingActionParameters (actionParameters) {
+  defaultBlockingActionParameters = actionParameters
+}
+
 module.exports = {
   addSpecificEndpoint,
   block,
@@ -159,5 +164,6 @@ module.exports = {
   getBlockingData,
   getBlockingAction,
   setTemplates,
-  isBlocked
+  isBlocked,
+  setDefaultBlockingActionParameters
 }

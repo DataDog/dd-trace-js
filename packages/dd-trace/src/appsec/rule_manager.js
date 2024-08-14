@@ -4,6 +4,8 @@ const fs = require('fs')
 const waf = require('./waf')
 const { ACKNOWLEDGED, ERROR } = require('./remote_config/apply_states')
 
+const blocking = require('./blocking')
+
 let defaultRules
 
 let appliedRulesData = new Map()
@@ -19,6 +21,11 @@ function loadRules (config) {
     : require('./recommended.json')
 
   waf.init(defaultRules, config)
+
+  if (defaultRules.actions) {
+    const action = defaultRules.actions.find(action => action.id === 'block')
+    blocking.setDefaultBlockingActionParameters(action?.parameters)
+  }
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
@@ -141,6 +148,8 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
       if (newActions.modified) {
         appliedActions = newActions
+        const action = concatArrays(newActions).find(action => action.id === 'block')
+       blocking.setDefaultBlockingActionParameters(action?.parameters)
       }
     } catch (err) {
       newApplyState = ERROR
