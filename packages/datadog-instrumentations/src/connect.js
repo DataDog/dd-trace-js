@@ -59,7 +59,7 @@ function wrapLayerHandle (layer) {
 
   const original = layer.handle
 
-  return shimmer.wrap(original, function () {
+  return shimmer.wrapFunction(original, original => function () {
     if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
     const lastIndex = arguments.length - 1
@@ -103,7 +103,7 @@ function wrapNext (req, next) {
 }
 
 addHook({ name: 'connect', versions: ['>=3'] }, connect => {
-  return shimmer.wrap(connect, wrapConnect(connect))
+  return shimmer.wrapFunction(connect, connect => wrapConnect(connect))
 })
 
 addHook({ name: 'connect', versions: ['2.2.2'] }, connect => {
