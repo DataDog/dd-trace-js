@@ -78,33 +78,42 @@ function encodeUnicode (str) {
   }).join('')
 }
 
+// migrate this to an extrnal module?
+// currently unsupported cases:
+// 1. function foo (a, b, ...rest)
+// 2. function foo ({ ctx })
+// 3. function foo ([k, v])
 function getFunctionArguments (fn, args) {
-  const fnString = fn.toString()
-  const matches = Array
-    .from(
-      fnString
-        .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
-        .matchAll(/(?:\s*(\w+)\s*(?:=\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\S+))?)\s*(?=,|$)/g) || []
-    )
-    .map(match => {
-      const name = match[1].trim()
-      const value = match[2]?.trim()
-      return [name, value]
+  try {
+    const fnString = fn.toString()
+    const matches = Array
+      .from(
+        fnString
+          .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
+          .matchAll(/(?:\s*(\w+)\s*(?:=\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\S+))?)\s*(?=,|$)/g) || []
+      )
+      .map(match => {
+        const name = match[1].trim()
+        const value = match[2]?.trim()
+        return [name, value]
+      })
+
+    const defaultValues = {}
+    const argNames = matches.map(([name, value]) => {
+      defaultValues[name] = parseStringValue(value)
+      return name
     })
 
-  const defaultValues = {}
-  const argNames = matches.map(([name, value]) => {
-    defaultValues[name] = parseStringValue(value)
-    return name
-  })
+    const argsObject = argNames.reduce((obj, name, idx) => {
+      obj[name] = merge(args[idx], defaultValues[name])
+      return obj
+    }, {})
 
-  const argsObject = argNames.reduce((obj, name, idx) => {
-    obj[name] = merge(args[idx], defaultValues[name])
-    return obj
-  }, {})
-
-  if (Object.entries(argsObject).length === 1) return Object.values(argsObject)[0]
-  return argsObject
+    if (Object.entries(argsObject).length === 1) return Object.values(argsObject)[0]
+    return argsObject
+  } catch {
+    return args
+  }
 }
 
 function parseStringValue (str) {
