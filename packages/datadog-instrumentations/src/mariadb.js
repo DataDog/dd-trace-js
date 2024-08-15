@@ -119,7 +119,7 @@ function createWrapQueryCallback (options) {
   }
 }
 
-function wrapConnection (Connection, promiseMethod) {
+function wrapConnection (promiseMethod, Connection) {
   return function (options) {
     Connection.apply(this, arguments)
 
@@ -170,13 +170,13 @@ addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.5.2 <3'] }, (Connection) => {
-  return shimmer.wrap(Connection, wrapConnection(Connection, '_queryPromise'))
+  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, '_queryPromise'))
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Connection) => {
-  return shimmer.wrap(Connection, wrapConnection(Connection, 'query'))
+  return shimmer.wrapFunction(Connection, wrapConnection.bind(null, 'query'))
 })
 
 addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
-  return shimmer.wrap(PoolBase, wrapPoolBase(PoolBase))
+  return shimmer.wrapFunction(PoolBase, wrapPoolBase)
 })

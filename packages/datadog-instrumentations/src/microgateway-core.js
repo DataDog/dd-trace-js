@@ -58,9 +58,9 @@ function wrapNext (req, res, next) {
 }
 
 addHook({ name, versions, file: 'lib/config-proxy-middleware.js' }, configProxyFactory => {
-  return shimmer.wrap(configProxyFactory, wrapConfigProxyFactory(configProxyFactory))
+  return shimmer.wrapFunction(configProxyFactory, wrapConfigProxyFactory)
 })
 
 addHook({ name, versions, file: 'lib/plugins-middleware.js' }, pluginsFactory => {
-  return shimmer.wrap(pluginsFactory, wrapPluginsFactory(pluginsFactory))
+  return shimmer.wrapFunction(pluginsFactory, wrapPluginsFactory)
 })
