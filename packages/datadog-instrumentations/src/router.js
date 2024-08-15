@@ -18,7 +18,7 @@ function createWrapRouterMethod (name) {
   function wrapLayerHandle (layer, original) {
     original._name = original._name || layer.name
 
-    const handle = shimmer.wrap(original, function () {
+    const handle = shimmer.wrapFunction(original, original => function () {
       if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
 
       const matchers = layerMatchers.get(layer)
