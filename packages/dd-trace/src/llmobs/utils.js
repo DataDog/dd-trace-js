@@ -39,7 +39,7 @@ function getLLMObsParentId (span) {
   const nearest = nearestLLMObsAncestor(span)
   if (nearest) return nearest.context().toSpanId()
 
-  return span.context()._tags[PROPAGATED_PARENT_ID_KEY]
+  return span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY]
 }
 
 function isLLMSpan (span) {
