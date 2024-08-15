@@ -434,6 +434,7 @@ describe('shimmer', () => {
     it('should not work with a wrap()', () => {
       expect(() => shimmer.wrap(() => {}, () => {})).to.throw()
     })
+
     it('should wrap the function', () => {
       const count = inc => inc
 
