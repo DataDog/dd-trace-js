@@ -638,7 +638,7 @@ addHook({
 
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ? jestAdapter.default : jestAdapter
-  const newAdapter = shimmer.wrap(adapter, function () {
+  const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
     if (!environment) {
       return adapter.apply(this, arguments)

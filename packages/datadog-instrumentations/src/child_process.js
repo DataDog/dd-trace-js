@@ -133,8 +133,8 @@ function wrapChildProcessAsyncMethod (shell = false) {
 
     if (childProcessMethod[util.promisify.custom]) {
       const wrapedChildProcessCustomPromisifyMethod =
-        shimmer.wrap(childProcessMethod[util.promisify.custom],
-          wrapChildProcessCustomPromisifyMethod(childProcessMethod[util.promisify.custom]), shell)
+        shimmer.wrapFunction(childProcessMethod[util.promisify.custom],
+          promisify => wrapChildProcessCustomPromisifyMethod(promisify, shell))
 
       // should do it in this way because the original property is readonly
       const descriptor = Object.getOwnPropertyDescriptor(childProcessMethod, util.promisify.custom)

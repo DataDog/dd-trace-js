@@ -71,7 +71,7 @@ function wrapStack (layer) {
 
     middleware = original || middleware
 
-    const handler = shimmer.wrap(middleware, wrapMiddleware(middleware, layer))
+    const handler = shimmer.wrapFunction(middleware, middleware => wrapMiddleware(middleware, layer))
 
     originals.set(handler, middleware)
 
