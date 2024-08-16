@@ -148,6 +148,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       }
       if (newActions.modified) {
         appliedActions = newActions
+
         const action = concatArrays(newActions).find(action => action.id === 'block')
         blocking.setDefaultBlockingActionParameters(action?.parameters)
       }
@@ -251,6 +252,8 @@ function clearAllRules () {
   appliedExclusions.clear()
   appliedCustomRules.clear()
   appliedActions.clear()
+
+  blocking.setDefaultBlockingActionParameters(undefined)
 }
 
 module.exports = {
