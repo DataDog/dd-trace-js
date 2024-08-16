@@ -201,7 +201,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled
+      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
+      flakyTestRetriesCount: this._config.flakyTestRetriesCount
     }
   }
 

@@ -1,6 +1,5 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -108,17 +107,19 @@ function getSortWrapper (sort) {
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
     let isFlakyTestRetriesEnabled = false
+    let flakyTestRetriesCount = 5
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
     }
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
-      this.ctx.config.retry = NUM_FAILED_TEST_RETRIES
+      this.ctx.config.retry = flakyTestRetriesCount
     }
 
     let testCodeCoverageLinesTotal
