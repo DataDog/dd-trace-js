@@ -1085,6 +1085,48 @@ versions.forEach(version => {
                   }).catch(done)
                 })
               })
+
+              it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    assert.equal(tests.length, 1)
+
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: {
+                      ...envVars,
+                      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+                    },
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
             })
           }
         })
