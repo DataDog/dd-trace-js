@@ -445,6 +445,7 @@ class Config {
     this._setValue(defaults, 'isAzureFunction', false)
     this._setValue(defaults, 'isCiVisibility', false)
     this._setValue(defaults, 'isEarlyFlakeDetectionEnabled', false)
+    this._setValue(defaults, 'isFlakyTestRetriesEnabled', false)
     this._setValue(defaults, 'isGCPFunction', false)
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
@@ -981,7 +982,8 @@ class Config {
 
     const {
       DD_CIVISIBILITY_AGENTLESS_URL,
-      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
+      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -992,6 +994,8 @@ class Config {
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
+      this._setBoolean(calc, 'isFlakyTestRetriesEnabled',
+        coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
     }
