@@ -25,10 +25,7 @@ module.exports = {
       activation = 'manual'
     } else if (injectionEnabled.includes('profiler')) {
       activation = 'injection'
-    } else {
-      // shouldn't happen
-      activation = 'unknown'
-    }
+    } // else activation = undefined
 
     return profiler.start({
       service,
