@@ -315,6 +315,7 @@ describe('Config', () => {
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
+      { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
@@ -1848,6 +1849,15 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
+      })
+      it('should enable flaky test retries by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', true)
+      })
+      it('should disable flaky test retries if isFlakyTestRetriesEnabled is false', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
       })
     })
     context('ci visibility mode is not enabled', () => {
