@@ -1859,6 +1859,11 @@ describe('Config', () => {
         const config = new Config(options)
         expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
       })
+      it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '5'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
+      })
     })
     context('ci visibility mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
