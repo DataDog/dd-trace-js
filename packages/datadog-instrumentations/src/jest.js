@@ -12,8 +12,7 @@ const {
   getTestParametersString,
   addEfdStringToTestName,
   removeEfdStringFromTestName,
-  getIsFaultyEarlyFlakeDetection,
-  NUM_FAILED_TEST_RETRIES
+  getIsFaultyEarlyFlakeDetection
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getFormattedJestTestParameters,
@@ -132,6 +131,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
+      this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
 
       if (this.isEarlyFlakeDetectionEnabled) {
         const hasKnownTests = !!knownTests.jest
@@ -149,7 +149,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
-          this.global[RETRY_TIMES] = NUM_FAILED_TEST_RETRIES
+          this.global[RETRY_TIMES] = this.flakyTestRetriesCount
         }
       }
     }
@@ -773,6 +773,7 @@ addHook({
       _ddEarlyFlakeDetectionNumRetries,
       _ddRepositoryRoot,
       _ddIsFlakyTestRetriesEnabled,
+      _ddFlakyTestRetriesCount,
       ...restOfTestEnvironmentOptions
     } = testEnvironmentOptions
 
