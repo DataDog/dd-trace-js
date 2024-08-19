@@ -998,7 +998,7 @@ class Config {
         coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
       this._setBoolean(calc, 'isFlakyTestRetriesEnabled',
         coalesce(DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true))
-      this._setUnit(calc, 'isFlakyTestRetriesCount', coalesce(DD_CIVISIBILITY_FLAKY_RETRY_COUNT, 5))
+      this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
     }
