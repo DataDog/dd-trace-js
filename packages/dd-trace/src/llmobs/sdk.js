@@ -29,10 +29,7 @@ class LLMObs extends NoopLLMObs {
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsSpanTagger(config)
 
-    this._evaluationWriter = new LLMObsEvalMetricsWriter({
-      site: config.site,
-      apiKey: config.apiKey
-    })
+    this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
   }
 
   get enabled () {

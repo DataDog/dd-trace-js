@@ -8,9 +8,9 @@ const logger = require('../../log')
 const { encodeUnicode } = require('../utils')
 
 class BaseLLMObsWriter {
-  constructor ({ site, apiKey, interval, timeout, endpoint, intake, eventType }) {
-    this._site = site
-    this._apiKey = apiKey
+  constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port, config }) {
+    this._site = config.site
+    this._apiKey = config.apiKey
     this._interval = interval || 1000 // 1s
     this._timeout = timeout || 5000 // 5s
     this._endpoint = endpoint
@@ -21,14 +21,13 @@ class BaseLLMObsWriter {
     this._bufferLimit = 1000
 
     this._url = new URL(format({
-      protocol: 'https:',
+      protocol: protocol || 'https:',
       hostname: this._intake,
-      port: 443,
+      port: port || 443,
       pathname: this._endpoint
     }))
 
     this._headers = {
-      'DD-API-KEY': this._apiKey,
       'Content-Type': 'application/json'
     }
 
@@ -37,6 +36,8 @@ class BaseLLMObsWriter {
       clearInterval(this._periodic)
       this.flush()
     })
+
+    logger.debug(`Started ${this.constructor.name} writer to ${this._url}`)
   }
 
   append (event) {
@@ -65,8 +66,7 @@ class BaseLLMObsWriter {
         logger.error(
           `Error sending ${events.length} LLMObs ${this._eventType} events to ${this._url}: ${err.message}`
         )
-      }
-      if (code >= 300) {
+      } else if (code >= 300) {
         logger.error(
           `Error sending ${events.length} LLMObs ${this._eventType} events to ${this._url}: ${code}`
         )
@@ -85,6 +85,24 @@ class BaseLLMObsWriter {
       }
       return value
     }).replace(/\\\\u/g, '\\u') // remove double escaping
+  }
+
+  _setUrl (agentlessEnabled) {
+    // remove span constraint once evaluations can be sent via agent proxy as well
+    if (this._eventType === 'span' && agentlessEnabled) {
+      this._url = new URL(format({
+        protocol: 'https:',
+        hostname: this._intake,
+        port: 443,
+        pathname: this._endpoint
+      }))
+    } else {
+      this._url = new URL(format({
+        protocol: 'http:',
+        hostname: undefined || 'localhost',
+        port: undefined
+      }))
+    }
   }
 }
 

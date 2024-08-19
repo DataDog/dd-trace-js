@@ -15,7 +15,8 @@ const {
   ML_APP,
   TAGS,
   PARENT_ID_KEY,
-  SESSION_ID
+  SESSION_ID,
+  NAME
 } = require('./constants')
 
 const {
@@ -24,7 +25,8 @@ const {
   ERROR_STACK
 } = require('../constants')
 
-const Writer = require('./writers/span')
+const AgentlessWriter = require('./writers/spans/agentless')
+const AgentProxyWriter = require('./writers/spans/agentProxy')
 
 const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
 const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
@@ -32,10 +34,12 @@ const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
 class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
-    this._writer = new Writer({
-      site: config.site,
-      apiKey: config.apiKey
-    })
+    const { llmobs } = config
+    if (llmobs.agentlessEnabled) {
+      this._writer = new AgentlessWriter(config)
+    } else {
+      this._writer = new AgentProxyWriter(config)
+    }
   }
 
   process (span, formattedSpan) {
@@ -95,13 +99,15 @@ class LLMObsSpanProcessor {
     const sessionId = this._pop(tags, SESSION_ID)
     const parentId = this._pop(tags, PARENT_ID_KEY)
 
+    const name = this._pop(tags, NAME, formattedSpan.name)
+
     return {
       trace_id: span.context().toTraceId(true),
-      // trace_id: formattedSpan.trace_id.toString(10),
       span_id: span.context().toSpanId(),
+      // parent_id: span.context()._parentId?.toString(10) || 'undefined',
       parent_id: parentId,
       session_id: sessionId,
-      name: formattedSpan.name,
+      name,
       tags: this._processTags(formattedSpan, mlApp, sessionId),
       start_ns: formattedSpan.start,
       duration: formattedSpan.duration,
@@ -120,7 +126,8 @@ class LLMObsSpanProcessor {
       ml_app: mlApp,
       session_id: sessionId,
       'dd-trace.version': TRACER_VERSION,
-      error: span.error
+      error: span.error,
+      language: 'javascript'
     }
     const errType = span.meta[ERROR_TYPE]
     if (errType) tags.error_type = errType
