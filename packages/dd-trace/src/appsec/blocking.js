@@ -8,6 +8,7 @@ const detectedSpecificEndpoints = {}
 let templateHtml = blockedTemplates.html
 let templateJson = blockedTemplates.json
 let templateGraphqlJson = blockedTemplates.graphqlJson
+
 let defaultBlockingActionParameters
 
 const responseBlockedSet = new WeakSet()
@@ -24,7 +25,7 @@ function addSpecificEndpoint (method, url, type) {
   detectedSpecificEndpoints[getSpecificKey(method, url)] = type
 }
 
-function getBlockWithRedirectData (rootSpan, actionParameters) {
+function getBlockWithRedirectData (actionParameters) {
   let statusCode = actionParameters.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
@@ -46,7 +47,7 @@ function getSpecificBlockingData (type) {
   }
 }
 
-function getBlockWithContentData (req, specificType, rootSpan, actionParameters) {
+function getBlockWithContentData (req, specificType, actionParameters) {
   let type
   let body
 
@@ -90,15 +91,11 @@ function getBlockWithContentData (req, specificType, rootSpan, actionParameters)
   return { body, statusCode, headers }
 }
 
-function getBlockingData (req, specificType, rootSpan, actionParameters) {
-  rootSpan.addTags({
-    'appsec.blocked': 'true'
-  })
-
+function getBlockingData (req, specificType, actionParameters) {
   if (actionParameters?.location) {
-    return getBlockWithRedirectData(rootSpan, actionParameters)
+    return getBlockWithRedirectData(actionParameters)
   } else {
-    return getBlockWithContentData(req, specificType, rootSpan, actionParameters)
+    return getBlockWithContentData(req, specificType, actionParameters)
   }
 }
 
@@ -108,7 +105,11 @@ function block (req, res, rootSpan, abortController, actionParameters = defaultB
     return
   }
 
-  const { body, headers, statusCode } = getBlockingData(req, null, rootSpan, actionParameters)
+  const { body, headers, statusCode } = getBlockingData(req, null, actionParameters)
+
+  rootSpan.addTags({
+    'appsec.blocked': 'true'
+  })
 
   for (const headerName of res.getHeaderNames()) {
     res.removeHeader(headerName)
