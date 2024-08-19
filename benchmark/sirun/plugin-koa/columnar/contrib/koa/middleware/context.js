@@ -16,7 +16,7 @@ class KoaContextMiddleware {
   }
 
   disable () {
-    ch.unsubscribe(this._subscribers)
+    ch.start.unbindStore(storage)
   }
 }
 
