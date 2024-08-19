@@ -1,7 +1,6 @@
 'use strict'
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
-const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -66,6 +65,7 @@ let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
+let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
 let isSuitesSkipped = false
@@ -307,6 +307,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
+    numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
 
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -344,8 +345,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    if (isFlakyTestRetriesEnabled && !this.options.retry) {
-      this.options.retry = NUM_FAILED_TEST_RETRIES
+    if (isFlakyTestRetriesEnabled && !this.options.retry && numTestRetries > 0) {
+      this.options.retry = numTestRetries
     }
 
     sessionAsyncResource.runInAsyncScope(() => {

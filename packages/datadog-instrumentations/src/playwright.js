@@ -2,7 +2,7 @@ const semver = require('semver')
 
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { parseAnnotations, getTestSuitePath, NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
+const { parseAnnotations, getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:playwright:test:start')
@@ -36,8 +36,9 @@ const STATUS_TO_TEST_STATUS = {
 
 let remainingTestsByFile = {}
 let isEarlyFlakeDetectionEnabled = false
-let isFlakyTestRetriesEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let isFlakyTestRetriesEnabled = false
+let flakyTestRetriesCount = 0
 let knownTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
@@ -407,6 +408,7 @@ function runnerHook (runnerExport, playwrightVersion) {
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
@@ -429,10 +431,10 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this)
 
-    if (isFlakyTestRetriesEnabled) {
+    if (isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
-          project.retries = NUM_FAILED_TEST_RETRIES
+          project.retries = flakyTestRetriesCount
         }
       })
     }
