@@ -227,7 +227,7 @@ describe('GraphQL', () => {
       sinon.stub(waf, 'run').returns({
         block_request: blockParameters
       })
-      
+
       sinon.stub(web, 'root').returns(rootSpan)
 
       startGraphqlResolve.publish({ context, resolverInfo })
