@@ -316,6 +316,7 @@ describe('Config', () => {
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
       { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
+      { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },

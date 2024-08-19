@@ -154,7 +154,7 @@ class JestPlugin extends CiPlugin {
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
-        config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount ?? 5
+        config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
       })
     })
 
