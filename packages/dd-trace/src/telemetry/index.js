@@ -337,6 +337,12 @@ function updateConfig (changes, config) {
       }
     } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
+    } else if (entry.name === 'profiling.enabled') {
+      if (['auto', 'true'].includes(entry.value)) {
+        entry.value = true
+      } else if (entry.value === 'false') {
+        entry.value = false
+      }
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
