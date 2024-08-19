@@ -38,7 +38,7 @@ let remainingTestsByFile = {}
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
-let flakyTestRetriesCount = 5
+let flakyTestRetriesCount = 0
 let knownTests = {}
 let rootDir = ''
 const MINIMUM_SUPPORTED_VERSION_EFD = '1.38.0'
@@ -431,7 +431,7 @@ function runnerHook (runnerExport, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this)
 
-    if (isFlakyTestRetriesEnabled) {
+    if (isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0) {
       projects.forEach(project => {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
