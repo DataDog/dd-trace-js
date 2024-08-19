@@ -249,6 +249,47 @@ versions.forEach((version) => {
           }
         )
       })
+
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: {
+            enabled: false
+          }
+        })
+
+        receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.equal(testEvents.length, 5)
+          assert.includeMembers(testEvents.map(test => test.content.resource), [
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+          ])
+          assert.equal(testEvents.filter(test => test.content.meta[TEST_IS_RETRY] === 'true').length, 2)
+        }).then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run', // TODO: change tests we run
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1,
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            },
+            stdio: 'pipe'
+          }
+        )
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {

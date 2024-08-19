@@ -107,7 +107,7 @@ function getSortWrapper (sort) {
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
     let isFlakyTestRetriesEnabled = false
-    let flakyTestRetriesCount = 5
+    let flakyTestRetriesCount = 0
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
@@ -118,7 +118,7 @@ function getSortWrapper (sort) {
     } catch (e) {
       isFlakyTestRetriesEnabled = false
     }
-    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
       this.ctx.config.retry = flakyTestRetriesCount
     }
 
