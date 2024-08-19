@@ -1,8 +1,8 @@
 'use strict'
 
-const { randomFillSync } = require('crypto')
+const crypto = globalThis.crypto
 
-const BUFFER_SIZE = 65536
+const BUFFER_SIZE = 8192
 
 const data = new BigUint64Array(BUFFER_SIZE)
 
@@ -20,7 +20,7 @@ function double () {
 
 function prefill () {
   if (batch === 0) {
-    randomFillSync(data)
+    crypto.getRandomValues(data)
   }
 
   batch = (batch + 1) % BUFFER_SIZE

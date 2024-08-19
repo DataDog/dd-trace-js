@@ -1,10 +1,12 @@
 'use strict'
 
+const textEncoder = new TextEncoder()
+
 const DEFAULT_MIN_SIZE = 1 * 1024 * 1024 // 2MB
 
 class Chunk {
   constructor (minSize = DEFAULT_MIN_SIZE) {
-    this.buffer = Buffer.allocUnsafe(minSize)
+    this.buffer = new Uint8Array(minSize)
     this.length = 0
     this._minSize = minSize
   }
@@ -17,14 +19,14 @@ class Chunk {
       this.reserve(maxLength + 2)
       this.length += 2
       this.buffer[offset] = 0xd9
-      const written = this.buffer.utf8Write(value, this.length)
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
       this.buffer[offset + 1] = written
       this.length += written
     } else if (maxLength <= 0xFFFF) { // str 16
       this.reserve(maxLength + 3)
       this.length += 3
       this.buffer[offset] = 0xda
-      const written = this.buffer.utf8Write(value, this.length)
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
       this.buffer[offset + 1] = written >> 8
       this.buffer[offset + 2] = written
       this.length += written
@@ -32,7 +34,7 @@ class Chunk {
       this.reserve(maxLength + 5)
       this.length += 5
       this.buffer[offset] = 0xdb
-      const written = this.buffer.utf8Write(value, this.length)
+      const written = textEncoder.encodeInto(value, this.buffer.subarray(this.length))
       this.buffer[offset + 1] = written >> 24
       this.buffer[offset + 2] = written >> 16
       this.buffer[offset + 3] = written >> 8
@@ -65,9 +67,8 @@ class Chunk {
   _resize (size) {
     const oldBuffer = this.buffer
 
-    this.buffer = Buffer.allocUnsafe(size)
-
-    oldBuffer.copy(this.buffer, 0, 0, this.length)
+    this.buffer = new Uint8Array(size)
+    this.buffer.set(oldBuffer)
   }
 }
 
