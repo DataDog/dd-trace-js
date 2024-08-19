@@ -84,9 +84,11 @@ describe('telemetry logs', () => {
     const dc = require('dc-polyfill')
     let logCollectorAdd
     let telemetryLog
+    let errorLog
 
     beforeEach(() => {
       telemetryLog = dc.channel('datadog:telemetry:log')
+      errorLog = dc.channel('datadog:log:error')
 
       logCollectorAdd = sinon.stub()
       const logs = proxyquire('../../../src/telemetry/logs', {
@@ -133,6 +135,32 @@ describe('telemetry logs', () => {
       telemetryLog.publish({ message: 'message', level: 'INFO' })
 
       expect(logCollectorAdd).to.not.be.called
+    })
+
+    describe('datadog:log:error', () => {
+      it('should be called when an Error object is published to datadog:log:error', () => {
+        const error = new Error('message')
+        const stack = error.stack
+        errorLog.publish(error)
+
+        expect(logCollectorAdd).to.be.calledOnceWith(match({ message: 'message', level: 'ERROR', stack_trace: stack }))
+      })
+
+      it('should be called when an error string is published to datadog:log:error', () => {
+        errorLog.publish('custom error message')
+
+        expect(logCollectorAdd).to.be.calledOnceWith(match({
+          message: 'custom error message',
+          level: 'ERROR',
+          stack_trace: undefined
+        }))
+      })
+
+      it('should not be called when an invalid object is published to datadog:log:error', () => {
+        errorLog.publish({ invalid: 'field' })
+
+        expect(logCollectorAdd).not.to.be.called
+      })
     })
   })
 
