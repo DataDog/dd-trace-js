@@ -1794,6 +1794,8 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.JEST_WORKER_ID
       options = {}
     })
@@ -1860,7 +1862,21 @@ describe('Config', () => {
         expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
-        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '5'
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
+      })
+      it('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4.1'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = 'a'
         const config = new Config(options)
         expect(config).to.have.property('flakyTestRetriesCount', 5)
       })
