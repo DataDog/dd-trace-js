@@ -39,7 +39,12 @@ function onErrorLog (msg) {
     onLog({
       level: 'ERROR',
       message: msg.message,
-      stack: msg.stack
+      stack_trace: msg.stack
+    })
+  } else if (typeof msg === 'string') {
+    onLog({
+      level: 'ERROR',
+      message: msg
     })
   }
 }
