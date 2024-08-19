@@ -16,9 +16,8 @@ const Span = require('../opentracing/span')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanTagger = require('./tagger')
 
-const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
+const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
-const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
 
 class LLMObs extends NoopLLMObs {
   constructor (tracer, llmobsModule, config) {
@@ -184,7 +183,7 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const evaluationTags = { 'dd-trace.version': TRACER_VERSION, ml_app: this._config.llmobs.mlApp || 'unknown' }
+    const evaluationTags = { 'dd-trace.version': tracerVersion, ml_app: this._config.llmobs.mlApp || 'unknown' }
 
     if (tags) {
       for (const key in tags) {

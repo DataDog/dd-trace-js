@@ -27,5 +27,10 @@ module.exports = {
 
   INPUT_TOKENS_METRIC_KEY: 'input_tokens',
   OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
-  TOTAL_TOKENS_METRIC_KEY: 'total_tokens'
+  TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
+
+  EVP_PROXY_AGENT_BASE_PATH: 'evp_proxy/v2',
+  EVP_PROXY_AGENT_ENDPOINT: 'evp_proxy/v2/api/v2/llmobs',
+  EVP_SUBDOMAIN_HEADER_NAME: 'X-Datadog-EVP-Subdomain',
+  EVP_SUBDOMAIN_HEADER_VALUE: 'llmobs-intake'
 }

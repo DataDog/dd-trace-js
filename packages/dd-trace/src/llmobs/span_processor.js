@@ -28,8 +28,7 @@ const {
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
 
-const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../../../version')
-const TRACER_VERSION = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
+const tracerVersion = require('../../../../package.json').version
 
 class LLMObsSpanProcessor {
   constructor (config) {
@@ -125,7 +124,7 @@ class LLMObsSpanProcessor {
       source: 'integration',
       ml_app: mlApp,
       session_id: sessionId,
-      'dd-trace.version': TRACER_VERSION,
+      'dd-trace.version': tracerVersion,
       error: span.error,
       language: 'javascript'
     }
