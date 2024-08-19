@@ -236,10 +236,8 @@ class CypressPlugin {
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-          this.flakyTestRetriesCount = flakyTestRetriesCount
-          if (this.isFlakyTestRetriesEnabled) {
-            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+          if (isFlakyTestRetriesEnabled) {
+            this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
         }
         return this.cypressConfig
