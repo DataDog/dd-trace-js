@@ -65,7 +65,7 @@ let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
-let numTestRetries = 5
+let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
 let isSuitesSkipped = false
@@ -345,7 +345,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    if (isFlakyTestRetriesEnabled && !this.options.retry) {
+    if (isFlakyTestRetriesEnabled && !this.options.retry && numTestRetries > 0) {
       this.options.retry = numTestRetries
     }
 
