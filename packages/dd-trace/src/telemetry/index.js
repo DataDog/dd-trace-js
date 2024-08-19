@@ -329,13 +329,17 @@ function updateConfig (changes, config) {
     const { origin, value } = change
     const entry = { name, value, origin }
 
-    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
-    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
+    if (namesNeedFormatting.has(entry.name)) {
+      entry.value = formatMapForTelemetry(entry.value)
+    } else if (entry.name === 'url') {
+      if (entry.value) {
+        entry.value = entry.value.toString()
+      }
+    } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
+    } else if (Array.isArray(entry.value)) {
+      entry.value = value.join(',')
     }
-    if (Array.isArray(entry.value)) entry.value = value.join(',')
-
     configuration.push(entry)
   }
 
