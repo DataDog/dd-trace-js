@@ -43,9 +43,6 @@ function onGraphqlStartResolve ({ context, resolverInfo }) {
     if (requestData?.isInGraphqlRequest) {
       requestData.blocked = true
       requestData.wafAction = blockingAction
-
-      rootSpan.setTag('appsec.blocked', 'true')
-
       context?.abortController?.abort()
     }
   }
