@@ -217,6 +217,7 @@ function getExecutionConfiguration (runner, onFinishRequest) {
     config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
     config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
     config.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+    config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
     if (isEarlyFlakeDetectionEnabled) {
       knownTestsCh.publish({

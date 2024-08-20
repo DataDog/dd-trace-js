@@ -92,7 +92,7 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
       const cb = arguments[arguments.length - 1]
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
           return cb.apply(this, arguments)
         })

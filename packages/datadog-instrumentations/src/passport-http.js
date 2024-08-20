@@ -9,7 +9,7 @@ addHook({
   file: 'lib/passport-http/strategies/basic.js',
   versions: ['>=0.3.0']
 }, BasicStrategy => {
-  return shimmer.wrap(BasicStrategy, function () {
+  return shimmer.wrapFunction(BasicStrategy, BasicStrategy => function () {
     const type = 'http'
 
     if (typeof arguments[0] === 'function') {

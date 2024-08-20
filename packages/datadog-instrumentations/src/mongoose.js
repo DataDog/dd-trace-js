@@ -169,7 +169,7 @@ addHook({
   versions: ['6', '>=7'],
   file: 'lib/helpers/query/sanitizeFilter.js'
 }, sanitizeFilter => {
-  return shimmer.wrap(sanitizeFilter, function wrappedSanitizeFilter () {
+  return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {

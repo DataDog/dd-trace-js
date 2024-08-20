@@ -22,7 +22,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: system_tests_binaries
-          path: .
+          path: |
+            .
+            !dd-trace-js/.git/**
 
   get-essential-scenarios:
     runs-on: ubuntu-latest

@@ -68,10 +68,10 @@ addHook({
   versions: ['>=4'],
   file: 'lib/middleware/query.js'
 }, query => {
-  return shimmer.wrap(query, function () {
+  return shimmer.wrapFunction(query, query => function () {
     const queryMiddleware = query.apply(this, arguments)
 
-    return shimmer.wrap(queryMiddleware, function (req, res, next) {
+    return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
       arguments[2] = publishQueryParsedAndNext(req, res, next)
       return queryMiddleware.apply(this, arguments)
     })

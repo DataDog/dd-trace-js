@@ -39,7 +39,7 @@ function wrapAddHook (addHook) {
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrap(fn, function (request, reply, done) {
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function (request, reply, done) {
       const req = getReq(request)
 
       try {
@@ -151,7 +151,7 @@ function publishError (error, req) {
 }
 
 addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
-  const wrapped = shimmer.wrap(fastify, wrapFastify(fastify, true))
+  const wrapped = shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 
   wrapped.fastify = wrapped
   wrapped.default = wrapped
@@ -160,9 +160,9 @@ addHook({ name: 'fastify', versions: ['>=3'] }, fastify => {
 })
 
 addHook({ name: 'fastify', versions: ['2'] }, fastify => {
-  return shimmer.wrap(fastify, wrapFastify(fastify, true))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, true))
 })
 
 addHook({ name: 'fastify', versions: ['1'] }, fastify => {
-  return shimmer.wrap(fastify, wrapFastify(fastify, false))
+  return shimmer.wrapFunction(fastify, fastify => wrapFastify(fastify, false))
 })
