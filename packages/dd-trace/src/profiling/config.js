@@ -125,6 +125,8 @@ class Config {
       port
     })))
 
+    this.libraryInjected = options.libraryInjected
+    this.activation = options.activation
     this.exporters = ensureExporters(options.exporters || [
       new AgentExporter(this)
     ], this)
