@@ -89,7 +89,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: config.profiling.enabled
+      enabled: profilingEnabledToBoolean(config.profiling.enabled)
     }
   }
   if (errors.profilingError) {
@@ -337,12 +337,6 @@ function updateConfig (changes, config) {
       }
     } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
-    } else if (entry.name === 'profiling.enabled') {
-      if (['auto', 'true'].includes(entry.value)) {
-        entry.value = true
-      } else if (entry.value === 'false') {
-        entry.value = false
-      }
     } else if (Array.isArray(entry.value)) {
       entry.value = value.join(',')
     }
@@ -362,6 +356,19 @@ function updateConfig (changes, config) {
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+}
+
+function profilingEnabledToBoolean (profilingEnabled) {
+  if (typeof profilingEnabled === 'boolean') {
+    return profilingEnabled
+  }
+  if (['auto', 'true'].includes(profilingEnabled)) {
+    return true
+  }
+  if (profilingEnabled === 'false') {
+    return false
+  }
+  return undefined
 }
 
 module.exports = {
