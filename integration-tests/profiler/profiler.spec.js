@@ -34,17 +34,24 @@ function expectProfileMessagePromise (agent, timeout,
 ) {
   const fileNames = expectedProfileTypes.map(type => `${type}.pprof`)
   return agent.assertMessageReceived(({ headers, _, files }) => {
+    let event
     try {
       assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
       assert.propertyVal(files[0], 'originalname', 'event.json')
-      const event = JSON.parse(files[0].buffer.toString())
+      event = JSON.parse(files[0].buffer.toString())
       assert.propertyVal(event, 'family', 'node')
+      assert.isString(event.info.profiler.activation)
+      const ssiEnabled = event.info.profiler.ssi.enabled
+      assert.isBoolean(ssiEnabled)
+      if (ssiEnabled) {
+        assert.isString(event.info.profiler.ssi.mechanism)
+      }
       assert.deepPropertyVal(event, 'attachments', fileNames)
       for (const [index, fileName] of fileNames.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
       }
     } catch (e) {
-      e.message += ` ${JSON.stringify({ headers, files })}`
+      e.message += ` ${JSON.stringify({ headers, files, event })}`
       throw e
     }
   }, timeout, multiplicity)
