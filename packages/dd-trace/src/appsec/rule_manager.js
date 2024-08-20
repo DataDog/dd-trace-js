@@ -20,12 +20,9 @@ function loadRules (config) {
     ? JSON.parse(fs.readFileSync(config.rules))
     : require('./recommended.json')
 
-  waf.init(defaultRules, config)
+    waf.init(defaultRules, config)
 
-  if (defaultRules.actions) {
-    const action = defaultRules.actions.find(action => action.id === 'block')
-    blocking.setDefaultBlockingActionParameters(action?.parameters)
-  }
+    blocking.setDefaultBlockingActionParameters(defaultRules?.actions) 
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
@@ -149,8 +146,7 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
       if (newActions.modified) {
         appliedActions = newActions
 
-        const action = concatArrays(newActions).find(action => action.id === 'block')
-        blocking.setDefaultBlockingActionParameters(action?.parameters)
+        blocking.setDefaultBlockingActionParameters(concatArrays(newActions))
       }
     } catch (err) {
       newApplyState = ERROR
