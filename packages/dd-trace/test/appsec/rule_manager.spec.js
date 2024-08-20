@@ -55,10 +55,7 @@ describe('AppSec Rule Manager', () => {
       loadRules(config.appsec)
 
       expect(waf.init).to.have.been.calledOnceWithExactly(testRules, config.appsec)
-      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly({
-        location: '/error',
-        status_code: 302
-      })
+      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(testRules.actions)
     })
   })
 
@@ -69,6 +66,7 @@ describe('AppSec Rule Manager', () => {
 
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
+      expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(undefined)
     })
   })
 
@@ -504,29 +502,62 @@ describe('AppSec Rule Manager', () => {
       })
 
       it('should apply blocking actions', () => {
-        const asm = {
-          actions: [
-            {
-              id: 'block',
-              otherParam: 'other'
-            },
-            {
-              id: 'otherId',
-              moreParams: 'more'
-            }
-          ]
-        }
-
         const toApply = [
           {
             product: 'ASM',
             id: '1',
-            file: asm
+            file: {
+              actions: [
+                {
+                  id: 'notblock',
+                  parameters: {
+                    location: '/notfound',
+                    status_code: 404
+                  }
+                }
+              ]
+            }
+          },
+          {
+            product: 'ASM',
+            id: '2',
+            file: {
+              actions: [
+                {
+                  id: 'block',
+                  parameters: {
+                    location: '/redirected',
+                    status_code: 302
+                  }
+                }
+              ]
+            }
           }
         ]
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
-        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+
+        const expected = {
+          actions: [
+            {
+              id: 'notblock',
+              parameters: {
+                location: '/notfound',
+                status_code: 404
+              }
+            },
+            {
+              id: 'block',
+              parameters: {
+                location: '/redirected',
+                status_code: 302
+              }
+            }
+          ]
+        }
+
+        expect(waf.update).to.have.been.calledOnceWithExactly(expected)
+        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledWithExactly(expected.actions)
       })
 
       it('should unapply blocking actions', () => {
