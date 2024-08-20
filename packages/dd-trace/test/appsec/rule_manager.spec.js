@@ -64,6 +64,8 @@ describe('AppSec Rule Manager', () => {
       loadRules(config.appsec)
       expect(waf.init).to.have.been.calledOnce
 
+      blocking.setDefaultBlockingActionParameters.resetHistory()
+
       clearAllRules()
       expect(waf.destroy).to.have.been.calledOnce
       expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(undefined)
@@ -557,7 +559,7 @@ describe('AppSec Rule Manager', () => {
         }
 
         expect(waf.update).to.have.been.calledOnceWithExactly(expected)
-        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledWithExactly(expected.actions)
+        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(expected.actions)
       })
 
       it('should unapply blocking actions', () => {
