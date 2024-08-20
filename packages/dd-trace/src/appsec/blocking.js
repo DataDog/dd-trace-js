@@ -151,8 +151,10 @@ function isBlocked (res) {
   return responseBlockedSet.has(res)
 }
 
-function setDefaultBlockingActionParameters (actionParameters) {
-  defaultBlockingActionParameters = actionParameters
+function setDefaultBlockingActionParameters (actions) {
+  const blockAction = actions?.find(action => action.id === 'block')
+
+  defaultBlockingActionParameters = blockAction?.parameters
 }
 
 module.exports = {
