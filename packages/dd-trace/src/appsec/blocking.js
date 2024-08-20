@@ -26,7 +26,7 @@ function addSpecificEndpoint (method, url, type) {
 }
 
 function getBlockWithRedirectData (actionParameters) {
-  let statusCode = actionParameters.status_code
+  let statusCode = actionParameters?.status_code
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
   }
