@@ -1,6 +1,6 @@
 'use strict'
 
-const { SPAN_KIND } = require('./constants')
+const { SPAN_KIND, OUTPUT_VALUE } = require('./constants')
 
 const {
   validKind,
@@ -299,7 +299,19 @@ class LLMObs extends NoopLLMObs {
       llmobsThis.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
 
       const result = fn.apply(this, arguments)
-      llmobsThis.annotate(span, { outputData: result })
+
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          if (kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+            llmobsThis.annotate(span, { outputData: value })
+          }
+          return value
+        })
+      }
+
+      if (result && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+        llmobsThis.annotate(span, { outputData: result })
+      }
 
       return result
     }
