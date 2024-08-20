@@ -277,10 +277,22 @@ describe('user_blocking', () => {
       })
 
       it('should block using redirect data if it is configured', (done) => {
-        blocking.setDefaultBlockingActionParameters({
-          location: '/redirected',
-          status_code: 302
-        })
+        blocking.setDefaultBlockingActionParameters([
+          {
+            id: 'notblock',
+            parameters: {
+              location: '/notfound',
+              status_code: 404
+            }
+          },
+          {
+            id: 'block',
+            parameters: {
+              location: '/redirected',
+              status_code: 302
+            }
+          }
+        ])
         controller = (req, res) => {
           const ret = tracer.appsec.blockRequest(req, res)
           expect(ret).to.be.true
