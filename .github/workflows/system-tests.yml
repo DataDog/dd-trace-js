@@ -24,7 +24,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: system_tests_binaries
-          path: ./binaries
+          path: ./binaries/**/*
 
   get-essential-scenarios:
     runs-on: ubuntu-latest
