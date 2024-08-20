@@ -1,4 +1,11 @@
+const {
+  EVP_EVENT_SIZE_LIMIT,
+  EVP_PAYLOAD_SIZE_LIMIT,
+  DROPPED_VALUE_TEXT,
+  DROPPED_IO_COLLECTION_ERROR
+} = require('../../constants')
 const BaseWriter = require('../base')
+const logger = require('../../../log')
 
 class LLMObsSpanWriter extends BaseWriter {
   constructor (options) {
@@ -8,12 +15,35 @@ class LLMObsSpanWriter extends BaseWriter {
     })
   }
 
+  append (event) {
+    const eventSizeBytes = Buffer.from(JSON.stringify(event)).byteLength
+    if (eventSizeBytes > EVP_EVENT_SIZE_LIMIT) {
+      logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
+      event = this._truncateSpanEvent(event)
+    }
+
+    if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
+      logger.debug('Flusing queue because queing next event will exceed EvP payload limit')
+      this.flush()
+    }
+
+    super.append(event, eventSizeBytes)
+  }
+
   makePayload (events) {
     return {
       '_dd.stage': 'raw',
       event_type: this._eventType,
       spans: events
     }
+  }
+
+  _truncateSpanEvent (event) {
+    event.meta.input = { value: DROPPED_VALUE_TEXT }
+    event.meta.output = { value: DROPPED_VALUE_TEXT }
+
+    event.collection_errors = [DROPPED_IO_COLLECTION_ERROR]
+    return event
   }
 }
 

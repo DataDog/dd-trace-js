@@ -19,6 +19,7 @@ class BaseLLMObsWriter {
 
     this._buffer = []
     this._bufferLimit = 1000
+    this._bufferSize = 0
 
     this._url = new URL(format({
       protocol: protocol || 'https:',
@@ -37,13 +38,17 @@ class BaseLLMObsWriter {
       this.flush()
     })
 
-    logger.debug(`Started ${this.constructor.name} writer to ${this._url}`)
+    logger.debug(`Started ${this.constructor.name} to ${this._url}`)
   }
 
-  append (event) {
-    if (this._buffer.length < this._bufferLimit) {
-      this._buffer.push(event)
+  append (event, byteLength) {
+    if (this._buffer.length >= this._bufferLimit) {
+      logger.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+      return
     }
+
+    this._bufferSize += byteLength || Buffer.from(JSON.stringify(event)).byteLength
+    this._buffer.push(event)
   }
 
   flush () {
@@ -53,6 +58,7 @@ class BaseLLMObsWriter {
 
     const events = this._buffer
     this._buffer = []
+    this._bufferSize = 0
     const payload = this._encode(this.makePayload(events))
 
     const options = {
@@ -85,24 +91,6 @@ class BaseLLMObsWriter {
       }
       return value
     }).replace(/\\\\u/g, '\\u') // remove double escaping
-  }
-
-  _setUrl (agentlessEnabled) {
-    // remove span constraint once evaluations can be sent via agent proxy as well
-    if (this._eventType === 'span' && agentlessEnabled) {
-      this._url = new URL(format({
-        protocol: 'https:',
-        hostname: this._intake,
-        port: 443,
-        pathname: this._endpoint
-      }))
-    } else {
-      this._url = new URL(format({
-        protocol: 'http:',
-        hostname: undefined || 'localhost',
-        port: undefined
-      }))
-    }
   }
 }
 
