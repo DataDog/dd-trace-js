@@ -20,9 +20,9 @@ function loadRules (config) {
     ? JSON.parse(fs.readFileSync(config.rules))
     : require('./recommended.json')
 
-    waf.init(defaultRules, config)
+  waf.init(defaultRules, config)
 
-    blocking.setDefaultBlockingActionParameters(defaultRules?.actions) 
+  blocking.setDefaultBlockingActionParameters(defaultRules?.actions)
 }
 
 function updateWafFromRC ({ toUnapply, toApply, toModify }) {
