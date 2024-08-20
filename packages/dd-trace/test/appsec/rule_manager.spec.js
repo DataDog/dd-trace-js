@@ -17,9 +17,9 @@ describe('AppSec Rule Manager', () => {
     clearAllRules()
     config = new Config()
 
-    sinon.stub(waf, 'init').callThrough()
-    sinon.stub(waf, 'destroy').callThrough()
-    sinon.stub(waf, 'update').callThrough()
+    sinon.stub(waf, 'init')
+    sinon.stub(waf, 'destroy')
+    sinon.stub(waf, 'update')
 
     sinon.spy(blocking, 'setDefaultBlockingActionParameters')
   })
