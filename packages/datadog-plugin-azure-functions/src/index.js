@@ -10,7 +10,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
   bindStart (ctx) {
     const { name, options } = ctx
     console.log('==== starting span =====')
-    const span = this.startSpan('azure-function', {
+    const span = this.startSpan('azure_function.invoke', {
       service: this.config.service || this._tracerConfig.service,
       resource: name,
       type: 'system',
