@@ -94,10 +94,12 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
     const rootSpan = web.root(req)
     if (!rootSpan) return
 
-    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, rootSpan, requestData.wafAction)
+    const blockingData = getBlockingData(req, specificBlockingTypes.GRAPHQL, requestData.wafAction)
     abortData.statusCode = blockingData.statusCode
     abortData.headers = blockingData.headers
     abortData.message = blockingData.body
+
+    rootSpan.setTag('appsec.blocked', 'true')
 
     abortController?.abort()
   }
