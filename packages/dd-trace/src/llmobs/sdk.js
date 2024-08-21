@@ -163,6 +163,18 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
+    const mlApp = options.mlApp || this._config.llmobs.mlApp
+    if (!mlApp) {
+      logger.warn('ML App name is required for sending evaluation metrics. Evaluation metric data will not be sent.')
+      return
+    }
+
+    const timestampMs = options.timestampMs || Date.now()
+    if (typeof timestampMs !== 'number' || timestampMs < 0) {
+      logger.warn('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
+      return
+    }
+
     const { label, value, tags } = options
     const metricType = options.metricType.toLowerCase()
     if (!label) {
@@ -183,7 +195,9 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const evaluationTags = { 'dd-trace.version': tracerVersion, ml_app: this._config.llmobs.mlApp || 'unknown' }
+    const evaluationTags = {
+      'dd-trace.version': tracerVersion, ml_app: this._config.llmobs.mlApp || 'unknown'
+    }
 
     if (tags) {
       for (const key in tags) {
@@ -203,7 +217,9 @@ class LLMObs extends NoopLLMObs {
       trace_id: traceId,
       label,
       metric_type: metricType,
+      ml_app: mlApp,
       [`${metricType}_value`]: value,
+      timestamp_ms: timestampMs,
       tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`)
     })
   }

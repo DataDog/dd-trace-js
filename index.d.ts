@@ -2298,7 +2298,17 @@ declare namespace tracer {
       /**
        * An object of string key-value pairs to tag the evaluation metric with.
        */
-      tags?: { [key: string]: any }
+      tags?: { [key: string]: any },
+
+      /**
+       * The name of the ML application
+       */
+      mlApp?: string,
+
+      /**
+       * The timestamp in milliseconds when the evaluation metric result was generated.
+       */
+      timestampMs?: number
     }
 
     interface Document {

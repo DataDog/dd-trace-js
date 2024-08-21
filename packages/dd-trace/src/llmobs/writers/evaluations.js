@@ -4,7 +4,7 @@ class LLMObsEvalMetricsWriter extends BaseWriter {
   constructor (config) {
     super({
       config,
-      endpoint: '/api/unstable/llm-obs/v1/eval-metric',
+      endpoint: '/api/intake/llm-obs/v1/eval-metric',
       intake: `api.${config.site}`,
       eventType: 'evaluation_metric'
     })
