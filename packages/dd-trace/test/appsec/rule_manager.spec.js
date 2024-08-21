@@ -21,13 +21,12 @@ describe('AppSec Rule Manager', () => {
     sinon.stub(waf, 'destroy')
     sinon.stub(waf, 'update')
 
-    sinon.spy(blocking, 'setDefaultBlockingActionParameters')
+    sinon.stub(blocking, 'setDefaultBlockingActionParameters')
   })
 
   afterEach(() => {
     sinon.restore()
     clearAllRules()
-    blocking.setDefaultBlockingActionParameters(undefined) // reset blocking action
   })
 
   describe('loadRules', () => {
@@ -539,7 +538,7 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
-        const expected = {
+        const expectedPayload = {
           actions: [
             {
               id: 'notblock',
@@ -558,7 +557,7 @@ describe('AppSec Rule Manager', () => {
           ]
         }
 
-        expect(waf.update).to.have.been.calledOnceWithExactly(expected)
+        expect(waf.update).to.have.been.calledOnceWithExactly(expectedPayload)
         expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(expected.actions)
       })
 
@@ -584,6 +583,11 @@ describe('AppSec Rule Manager', () => {
         ]
         updateWafFromRC({ toUnapply: [], toApply, toModify: [] })
 
+        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(asm.actions)
+
+        sinon.resetHistory()
+
         const toUnapply = [
           {
             product: 'ASM',
@@ -593,7 +597,8 @@ describe('AppSec Rule Manager', () => {
 
         updateWafFromRC({ toUnapply, toApply: [], toModify: [] })
 
-        expect(waf.update).to.have.been.calledOnceWithExactly(asm)
+        expect(waf.update).to.have.been.calledOnceWithExactly({ actions: [] })
+        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly([])
       })
 
       it('should ignore other properties', () => {
