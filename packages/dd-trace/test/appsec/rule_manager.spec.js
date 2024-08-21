@@ -558,7 +558,7 @@ describe('AppSec Rule Manager', () => {
         }
 
         expect(waf.update).to.have.been.calledOnceWithExactly(expectedPayload)
-        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(expected.actions)
+        expect(blocking.setDefaultBlockingActionParameters).to.have.been.calledOnceWithExactly(expectedPayload.actions)
       })
 
       it('should unapply blocking actions', () => {
