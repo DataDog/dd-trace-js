@@ -2,7 +2,6 @@
 
 const { SPAN_KINDS, PARENT_ID_KEY, PROPAGATED_PARENT_ID_KEY, ML_APP, SESSION_ID } = require('./constants')
 const { SPAN_TYPE } = require('../../../../ext/tags')
-const { isTrue, isFalse } = require('../util')
 
 function validKind (kind) {
   // cases for invalid kind
@@ -78,81 +77,45 @@ function encodeUnicode (str) {
   }).join('')
 }
 
-// migrate this to an extrnal module?
-// currently unsupported cases:
-// 1. function foo (a, b, ...rest)
-// 2. function foo ({ ctx })
-// 3. function foo ([k, v])
-function getFunctionArguments (fn, args) {
+function getFunctionArguments (fn, args = []) {
+  if (!fn) return
+
   try {
     const fnString = fn.toString()
     const matches = Array
       .from(
         fnString
-          .slice(fnString.indexOf('(') + 1, fnString.indexOf(')'))
-          .matchAll(/(?:\s*(\w+)\s*(?:=\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\S+))?)\s*(?=,|$)/g) || []
+          .slice(fnString.indexOf('(') + 1, fnString.lastIndexOf(')'))
+          .matchAll(/(\.{3}\w+|\w+)\s*(?:=\s*([^,]+))?/g) || [] // this doesn't do well with nested objects
       )
-      .map(match => {
-        const name = match[1].trim()
-        const value = match[2]?.trim()
-        return [name, value]
-      })
 
-    const defaultValues = {}
-    const argNames = matches.map(([name, value]) => {
-      defaultValues[name] = parseStringValue(value)
-      return name
-    })
+    const names = matches.map(match => match[1]?.trim())
 
-    const argsObject = argNames.reduce((obj, name, idx) => {
-      obj[name] = merge(args[idx], defaultValues[name])
-      return obj
-    }, {})
+    const argsObject = {}
 
-    if (Object.entries(argsObject).length === 1) return Object.values(argsObject)[0]
+    for (const argIdx in args) {
+      const name = names[argIdx]
+      const arg = args[argIdx]
+
+      const spread = name.startsWith('...')
+
+      // this can only be the last argument
+      if (spread) {
+        argsObject[name.slice(3)] = args.slice(argIdx)
+        break
+      }
+
+      argsObject[name] = arg
+    }
+
+    const numArgs = Object.keys(argsObject).length
+
+    if (!numArgs) return undefined
+    if (numArgs === 1) return Object.values(argsObject)[0]
     return argsObject
   } catch {
     return args
   }
-}
-
-function parseStringValue (str) {
-  if (!str) return str
-
-  const bool = isTrue(str) ? true : isFalse(str) ? false : undefined
-  if (bool) return bool
-
-  const number = parseFloat(str)
-  if (!isNaN(number)) return number
-
-  const validJsonStr = str.replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":')
-  try {
-    return JSON.parse(validJsonStr)
-  } catch {
-    if (
-      (str.startsWith("'") && str.endsWith("'")) ||
-      (str.startsWith('`') && str.endsWith('`'))
-    ) {
-      return str.slice(1, -1)
-    }
-
-    if (str === 'undefined') return undefined
-    return str
-  }
-}
-function merge (value, defaultValue) {
-  if (!value) return defaultValue
-  if (typeof value !== typeof defaultValue) return value
-
-  const maybeEntries = Object.entries(value)
-  if (!maybeEntries.length) return value
-
-  const merged = {}
-  maybeEntries.forEach(([k, v]) => {
-    merged[k] = merge(v, defaultValue[k])
-  })
-
-  return { ...defaultValue, ...merged }
 }
 
 module.exports = {
