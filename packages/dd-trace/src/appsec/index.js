@@ -227,6 +227,11 @@ function onPassportVerify ({ credentials, user }) {
 const responseAnalyzedSet = new WeakSet()
 
 function onResponseWriteHead ({ req, res, abortController, statusCode, responseHeaders }) {
+  // avoid calling WAF on destroyed context because the request was dropped by client
+  if (res.destroyed) {
+    return
+  }
+
   // avoid "write after end" error
   if (isBlocked(res)) {
     abortController?.abort()
