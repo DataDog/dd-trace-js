@@ -33,7 +33,11 @@
   "actions": [
     {
       "id": "block",
-      "otherParam": "other"
+      "otherParam": "other",
+      "parameters": {
+        "location": "/error",
+        "status_code": 302
+      }
     },
     {
       "id": "otherId",
