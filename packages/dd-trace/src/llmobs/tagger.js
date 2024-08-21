@@ -109,7 +109,8 @@ class LLMObsTagger {
         span.setTag(key, data)
       } else {
         try {
-          span.setTag(key, JSON.stringify(data))
+          // this will help showcase unfinished promises being passed in as values
+          span.setTag(key, data instanceof Promise ? data.toString() : JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
           logger.warn(`Failed to parse ${type} value, must be JSON serializable.`)

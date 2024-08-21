@@ -196,7 +196,8 @@ class LLMObs extends NoopLLMObs {
     }
 
     const evaluationTags = {
-      'dd-trace.version': tracerVersion, ml_app: this._config.llmobs.mlApp || 'unknown'
+      'dd-trace.version': tracerVersion,
+      ml_app: mlApp
     }
 
     if (tags) {
