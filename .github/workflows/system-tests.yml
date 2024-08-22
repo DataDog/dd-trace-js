@@ -18,13 +18,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: dd-trace-js
+      - name: Pack dd-trace-js
+        run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: system_tests_binaries
-          path: |
-            .
-            !dd-trace-js/.git/**
+          path: ./binaries/**/*
 
   get-essential-scenarios:
     runs-on: ubuntu-latest
