@@ -11,7 +11,8 @@ const log = require('../log')
 const { enable: fsPluginEnable, disable: fsPluginDisable } = require('./fs-plugin')
 
 const RULE_TYPES = {
-  SSRF: 'ssrf'
+  SSRF: 'ssrf',
+  LFI: 'lfi'
 }
 
 class DatadogRaspAbortError extends Error {
@@ -154,9 +155,14 @@ function analyzeLfi (ctx) {
   // NOTE 1: only analyze root fs.operations and not excluded (if response is not rendering)
   // NOTE 2: only call waf if it is an absolute path or it contains ../ in the path
   if (fs.root && !fs.opExcluded) {
-    console.log('ANALYZE LFI', ctx.operation, ctx)
-
     // TODO should we use a lfi analysis by req?
+    const persistent = {
+      [addresses.FS_OPERATION_PATH]: path
+    }
+
+    const result = waf.run({ persistent }, req, RULE_TYPES.LFI)
+
+    handleResult(result, req, store.res, ctx.abortController)
   }
 }
 
