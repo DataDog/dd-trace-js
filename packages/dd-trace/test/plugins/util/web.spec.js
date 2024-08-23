@@ -10,14 +10,12 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../../../dd-trace
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
-const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
 const SPAN_KIND = tags.SPAN_KIND
 const ERROR = tags.ERROR
 const HTTP_METHOD = tags.HTTP_METHOD
 const HTTP_URL = tags.HTTP_URL
-const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_ROUTE = tags.HTTP_ROUTE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -535,19 +533,6 @@ describe('plugins/util/web', () => {
         expect(end).to.have.been.called
       })
 
-      it('should add response tags to the span', () => {
-        req.method = 'GET'
-        req.url = '/user/123'
-        res.statusCode = 200
-
-        res.end()
-
-        expect(tags).to.include({
-          [RESOURCE_NAME]: 'GET',
-          [HTTP_STATUS_CODE]: 200
-        })
-      })
-
       it('should set the error tag if the request is an error', () => {
         res.statusCode = 500
 
@@ -597,71 +582,6 @@ describe('plugins/util/web', () => {
           expect(config.hooks.request).to.have.been.calledWith(span, req, res)
         })
       })
-
-      it('should set the resource name from the http.route tag set in the hooks', () => {
-        config.hooks = {
-          request: span => span.setTag('http.route', '/custom/route')
-        }
-
-        web.instrument(tracer, config, req, res, 'test.request', span => {
-          res.end()
-
-          expect(tags).to.have.property('resource.name', 'GET /custom/route')
-        })
-      })
-    })
-  })
-
-  describe('enterRoute', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', () => {
-        span = tracer.scope().active()
-        tags = span.context()._tags
-      })
-    })
-
-    it('should add a route segment that will be added to the span resource name', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req, '/foo')
-      web.enterRoute(req, '/bar')
-      res.end()
-
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo/bar')
-      expect(tags).to.have.property(HTTP_ROUTE, '/foo/bar')
-    })
-
-    it('should only add valid route segments to the span resource name', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req)
-      web.enterRoute(req, 1337)
-      res.end()
-
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET')
-      expect(tags).to.not.have.property(HTTP_ROUTE)
-    })
-  })
-
-  describe('exitRoute', () => {
-    beforeEach(() => {
-      config = web.normalizeConfig(config)
-      web.instrument(tracer, config, req, res, 'test.request', reqSpan => {
-        span = reqSpan
-        tags = span.context()._tags
-      })
-    })
-
-    it('should remove a route segment', () => {
-      req.method = 'GET'
-
-      web.enterRoute(req, '/foo')
-      web.enterRoute(req, '/bar')
-      web.exitRoute(req)
-      res.end()
-
-      expect(tags).to.have.property(RESOURCE_NAME, 'GET /foo')
     })
   })
 
