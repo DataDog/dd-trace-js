@@ -4,18 +4,11 @@ const { SPAN_KINDS, PARENT_ID_KEY, PROPAGATED_PARENT_ID_KEY, ML_APP, SESSION_ID 
 const { SPAN_TYPE } = require('../../../../ext/tags')
 
 function validKind (kind) {
-  // cases for invalid kind
-  // 1. kind is not a string
-  // 2. kind is not in SPAN_KINDS
-  if (!SPAN_KINDS.includes(kind)) {
-    return false
-  }
-
-  return true
+  return SPAN_KINDS.includes(kind)
 }
 
-function getName (kind, options = {}, fn = () => {}) {
-  return options.name || fn.name || kind
+function getName (kind, options = {}, fn) {
+  return options.name || fn?.name || kind
 }
 
 function nearestLLMObsAncestor (span) {
@@ -52,7 +45,7 @@ function getMlApp (span, defaultMlApp) {
   const nearest = nearestLLMObsAncestor(span)
   if (nearest) return nearest.context()._tags[ML_APP]
 
-  return mlApp || defaultMlApp || 'unknown-ml-app'
+  return defaultMlApp || 'unknown-ml-app'
 }
 
 function getSessionId (span) {
