@@ -1,7 +1,8 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:hapi:request:handle')
 const routeChannel = channel('apm:hapi:request:route')
