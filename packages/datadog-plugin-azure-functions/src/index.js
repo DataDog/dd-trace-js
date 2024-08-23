@@ -40,8 +40,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     const span = ctx.currentStore.span
-    console.log('async end')
     span.finish()
+    console.log('async end')
   }
 }
 
