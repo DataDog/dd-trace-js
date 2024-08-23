@@ -109,8 +109,7 @@ class AgentExporter {
         profiler: {
           activation: this._activation,
           ssi: {
-            enabled: this._libraryInjected,
-            mechanism: this._libraryInjected ? 'injected_agent' : undefined
+            mechanism: this._libraryInjected ? 'injected_agent' : 'none'
           },
           version
         },

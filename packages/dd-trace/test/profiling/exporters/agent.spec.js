@@ -118,7 +118,7 @@ describe('exporters/agent', function () {
     expect(Object.keys(event.info.profiler)).to.have.length(3)
     expect(event.info.profiler).to.have.property('activation', 'unknown')
     expect(event.info.profiler).to.have.property('ssi')
-    expect(event.info.profiler.ssi).to.have.property('enabled', false)
+    expect(event.info.profiler.ssi).to.have.property('mechanism', 'none')
     expect(event.info.profiler).to.have.property('version', version)
     expect(event.info).to.have.property('runtime')
     expect(Object.keys(event.info.runtime)).to.have.length(2)

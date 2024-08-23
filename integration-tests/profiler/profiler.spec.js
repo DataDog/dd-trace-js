@@ -41,11 +41,7 @@ function expectProfileMessagePromise (agent, timeout,
       event = JSON.parse(files[0].buffer.toString())
       assert.propertyVal(event, 'family', 'node')
       assert.isString(event.info.profiler.activation)
-      const ssiEnabled = event.info.profiler.ssi.enabled
-      assert.isBoolean(ssiEnabled)
-      if (ssiEnabled) {
-        assert.isString(event.info.profiler.ssi.mechanism)
-      }
+      assert.isString(event.info.profiler.ssi.mechanism)
       assert.deepPropertyVal(event, 'attachments', fileNames)
       for (const [index, fileName] of fileNames.entries()) {
         assert.propertyVal(files[index + 1], 'originalname', fileName)
