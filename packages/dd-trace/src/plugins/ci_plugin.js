@@ -1,5 +1,6 @@
 const {
   getTestEnvironmentMetadata,
+  getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
   getTestCommonTags,
@@ -13,6 +14,7 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
@@ -75,10 +77,13 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
+      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
           [COMPONENT]: this.constructor.id,
+          [TEST_SESSION_NAME]: testSessionName,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
