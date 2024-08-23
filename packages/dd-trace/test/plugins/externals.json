@@ -47,6 +47,28 @@
       "versions": [">=3"]
     }
   ],
+  "azure-functions": [
+    {
+      "name": "azure-functions-core-tools",
+      "versions": [">=4.0.0"]
+    },
+    {
+      "name": "child_process",
+      "versions": ["^1.0.2"]
+    },
+    {
+      "name": "cross-spawn",
+      "versions": ["^7.0.3"]
+    },
+    {
+      "name": "tree-kill",
+      "versions": ["1.2.2"]
+    },
+    {
+      "name": "wait-on",
+      "versions": ["^7.2.0"]
+    }
+  ],
   "cypress": [
     {
       "name": "cypress",

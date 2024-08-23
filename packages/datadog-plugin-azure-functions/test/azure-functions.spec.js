@@ -4,10 +4,11 @@ const spawn = require('cross-spawn')
 const waitOn = require('wait-on')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
-describe('azure-functions testsing', () => {
-  withVersions('azure-functions', ['@azure/functions'], (version, moduleName) => {
+withVersions('azure-functions', ['@azure/functions'], (version, moduleName) => {
+  describe('azure-functions testsing', () => {
     let child
 
     before(async () => {
@@ -25,8 +26,12 @@ describe('azure-functions testsing', () => {
     after(() => {
       return agent.close({ ritmReset: false })
     })
+
     beforeEach(async () => {
       child = await start(agent.server.address().port)
+      child.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`)
+      })
       child.stderr.on('data', (data) => {
         console.error(`stderr-: ${data}`)
       })
@@ -37,7 +42,8 @@ describe('azure-functions testsing', () => {
     })
 
     afterEach(() => {
-      stopProcess(child)
+      freePort()
+      // stopProcess(child)
     })
 
     it('span generation', async () => {
@@ -67,14 +73,14 @@ async function freePort () {
       'tcp:localhost:7071'
     ],
     reverse: true,
-    timeout: 3000,
+    timeout: 30000,
     log: true
   })
   return port
 }
 
 async function start (port) {
-  const child = spawn('cd packages/datadog-plugin-azure-functions/test && func start', {
+  const child = spawn('cd packages/datadog-plugin-azure-functions/test/fixture && func start', {
     shell: true,
     env: {
       ...process.env,
