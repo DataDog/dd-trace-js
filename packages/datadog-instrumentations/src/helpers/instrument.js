@@ -14,15 +14,6 @@ exports.channel = function (name) {
   return ch
 }
 
-const tracingChannelMap = {}
-exports.tracingChannel = function (name) {
-  const maybe = tracingChannelMap[name]
-  if (maybe) return maybe
-  const ch = dc.tracingChannel(name)
-  tracingChannelMap[name] = ch
-  return ch
-}
-
 /**
  * @param {string} args.name module name
  * @param {string[]} args.versions array of semver range strings
