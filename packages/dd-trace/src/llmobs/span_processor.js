@@ -34,9 +34,11 @@ class LLMObsSpanProcessor {
   constructor (config) {
     this._config = config
     const { llmobs } = config
-    const LLMObsSpanWriter = llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
 
-    this._writer = new LLMObsSpanWriter(config)
+    if (llmobs.enabled) {
+      const LLMObsSpanWriter = llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
+      this._writer = new LLMObsSpanWriter(config)
+    }
   }
 
   process (span, formattedSpan) {
