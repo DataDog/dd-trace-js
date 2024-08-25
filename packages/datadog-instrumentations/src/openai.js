@@ -329,11 +329,6 @@ for (const shim of V4_PACKAGE_SHIMS) {
 
                 throw error
               })
-              .finally(() => {
-              // maybe we don't want to unwrap here in case the promise is re-used?
-              // other hand: we want to avoid resource leakage
-                shimmer.unwrap(apiProm, 'parse')
-              })
           })
 
           return apiProm

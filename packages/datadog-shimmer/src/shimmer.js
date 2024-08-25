@@ -2,9 +2,6 @@
 
 const log = require('../../dd-trace/src/log')
 
-// Use a weak map to avoid polluting the wrapped function/method.
-const unwrappers = new WeakMap()
-
 function copyProperties (original, wrapped) {
   Object.setPrototypeOf(wrapped, original)
 
@@ -25,19 +22,11 @@ function wrapFunction (original, wrapper) {
   // TODO This needs to be re-done so that this and wrapMethod are distinct.
   const target = { func: original }
   wrapMethod(target, 'func', wrapper)
-  let delegate = target.func
+  const delegate = target.func
 
-  const shim = function shim () {
-    return delegate.apply(this, arguments)
-  }
+  copyProperties(original, delegate)
 
-  unwrappers.set(shim, () => {
-    delegate = original
-  })
-
-  copyProperties(original, shim)
-
-  return shim
+  return delegate
 }
 
 const wrapFn = function (original, delegate) {
@@ -181,8 +170,6 @@ function wrapMethod (target, name, wrapper) {
   copyProperties(original, wrapped)
 
   if (descriptor) {
-    unwrappers.set(wrapped, () => Object.defineProperty(target, name, descriptor))
-
     if (descriptor.get || descriptor.set) {
       attributes.get = () => wrapped
     } else {
@@ -196,7 +183,6 @@ function wrapMethod (target, name, wrapper) {
       })
     }
   } else { // no descriptor means original was on the prototype
-    unwrappers.set(wrapped, () => delete target[name])
     attributes.value = wrapped
     attributes.writable = true
   }
@@ -212,18 +198,6 @@ function wrap (target, name, wrapper) {
     : wrapMethod(target, name, wrapper)
 }
 
-function unwrap (target, name) {
-  if (!target) return target // no target to unwrap
-
-  const unwrapper = unwrappers.get(name ? target[name] : target)
-
-  if (!unwrapper) return target // target is already unwrapped or isn't wrapped
-
-  unwrapper()
-
-  return target
-}
-
 function massWrap (targets, names, wrapper) {
   targets = toArray(targets)
   names = toArray(names)
@@ -231,17 +205,6 @@ function massWrap (targets, names, wrapper) {
   for (const target of targets) {
     for (const name of names) {
       wrap(target, name, wrapper)
-    }
-  }
-}
-
-function massUnwrap (targets, names) {
-  targets = toArray(targets)
-  names = toArray(names)
-
-  for (const target of targets) {
-    for (const name of names) {
-      unwrap(target, name)
     }
   }
 }
@@ -288,7 +251,5 @@ module.exports = {
   wrap,
   wrapFunction,
   massWrap,
-  unwrap,
-  massUnwrap,
   setSafe
 }
