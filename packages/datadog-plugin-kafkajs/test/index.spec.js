@@ -29,6 +29,7 @@ const expectedConsumerHash = computePathwayHash(
 describe('Plugin', () => {
   describe('kafkajs', function () {
     // TODO: remove when new internal trace has landed
+    let groupId
     this.timeout(10000)
 
     afterEach(() => {
@@ -40,6 +41,7 @@ describe('Plugin', () => {
       let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
+        groupId = 'test-group-' + Date.now()
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -145,11 +147,11 @@ describe('Plugin', () => {
           )
         })
 
-        describe('consumer', () => {
+        describe('consumer (eachMessage)', () => {
           let consumer
 
           beforeEach(async () => {
-            consumer = kafka.consumer({ groupId: 'test-group' })
+            consumer = kafka.consumer({ groupId })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -342,13 +344,125 @@ describe('Plugin', () => {
           )
         })
 
+        describe('consumer (eachBatch)', () => {
+          let consumer
+
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId })
+            await consumer.subscribe({ topic: testTopic })
+            await consumer.connect()
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+
+          it('should be instrumented', async () => {
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              meta: {
+                'span.kind': 'consumer',
+                component: 'kafkajs'
+              },
+              resource: testTopic,
+              error: 0,
+              type: 'worker'
+            })
+
+            await consumer.run({
+              eachBatch: () => {}
+            })
+            await sendMessages(kafka, testTopic, messages)
+
+            return expectedSpanPromise
+          })
+
+          it('should run the consumer in the context of the consumer span', done => {
+            const firstSpan = tracer.scope().active()
+            let eachBatch = async ({ batch }) => {
+              const currentSpan = tracer.scope().active()
+
+              try {
+                expect(currentSpan).to.not.equal(firstSpan)
+                expect(currentSpan.context()._name).to.equal(expectedSchema.receive.opName)
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                eachBatch = () => {} // avoid being called for each message
+              }
+            }
+
+            consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+              .then(() => sendMessages(kafka, testTopic, messages))
+              .catch(done)
+          })
+
+          it('should propagate context', async () => {
+            const expectedSpanPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.include({
+                name: 'kafka.consume-batch',
+                service: 'test-kafka',
+                resource: testTopic
+              })
+
+              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+            await expectedSpanPromise
+          })
+
+          it('should be instrumented w/ error', async () => {
+            const fakeError = new Error('Oh No!')
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              meta: {
+                [ERROR_TYPE]: fakeError.name,
+                [ERROR_MESSAGE]: fakeError.message,
+                [ERROR_STACK]: fakeError.stack,
+                component: 'kafkajs'
+              },
+              resource: testTopic,
+              error: 1,
+              type: 'worker'
+
+            })
+
+            await consumer.subscribe({ topic: testTopic, fromBeginning: true })
+            await consumer.run({
+              eachBatch: async ({ batch }) => {
+                throw fakeError
+              }
+            })
+            await sendMessages(kafka, testTopic, messages)
+
+            return expectedSpanPromise
+          })
+
+          withNamingSchema(
+            async () => {
+              await consumer.run({ eachBatch: () => {} })
+              await sendMessages(kafka, testTopic, messages)
+            },
+            () => expectedSchema.send.opName,
+            () => expectedSchema.send.serviceName,
+            'test'
+          )
+        })
+
         describe('data stream monitoring', () => {
           let consumer
 
           beforeEach(async () => {
             tracer.init()
             tracer.use('kafkajs', { dsmEnabled: true })
-            consumer = kafka.consumer({ groupId: 'test-group' })
+            consumer = kafka.consumer({ groupId })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -377,7 +491,7 @@ describe('Plugin', () => {
             const expectedConsumerHash = computePathwayHash(
               'test',
               'tester',
-              ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
+              ['direction:in', 'group:' + groupId, 'topic:' + testTopic, 'type:kafka'],
               expectedProducerHash
             )
 
@@ -387,7 +501,7 @@ describe('Plugin', () => {
               expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedProducerHash)
             })
 
-            it('Should set a checkpoint on consume', async () => {
+            it('Should set a checkpoint on consume (eachMessage)', async () => {
               const runArgs = []
               await consumer.run({
                 eachMessage: async () => {
@@ -399,6 +513,17 @@ describe('Plugin', () => {
               for (const runArg of runArgs) {
                 expect(runArg.hash).to.equal(expectedConsumerHash)
               }
+            })
+
+            it('Should set a checkpoint on consume (eachBatch)', async () => {
+              await sendMessages(kafka, testTopic, messages)
+              const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+              await consumer.run({
+                eachBatch: async ({ batch, heartbeat, pause }) => {
+                  expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
+                }
+              })
+              setDataStreamsContextSpy.restore()
             })
 
             it('Should set a message payload size when producing a message', async () => {

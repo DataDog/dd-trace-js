@@ -17,6 +17,10 @@ const consumerCommitCh = channel('apm:kafkajs:consume:commit')
 const consumerFinishCh = channel('apm:kafkajs:consume:finish')
 const consumerErrorCh = channel('apm:kafkajs:consume:error')
 
+const batchConsumerStartCh = channel('apm:kafkajs:consume-batch:start')
+const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
+const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
+
 function commitsFromEvent (event) {
   const { payload: { groupId, topics } } = event
   const commitList = []
@@ -103,39 +107,72 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     const run = consumer.run
 
     const groupId = arguments[0].groupId
-    consumer.run = function ({ eachMessage, ...runArgs }) {
-      if (typeof eachMessage !== 'function') return run({ eachMessage, ...runArgs })
-
+    consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
       return run({
-        eachMessage: function (...eachMessageArgs) {
-          const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-          return innerAsyncResource.runInAsyncScope(() => {
-            const { topic, partition, message } = eachMessageArgs[0]
-            consumerStartCh.publish({ topic, partition, message, groupId })
-            try {
-              const result = eachMessage.apply(this, eachMessageArgs)
-              if (result && typeof result.then === 'function') {
-                result.then(
-                  innerAsyncResource.bind(() => consumerFinishCh.publish(undefined)),
-                  innerAsyncResource.bind(err => {
-                    if (err) {
-                      consumerErrorCh.publish(err)
-                    }
-                    consumerFinishCh.publish(undefined)
-                  })
-                )
-              } else {
-                consumerFinishCh.publish(undefined)
-              }
+        eachMessage: typeof eachMessage === 'function'
+          ? function (...eachMessageArgs) {
+            const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+            return innerAsyncResource.runInAsyncScope(() => {
+              const { topic, partition, message } = eachMessageArgs[0]
+              consumerStartCh.publish({ topic, partition, message, groupId })
+              try {
+                const result = eachMessage.apply(this, eachMessageArgs)
+                if (result && typeof result.then === 'function') {
+                  result.then(
+                    innerAsyncResource.bind(() => consumerFinishCh.publish(undefined)),
+                    innerAsyncResource.bind(err => {
+                      if (err) {
+                        consumerErrorCh.publish(err)
+                      }
+                      consumerFinishCh.publish(undefined)
+                    })
+                  )
+                } else {
+                  consumerFinishCh.publish(undefined)
+                }
 
-              return result
-            } catch (e) {
-              consumerErrorCh.publish(e)
-              consumerFinishCh.publish(undefined)
-              throw e
+                return result
+              } catch (e) {
+                consumerErrorCh.publish(e)
+                consumerFinishCh.publish(undefined)
+                throw e
+              }
+            })
+          }
+          : eachMessage,
+        eachBatch:
+          typeof eachBatch === 'function'
+            ? function (...eachBatchArgs) {
+              const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+              return innerAsyncResource.runInAsyncScope(() => {
+                const { batch } = eachBatchArgs[0]
+                const { topic, partition, messages } = batch
+                batchConsumerStartCh.publish({ topic, partition, messages, groupId })
+                try {
+                  const result = eachBatch.apply(this, eachBatchArgs)
+                  if (result && typeof result.then === 'function') {
+                    result.then(
+                      innerAsyncResource.bind(() => batchConsumerFinishCh.publish()),
+                      innerAsyncResource.bind((err) => {
+                        if (err) {
+                          batchConsumerErrorCh.publish(err)
+                        }
+                        batchConsumerFinishCh.publish()
+                      })
+                    )
+                  } else {
+                    batchConsumerFinishCh.publish()
+                  }
+
+                  return result
+                } catch (error) {
+                  batchConsumerErrorCh.publish(error)
+                  batchConsumerFinishCh.publish()
+                  throw error
+                }
+              })
             }
-          })
-        },
+            : eachBatch,
         ...runArgs
       })
     }
