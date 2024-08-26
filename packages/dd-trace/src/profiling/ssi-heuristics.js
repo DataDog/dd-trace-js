@@ -3,6 +3,7 @@
 const telemetryMetrics = require('../telemetry/metrics')
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 const dc = require('dc-polyfill')
+const log = require('../log')
 
 // If the process lives for at least 30 seconds, it's considered long-lived
 const DEFAULT_LONG_LIVED_THRESHOLD = 30000
@@ -40,9 +41,14 @@ class SSIHeuristics {
 
     const longLivedThreshold = config.profiling.longLivedThreshold || DEFAULT_LONG_LIVED_THRESHOLD
     if (typeof longLivedThreshold !== 'number' || longLivedThreshold <= 0) {
-      throw new Error('Long-lived threshold must be a positive number')
+      this.longLivedThreshold = DEFAULT_LONG_LIVED_THRESHOLD
+      log.warn(
+        `Invalid SSIHeuristics.longLivedThreshold value: ${config.profiling.longLivedThreshold}. ` +
+        `Using default value: ${DEFAULT_LONG_LIVED_THRESHOLD}`
+      )
+    } else {
+      this.longLivedThreshold = longLivedThreshold
     }
-    this.longLivedThreshold = longLivedThreshold
 
     this.hasSentProfiles = false
     this.noSpan = true
@@ -94,6 +100,8 @@ class SSIHeuristics {
         })
         break
       default:
+        // injection hardening: only usage is internal, one call site with
+        // a function and another with undefined, so we can throw here.
         throw new TypeError('callback must be a function or undefined')
     }
   }
