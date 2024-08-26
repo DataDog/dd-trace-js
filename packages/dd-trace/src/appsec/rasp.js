@@ -147,7 +147,7 @@ function analyzeLfi (ctx) {
   const store = storage.getStore()
   if (!store) return
 
-  const { req, fs } = store
+  const { req, fs, res } = store
   const path = ctx?.path
 
   if (!req || !path || !fs) return
@@ -155,14 +155,21 @@ function analyzeLfi (ctx) {
   // NOTE 1: only analyze root fs.operations and not excluded (if response is not rendering)
   // NOTE 2: only call waf if it is an absolute path or it contains ../ in the path
   if (fs.root && !fs.opExcluded) {
-    // TODO should we use a lfi analysis by req?
     const persistent = {
       [addresses.FS_OPERATION_PATH]: path
     }
 
     const result = waf.run({ persistent }, req, RULE_TYPES.LFI)
 
-    handleResult(result, req, store.res, ctx.abortController)
+    if (result) {
+      const abortController = new AbortController()
+      handleResult(result, req, res, abortController)
+
+      const { aborted, reason } = abortController.signal
+      if (aborted) {
+        block(req, res, web.root(req), null, reason.blockingAction)
+      }
+    }
   }
 }
 
