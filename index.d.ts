@@ -2312,10 +2312,25 @@ declare namespace tracer {
     }
 
     interface Document {
+      /**
+       * Document text
+       */
       text?: string,
+
+      /**
+       * Document name
+       */
       name?: string,
+
+      /**
+       * Document ID
+       */
       id?: string,
-      source?: number
+
+      /**
+       * Score of the document retrieval as a source of ground truth
+       */
+      score?: number
     }
 
     /**
