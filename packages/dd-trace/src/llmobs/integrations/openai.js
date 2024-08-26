@@ -2,7 +2,7 @@
 
 const BaseLLMObsIntegration = require('./base')
 
-const { getMlApp, getSessionId } = require('../utils')
+const { getMlApp, getSessionId } = require('../util')
 const {
   MODEL_NAME,
   INPUT_TOKENS_METRIC_KEY,

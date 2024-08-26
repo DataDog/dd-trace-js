@@ -10,7 +10,7 @@ const {
 
 const tracer = require('../../../../')
 const log = require('../log')
-const { isLLMSpan, getLLMObsParentId } = require('./utils')
+const { isLLMSpan, getLLMObsParentId } = require('./util')
 const { PROPAGATED_PARENT_ID_KEY } = require('./constants')
 
 // TODO(sam.brenner) integration enablement can happen here too

@@ -5,7 +5,7 @@ const { URL, format } = require('url')
 
 const logger = require('../../log')
 
-const { encodeUnicode } = require('../utils')
+const { encodeUnicode } = require('../util')
 
 class BaseLLMObsWriter {
   constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port, config }) {

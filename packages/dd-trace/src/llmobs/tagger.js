@@ -28,7 +28,7 @@ const {
   getLLMObsParentId,
   getMlApp,
   getSessionId
-} = require('./utils')
+} = require('./util')
 
 class LLMObsTagger {
   constructor (config) {

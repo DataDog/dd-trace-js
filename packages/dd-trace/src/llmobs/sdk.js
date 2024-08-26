@@ -7,7 +7,7 @@ const {
   getName,
   isLLMSpan,
   getFunctionArguments
-} = require('./utils')
+} = require('./util')
 const { storage } = require('../../../datadog-core')
 const { isTrue } = require('../util')
 

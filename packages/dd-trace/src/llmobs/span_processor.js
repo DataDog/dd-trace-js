@@ -27,7 +27,7 @@ const {
 
 const AgentlessWriter = require('./writers/spans/agentless')
 const AgentProxyWriter = require('./writers/spans/agentProxy')
-const { isLLMSpan } = require('./utils')
+const { isLLMSpan } = require('./util')
 
 const tracerVersion = require('../../../../package.json').version
 
