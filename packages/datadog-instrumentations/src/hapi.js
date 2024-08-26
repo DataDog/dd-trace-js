@@ -1,12 +1,13 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, AsyncResource } = require('./helpers/instrument')
+const { addHook, channel } = require('./helpers/instrument')
 
 const handleChannel = channel('apm:hapi:request:handle')
 const routeChannel = channel('apm:hapi:request:route')
 const errorChannel = channel('apm:hapi:request:error')
-const enterChannel = channel('apm:hapi:extension:enter')
+const hapiTracingChannel = tracingChannel('apm:hapi:extension')
 
 function wrapServer (server) {
   return function (options) {
@@ -96,11 +97,7 @@ function wrapHandler (handler) {
 
     if (!req) return handler.apply(this, arguments)
 
-    const asyncResource = new AsyncResource('bound-anonymous-fn')
-
-    return asyncResource.runInAsyncScope(() => {
-      enterChannel.publish({ req })
-
+    return hapiTracingChannel.traceSync(() => {
       return handler.apply(this, arguments)
     })
   }
