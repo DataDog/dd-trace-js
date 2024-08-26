@@ -1,14 +1,23 @@
-const ConsumerPlugin = require('dd-trace/packages/dd-trace/src/plugins/consumer')
+const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+const { extract } = require('./utils')
 const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
 const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
-  static get operation () {
-    return 'consume-batch'
-  }
+  static get id () { return 'kafkajs' }
+  static get operation () { return 'consume-batch' }
 
   start ({ topic, partition, messages, groupId }) {
+    let childOf
+    for (const message of messages) {
+      childOf = extract(this.tracer, message?.headers)
+      if (childOf._traceId !== null) {
+        break
+      }
+    }
+
     const span = this.startSpan({
+      childOf,
       resource: topic,
       type: 'worker',
       meta: {

@@ -29,7 +29,6 @@ const expectedConsumerHash = computePathwayHash(
 describe('Plugin', () => {
   describe('kafkajs', function () {
     // TODO: remove when new internal trace has landed
-    let groupId
     this.timeout(10000)
 
     afterEach(() => {
@@ -41,7 +40,6 @@ describe('Plugin', () => {
       let Kafka
       describe('without configuration', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
-        groupId = 'test-group-' + Date.now()
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
@@ -151,7 +149,7 @@ describe('Plugin', () => {
           let consumer
 
           beforeEach(async () => {
-            consumer = kafka.consumer({ groupId })
+            consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -348,7 +346,7 @@ describe('Plugin', () => {
           let consumer
 
           beforeEach(async () => {
-            consumer = kafka.consumer({ groupId })
+            consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.subscribe({ topic: testTopic })
             await consumer.connect()
           })
@@ -404,9 +402,12 @@ describe('Plugin', () => {
               const span = traces[0][0]
 
               expect(span).to.include({
-                name: 'kafka.consume-batch',
+                name: 'kafka.consume',
                 service: 'test-kafka',
                 resource: testTopic
+              })
+              expect(span.metrics).to.include({
+                'kafka.batch_size': 1
               })
 
               expect(parseInt(span.parent_id.toString())).to.be.gt(0)
@@ -450,9 +451,7 @@ describe('Plugin', () => {
               await consumer.run({ eachBatch: () => {} })
               await sendMessages(kafka, testTopic, messages)
             },
-            () => expectedSchema.send.opName,
-            () => expectedSchema.send.serviceName,
-            'test'
+            rawExpectedSchema.receive
           )
         })
 
@@ -462,7 +461,7 @@ describe('Plugin', () => {
           beforeEach(async () => {
             tracer.init()
             tracer.use('kafkajs', { dsmEnabled: true })
-            consumer = kafka.consumer({ groupId })
+            consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
           })
@@ -491,7 +490,7 @@ describe('Plugin', () => {
             const expectedConsumerHash = computePathwayHash(
               'test',
               'tester',
-              ['direction:in', 'group:' + groupId, 'topic:' + testTopic, 'type:kafka'],
+              ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka'],
               expectedProducerHash
             )
 
@@ -516,14 +515,17 @@ describe('Plugin', () => {
             })
 
             it('Should set a checkpoint on consume (eachBatch)', async () => {
-              await sendMessages(kafka, testTopic, messages)
-              const setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+              const runArgs = []
               await consumer.run({
-                eachBatch: async ({ batch, heartbeat, pause }) => {
-                  expect(setDataStreamsContextSpy.args[0][0].hash).to.equal(expectedConsumerHash)
+                eachBatch: async () => {
+                  runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
                 }
               })
-              setDataStreamsContextSpy.restore()
+              await sendMessages(kafka, testTopic, messages)
+              await consumer.disconnect()
+              for (const runArg of runArgs) {
+                expect(runArg.hash).to.equal(expectedConsumerHash)
+              }
             })
 
             it('Should set a message payload size when producing a message', async () => {
