@@ -140,7 +140,7 @@ class LLMObs extends NoopLLMObs {
 
       return {
         traceId: span.context().toTraceId(true),
-        spanId: span.context()._spanId.toString()
+        spanId: span.context().toSpanId()
       }
     } catch {
       return undefined // invalid span kind
