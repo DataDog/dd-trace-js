@@ -9,7 +9,7 @@ class LLMObsEvalMetricsWriter extends BaseWriter {
       eventType: 'evaluation_metric'
     })
 
-    this._headers['DD-API-KEY'] = config.apiKey
+    this._headers['DD-API-KEY'] = config.apiKey || config.llmobs.apiKey
   }
 
   makePayload (events) {

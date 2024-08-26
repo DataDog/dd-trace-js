@@ -9,12 +9,8 @@ const { encodeUnicode } = require('../utils')
 
 class BaseLLMObsWriter {
   constructor ({ interval, timeout, endpoint, intake, eventType, protocol, port, config }) {
-    this._site = config.site
-    this._apiKey = config.apiKey
     this._interval = interval || 1000 // 1s
     this._timeout = timeout || 5000 // 5s
-    this._endpoint = endpoint
-    this._intake = intake
     this._eventType = eventType
 
     this._buffer = []
@@ -23,9 +19,9 @@ class BaseLLMObsWriter {
 
     this._url = new URL(format({
       protocol: protocol || 'https:',
-      hostname: this._intake,
+      hostname: intake,
       port: port || 443,
-      pathname: this._endpoint
+      pathname: endpoint
     }))
 
     this._headers = {

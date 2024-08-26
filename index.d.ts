@@ -2384,7 +2384,7 @@ declare namespace tracer {
       spanId: string,
     }
   
-    interface LLMObsSpanOptions extends SpanOptions{
+    interface LLMObsSpanOptions extends SpanOptions {
       /**
        * The name of the traced operation. As a default, the LLM Observability span kind will be used.
        */
@@ -2426,6 +2426,12 @@ declare namespace tracer {
        * Set to `true` to disbale sending data that requires a Datadog Agent.
        */
       agentlessEnabled?: boolean,
+
+      /**
+       * The Datadog API key associated with the site you are using.
+       * It is recommended to set this as an environment variable.
+       */
+      apiKey?: string,
     }
 
     /** @hidden */
