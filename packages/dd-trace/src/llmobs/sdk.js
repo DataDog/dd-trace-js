@@ -41,13 +41,14 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const { mlApp, agentlessEnabled } = options
+    const { mlApp, agentlessEnabled, apiKey } = options
 
     const { DD_LLMOBS_ENABLED } = process.env
 
     const llmobsConfig = {
       mlApp,
-      agentlessEnabled
+      agentlessEnabled,
+      apiKey
     }
 
     const enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
