@@ -180,12 +180,12 @@ function finish (finishCh, errorCh, error) {
 }
 
 function wrapCallback (finishCh, errorCh, asyncResource, callback) {
-  return asyncResource.bind(function (err) {
+  return shimmer.wrapFunction(callback, callback => asyncResource.bind(function (err) {
     finish(finishCh, errorCh, err)
     if (callback) {
       return callback.apply(this, arguments)
     }
-  })
+  }))
 }
 
 function isRequestValid (exec, args, length) {
