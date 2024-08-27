@@ -222,15 +222,12 @@ class EventSerializer {
 }
 
 /**
- * This class generates pprof files with timeline events sourced from Node.js
- * performance measurement APIs.
+ * Class that sources timeline events through Node.js performance measurement APIs.
  */
-class EventsProfiler {
-  constructor (options = {}) {
-    this.type = 'events'
-    this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
+class NodeApiEventSource {
+  constructor (addEventCallback) {
+    this.addEventCallback = addEventCallback
     this._observer = undefined
-    this.eventSerializer = new EventSerializer()
   }
 
   start () {
@@ -239,9 +236,10 @@ class EventsProfiler {
 
     function add (items) {
       for (const item of items.getEntries()) {
-        this.eventSerializer.addEvent(item)
+        this.addEventCallback(item)
       }
     }
+
     this._observer = new PerformanceObserver(add.bind(this))
     this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
   }
@@ -251,6 +249,30 @@ class EventsProfiler {
       this._observer.disconnect()
       this._observer = undefined
     }
+  }
+}
+
+/**
+ * This class generates pprof files with timeline events. It combines an event
+ * source with an event serializer.
+ */
+class EventsProfiler {
+  constructor (options = {}) {
+    this.type = 'events'
+    this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
+    this.eventSerializer = new EventSerializer()
+
+    const eventHandler = event => this.eventSerializer.addEvent(event)
+
+    this._eventSource = new NodeApiEventSource(eventHandler)
+  }
+
+  start () {
+    this._eventSource.start()
+  }
+
+  stop () {
+    this._eventSource.stop()
   }
 
   profile (restart, startDate, endDate) {
