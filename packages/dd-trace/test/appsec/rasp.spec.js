@@ -199,8 +199,17 @@ describe('RASP', () => {
       sinon.assert.notCalled(waf.run)
     })
 
+    it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
+      const fs = undefined
+      datadogCore.storage.getStore.returns({ req, fs })
+
+      fsOperationStart.publish(ctx)
+
+      sinon.assert.notCalled(waf.run)
+    })
+
     it('should NOT analyze lfi for excluded operations', () => {
-      const fs = { opExcluded: true }
+      const fs = { opExcluded: true, root: true }
       datadogCore.storage.getStore.returns({ req, fs })
 
       fsOperationStart.publish(ctx)

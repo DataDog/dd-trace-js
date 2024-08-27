@@ -46,7 +46,6 @@ class AppsecFsPlugin extends Plugin {
   _onFsOperationFinishOrRenderEnd () {
     const store = storage.getStore()
     if (store?.fs?.parentStore) {
-      // TODO: could a fs:operation finish a render store?
       storage.enterWith(store.fs.parentStore)
     }
   }

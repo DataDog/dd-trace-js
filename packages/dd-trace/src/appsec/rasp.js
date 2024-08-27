@@ -144,13 +144,14 @@ function analyzeSsrf (ctx) {
 }
 
 function analyzeLfi (ctx) {
+  const path = ctx?.path
+  if (!path) return
+
   const store = storage.getStore()
   if (!store) return
 
   const { req, fs, res } = store
-  const path = ctx?.path
-
-  if (!req || !path || !fs) return
+  if (!req || !fs) return
 
   // NOTE 1: only analyze root fs.operations and not excluded (if response is not rendering)
   // NOTE 2: only call waf if it is an absolute path or it contains ../ in the path
