@@ -1,6 +1,9 @@
 name: All Green
 on:
   pull_request:
+  push:
+    branches:
+      - master
 
 jobs:
 
