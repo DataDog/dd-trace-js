@@ -1,5 +1,5 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
-const { END_TIMESTAMP_LABEL } = require('./shared')
+const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL } = require('./shared')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
 
@@ -161,10 +161,12 @@ class EventSerializer {
     this.locationId = [location.id]
 
     this.timestampLabelKey = this.stringTable.dedup(END_TIMESTAMP_LABEL)
+    this.spanIdKey = this.stringTable.dedup(SPAN_ID_LABEL)
+    this.rootSpanIdKey = this.stringTable.dedup(LOCAL_ROOT_SPAN_ID_LABEL)
   }
 
   addEvent (item) {
-    const { entryType, startTime, duration } = item
+    const { entryType, startTime, duration, _ddSpanId, _ddRootSpanId } = item
     let decorator = this.decorators[entryType]
     if (!decorator) {
       const DecoratorCtor = decoratorTypes[entryType]
@@ -179,13 +181,21 @@ class EventSerializer {
       }
     }
     const endTime = startTime + duration
+    const label = [
+      decorator.eventTypeLabel,
+      new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
+    ]
+    if (_ddSpanId) {
+      label.push(labelFromStr(this.stringTable, this.spanIdKey, _ddSpanId))
+    }
+    if (_ddRootSpanId) {
+      label.push(labelFromStr(this.stringTable, this.rootSpanIdKey, _ddRootSpanId))
+    }
+
     const sampleInput = {
       value: [Math.round(duration * MS_TO_NS)],
       locationId: this.locationId,
-      label: [
-        decorator.eventTypeLabel,
-        new Label({ key: this.timestampLabelKey, num: dateOffset + BigInt(Math.round(endTime * MS_TO_NS)) })
-      ]
+      label
     }
     decorator.decorateSample(sampleInput, item)
     this.samples.push(new Sample(sampleInput))
