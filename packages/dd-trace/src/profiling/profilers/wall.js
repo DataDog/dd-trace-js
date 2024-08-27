@@ -7,7 +7,13 @@ const { HTTP_METHOD, HTTP_ROUTE, RESOURCE_NAME, SPAN_TYPE } = require('../../../
 const { WEB } = require('../../../../../ext/types')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
-const { END_TIMESTAMP_LABEL, getNonJSThreadsLabels, getThreadLabels } = require('./shared')
+const {
+  END_TIMESTAMP_LABEL,
+  SPAN_ID_LABEL,
+  LOCAL_ROOT_SPAN_ID_LABEL,
+  getNonJSThreadsLabels,
+  getThreadLabels
+} = require('./shared')
 
 const beforeCh = dc.channel('dd-trace:storage:before')
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -275,10 +281,10 @@ class NativeWallProfiler {
     }
 
     if (spanId) {
-      labels['span id'] = spanId
+      labels[SPAN_ID_LABEL] = spanId
     }
     if (rootSpanId) {
-      labels['local root span id'] = rootSpanId
+      labels[LOCAL_ROOT_SPAN_ID_LABEL] = rootSpanId
     }
     if (webTags && Object.keys(webTags).length !== 0) {
       labels['trace endpoint'] = endpointNameFromTags(webTags)
