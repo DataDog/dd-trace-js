@@ -1,11 +1,7 @@
 const { performance, constants, PerformanceObserver } = require('perf_hooks')
 const { END_TIMESTAMP_LABEL } = require('./shared')
-const semver = require('semver')
 const { Function, Label, Line, Location, Profile, Sample, StringTable, ValueType } = require('pprof-format')
 const pprof = require('@datadog/pprof/')
-
-// Format of perf_hooks events changed with Node 16, we need to be mindful of it.
-const node16 = semver.gte(process.version, '16.0.0')
 
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1000000
@@ -48,7 +44,7 @@ class GCDecorator {
   }
 
   decorateSample (sampleInput, item) {
-    const { kind, flags } = node16 ? item.detail : item
+    const { kind, flags } = item.detail
     sampleInput.label.push(this.kindLabels[kind])
     const reasonLabel = this.getReasonLabel(flags)
     if (reasonLabel) {
@@ -140,12 +136,9 @@ class NetDecorator {
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
-  gc: GCDecorator
-}
-// Needs at least node 16 for DNS and Net
-if (node16) {
-  decoratorTypes.dns = DNSDecorator
-  decoratorTypes.net = NetDecorator
+  gc: GCDecorator,
+  dns: DNSDecorator,
+  net: NetDecorator
 }
 
 // Translates performance entries into pprof samples.
