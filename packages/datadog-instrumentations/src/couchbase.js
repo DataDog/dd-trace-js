@@ -76,13 +76,13 @@ function wrap (prefix, fn) {
 
       startCh.publish({ bucket: { name: this.name || this._name }, seedNodes: this._dd_hosts })
 
-      arguments[callbackIndex] = asyncResource.bind(function (error, result) {
+      arguments[callbackIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
         if (error) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
         return cb.apply(this, arguments)
-      })
+      }))
 
       try {
         return fn.apply(this, arguments)
@@ -118,13 +118,13 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
         // v3 offers callback or promises event handling
         // NOTE: this does not work with v3.2.0-3.2.1 cluster.query, as there is a bug in the couchbase source code
         const cb = callbackResource.bind(args[cbIndex])
-        args[cbIndex] = asyncResource.bind(function (error, result) {
+        args[cbIndex] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
           if (error) {
             errorCh.publish(error)
           }
           finishCh.publish({ result })
           return cb.apply(thisArg, arguments)
-        })
+        }))
       }
       const res = fn.apply(thisArg, args)
 

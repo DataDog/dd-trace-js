@@ -58,7 +58,7 @@ addHook({ name: names }, (net, version, name) => {
       }
 
       const emit = this.emit
-      this.emit = function (eventName) {
+      this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
@@ -68,7 +68,7 @@ addHook({ name: names }, (net, version, name) => {
           default:
             return emit.apply(this, arguments)
         }
-      }
+      })
 
       try {
         return connect.apply(this, arguments)

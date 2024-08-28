@@ -188,7 +188,7 @@ function wrapRun (pl, isLatestVersion) {
       testStartCh.publish(testStartPayload)
     })
     try {
-      this.eventBroadcaster.on('envelope', (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -206,7 +206,7 @@ function wrapRun (pl, isLatestVersion) {
             })
           }
         }
-      })
+      }))
       let promise
 
       asyncResource.runInAsyncScope(() => {

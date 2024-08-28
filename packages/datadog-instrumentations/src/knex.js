@@ -81,8 +81,8 @@ addHook({
 function wrapCallbackWithFinish (callback, finish) {
   if (typeof callback !== 'function') return callback
 
-  return function () {
+  return shimmer.wrapFunction(callback, callback => function () {
     finish()
     callback.apply(this, arguments)
-  }
+  })
 }

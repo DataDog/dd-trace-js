@@ -128,22 +128,21 @@ addHook({
                     const resolve = arguments[0]
                     const reject = arguments[1]
 
-                    // not using shimmer here because resolve/reject could be empty
-                    arguments[0] = function wrappedResolve () {
+                    arguments[0] = shimmer.wrapFunction(resolve, resolve => function wrappedResolve () {
                       finish()
 
                       if (resolve) {
                         return resolve.apply(this, arguments)
                       }
-                    }
+                    })
 
-                    arguments[1] = function wrappedReject () {
+                    arguments[1] = shimmer.wrapFunction(reject, reject => function wrappedReject () {
                       finish()
 
                       if (reject) {
                         return reject.apply(this, arguments)
                       }
-                    }
+                    })
 
                     return originalThen.apply(this, arguments)
                   }
