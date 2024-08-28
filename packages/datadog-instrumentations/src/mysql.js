@@ -37,14 +37,14 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
 
         if (res._callback) {
           const cb = callbackResource.bind(res._callback)
-          res._callback = asyncResource.bind(function (error, result) {
+          res._callback = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
             if (error) {
               errorCh.publish(error)
             }
             finishCh.publish(result)
 
             return cb.apply(this, arguments)
-          })
+          }))
         } else {
           const cb = asyncResource.bind(function () {
             finishCh.publish(undefined)

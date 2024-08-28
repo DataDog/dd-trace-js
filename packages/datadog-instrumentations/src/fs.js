@@ -271,7 +271,7 @@ function createWrapFunction (prefix = '', override = '') {
       if (cb) {
         const outerResource = new AsyncResource('bound-anonymous-fn')
 
-        arguments[lastIndex] = innerResource.bind(function (e) {
+        arguments[lastIndex] = shimmer.wrapFunction(cb, cb => innerResource.bind(function (e) {
           if (e !== null && typeof e === 'object') { // fs.exists receives a boolean
             errorChannel.publish(e)
           }
@@ -279,7 +279,7 @@ function createWrapFunction (prefix = '', override = '') {
           finishChannel.publish()
 
           return outerResource.runInAsyncScope(() => cb.apply(this, arguments))
-        })
+        }))
       }
 
       return innerResource.runInAsyncScope(() => {

@@ -89,7 +89,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapNext (req, next) {
-    return function (error) {
+    return shimmer.wrapFunction(next, next => function (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -98,7 +98,7 @@ function createWrapRouterMethod (name) {
       finishChannel.publish({ req })
 
       next.apply(this, arguments)
-    }
+    })
   }
 
   function extractMatchers (fn) {
@@ -151,7 +151,7 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return function methodWithTrace (fn) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (fn) {
       const offset = this.stack ? [].concat(this.stack).length : 0
       const router = original.apply(this, arguments)
 
@@ -162,7 +162,7 @@ function createWrapRouterMethod (name) {
       wrapStack(this.stack, offset, extractMatchers(fn))
 
       return router
-    }
+    })
   }
 
   return wrapMethod
