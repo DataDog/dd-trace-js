@@ -48,8 +48,8 @@ class LLMObsTagger {
     if (modelName) span.setTag(MODEL_NAME, modelName)
     if (modelProvider) span.setTag(MODEL_PROVIDER, modelProvider)
 
-    if (!sessionId) sessionId = getSessionId(span)
-    span.setTag(SESSION_ID, sessionId)
+    sessionId = sessionId || getSessionId(span)
+    if (sessionId) span.setTag(SESSION_ID, sessionId)
 
     if (!mlApp) mlApp = getMlApp(span, this._config.llmobs.mlApp)
     span.setTag(ML_APP, mlApp)

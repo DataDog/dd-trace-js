@@ -103,11 +103,10 @@ class LLMObsSpanProcessor {
 
     const name = tags[NAME] || span._name
 
-    return {
+    const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
       span_id: span.context().toSpanId(),
       parent_id: parentId,
-      session_id: sessionId,
       name,
       tags: this._processTags(span, mlApp, sessionId),
       start_ns: span._startTime * 1e6,
@@ -116,6 +115,10 @@ class LLMObsSpanProcessor {
       meta,
       metrics
     }
+
+    if (sessionId) llmObsSpanEvent.session_id = sessionId
+
+    return llmObsSpanEvent
   }
 
   _processTags (span, mlApp, sessionId) {
@@ -125,13 +128,13 @@ class LLMObsSpanProcessor {
       service: this._config.service,
       source: 'integration',
       ml_app: mlApp,
-      session_id: sessionId,
       'dd-trace.version': tracerVersion,
       error: span.error,
       language: 'javascript'
     }
     const errType = span.context()._tags[ERROR_TYPE]
     if (errType) tags.error_type = errType
+    if (sessionId) tags.session_id = sessionId
     const existingTags = JSON.parse(tags[TAGS] || '{}')
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value}`)

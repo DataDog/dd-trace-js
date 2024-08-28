@@ -55,7 +55,7 @@ function getSessionId (span) {
   const nearest = nearestLLMObsAncestor(span)
   if (nearest) sessionId = nearest.context()._tags[SESSION_ID]
 
-  return sessionId || span.context().toTraceId(true)
+  return sessionId
 }
 
 // This takes about 1.3 ms for every 30k characters
