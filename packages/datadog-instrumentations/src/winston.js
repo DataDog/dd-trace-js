@@ -42,13 +42,12 @@ function wrapMethod (method, logCh) {
 
         if (patched.has(transport) || typeof transport.log !== 'function') continue
 
-        const log = transport.log
-        transport.log = function wrappedLog (level, msg, meta, callback) {
+        shimmer.wrap(transport, 'log', log => function wrappedLog (level, msg, meta, callback) {
           const payload = { message: meta || {} }
           logCh.publish(payload)
           arguments[2] = payload.message
           log.apply(this, arguments)
-        }
+        })
         patched.add(transport)
       }
     }
