@@ -209,13 +209,15 @@ function buildExpressServer (agent) {
 
     // The real response object also contains a `roots` property which has been omitted here since it's not currently
     // used by the Node.js tracer.
-    // TODO: What does the real agent do if there's nothing to return? Does it just return empty arrays and objects
-    // like we do here, or do we need to change the algorithm to align?
-    res.json({
-      targets: base64(targets),
-      target_files: targetFiles,
-      client_configs: clientConfigs
-    })
+    res.json(
+      clientConfigs.length === 0
+        ? {}
+        : {
+            targets: targets.signed.targets.length === 0 ? '' : base64(targets),
+            target_files: targetFiles,
+            client_configs: clientConfigs
+          }
+    )
   })
 
   app.post('/profiling/v1/input', upload.any(), (req, res) => {
