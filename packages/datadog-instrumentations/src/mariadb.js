@@ -11,7 +11,7 @@ const skipCh = channel('apm:mariadb:pool:skip')
 const unskipCh = channel('apm:mariadb:pool:unskip')
 
 function wrapCommandStart (start, callbackResource) {
-  return function () {
+  return shimmer.wrapFunction(start, start => function () {
     if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
     const resolve = callbackResource.bind(this.resolve)
@@ -44,7 +44,7 @@ function wrapCommandStart (start, callbackResource) {
       startCh.publish({ sql: this.sql, conf: this.opts })
       return start.apply(this, arguments)
     })
-  }
+  })
 }
 
 function wrapCommand (Command) {
@@ -98,7 +98,7 @@ function createWrapQueryCallback (options) {
         arguments.length = arguments.length + 1
       }
 
-      arguments[arguments.length - 1] = asyncResource.bind(function (err) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (err) {
         if (err) {
           errorCh.publish(err)
         }
@@ -108,7 +108,7 @@ function createWrapQueryCallback (options) {
         if (typeof cb === 'function') {
           return callbackResource.runInAsyncScope(() => cb.apply(this, arguments))
         }
-      })
+      }))
 
       return asyncResource.runInAsyncScope(() => {
         startCh.publish({ sql, conf: options })

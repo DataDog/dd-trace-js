@@ -49,7 +49,7 @@ addHook({ name: 'express', versions: ['>=4'] }, express => {
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return function () {
+  return shimmer.wrapFunction(next, next => function () {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -60,7 +60,7 @@ function publishQueryParsedAndNext (req, res, next) {
     }
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({
