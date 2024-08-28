@@ -13,7 +13,8 @@ module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
     this.port = port
-    this._rc_files = {}
+    this._rcFiles = {}
+    this._rcTargetsVersion = 0
   }
 
   async start () {
@@ -60,7 +61,8 @@ module.exports = class FakeAgent extends EventEmitter {
       length: config.config.length
     }
 
-    this._rc_files[config.id] = config
+    this._rcFiles[config.id] = config
+    this._rcTargetsVersion++
   }
 
   /**
@@ -71,7 +73,7 @@ module.exports = class FakeAgent extends EventEmitter {
   updateRemoteConfig (id, config) {
     config = JSON.stringify(config)
     config = Object.assign(
-      this._rc_files[id],
+      this._rcFiles[id],
       {
         config,
         fileHash: createHash('sha256').update(config).digest('hex')
@@ -80,6 +82,7 @@ module.exports = class FakeAgent extends EventEmitter {
     config.meta.custom.v++
     config.meta.hashes.sha256 = config.fileHash
     config.meta.length = config.config.length
+    this._rcTargetsVersion++
   }
 
   /**
@@ -87,14 +90,16 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {string} id - The ID of the config object that should be removed
    */
   removeRemoteConfig (id) {
-    delete this._rc_files[id]
+    delete this._rcFiles[id]
+    this._rcTargetsVersion++
   }
 
   /**
    * Remove any existing config added by calls to FakeAgent#addRemoteConfig.
    */
   resetRemoteConfig () {
-    this._rc_files = {}
+    this._rcFiles = {}
+    this._rcTargetsVersion++
   }
 
   // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
@@ -206,30 +211,25 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
-    const numberOfFiles = Object.keys(agent._rc_files).length
-    let cachedFilesWithoutChanges = 0
-
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
     }
 
-    for (const { id, version, apply_error: error } of state.config_states) {
-      if (id in agent._rc_files && agent._rc_files[id].meta.custom.v === version) cachedFilesWithoutChanges++
+    for (const { apply_error: error } of state.config_states) {
       if (error) {
         // Print the error sent by the client in case it's useful in debugging tests
         console.error(error) // eslint-disable-line no-console
       }
     }
 
-    if (cachedFilesWithoutChanges === numberOfFiles) {
-      // If the files cached by the client matches the files known by the agent exactly and there hasn't been any
-      // updates to them since the last time the client asked, just return an empty result.
+    if (agent._rcTargetsVersion === state.targets_version) {
+      // If the state hasn't changed since the last time the client asked, hyst return an empty result
       res.json({})
       return
     }
 
-    if (numberOfFiles === 0) {
+    if (Object.keys(agent._rcFiles).length === 0) {
       // All config files have been removed, but the client has not yet been informed.
       // Return this custom result to let the client know.
       res.json({ client_configs: [] })
@@ -242,13 +242,13 @@ function buildExpressServer (agent) {
       signed: {
         custom: { opaque_backend_state: 'foo' },
         targets: {},
-        version: 12345
+        version: agent._rcTargetsVersion
       }
     }
     const targetFiles = []
     const clientConfigs = []
 
-    const files = Object.values(agent._rc_files).filter(({ product }) => products.includes(product))
+    const files = Object.values(agent._rcFiles).filter(({ product }) => products.includes(product))
 
     for (const { path, fileHash, meta, config } of files) {
       clientConfigs.push(path)
