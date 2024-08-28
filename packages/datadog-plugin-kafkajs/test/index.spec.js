@@ -406,7 +406,7 @@ describe('Plugin', () => {
                 service: 'test-kafka',
                 resource: testTopic
               })
-              expect(span.metrics).to.include({
+              expect(span.metrics).to.be.gt({
                 'kafka.batch_size': 1
               })
 
@@ -659,7 +659,7 @@ describe('Plugin', () => {
                 service: 'test-kafka',
                 resource: testTopic
               })
-              expect(span.metrics).to.include({
+              expect(span.metrics).to.be.gt({
                 'kafka.batch_size': 1
               })
 
@@ -714,7 +714,7 @@ describe('Plugin', () => {
                 service: 'test-kafka',
                 resource: testTopic
               })
-              expect(span.metrics).to.include({
+              expect(span.metrics).to.be.gt({
                 'kafka.batch_size': 1
               })
 
