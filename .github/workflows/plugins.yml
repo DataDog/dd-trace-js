@@ -649,7 +649,6 @@ jobs:
         version:
           - 18
           - 22.6
-        range: ['9.5.0', '11.1.4', '13.2.0', '*']
     runs-on: ubuntu-latest
     env:
       PLUGINS: next
