@@ -168,9 +168,21 @@ function buildExpressServer (agent) {
 
   app.post('/v0.7/config', (req, res) => {
     const {
-      client: { products },
+      client: { products, state },
       cached_target_files: cachedTargetFiles
     } = req.body
+
+    if (state.has_error) {
+      // Print the error sent by the client in case it's useful in debugging tests
+      console.error(state.error) // eslint-disable-line no-console
+    }
+
+    for (const { apply_error: error } of state.config_states) {
+      if (error) {
+        // Print the error sent by the client in case it's useful in debugging tests
+        console.error(error) // eslint-disable-line no-console
+      }
+    }
 
     // The actual targets object is much more complicated,
     // but the Node.js tracer currently only cares about the following properties.
