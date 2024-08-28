@@ -2,17 +2,26 @@ const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { extract } = require('./utils')
 const { getMessageSize } = require('../../dd-trace/src/datastreams/processor')
 const { DsmPathwayCodec } = require('../../dd-trace/src/datastreams/pathway')
+const { isTrue } = require('../../dd-trace/src/util')
+const coalesce = require('koalas')
 
 class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get id () { return 'kafkajs' }
   static get operation () { return 'consume-batch' }
 
+  configure (config) {
+    super.configure(coalesceConfiguration(config, this.serviceIdentifier))
+  }
+
   start ({ topic, partition, messages, groupId }) {
     let childOf
-    for (const message of messages) {
-      childOf = extract(this.tracer, message?.headers)
-      if (childOf._traceId !== null) {
-        break
+    if (this.config.batchedParentPropagationEnabled) {
+      for (const message of messages) {
+        // find the first valid context and use this as this span's parent
+        childOf = extract(this.tracer, message?.headers)
+        if (childOf._traceId !== null) {
+          break
+        }
       }
     }
 
@@ -43,6 +52,19 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       }
     }
   }
+}
+
+function coalesceConfiguration (config) {
+  // check if batch propagation is enabled via env variable
+  config.batchedParentPropagationEnabled = isTrue(
+    coalesce(
+      process.env.DD_TRACE_KAFKAJS_BATCHED_PARENT_PROPAGATION_ENABLED,
+      config.batchedParentPropagationEnabled,
+      false
+    )
+  )
+
+  return config
 }
 
 module.exports = KafkajsBatchConsumerPlugin

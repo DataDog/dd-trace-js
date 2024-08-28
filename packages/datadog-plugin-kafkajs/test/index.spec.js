@@ -397,7 +397,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          it('should propagate context', async () => {
+          it('should not propagate context by default', async () => {
             const expectedSpanPromise = agent.use(traces => {
               const span = traces[0][0]
 
@@ -410,7 +410,7 @@ describe('Plugin', () => {
                 'kafka.batch_size': 1
               })
 
-              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+              expect(parseInt(span.parent_id.toString())).to.equal(0)
             })
 
             await consumer.run({ eachBatch: () => {} })
@@ -616,6 +616,114 @@ describe('Plugin', () => {
               const { topic } = setOffsetSpy.lastCall.args[0]
               expect(topic).to.equal(testTopic)
             })
+          })
+        })
+      })
+
+      describe('with api configuration', () => {
+        const messages = [{ key: 'key1', value: 'test2' }]
+
+        beforeEach(async () => {
+          tracer = require('../../dd-trace').init({
+            kafkajs: { batchedParentPropagationEnabled: true }
+          })
+          await agent.load('kafkajs', { batchedParentPropagationEnabled: true })
+          const lib = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = lib.Kafka
+          kafka = new Kafka({
+            clientId: `kafkajs-test-${version}`,
+            brokers: ['127.0.0.1:9092'],
+            logLevel: lib.logLevel.WARN
+          })
+        })
+
+        describe('consumer (eachBatch)', () => {
+          let consumer
+
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.subscribe({ topic: testTopic })
+            await consumer.connect()
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+
+          it('should propagate context when configured', async () => {
+            const expectedSpanPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.include({
+                name: 'kafka.consume',
+                service: 'test-kafka',
+                resource: testTopic
+              })
+              expect(span.metrics).to.include({
+                'kafka.batch_size': 1
+              })
+
+              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+            await expectedSpanPromise
+          })
+        })
+      })
+      describe('with env variable configuration', () => {
+        const messages = [{ key: 'key1', value: 'test2' }]
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_KAFKAJS_BATCHED_PARENT_PROPAGATION_ENABLED = 'true'
+          tracer = require('../../dd-trace').init()
+          await agent.load('kafkajs')
+          const lib = require(`../../../versions/kafkajs@${version}`).get()
+          Kafka = lib.Kafka
+          kafka = new Kafka({
+            clientId: `kafkajs-test-${version}`,
+            brokers: ['127.0.0.1:9092'],
+            logLevel: lib.logLevel.WARN
+          })
+        })
+
+        afterEach(() => {
+          process.env.DD_TRACE_KAFKAJS_BATCHED_PARENT_PROPAGATION_ENABLED = 'false'
+        })
+
+        describe('consumer (eachBatch)', () => {
+          let consumer
+
+          beforeEach(async () => {
+            consumer = kafka.consumer({ groupId: 'test-group' })
+            await consumer.subscribe({ topic: testTopic })
+            await consumer.connect()
+          })
+
+          afterEach(async () => {
+            await consumer.disconnect()
+          })
+
+          it('should propagate context when configured', async () => {
+            const expectedSpanPromise = agent.use(traces => {
+              const span = traces[0][0]
+
+              expect(span).to.include({
+                name: 'kafka.consume',
+                service: 'test-kafka',
+                resource: testTopic
+              })
+              expect(span.metrics).to.include({
+                'kafka.batch_size': 1
+              })
+
+              expect(parseInt(span.parent_id.toString())).to.be.gt(0)
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            await sendMessages(kafka, testTopic, messages)
+            await expectedSpanPromise
           })
         })
       })
