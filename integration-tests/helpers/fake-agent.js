@@ -224,7 +224,7 @@ function buildExpressServer (agent) {
     }
 
     if (agent._rcTargetsVersion === state.targets_version) {
-      // If the state hasn't changed since the last time the client asked, hyst return an empty result
+      // If the state hasn't changed since the last time the client asked, just return an empty result
       res.json({})
       return
     }
