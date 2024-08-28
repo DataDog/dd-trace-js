@@ -13,7 +13,7 @@ module.exports = class FakeAgent extends EventEmitter {
   constructor (port = 0) {
     super()
     this.port = port
-    this._rc_files = []
+    this._rc_files = {}
   }
 
   async start () {
@@ -39,13 +39,6 @@ module.exports = class FakeAgent extends EventEmitter {
   }
 
   /**
-   * Remove any existing config added by calls to FakeAgent#addRemoteConfig.
-   */
-  resetRemoteConfig () {
-    this._rc_files = []
-  }
-
-  /**
    * Add a config object to be returned by the fake Remote Config endpoint.
    * @param {Object} config - Object containing the Remote Config "file" and metadata
    * @param {number} [config.orgId=2] - The Datadog organization ID
@@ -59,8 +52,49 @@ module.exports = class FakeAgent extends EventEmitter {
     config.orgId = config.orgId || 2
     config.name = config.name || createHash('sha256').update(config.id).digest('hex')
     config.config = JSON.stringify(config.config)
+    config.path = `datadog/${config.orgId}/${config.product}/${config.id}/${config.name}`
+    config.fileHash = createHash('sha256').update(config.config).digest('hex')
+    config.meta = {
+      custom: { v: 1 },
+      hashes: { sha256: config.fileHash },
+      length: config.config.length
+    }
 
-    this._rc_files.push(config)
+    this._rc_files[config.id] = config
+  }
+
+  /**
+   * Update an existing config object
+   * @param {string} id - The Remote Config config ID
+   * @param {Object} config - The Remote Config "file" object
+   */
+  updateRemoteConfig (id, config) {
+    config = JSON.stringify(config)
+    config = Object.assign(
+      this._rc_files[id],
+      {
+        config,
+        fileHash: createHash('sha256').update(config).digest('hex')
+      }
+    )
+    config.meta.custom.v++
+    config.meta.hashes.sha256 = config.fileHash
+    config.meta.length = config.config.length
+  }
+
+  /**
+   * Remove a specific config object
+   * @param {string} id - The ID of the config object that should be removed
+   */
+  removeRemoteConfig (id) {
+    delete this._rc_files[id]
+  }
+
+  /**
+   * Remove any existing config added by calls to FakeAgent#addRemoteConfig.
+   */
+  resetRemoteConfig () {
+    this._rc_files = {}
   }
 
   // **resolveAtFirstSuccess** - specific use case for Next.js (or any other future libraries)
@@ -172,16 +206,34 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
+    const numberOfFiles = Object.keys(agent._rc_files).length
+    let cachedFilesWithoutChanges = 0
+
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
       console.error(state.error) // eslint-disable-line no-console
     }
 
-    for (const { apply_error: error } of state.config_states) {
+    for (const { id, version, apply_error: error } of state.config_states) {
+      if (id in agent._rc_files && agent._rc_files[id].meta.custom.v === version) cachedFilesWithoutChanges++
       if (error) {
         // Print the error sent by the client in case it's useful in debugging tests
         console.error(error) // eslint-disable-line no-console
       }
+    }
+
+    if (cachedFilesWithoutChanges === numberOfFiles) {
+      // If the files cached by the client matches the files known by the agent exactly and there hasn't been any
+      // updates to them since the last time the client asked, just return an empty result.
+      res.json({})
+      return
+    }
+
+    if (numberOfFiles === 0) {
+      // All config files have been removed, but the client has not yet been informed.
+      // Return this custom result to let the client know.
+      res.json({ client_configs: [] })
+      return
     }
 
     // The actual targets object is much more complicated,
@@ -196,40 +248,28 @@ function buildExpressServer (agent) {
     const targetFiles = []
     const clientConfigs = []
 
-    const files = agent._rc_files.filter(({ product }) => products.includes(product))
+    const files = Object.values(agent._rc_files).filter(({ product }) => products.includes(product))
 
-    for (const { orgId, product, id, name, config } of files) {
-      const path = `datadog/${orgId}/${product}/${id}/${name}`
-      const fileDigest = createHash('sha256').update(config).digest('hex')
+    for (const { path, fileHash, meta, config } of files) {
+      clientConfigs.push(path)
+      targets.signed.targets[path] = meta
 
+      // skip files already cached by the client so we don't send them more than once
       if (cachedTargetFiles.some((cached) =>
         path === cached.path &&
-        fileDigest === cached.hashes.find((e) => e.algorithm === 'sha256').hash
-      )) {
-        continue // skip files already cached by the client so we don't send them more than once
-      }
-
-      targets.signed.targets[path] = {
-        custom: { v: 20 },
-        hashes: { sha256: fileDigest },
-        length: config.length
-      }
+        fileHash === cached.hashes.find((e) => e.algorithm === 'sha256').hash
+      )) continue
 
       targetFiles.push({ path, raw: base64(config) })
-      clientConfigs.push(path)
     }
 
     // The real response object also contains a `roots` property which has been omitted here since it's not currently
     // used by the Node.js tracer.
-    res.json(
-      clientConfigs.length === 0
-        ? {}
-        : {
-            targets: targets.signed.targets.length === 0 ? '' : base64(targets),
-            target_files: targetFiles,
-            client_configs: clientConfigs
-          }
-    )
+    res.json({
+      targets: clientConfigs.length === 0 ? undefined : base64(targets),
+      target_files: targetFiles,
+      client_configs: clientConfigs
+    })
   })
 
   app.post('/profiling/v1/input', upload.any(), (req, res) => {
