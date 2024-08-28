@@ -109,8 +109,8 @@ class LLMObsSpanProcessor {
       parent_id: parentId,
       name,
       tags: this._processTags(span, mlApp, sessionId),
-      start_ns: span._startTime * 1e6,
-      duration: span._duration * 1e6,
+      start_ns: Math.round(span._startTime * 1e6),
+      duration: Math.round(span._duration * 1e6),
       status: tags.error ? 'error' : 'ok',
       meta,
       metrics
