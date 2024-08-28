@@ -34,7 +34,7 @@ function wrapFastify (fastify, hasParsingEvents) {
 }
 
 function wrapAddHook (addHook) {
-  return function addHookWithTrace (name, fn) {
+  return shimmer.wrapFunction(addHook, addHook => function addHookWithTrace (name, fn) {
     fn = arguments[arguments.length - 1]
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
@@ -78,7 +78,7 @@ function wrapAddHook (addHook) {
     })
 
     return addHook.apply(this, arguments)
-  }
+  })
 }
 
 function onRequest (request, reply, done) {

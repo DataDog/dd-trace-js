@@ -90,7 +90,7 @@ function wrapLayerHandle (layer) {
 }
 
 function wrapNext (req, next) {
-  return function (error) {
+  return shimmer.wrapFunction(next, next => function (error) {
     if (error) {
       errorChannel.publish({ req, error })
     }
@@ -99,7 +99,7 @@ function wrapNext (req, next) {
     finishChannel.publish({ req })
 
     next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({ name: 'connect', versions: ['>=3'] }, connect => {
