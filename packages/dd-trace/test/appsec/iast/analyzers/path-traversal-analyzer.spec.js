@@ -163,9 +163,9 @@ describe('path-traversal-analyzer', () => {
 prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, testThatRequestHasNoVulnerability) => {
   function runFsMethodTest (description, vulnerableIndex, fn, ...args) {
     describe(description, () => {
-      before(() => enableFsPlugin())
+      before(() => enableFsPlugin('iast'))
 
-      after(() => disableFsPlugin())
+      after(() => disableFsPlugin('iast'))
 
       describe('vulnerable', () => {
         testThatRequestHasVulnerability(function () {

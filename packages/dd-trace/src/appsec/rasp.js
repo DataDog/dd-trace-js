@@ -8,7 +8,7 @@ const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const log = require('../log')
-const { enable: fsPluginEnable, disable: fsPluginDisable } = require('./fs-plugin')
+const { enable: enableFsPlugin, disable: disableFsPlugin } = require('./fs-plugin')
 
 const RULE_TYPES = {
   SSRF: 'ssrf',
@@ -104,7 +104,7 @@ function handleUncaughtExceptionMonitor (err) {
 function enable (_config) {
   config = _config
 
-  fsPluginEnable()
+  enableFsPlugin('rasp')
 
   httpClientRequestStart.subscribe(analyzeSsrf)
   fsOperationStart.subscribe(analyzeLfi)
@@ -121,7 +121,7 @@ function disable () {
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
   if (fsOperationStart.hasSubscribers) fsOperationStart.unsubscribe(analyzeLfi)
 
-  fsPluginDisable()
+  disableFsPlugin('rasp')
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
 }

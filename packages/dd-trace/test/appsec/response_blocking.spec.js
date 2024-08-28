@@ -57,7 +57,7 @@ describe('HTTP Response Blocking', () => {
       }
     }))
 
-    disableFsPlugin()
+    disableFsPlugin('rasp')
   })
 
   beforeEach(() => {

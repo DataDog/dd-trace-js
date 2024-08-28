@@ -2,6 +2,12 @@
 
 const Plugin = require('../plugins/plugin')
 const { storage } = require('../../../datadog-core')
+const log = require('../log')
+
+const enabledFor = {
+  rasp: false,
+  iast: false
+}
 
 let fsPlugin
 
@@ -51,20 +57,29 @@ class AppsecFsPlugin extends Plugin {
   }
 }
 
-function enable () {
-  if (fsPlugin) return
+function enable (mod) {
+  if (!mod || enabledFor[mod]) return
 
-  fsPlugin = new AppsecFsPlugin()
-  fsPlugin.enable()
+  enabledFor[mod] = true
+
+  if (!fsPlugin) {
+    fsPlugin = new AppsecFsPlugin()
+    fsPlugin.enable()
+  }
+
+  log.info(`Enabled AppsecFsPlugin for ${mod}`)
 }
 
-function disable () {
-  if (!fsPlugin) return
+function disable (mod) {
+  if (!mod || !enabledFor[mod]) return
 
-  // FIXME: AppsecFsPlugin could be used by appsec and iast
-  fsPlugin.disable()
+  enabledFor[mod] = false
+
+  fsPlugin?.disable()
 
   fsPlugin = undefined
+
+  log.info(`Disabled AppsecFsPlugin for ${mod}`)
 }
 
 module.exports = {
