@@ -50,6 +50,13 @@ describe('Remote Config index', () => {
   })
 
   describe('enable', () => {
+    let ack
+    const id = 1
+
+    beforeEach(() => {
+      ack = sinon.spy()
+    })
+
     it('should listen to remote config when appsec is not explicitly configured', () => {
       config.appsec = { enabled: undefined }
 
@@ -116,28 +123,32 @@ describe('Remote Config index', () => {
       })
 
       it('should enable appsec when listener is called with apply and enabled', () => {
-        listener('apply', { asm: { enabled: true } })
+        listener('apply', { asm: { enabled: true } }, id, ack)
 
         expect(appsec.enable).to.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should enable appsec when listener is called with modify and enabled', () => {
-        listener('modify', { asm: { enabled: true } })
+        listener('modify', { asm: { enabled: true } }, id, ack)
 
         expect(appsec.enable).to.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should disable appsec when listener is called with unnaply and enabled', () => {
-        listener('unnaply', { asm: { enabled: true } })
+        listener('unnaply', { asm: { enabled: true } }, id, ack)
 
         expect(appsec.disable).to.have.been.calledOnce
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should not do anything when listener is called with apply and malformed data', () => {
-        listener('apply', {})
+        listener('apply', {}, id, ack)
 
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
     })
 
@@ -165,9 +176,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0.5
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should update apiSecuritySampler config and disable it', () => {
@@ -175,9 +187,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0)
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with values greater than 1', () => {
@@ -185,9 +198,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 5
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.configure).to.not.be.called
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with values less than 0', () => {
@@ -195,9 +209,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: -0.4
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.configure).to.not.be.called
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with incorrect values', () => {
@@ -205,9 +220,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 'not_a_number'
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.configure).to.not.be.called
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
       })
 
@@ -234,9 +250,10 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0.5
             }
-          })
+          }, id, ack)
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
+          expect(ack).to.have.been.calledOnceWithExactly()
         })
       })
     })

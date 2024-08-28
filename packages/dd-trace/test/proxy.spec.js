@@ -250,18 +250,23 @@ describe('TracerProxy', () => {
 
       it('should support applying remote config', () => {
         const conf = {}
+        const id = 1
+        const ack = sinon.spy()
 
         proxy.init()
 
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf }, id, ack)
 
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
         expect(pluginManager.configure).to.have.been.calledWith(config)
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should support enabling debug logs for tracer flares', () => {
         const logLevel = 'debug'
+        const id = 1
+        const ack = sinon.spy()
 
         proxy.init()
 
@@ -270,10 +275,11 @@ describe('TracerProxy', () => {
             log_level: logLevel
           },
           name: 'flare-log-level.debug'
-        })
+        }, id, ack)
 
         expect(flare.enable).to.have.been.calledWith(config)
         expect(flare.prepare).to.have.been.calledWith(logLevel)
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should support sending tracer flares', () => {
@@ -282,6 +288,8 @@ describe('TracerProxy', () => {
           hostname: 'myhostname',
           user_handle: 'user.name@datadoghq.com'
         }
+        const id = 1
+        const ack = sinon.spy()
 
         proxy.init()
 
@@ -289,10 +297,11 @@ describe('TracerProxy', () => {
           args: task,
           task_type: 'tracer_flare',
           uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
-        })
+        }, id, ack)
 
         expect(flare.enable).to.have.been.calledWith(config)
         expect(flare.send).to.have.been.calledWith(task)
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should cleanup flares when the config is removed', () => {
@@ -302,13 +311,17 @@ describe('TracerProxy', () => {
           },
           name: 'flare-log-level.debug'
         }
+        const id = 1
+        const ack = sinon.spy()
 
         proxy.init()
 
-        rc.emit('AGENT_CONFIG', 'apply', conf)
-        rc.emit('AGENT_CONFIG', 'unapply', conf)
+        rc.emit('AGENT_CONFIG', 'apply', conf, id, ack)
+        rc.emit('AGENT_CONFIG', 'unapply', conf, id, ack)
 
         expect(flare.disable).to.have.been.called
+        expect(ack).to.have.callCount(2)
+        expect(ack).to.have.been.calledWithExactly()
       })
 
       it('should support applying remote config', () => {
@@ -319,6 +332,8 @@ describe('TracerProxy', () => {
           './appsec/remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
+        const id = 1
+        const ack = sinon.spy()
 
         const remoteConfigProxy = new RemoteConfigProxy()
         remoteConfigProxy.init()
@@ -328,16 +343,19 @@ describe('TracerProxy', () => {
         expect(iast.enable).to.not.have.been.called
 
         let conf = { tracing_enabled: false }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf }, id, ack)
         expect(appsec.disable).to.not.have.been.called
         expect(iast.disable).to.not.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
 
         conf = { tracing_enabled: true }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        ack.resetHistory()
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf }, id, ack)
         expect(DatadogTracer).to.have.been.calledOnce
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
         expect(iast.enable).to.not.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should support applying remote config (only call disable if enabled before)', () => {
@@ -349,6 +367,8 @@ describe('TracerProxy', () => {
           './appsec/remote_config': remoteConfig,
           './appsec/sdk': AppsecSdk
         })
+        const id = 1
+        const ack = sinon.spy()
 
         config.telemetry = {}
         config.appsec.enabled = true
@@ -364,16 +384,19 @@ describe('TracerProxy', () => {
         expect(iast.enable).to.have.been.calledOnceWithExactly(config, tracer)
 
         let conf = { tracing_enabled: false }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf }, id, ack)
         expect(appsec.disable).to.have.been.called
         expect(iast.disable).to.have.been.called
+        expect(ack).to.have.been.calledOnceWithExactly()
 
         conf = { tracing_enabled: true }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        ack.resetHistory()
+        rc.emit('APM_TRACING', 'apply', { lib_config: conf }, id, ack)
         expect(appsec.enable).to.have.been.calledTwice
         expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
         expect(iast.enable).to.have.been.calledTwice
         expect(iast.enable.secondCall).to.have.been.calledWithExactly(config, tracer)
+        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should start capturing runtimeMetrics when configured', () => {

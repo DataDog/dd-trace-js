@@ -236,8 +236,9 @@ class RemoteConfigManager extends EventEmitter {
           id: conf.id,
           version: conf.version,
           product: conf.product,
-          apply_state: conf.apply_state,
-          apply_error: conf.apply_error
+          // Use getters so `conf.apply_*` can be updated async and still affect the new object pushed to config_states
+          get apply_state () { return conf.apply_state },
+          get apply_error () { return conf.apply_error }
         })
 
         this.state.cached_target_files.push({
@@ -258,11 +259,14 @@ class RemoteConfigManager extends EventEmitter {
       if (item.apply_state === UNACKNOWLEDGED || action === 'unapply') {
         try {
           // TODO: do we want to pass old and new config ?
-          const hadListeners = this.emit(item.product, action, item.file, item.id)
-
-          if (hadListeners) {
-            item.apply_state = ACKNOWLEDGED
-          }
+          this.emit(item.product, action, item.file, item.id, (err) => {
+            if (err) {
+              item.apply_state = ERROR
+              item.apply_error = err.toString()
+            } else if (item.apply_state !== ERROR) {
+              item.apply_state = ACKNOWLEDGED
+            }
+          })
         } catch (err) {
           item.apply_state = ERROR
           item.apply_error = err.toString()

@@ -28,7 +28,8 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     }
 
-    rc.on('ASM_FEATURES', (action, rcConfig) => {
+    rc.on('ASM_FEATURES', (action, rcConfig, id, ack) => {
+      ack()
       if (!rcConfig) return
 
       if (activation === Activation.ONECLICK) {
@@ -76,9 +77,9 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-    rc.on('ASM_DATA', noop)
-    rc.on('ASM_DD', noop)
-    rc.on('ASM', noop)
+    rc.on('ASM_DATA', ackNoop)
+    rc.on('ASM_DD', ackNoop)
+    rc.on('ASM', ackNoop)
 
     rc.on(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }
@@ -106,6 +107,7 @@ function disableWafUpdate () {
   }
 }
 
+function ackNoop (a, b, c, ack) { ack() }
 function noop () {}
 
 module.exports = {

@@ -3,7 +3,7 @@
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
 
-const noop = () => {}
+const noop = (a, b, c, ack) => { ack() }
 
 describe('RemoteConfigManager', () => {
   let uuid
@@ -557,9 +557,10 @@ describe('RemoteConfigManager', () => {
     })
 
     it('should call emit for each config, catch errors, and update the state', () => {
-      rc.emit.onFirstCall().returns(true)
-      rc.emit.onSecondCall().throws(new Error('Unable to apply config'))
-      rc.emit.onThirdCall().returns(true)
+      rc.emit
+        .onCall(0).yields()
+        .onCall(1).yields(new Error('foo'))
+        .onCall(2).throws(new Error('bar'))
 
       const list = [
         {
@@ -585,27 +586,38 @@ describe('RemoteConfigManager', () => {
           apply_state: UNACKNOWLEDGED,
           apply_error: '',
           file: { rules: [4, 5, 6] }
+        },
+        {
+          id: 'asm_dd_rules',
+          path: 'datadog/42/ASM_DD_RULES/confId/config',
+          product: 'ASM_DD_RULES',
+          apply_state: UNACKNOWLEDGED,
+          apply_error: '',
+          file: { rules: [7, 8, 9] }
         }
       ]
 
       rc.dispatch(list, 'apply')
 
-      expect(rc.emit).to.have.been.calledThrice
-      expect(rc.emit.firstCall).to.have.been
-        .calledWithExactly('ASM_FEATURES', 'apply', { asm: { enabled: true } }, 'asm_features')
-      expect(rc.emit.secondCall).to.have.been.calledWithExactly('ASM_DATA', 'apply', { data: [1, 2, 3] }, 'asm_data')
-      expect(rc.emit.thirdCall).to.have.been.calledWithExactly('ASM_DD', 'apply', { rules: [4, 5, 6] }, 'asm_dd')
+      expect(rc.emit).to.have.callCount(4)
+      assertRCEmitCallArguments(rc.emit.getCall(0), 'ASM_FEATURES', 'apply', { asm: { enabled: true } }, 'asm_features')
+      assertRCEmitCallArguments(rc.emit.getCall(1), 'ASM_DATA', 'apply', { data: [1, 2, 3] }, 'asm_data')
+      assertRCEmitCallArguments(rc.emit.getCall(2), 'ASM_DD', 'apply', { rules: [4, 5, 6] }, 'asm_dd')
+      assertRCEmitCallArguments(rc.emit.getCall(3), 'ASM_DD_RULES', 'apply', { rules: [7, 8, 9] }, 'asm_dd_rules')
 
       expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
       expect(list[0].apply_error).to.equal('')
       expect(list[1].apply_state).to.equal(ERROR)
-      expect(list[1].apply_error).to.equal('Error: Unable to apply config')
-      expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
-      expect(list[2].apply_error).to.equal('')
+      expect(list[1].apply_error).to.equal('Error: foo')
+      expect(list[2].apply_state).to.equal(ERROR)
+      expect(list[2].apply_error).to.equal('Error: bar')
+      expect(list[3].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[3].apply_error).to.equal('')
 
       expect(rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')).to.equal(list[0])
       expect(rc.appliedConfigs.get('datadog/42/ASM_DATA/confId/config')).to.equal(list[1])
       expect(rc.appliedConfigs.get('datadog/42/ASM_DD/confId/config')).to.equal(list[2])
+      expect(rc.appliedConfigs.get('datadog/42/ASM_DD_RULES/confId/config')).to.equal(list[3])
     })
 
     it('should delete config from state when action is unapply', () => {
@@ -620,10 +632,15 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
-      expect(rc.emit).to.have.been
-        .calledOnceWithExactly('ASM_FEATURES', 'unapply', { asm: { enabled: true } }, 'asm_data')
+      assertRCEmitCallArguments(rc.emit.firstCall, 'ASM_FEATURES', 'unapply', { asm: { enabled: true } }, 'asm_data')
       expect(rc.appliedConfigs).to.be.empty
     })
+
+    function assertRCEmitCallArguments (call, ...expectedArgs) {
+      expect(call).to.have.been.calledWith(...expectedArgs)
+      expect(call.args.length).to.equal(expectedArgs.length + 1)
+      expect(call.args[call.args.length - 1]).to.be.a('function')
+    }
   })
 })
 
