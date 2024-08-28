@@ -28,17 +28,17 @@ function wrapServer (server) {
 }
 
 function wrapStart (start) {
-  return function () {
+  return shimmer.wrapFunction(start, start => function () {
     if (this && typeof this.ext === 'function') {
       this.ext('onPreResponse', onPreResponse)
     }
 
     return start.apply(this, arguments)
-  }
+  })
 }
 
 function wrapExt (ext) {
-  return function (events, method, options) {
+  return shimmer.wrapFunction(ext, ext => function (events, method, options) {
     if (events !== null && typeof events === 'object') {
       arguments[0] = wrapEvents(events)
     } else {
@@ -46,7 +46,7 @@ function wrapExt (ext) {
     }
 
     return ext.apply(this, arguments)
-  }
+  })
 }
 
 function wrapDispatch (dispatch) {
@@ -92,7 +92,7 @@ function wrapEvents (events) {
 function wrapHandler (handler) {
   if (typeof handler !== 'function') return handler
 
-  return function (request, h) {
+  return shimmer.wrapFunction(handler, handler => function (request, h) {
     const req = request && request.raw && request.raw.req
 
     if (!req) return handler.apply(this, arguments)
@@ -100,7 +100,7 @@ function wrapHandler (handler) {
     return hapiTracingChannel.traceSync(() => {
       return handler.apply(this, arguments)
     })
-  }
+  })
 }
 
 function onPreResponse (request, h) {
