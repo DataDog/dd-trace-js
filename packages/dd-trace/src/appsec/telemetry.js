@@ -90,14 +90,14 @@ function updateRaspRequestsMetricTags (metrics, req, raspRuleType) {
   if (!enabled) return
 
   const tags = { rule_type: raspRuleType, waf_version: metrics.wafVersion }
-  appsecMetrics.count('appsec.rasp.rule.eval', tags).inc(1)
+  appsecMetrics.count('rasp.rule.eval', tags).inc(1)
 
   if (metrics.wafTimeout) {
-    appsecMetrics.count('appsec.rasp.timeout', tags).inc(1)
+    appsecMetrics.count('rasp.timeout', tags).inc(1)
   }
 
   if (metrics.ruleTriggered) {
-    appsecMetrics.count('appsec.rasp.rule.match', tags).inc(1)
+    appsecMetrics.count('rasp.rule.match', tags).inc(1)
   }
 }
 
