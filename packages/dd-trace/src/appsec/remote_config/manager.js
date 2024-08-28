@@ -120,7 +120,10 @@ class RemoteConfigManager extends EventEmitter {
     const options = {
       url: this.url,
       method: 'POST',
-      path: '/v0.7/config'
+      path: '/v0.7/config',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      }
     }
 
     request(this.getPayload(), options, (err, data, statusCode) => {
