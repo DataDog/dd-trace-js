@@ -115,11 +115,11 @@ function parseArgumentNames (str) {
       continue
     }
 
-    if (char === '{' || char === '[') {
+    if (['{', '[', '('].includes(char)) {
       closerCount++
-    } else if (char === '}' || char === ']') {
+    } else if (['}', ']', ')'].includes(char)) {
       closerCount--
-    } else if (char === '=' && closerCount === 0) {
+    } else if (char === '=' && nextChar !== '>' && closerCount === 0) {
       recording = false
       // record the variable name early, and stop counting characters until we reach the next comma
       result.push(current.trim())
