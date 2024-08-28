@@ -178,8 +178,16 @@ describe('RemoteConfigManager', () => {
   })
 
   describe('poll', () => {
+    let expectedPayload
+
     beforeEach(() => {
       sinon.stub(rc, 'parseConfig')
+      expectedPayload = {
+        url: rc.url,
+        method: 'POST',
+        path: '/v0.7/config',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }
     })
 
     it('should request and do nothing when received status 404', (cb) => {
@@ -188,11 +196,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(log.error).to.not.have.been.called
         expect(rc.parseConfig).to.not.have.been.called
         cb()
@@ -206,11 +210,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(log.error).to.have.been.calledOnceWithExactly(err)
         expect(rc.parseConfig).to.not.have.been.called
         cb()
@@ -223,11 +223,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(log.error).to.not.have.been.called
         expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
         cb()
@@ -243,11 +239,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(rc.parseConfig).to.have.been.calledOnceWithExactly({ a: 'b' })
         expect(log.error).to.have.been
           .calledOnceWithExactly('Could not parse remote config response: Error: Unable to parse config')
@@ -258,11 +250,7 @@ describe('RemoteConfigManager', () => {
 
         rc.poll(() => {
           expect(request).to.have.been.calledTwice
-          expect(request.secondCall).to.have.been.calledWith(payload2, {
-            url: rc.url,
-            method: 'POST',
-            path: '/v0.7/config'
-          })
+          expect(request.secondCall).to.have.been.calledWith(payload2, expectedPayload)
           expect(rc.parseConfig).to.have.been.calledOnce
           expect(log.error).to.have.been.calledOnce
           expect(rc.state.client.state.has_error).to.be.false
@@ -278,11 +266,7 @@ describe('RemoteConfigManager', () => {
       const payload = JSON.stringify(rc.state)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         expect(log.error).to.not.have.been.called
         expect(rc.parseConfig).to.not.have.been.called
         cb()
@@ -299,11 +283,7 @@ describe('RemoteConfigManager', () => {
       expect(JSON.parse(payload).client.client_tracer.extra_services).to.deep.equal(extraServices)
 
       rc.poll(() => {
-        expect(request).to.have.been.calledOnceWith(payload, {
-          url: rc.url,
-          method: 'POST',
-          path: '/v0.7/config'
-        })
+        expect(request).to.have.been.calledOnceWith(payload, expectedPayload)
         cb()
       })
     })
