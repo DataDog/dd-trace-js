@@ -3,7 +3,6 @@
 const { createHash } = require('crypto')
 const EventEmitter = require('events')
 const http = require('http')
-const uuid = require('crypto-randomuuid')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
@@ -173,27 +172,14 @@ function buildExpressServer (agent) {
       cached_target_files: cachedTargetFiles
     } = req.body
 
-    const expires = (new Date(Date.now() + 1000 * 60 * 60 * 24)).toISOString() // in 24 hours
-    const clientID = uuid() // TODO: What is this? It isn't the runtime-id
-
-    // Currently, only `opaque_backend_state` and `targets` are used by dd-trace-js in the object below
+    // The actual targets object is much more complicated,
+    // but the Node.js tracer currently only cares about the following properties.
     const targets = {
-      signatures: [],
       signed: {
-        _type: 'targets',
-        custom: {
-          agent_refresh_interval: 5,
-          opaque_backend_state: ''
-        },
-        expires,
-        spec_version: '1.0.0',
+        custom: { opaque_backend_state: 'foo' },
         targets: {},
         version: 12345
       }
-    }
-    const opaqueBackendState = {
-      version: 2,
-      state: { file_hashes: { key: [] } }
     }
     const targetFiles = []
     const clientConfigs = []
@@ -202,25 +188,18 @@ function buildExpressServer (agent) {
 
     for (const { orgId, product, id, name, config } of files) {
       const path = `datadog/${orgId}/${product}/${id}/${name}`
-      const fileDigest = createHash('sha256').update(config).digest()
-      const fileDigestHex = fileDigest.toString('hex')
+      const fileDigest = createHash('sha256').update(config).digest('hex')
 
       if (cachedTargetFiles.some((cached) =>
         path === cached.path &&
-        fileDigestHex === cached.hashes.find((e) => e.algorithm === 'sha256').hash
+        fileDigest === cached.hashes.find((e) => e.algorithm === 'sha256').hash
       )) {
         continue // skip files already cached by the client so we don't send them more than once
       }
 
-      opaqueBackendState.state.file_hashes.key.push(fileDigest.toString('base64'))
-
       targets.signed.targets[path] = {
-        custom: {
-          c: [clientID],
-          'tracer-predicates': { tracer_predicates_v1: [{ clientID }] },
-          v: 20
-        },
-        hashes: { sha256: fileDigestHex },
+        custom: { v: 20 },
+        hashes: { sha256: fileDigest },
         length: config.length
       }
 
@@ -228,12 +207,11 @@ function buildExpressServer (agent) {
       clientConfigs.push(path)
     }
 
-    targets.signed.custom.opaque_backend_state = base64(opaqueBackendState)
-
+    // The real response object also contains a `roots` property which has been omitted here since it's not currently
+    // used by the Node.js tracer.
     // TODO: What does the real agent do if there's nothing to return? Does it just return empty arrays and objects
     // like we do here, or do we need to change the algorithm to align?
     res.json({
-      roots: [], // Not used by dd-trace-js currently, so left empty
       targets: base64(targets),
       target_files: targetFiles,
       client_configs: clientConfigs
