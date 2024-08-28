@@ -3,7 +3,7 @@
 require('../setup/tap')
 
 const proxyquire = require('proxyquire')
-const path = require('path')
+const path = require('node:path')
 const dc = require('dc-polyfill')
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const originalSetImmediate = global.setImmediate

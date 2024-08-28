@@ -21,10 +21,10 @@ if (process.env.STEALTHY_REQUIRE === 'true') {
   }
 
   // require module known to break with stealthy-require
-  require('net')
+  require('node:net')
 }
 
-const http = require('http')
+const http = require('node:http')
 
 const server = http.createServer((req, res) => {
   res.end('hello, world\n')

@@ -1,8 +1,8 @@
-const http = require('http')
-const net = require('net')
+const http = require('node:http')
+const net = require('node:net')
 const tls = require('tls')
-const url = require('url')
-const util = require('util')
+const url = require('node:url')
+const util = require('node:util')
 
 const axios = require('axios')
 

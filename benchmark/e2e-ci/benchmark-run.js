@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 
-const https = require('https')
+const https = require('node:https')
 
 const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environment'
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`

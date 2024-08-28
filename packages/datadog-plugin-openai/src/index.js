@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')

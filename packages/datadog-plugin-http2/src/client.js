@@ -3,7 +3,7 @@
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')

@@ -12,7 +12,7 @@ const {
   incrementWafRequestsMetric,
   getRequestMetrics
 } = require('./telemetry')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 const { MANUAL_KEEP } = require('../../../../ext/tags')
 const standalone = require('./standalone')
 

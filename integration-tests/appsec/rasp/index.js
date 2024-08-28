@@ -4,9 +4,9 @@ tracer.init({
   flushInterval: 0
 })
 
-const path = require('path')
-const fs = require('fs')
-const http = require('https')
+const path = require('node:path')
+const fs = require('node:fs')
+const http = require('node:https')
 const express = require('express')
 const axios = require('axios')
 

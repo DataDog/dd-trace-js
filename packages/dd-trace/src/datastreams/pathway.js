@@ -1,7 +1,7 @@
 // encoding used here is sha256
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
-const crypto = require('crypto')
+const crypto = require('node:crypto')
 const { encodeVarint, decodeVarint } = require('./encoding')
 const LRUCache = require('lru-cache')
 

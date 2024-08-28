@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')

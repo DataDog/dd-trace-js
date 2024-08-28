@@ -5,7 +5,7 @@ const PROMISES_PER_INTERVAL = process.env.PROMISES_PER_INTERVAL || 100000
 const INTERVALS = process.env.INTERVALS || 10
 
 if (ASYNC_HOOKS) {
-  const { createHook } = require('async_hooks')
+  const { createHook } = require('node:async_hooks')
 
   const hooks = {}
 

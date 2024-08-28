@@ -1,6 +1,6 @@
 'use strict'
 
-const Module = require('module')
+const Module = require('node:module')
 const shimmer = require('../../../../../datadog-shimmer')
 const iastLog = require('../iast-log')
 const { isPrivateModule, isNotLibraryFile } = require('./filter')

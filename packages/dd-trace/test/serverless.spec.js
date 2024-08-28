@@ -1,10 +1,10 @@
 'use strict'
 
-const fs = require('fs')
+const fs = require('node:fs')
 const log = require('../src/log')
 const Proxy = require('../src/proxy')
 const { getRustBinaryPath } = require('../src/serverless')
-const childProcess = require('child_process')
+const childProcess = require('node:child_process')
 
 require('./setup/tap')
 

@@ -2,7 +2,7 @@
 
 require('./setup/tap')
 
-const fs = require('fs')
+const fs = require('node:fs')
 
 const AgentExporter = require('../src/exporters/agent')
 const LogExporter = require('../src/exporters/log')

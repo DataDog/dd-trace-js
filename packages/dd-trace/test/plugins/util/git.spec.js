@@ -2,10 +2,10 @@
 
 require('../../setup/tap')
 
-const { execSync } = require('child_process')
-const os = require('os')
-const fs = require('fs')
-const path = require('path')
+const { execSync } = require('node:child_process')
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { GIT_REV_LIST_MAX_BUFFER, isGitAvailable } = require('../../../src/plugins/util/git')
 const proxyquire = require('proxyquire')
@@ -28,7 +28,7 @@ const {
 
 const { getGitMetadata, unshallowRepository } = proxyquire('../../../src/plugins/util/git',
   {
-    child_process: {
+    'node:child_process': {
       execFileSync: execFileSyncStub
     }
   }
@@ -147,7 +147,7 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: (command, flags, options) =>
             execSync(`head -c ${Math.floor(GIT_REV_LIST_MAX_BUFFER * 0.9)} /dev/zero`, options)
         },
@@ -165,7 +165,7 @@ describe('getCommitsRevList', () => {
 
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         },
@@ -181,7 +181,7 @@ describe('getCommitsRevList', () => {
   it('returns null if the repository is bigger than the limit', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: (command, flags, options) =>
             execSync(`head -c ${GIT_REV_LIST_MAX_BUFFER * 2} /dev/zero`, options)
         }
@@ -194,7 +194,7 @@ describe('getCommitsRevList', () => {
   it('returns null if execFileSync fails for whatever reason', () => {
     const { getCommitsRevList } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: () => { throw new Error('error!') }
         }
       }
@@ -224,7 +224,7 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: execFileSyncSpy
         }
       }
@@ -242,7 +242,7 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: execFileSyncSpy
         }
       }
@@ -260,7 +260,7 @@ describe('generatePackFilesForCommits', () => {
 
     const { generatePackFilesForCommits } = proxyquire('../../../src/plugins/util/git',
       {
-        child_process: {
+        'node:child_process': {
           execFileSync: execFileSyncSpy
         }
       }

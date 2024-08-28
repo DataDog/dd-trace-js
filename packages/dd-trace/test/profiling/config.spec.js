@@ -3,8 +3,8 @@
 require('../setup/tap')
 
 const { expect } = require('chai')
-const os = require('os')
-const path = require('path')
+const os = require('node:os')
+const path = require('node:path')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')

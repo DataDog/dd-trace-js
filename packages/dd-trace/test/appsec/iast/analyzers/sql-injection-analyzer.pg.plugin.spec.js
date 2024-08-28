@@ -1,9 +1,9 @@
 'use strict'
 
 const semver = require('semver')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')

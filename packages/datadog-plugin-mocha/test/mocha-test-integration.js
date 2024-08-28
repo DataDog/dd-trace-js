@@ -1,4 +1,4 @@
-const http = require('http')
+const http = require('node:http')
 
 describe('mocha-test-integration-http', () => {
   it('can do integration http', (done) => {

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 require('../../').init() // dd-trace
-const assert = require('assert')
+const assert = require('node:assert')
 const express = require('express')
 const redis = require('redis')
 const app = express()

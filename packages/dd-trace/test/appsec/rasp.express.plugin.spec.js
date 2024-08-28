@@ -4,7 +4,7 @@ const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const path = require('path')
+const path = require('node:path')
 const { assert } = require('chai')
 
 function noop () {}
@@ -197,7 +197,7 @@ describe('RASP', () => {
     })
 
     before((done) => {
-      const http = require('http')
+      const http = require('node:http')
       server = http.createServer((req, res) => {
         if (app) {
           app(req, res)
@@ -232,7 +232,7 @@ describe('RASP', () => {
 
     it('Should detect threat without blocking doing a GET request', async () => {
       app = (req, res) => {
-        const clientRequest = require('http').get(`http://${req.headers.host}`, { timeout: 10 }, function () {
+        const clientRequest = require('node:http').get(`http://${req.headers.host}`, { timeout: 10 }, function () {
           res.end('end')
         })
 

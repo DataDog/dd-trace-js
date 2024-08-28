@@ -2,7 +2,7 @@
 
 const proxyquire = require('proxyquire')
 const { storage } = require('../../../datadog-core')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 describe('reporter', () => {
   let Reporter

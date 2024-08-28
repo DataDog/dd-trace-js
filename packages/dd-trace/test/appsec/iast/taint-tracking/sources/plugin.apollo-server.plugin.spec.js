@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const agent = require('../../../../plugins/agent')
 const {
   schema,

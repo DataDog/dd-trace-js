@@ -2,7 +2,7 @@
 
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
 const variants = Object.keys(metaJson.variants)
 

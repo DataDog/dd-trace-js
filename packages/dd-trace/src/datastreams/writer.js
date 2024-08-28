@@ -1,9 +1,9 @@
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 const msgpack = require('msgpack-lite')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 const codec = msgpack.createCodec({ int64: true })
 
 function makeRequest (data, url, cb) {

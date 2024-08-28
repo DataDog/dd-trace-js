@@ -1,4 +1,4 @@
-const os = require('os')
+const os = require('node:os')
 
 const OS_PLATFORM = 'os.platform'
 const OS_VERSION = 'os.version'

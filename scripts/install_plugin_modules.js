@@ -1,13 +1,13 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
-const crypto = require('crypto')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const crypto = require('node:crypto')
 const semver = require('semver')
 const proxyquire = require('proxyquire')
 const exec = require('./helpers/exec')
-const childProcess = require('child_process')
+const childProcess = require('node:child_process')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')

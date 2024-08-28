@@ -1,6 +1,6 @@
 'use strict'
 
-const { exec, execSync } = require('child_process')
+const { exec, execSync } = require('node:child_process')
 
 const getPort = require('get-port')
 const { assert } = require('chai')

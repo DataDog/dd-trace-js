@@ -1,7 +1,7 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
@@ -79,7 +79,7 @@ describe('TaintTracking', () => {
               expect(commandResult).eq(commandResultOrig)
 
               try {
-                const childProcess = require('child_process')
+                const childProcess = require('node:child_process')
                 childProcess.execSync(commandResult, { stdio: 'ignore' })
               } catch (e) {
                 // do nothing
@@ -119,7 +119,7 @@ describe('TaintTracking', () => {
         expect(result).deep.eq(resultOrig)
 
         try {
-          const childProcess = require('child_process')
+          const childProcess = require('node:child_process')
           childProcess.execSync(result.command, { stdio: 'ignore' })
         } catch (e) {
           // do nothing

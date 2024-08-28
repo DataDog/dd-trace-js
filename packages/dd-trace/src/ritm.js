@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const Module = require('module')
+const path = require('node:path')
+const Module = require('node:module')
 const parse = require('module-details-from-path')
 const dc = require('dc-polyfill')
 

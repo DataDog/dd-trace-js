@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const fs = require('fs')
+const path = require('node:path')
+const fs = require('node:fs')
 
 const nock = require('nock')
 const semver = require('semver')

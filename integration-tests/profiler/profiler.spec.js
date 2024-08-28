@@ -4,14 +4,14 @@ const {
   FakeAgent,
   createSandbox
 } = require('../helpers')
-const childProcess = require('child_process')
+const childProcess = require('node:child_process')
 const { fork } = childProcess
-const path = require('path')
+const path = require('node:path')
 const { assert } = require('chai')
 const fs = require('fs/promises')
-const fsync = require('fs')
-const net = require('net')
-const zlib = require('zlib')
+const fsync = require('node:fs')
+const net = require('node:net')
+const zlib = require('node:zlib')
 const { Profile } = require('pprof-format')
 const semver = require('semver')
 

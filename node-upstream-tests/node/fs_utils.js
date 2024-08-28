@@ -1,8 +1,8 @@
 'use strict'
 
-const fs = require('fs')
-const path = require('path')
-const promisify = require('util').promisify
+const fs = require('node:fs')
+const path = require('node:path')
+const promisify = require('node:util').promisify
 
 const glob = promisify(require('glob'))
 const readFile = promisify(fs.readFile)

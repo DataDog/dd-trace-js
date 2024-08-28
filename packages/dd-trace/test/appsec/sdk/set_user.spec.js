@@ -83,7 +83,7 @@ describe('set_user', () => {
 
     before(async () => {
       await agent.load('http')
-      http = require('http')
+      http = require('node:http')
     })
 
     before(done => {

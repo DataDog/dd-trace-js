@@ -4,7 +4,7 @@ if (Number(process.env.USE_TRACER)) {
   require('../../..').init()
 }
 
-const dns = require('dns')
+const dns = require('node:dns')
 
 function testRun (count) {
   if (++count === 1000) return

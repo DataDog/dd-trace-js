@@ -1,6 +1,6 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 

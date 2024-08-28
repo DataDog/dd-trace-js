@@ -3,12 +3,12 @@
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
-const realFS = Object.assign({}, require('fs'))
-const os = require('os')
-const path = require('path')
+const realFS = Object.assign({}, require('node:fs'))
+const os = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
 const rimraf = require('rimraf')
-const util = require('util')
+const util = require('node:util')
 const plugins = require('../../dd-trace/src/plugins')
 const { channel } = require('dc-polyfill')
 
@@ -24,7 +24,7 @@ describe('Plugin', () => {
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
-      fs = require('fs')
+      fs = require('node:fs')
     }))
 
     describe('with parent span', () => {
@@ -77,7 +77,7 @@ describe('Plugin', () => {
 
     beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
-      fs = require('fs')
+      fs = require('node:fs')
       tracer.use('fs', { enabled: true })
     }))
 

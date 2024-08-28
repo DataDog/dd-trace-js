@@ -37,7 +37,7 @@ describe('command-injection-analyzer with kafkajs', () => {
         await consumer.run({
           eachMessage: ({ topic, message }) => {
             try {
-              const { execSync } = require('child_process')
+              const { execSync } = require('node:child_process')
 
               const command = message.value.toString()
               execSync(command)

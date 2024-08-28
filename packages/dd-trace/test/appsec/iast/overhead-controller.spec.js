@@ -7,7 +7,7 @@ const iast = require('../../../src/appsec/iast')
 const { testInRequest } = require('./utils')
 const agent = require('../../plugins/agent')
 const axios = require('axios')
-const { EventEmitter } = require('events')
+const { EventEmitter } = require('node:events')
 
 describe('Overhead controller', () => {
   const oceContextKey = overheadController.OVERHEAD_CONTROLLER_CONTEXT_KEY
@@ -242,7 +242,7 @@ describe('Overhead controller', () => {
       function app (req) {
         return new Promise((resolve) => {
           if (req.url.indexOf('secure') === -1) {
-            const crypto = require('crypto')
+            const crypto = require('node:crypto')
             crypto.createHash('sha1')
           }
           requestResolvers[req.url] = () => {

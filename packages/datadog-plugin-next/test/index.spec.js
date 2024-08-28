@@ -2,12 +2,12 @@
 
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
-const path = require('path')
+const path = require('node:path')
 const axios = require('axios')
 const getPort = require('get-port')
-const { execSync, spawn } = require('child_process')
+const { execSync, spawn } = require('node:child_process')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { writeFileSync, readdirSync } = require('fs')
+const { writeFileSync, readdirSync } = require('node:fs')
 const { satisfies } = require('semver')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')

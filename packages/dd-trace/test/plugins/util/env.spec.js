@@ -2,7 +2,7 @@
 
 require('../../setup/tap')
 
-const os = require('os')
+const os = require('node:os')
 const {
   getRuntimeAndOSMetadata,
   OS_ARCHITECTURE,

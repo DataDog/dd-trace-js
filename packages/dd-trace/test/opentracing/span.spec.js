@@ -49,7 +49,7 @@ describe('Span', () => {
     }
 
     Span = proxyquire('../src/opentracing/span', {
-      perf_hooks: {
+      'node:perf_hooks': {
         performance: {
           now
         }

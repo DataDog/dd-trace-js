@@ -4,7 +4,7 @@ require('../../setup/tap')
 
 const { expect } = require('chai')
 
-const URL = require('url').URL
+const URL = require('node:url').URL
 
 function describeWriter (protocolVersion) {
   let Writer

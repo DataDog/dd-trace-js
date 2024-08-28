@@ -1,4 +1,4 @@
-const { createHistogram, PerformanceObserver } = require('perf_hooks')
+const { createHistogram, PerformanceObserver } = require('node:perf_hooks')
 if (createHistogram) {
   const StatsD = require('./statsd')
   const statsd = new StatsD()

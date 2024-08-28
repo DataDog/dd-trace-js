@@ -26,7 +26,7 @@ describe('Plugin', () => {
       if ((NODE_MAJOR <= 16) && semver.satisfies(specificVersion, '>=6')) return
 
       function server (app, listener) {
-        const server = require('http').createServer(app)
+        const server = require('node:http').createServer(app)
         server.listen(0, 'localhost', () => listener(server.address().port))
         return server
       }

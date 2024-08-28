@@ -1,8 +1,8 @@
 'use strict'
 
-const fs = require('fs')
-const { promisify } = require('util')
-const { threadId } = require('worker_threads')
+const fs = require('node:fs')
+const { promisify } = require('node:util')
+const { threadId } = require('node:worker_threads')
 const writeFile = promisify(fs.writeFile)
 
 function formatDateTime (t) {

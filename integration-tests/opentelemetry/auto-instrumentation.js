@@ -27,7 +27,7 @@ registerInstrumentations({
 })
 
 const express = require('express')
-const http = require('http')
+const http = require('node:http')
 const app = express()
 const PORT = process.env.SERVER_PORT
 

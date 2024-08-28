@@ -3,7 +3,7 @@
 if (process.env.DD_BENCH_TRACE_ENABLE) {
   require('../..').init({})
 } else if (process.env.DD_BENCH_ASYNC_HOOKS) {
-  const asyncHooks = require('async_hooks')
+  const asyncHooks = require('node:async_hooks')
   const hook = asyncHooks.createHook({
     init () {},
     before () {},
@@ -12,7 +12,7 @@ if (process.env.DD_BENCH_TRACE_ENABLE) {
   })
   hook.enable()
 }
-const { Server } = require('http')
+const { Server } = require('node:http')
 const origEmit = Server.prototype.emit
 Server.prototype.emit = function (name) {
   if (name === 'listening') { process.send && process.send({ ready: true }) }

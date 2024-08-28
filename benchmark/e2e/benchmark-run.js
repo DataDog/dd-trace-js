@@ -2,11 +2,11 @@
 
 /* eslint-disable no-console */
 
-const { spawn, fork } = require('child_process')
-const { promisify } = require('util')
-const { stat } = require('fs')
-const { get: _get } = require('http')
-const path = require('path')
+const { spawn, fork } = require('node:child_process')
+const { promisify } = require('node:util')
+const { stat } = require('node:fs')
+const { get: _get } = require('node:http')
+const path = require('node:path')
 const mongoService = require('../../packages/dd-trace/test/setup/services/mongo')
 const autocannon = require('autocannon')
 const { chdir: cd } = process

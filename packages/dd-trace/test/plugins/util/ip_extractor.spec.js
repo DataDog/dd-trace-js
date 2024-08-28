@@ -4,7 +4,7 @@ require('../../setup/tap')
 
 const getPort = require('get-port')
 const { extractIp } = require('../../../src/plugins/util/ip_extractor')
-const http = require('http')
+const http = require('node:http')
 const axios = require('axios')
 
 describe('ip extractor', () => {

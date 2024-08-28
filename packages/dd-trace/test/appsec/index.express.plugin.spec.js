@@ -1,12 +1,12 @@
 'use strict'
 
 const axios = require('axios')
-const path = require('path')
+const path = require('node:path')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
 const { json } = require('../../src/appsec/blocked_templates')
-const zlib = require('zlib')
+const zlib = require('node:zlib')
 
 withVersions('express', 'express', version => {
   describe('Suspicious request blocking - query', () => {

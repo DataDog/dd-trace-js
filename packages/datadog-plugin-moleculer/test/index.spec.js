@@ -2,7 +2,7 @@
 
 const { expect } = require('chai')
 const getPort = require('get-port')
-const os = require('os')
+const os = require('node:os')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 

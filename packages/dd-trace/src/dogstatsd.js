@@ -1,11 +1,11 @@
 'use strict'
 
-const lookup = require('dns').lookup // cache to avoid instrumentation
+const lookup = require('node:dns').lookup // cache to avoid instrumentation
 const request = require('./exporters/common/request')
-const dgram = require('dgram')
-const isIP = require('net').isIP
+const dgram = require('node:dgram')
+const isIP = require('node:net').isIP
 const log = require('./log')
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 

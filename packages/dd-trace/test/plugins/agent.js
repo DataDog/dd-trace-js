@@ -1,11 +1,11 @@
 'use strict'
 
-const http = require('http')
+const http = require('node:http')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
 const express = require('express')
-const path = require('path')
+const path = require('node:path')
 const ritm = require('../../src/ritm')
 const { storage } = require('../../../datadog-core')
 

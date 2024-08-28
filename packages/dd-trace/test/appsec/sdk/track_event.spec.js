@@ -281,7 +281,7 @@ describe('track_event', () => {
 
     before(async () => {
       await agent.load('http')
-      http = require('http')
+      http = require('node:http')
     })
 
     before(done => {

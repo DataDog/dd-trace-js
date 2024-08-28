@@ -1,6 +1,6 @@
 'use strict'
 
-const exec = require('child_process').execSync
+const exec = require('node:child_process').execSync
 const color = require('./color')
 
 function title (str) {

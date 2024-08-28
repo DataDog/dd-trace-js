@@ -2,7 +2,7 @@
 
 require('../setup/tap')
 
-const { hostname } = require('os')
+const { hostname } = require('node:os')
 const Uint64 = require('int64-buffer').Uint64BE
 
 const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')

@@ -1,6 +1,6 @@
 'use strict'
 
-const { promisify } = require('util')
+const { promisify } = require('node:util')
 const agent = require('../../dd-trace/test/plugins/agent')
 const dc = require('dc-polyfill')
 const { NODE_MAJOR } = require('../../../version')

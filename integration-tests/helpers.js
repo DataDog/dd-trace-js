@@ -1,22 +1,22 @@
 'use strict'
 
-const { promisify } = require('util')
+const { promisify } = require('node:util')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('msgpack-lite')
 const codec = msgpack.createCodec({ int64: true })
-const EventEmitter = require('events')
-const childProcess = require('child_process')
+const EventEmitter = require('node:events')
+const childProcess = require('node:child_process')
 const { fork, spawn } = childProcess
 const exec = promisify(childProcess.exec)
-const http = require('http')
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const http = require('node:http')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const rimraf = promisify(require('rimraf'))
 const id = require('../packages/dd-trace/src/id')
 const upload = require('multer')()
-const assert = require('assert')
+const assert = require('node:assert')
 
 const hookFile = 'dd-trace/loader-hook.mjs'
 

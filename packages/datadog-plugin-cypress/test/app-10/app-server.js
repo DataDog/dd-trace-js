@@ -1,5 +1,5 @@
 // File to spin an HTTP server that returns an HTML for cypress to visit
-const http = require('http')
+const http = require('node:http')
 
 module.exports = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'text/html')

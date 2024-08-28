@@ -2,9 +2,9 @@
 
 require('./setup/tap')
 
-const http = require('http')
-const path = require('path')
-const os = require('os')
+const http = require('node:http')
+const path = require('node:path')
+const os = require('node:os')
 
 describe('dogstatsd', () => {
   let client
@@ -63,8 +63,8 @@ describe('dogstatsd', () => {
     })
 
     const dogstatsd = proxyquire('../src/dogstatsd', {
-      dgram,
-      dns
+      'node:dgram': dgram,
+      'node:dns': dns
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics

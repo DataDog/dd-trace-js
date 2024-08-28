@@ -292,7 +292,7 @@ describe('Child process plugin', () => {
       beforeEach(() => {
         return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
           tracer = require('../../dd-trace')
-          childProcess = require('child_process')
+          childProcess = require('node:child_process')
           tracer.use('child_process', { enabled: true })
         })
       })
@@ -407,7 +407,7 @@ describe('Child process plugin', () => {
       beforeEach(() => {
         return agent.load('child_process', undefined, { flushInterval: 1 }).then(() => {
           tracer = require('../../dd-trace')
-          childProcess = require('child_process')
+          childProcess = require('node:child_process')
           tracer.use('child_process', { enabled: true })
         })
       })

@@ -1,6 +1,6 @@
 'use strict'
 
-const dgram = require('dgram')
+const dgram = require('node:dgram')
 const port = process.env.SIRUN_STATSD_PORT || 8125
 
 class StatsD {

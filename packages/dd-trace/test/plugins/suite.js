@@ -2,14 +2,14 @@
 
 /* eslint-disable no-console */
 
-const childProcess = require('child_process')
-const fs = require('fs')
-const util = require('util')
-const os = require('os')
-const path = require('path')
-const https = require('https')
-const url = require('url')
-const { once } = require('events')
+const childProcess = require('node:child_process')
+const fs = require('node:fs')
+const util = require('node:util')
+const os = require('node:os')
+const path = require('node:path')
+const https = require('node:https')
+const url = require('node:url')
+const { once } = require('node:events')
 const { expect } = require('chai')
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'

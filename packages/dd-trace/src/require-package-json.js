@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const fs = require('fs')
+const path = require('node:path')
+const fs = require('node:fs')
 
 /**
  * Given a package name and a module to start from, find a package's

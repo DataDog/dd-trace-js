@@ -1,8 +1,8 @@
 'use strict'
 
 const { FakeAgent, createSandbox } = require('./helpers')
-const { fork } = require('child_process')
-const { join } = require('path')
+const { fork } = require('node:child_process')
+const { join } = require('node:path')
 const { assert } = require('chai')
 const { satisfies } = require('semver')
 const axios = require('axios')

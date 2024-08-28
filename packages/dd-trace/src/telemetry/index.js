@@ -1,7 +1,7 @@
 'use strict'
 const tracerVersion = require('../../../../package.json').version
 const dc = require('dc-polyfill')
-const os = require('os')
+const os = require('node:os')
 const dependencies = require('./dependencies')
 const { sendData } = require('./send-data')
 const { errors } = require('../startup-log')

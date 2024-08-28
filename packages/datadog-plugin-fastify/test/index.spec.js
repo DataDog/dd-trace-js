@@ -1,6 +1,6 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('async_hooks')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const axios = require('axios')
 const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')

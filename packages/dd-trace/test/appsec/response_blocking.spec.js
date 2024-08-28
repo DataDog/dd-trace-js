@@ -5,10 +5,10 @@ const agent = require('../plugins/agent')
 const Axios = require('axios')
 const appsec = require('../../src/appsec')
 const Config = require('../../src/config')
-const path = require('path')
+const path = require('node:path')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
-const fs = require('fs')
+const fs = require('node:fs')
 
 describe('HTTP Response Blocking', () => {
   let server
@@ -18,7 +18,7 @@ describe('HTTP Response Blocking', () => {
   before(async () => {
     await agent.load('http')
 
-    const http = require('http')
+    const http = require('node:http')
 
     server = new http.Server((req, res) => {
       // little polyfill, older versions of node don't have setHeaders()

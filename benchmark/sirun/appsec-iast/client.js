@@ -1,7 +1,7 @@
 'use strict'
 
 const { port, reqs } = require('./common')
-const http = require('http')
+const http = require('node:http')
 
 let connectionsMade = 0
 function request (opts) {

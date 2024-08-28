@@ -1,7 +1,7 @@
 'use strict'
 
-const path = require('path')
-const Module = require('module')
+const path = require('node:path')
+const Module = require('node:module')
 const semver = require('semver')
 const log = require('./packages/dd-trace/src/log')
 const { isTrue } = require('./packages/dd-trace/src/util')

@@ -2,7 +2,7 @@
 
 const getPort = require('get-port')
 const { assert } = require('chai')
-const path = require('path')
+const path = require('node:path')
 const axios = require('axios')
 
 const {

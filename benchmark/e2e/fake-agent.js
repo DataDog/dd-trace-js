@@ -1,5 +1,5 @@
 'use strict'
-const http = require('http')
+const http = require('node:http')
 
 http.createServer(async (req, res) => {
   res.statusCode = 200

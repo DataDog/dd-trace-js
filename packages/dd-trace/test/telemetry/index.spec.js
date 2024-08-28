@@ -4,10 +4,10 @@ require('../setup/tap')
 
 const tracerVersion = require('../../../../package.json').version
 const proxyquire = require('proxyquire').noPreserveCache()
-const http = require('http')
-const { once } = require('events')
+const http = require('node:http')
+const { once } = require('node:events')
 const { storage } = require('../../../datadog-core')
-const os = require('os')
+const os = require('node:os')
 const sinon = require('sinon')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000

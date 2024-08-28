@@ -1,9 +1,9 @@
 'use strict'
 
 const coalesce = require('koalas')
-const os = require('os')
-const path = require('path')
-const { URL, format, pathToFileURL } = require('url')
+const os = require('node:os')
+const path = require('node:path')
+const { URL, format, pathToFileURL } = require('node:url')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')

@@ -1,4 +1,4 @@
-const net = require('net')
+const net = require('node:net')
 
 async function streamToString (stream) {
   const chunks = []

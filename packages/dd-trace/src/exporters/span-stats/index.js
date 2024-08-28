@@ -1,4 +1,4 @@
-const { URL, format } = require('url')
+const { URL, format } = require('node:url')
 
 const { Writer } = require('./writer')
 

@@ -15,7 +15,7 @@ describe('IAST Index', () => {
 
   describe('full feature', () => {
     function app () {
-      const crypto = require('crypto')
+      const crypto = require('node:crypto')
       crypto.createHash('sha1')
     }
 

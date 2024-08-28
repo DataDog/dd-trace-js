@@ -17,7 +17,7 @@ describe('Taint tracking plugin sources express tests', () => {
           }
 
           testThatRequestHasVulnerability((req) => {
-            const childProcess = require('child_process')
+            const childProcess = require('node:child_process')
             childProcess.exec(req.body.command, noop)
           }, 'COMMAND_INJECTION', 1, noop, makePostRequest)
         })
@@ -28,7 +28,7 @@ describe('Taint tracking plugin sources express tests', () => {
           }
 
           testThatRequestHasVulnerability((req) => {
-            const childProcess = require('child_process')
+            const childProcess = require('node:child_process')
             childProcess.exec(req.query.command, noop)
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithQueryParam)
         })
@@ -43,7 +43,7 @@ describe('Taint tracking plugin sources express tests', () => {
           }
 
           testThatRequestHasVulnerability((req) => {
-            const childProcess = require('child_process')
+            const childProcess = require('node:child_process')
             childProcess.exec(req.headers['x-iast-test-command'], noop)
           }, 'COMMAND_INJECTION', 1, noop, makeRequestWithHeader)
         })

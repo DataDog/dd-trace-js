@@ -1,7 +1,7 @@
 'use strict'
 
 const exporters = require('../../../ext/exporters')
-const fs = require('fs')
+const fs = require('node:fs')
 const constants = require('./constants')
 
 module.exports = name => {

@@ -1,7 +1,7 @@
 'use strict'
 
-const os = require('os')
-const path = require('path')
+const os = require('node:os')
+const path = require('node:path')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const expect = require('chai').expect
@@ -11,7 +11,7 @@ const pathTraversalAnalyzer = require('../../../../src/appsec/iast/analyzers/pat
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
 
 const { prepareTestServerForIast } = require('../utils')
-const fs = require('fs')
+const fs = require('node:fs')
 
 const iastContext = {
   rootSpan: {

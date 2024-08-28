@@ -1,8 +1,8 @@
 'use strict'
 
-const fs = require('fs')
-const os = require('os')
-const path = require('path')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const agent = require('../../plugins/agent')
 const axios = require('axios')
@@ -34,7 +34,7 @@ function testInRequest (app, tests) {
   beforeEach(() => {
     return agent.load('http', undefined, { flushInterval: 1 })
       .then(() => {
-        http = require('http')
+        http = require('node:http')
       })
   })
 
@@ -224,7 +224,7 @@ function prepareTestServerForIast (description, tests, iastConfig) {
     before(() => {
       return agent.load('http', undefined, { flushInterval: 1 })
         .then(() => {
-          http = require('http')
+          http = require('node:http')
         })
     })
 

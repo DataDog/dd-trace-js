@@ -15,7 +15,7 @@ describe('exporters/file', () => {
     }
 
     FileExporter = proxyquire('../../../src/profiling/exporters/file', {
-      fs
+      'node:fs': fs
     }).FileExporter
   })
 

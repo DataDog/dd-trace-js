@@ -2,7 +2,7 @@
 
 const semver = require('semver')
 const agent = require('../../dd-trace/test/plugins/agent')
-const http = require('http')
+const http = require('node:http')
 const { expect } = require('chai')
 const proxyquire = require('proxyquire').noPreserveCache()
 

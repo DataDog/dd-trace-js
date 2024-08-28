@@ -4,8 +4,8 @@ require('../../setup/tap')
 
 const nock = require('nock')
 const getPort = require('get-port')
-const http = require('http')
-const zlib = require('zlib')
+const http = require('node:http')
+const zlib = require('node:zlib')
 
 const FormData = require('../../../src/exporters/common/form-data')
 

@@ -1,12 +1,12 @@
 'use strict'
 
-const { spawn, execSync } = require('child_process')
-const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('fs')
+const { spawn, execSync } = require('node:child_process')
+const { cpSync, mkdirSync, rmdirSync, unlinkSync } = require('node:fs')
 const getPort = require('get-port')
 const axios = require('axios')
-const { writeFileSync } = require('fs')
+const { writeFileSync } = require('node:fs')
 const { satisfies } = require('semver')
-const path = require('path')
+const path = require('node:path')
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')

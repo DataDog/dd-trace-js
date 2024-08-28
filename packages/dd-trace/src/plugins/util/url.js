@@ -1,4 +1,4 @@
-const { URL } = require('url')
+const { URL } = require('node:url')
 
 function filterSensitiveInfoFromRepository (repositoryUrl) {
   if (!repositoryUrl) {

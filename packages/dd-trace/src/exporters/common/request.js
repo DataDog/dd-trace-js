@@ -3,12 +3,12 @@
 // TODO: Add test with slow or unresponsive agent.
 // TODO: Add telemetry for things like dropped requests, errors, etc.
 
-const { Readable } = require('stream')
-const http = require('http')
-const https = require('https')
+const { Readable } = require('node:stream')
+const http = require('node:http')
+const https = require('node:https')
 // eslint-disable-next-line n/no-deprecated-api
-const { parse: urlParse } = require('url')
-const zlib = require('zlib')
+const { parse: urlParse } = require('node:url')
+const zlib = require('node:zlib')
 
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')

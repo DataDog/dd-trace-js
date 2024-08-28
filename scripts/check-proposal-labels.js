@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-const childProcess = require('child_process')
+const childProcess = require('node:child_process')
 const ORIGIN = 'origin/'
 
 let releaseBranch = process.env.GITHUB_BASE_REF // 'origin/v3.x'

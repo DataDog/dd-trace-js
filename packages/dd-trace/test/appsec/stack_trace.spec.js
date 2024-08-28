@@ -1,7 +1,7 @@
 'use strict'
 
 const { assert } = require('chai')
-const path = require('path')
+const path = require('node:path')
 
 const { reportStackTrace } = require('../../src/appsec/stack_trace')
 

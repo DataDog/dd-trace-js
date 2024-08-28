@@ -3,10 +3,10 @@
 const { prepareTestServerForIastInExpress } = require('../utils')
 const axios = require('axios')
 const agent = require('../../../plugins/agent')
-const os = require('os')
-const path = require('path')
+const os = require('node:os')
+const path = require('node:path')
 const semver = require('semver')
-const fs = require('fs')
+const fs = require('node:fs')
 
 describe('nosql injection detection with mquery', () => {
   withVersions('express', 'express', '>4.18.0', expressVersion => {

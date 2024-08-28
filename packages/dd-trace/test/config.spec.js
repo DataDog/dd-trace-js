@@ -3,7 +3,7 @@
 require('./setup/tap')
 
 const { expect } = require('chai')
-const { readFileSync } = require('fs')
+const { readFileSync } = require('node:fs')
 const sinon = require('sinon')
 
 describe('Config', () => {
@@ -39,8 +39,8 @@ describe('Config', () => {
       './pkg': pkg,
       './log': log,
       './telemetry': { updateConfig },
-      fs,
-      os
+      'node:fs:': fs,
+      'node:os': os
     })
   }
 
@@ -1649,8 +1649,8 @@ describe('Config', () => {
     const Config = proxyquire('../src/config', {
       './pkg': pkg,
       './log': log,
-      fs,
-      os
+      'node:fs': fs,
+      'node:os': os
     })
 
     const config = new Config({

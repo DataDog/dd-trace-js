@@ -2,9 +2,9 @@
 
 /* eslint-disable no-console */
 
-const fs = require('fs')
-const path = require('path')
-const { execSync } = require('child_process')
+const fs = require('node:fs')
+const path = require('node:path')
+const { execSync } = require('node:child_process')
 const walk = require('./results-diff')
 const {
   getBuildNumsFromGithub,

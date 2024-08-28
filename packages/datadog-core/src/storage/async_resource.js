@@ -1,6 +1,6 @@
 'use strict'
 
-const { createHook, executionAsyncResource } = require('async_hooks')
+const { createHook, executionAsyncResource } = require('node:async_hooks')
 const { channel } = require('dc-polyfill')
 
 const beforeCh = channel('dd-trace:storage:before')
@@ -17,7 +17,7 @@ try {
   makePrivateSymbol()
 } catch (e) {
   try {
-    const v8 = require('v8')
+    const v8 = require('node:v8')
     v8.setFlagsFromString('--allow-natives-syntax')
     makePrivateSymbol()
     v8.setFlagsFromString('--no-allow-natives-syntax')

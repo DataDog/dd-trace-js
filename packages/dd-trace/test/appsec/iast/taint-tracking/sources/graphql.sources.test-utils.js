@@ -42,7 +42,7 @@ const books = [
 const resolvers = {
   Query: {
     books: (root, args, context) => {
-      const { execSync } = require('child_process')
+      const { execSync } = require('node:child_process')
       execSync(args.title)
       return books.filter(book => {
         return book.title.includes(args.title)

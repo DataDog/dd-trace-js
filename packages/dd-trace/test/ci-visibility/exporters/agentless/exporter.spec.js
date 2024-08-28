@@ -2,7 +2,7 @@
 
 require('../../../../../dd-trace/test/setup/tap')
 
-const cp = require('child_process')
+const cp = require('node:child_process')
 
 const { expect } = require('chai')
 const nock = require('nock')

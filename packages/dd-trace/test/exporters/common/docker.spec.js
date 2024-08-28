@@ -13,7 +13,7 @@ describe('docker', () => {
   })
 
   it('should return an empty ID when the cgroup cannot be read', () => {
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.be.undefined
   })
@@ -24,7 +24,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('34dc0b5e626f2c5c4c5170e34b10e7654ce36f0fcd532739f4445baabea03376')
   })
@@ -35,7 +35,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('34dc0b5e-626f-2c5c-4c51-70e34b10e765')
   })
@@ -46,7 +46,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('34dc0b5e626f2c5c4c5170e34b10e765-1234567890')
   })
@@ -57,7 +57,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('7b8952daecf4c0e44bbcefe1b5c5ebc7b4839d4eefeccefe694709d3809b6199')
   })
@@ -70,7 +70,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('34dc0b5e626f2c5c4c5170e34b10e7654ce36f0fcd532739f4445baabea03376')
   })
@@ -81,7 +81,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('34dc0b5e626f2c5c4c5170e34b10e7654ce36f0fcd532739f4445baabea03376')
   })
@@ -92,7 +92,7 @@ describe('docker', () => {
     ].join('\n')
 
     fs.readFileSync.withArgs('/proc/self/cgroup').returns(Buffer.from(cgroup))
-    docker = proxyquire('../src/exporters/common/docker', { fs })
+    docker = proxyquire('../src/exporters/common/docker', { 'node:fs': fs })
 
     expect(docker.id()).to.equal('6f265890-5165-7fab-6b52-18d1')
   })
