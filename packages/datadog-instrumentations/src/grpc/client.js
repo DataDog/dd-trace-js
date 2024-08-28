@@ -93,8 +93,6 @@ function wrapMethod (method, path, type, hasPeer) {
     return callMethod(this, method, args, path, args[1], type, hasPeer)
   })
 
-  Object.assign(wrapped, method)
-
   patched.add(wrapped)
 
   return wrapped
