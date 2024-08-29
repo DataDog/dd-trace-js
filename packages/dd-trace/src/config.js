@@ -299,8 +299,8 @@ class Config {
 
     const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
       coalesce(
-        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, // string
-        options.cloudPayloadTagging?.request, // array
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
         ''
       ))
 

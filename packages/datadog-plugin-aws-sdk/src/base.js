@@ -26,7 +26,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     return this._tracerConfig.cloudPayloadTagging
   }
 
-  get payloadTaggingRules () { // never runs
+  get payloadTaggingRules () {
     return this.cloudTaggingConfig.rules.aws?.[this.constructor.id]
   }
 

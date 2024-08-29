@@ -86,15 +86,11 @@ describe('Sns', function () {
 
     describe('with payload tagging', () => {
       before(async () => {
-        // There's some bug when running tests in CI where the agent needs to be loaded and closed first
-        // without it the first test run fails
         await agent.load('aws-sdk')
         await agent.close({ ritmReset: false, wipe: true })
         await agent.load('aws-sdk', {}, {
           cloudPayloadTagging: {
-            // request: ['$.MessageAttributes.foo', '$.MessageAttributes.redacted.StringValue.foo'],
             request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
-            // response: ['$.MessageId', '$.Attributes.DisplayName'],
             response: '$.MessageId,$.Attributes.DisplayName',
             maxDepth: 5
           }
@@ -299,7 +295,6 @@ describe('Sns', function () {
             agent.use(traces => {
               const span = traces[0][0]
 
-              // expect(span.resource).to.equal('publish') // typo?
               expect(span.resource).to.equal(`confirmSubscription ${TopicArn}`)
               expect(span.meta).to.include({
                 aws_service: 'SNS',
@@ -307,7 +302,6 @@ describe('Sns', function () {
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
-                // 'aws.request.body.TopicArn': 'TestTopic' // typo?
                 'aws.request.body.TopicArn': TopicArn
               })
             }).then(done, done)
