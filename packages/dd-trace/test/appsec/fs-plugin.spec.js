@@ -1,5 +1,6 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
 const { assert } = require('chai')
 const path = require('path')
 const dc = require('dc-polyfill')
@@ -11,80 +12,155 @@ const opStartCh = dc.channel('apm:fs:operation:start')
 const opFinishCh = dc.channel('apm:fs:operation:finish')
 
 describe('AppsecFsPlugin', () => {
-  let plugin
+  let appsecFsPlugin
 
   beforeEach(() => {
-    plugin = new AppsecFsPlugin()
-    plugin.enable()
+    appsecFsPlugin = new AppsecFsPlugin()
+    appsecFsPlugin.enable()
   })
 
-  afterEach(() => { plugin.disable() })
+  afterEach(() => { appsecFsPlugin.disable() })
 
-  it('should mark fs root', () => {
-    const origStore = {}
-    storage.enterWith(origStore)
+  describe('enable/disable', () => {
+    let fsPlugin, configure
 
-    plugin._onFsOperationStart()
+    beforeEach(() => {
+      configure = sinon.stub()
+      class PluginClass {
+        addSub (channelName, handler) {}
 
-    let store = storage.getStore()
-    assert.property(store, 'fs')
-    assert.propertyVal(store.fs, 'parentStore', origStore)
-    assert.propertyVal(store.fs, 'root', true)
+        configure (config) {
+          configure(config)
+        }
+      }
 
-    plugin._onFsOperationFinishOrRenderEnd()
+      fsPlugin = proxyquire('../../src/appsec/fs-plugin', {
+        '../plugins/plugin': PluginClass
+      })
+    })
 
-    store = storage.getStore()
-    assert.equal(store, origStore)
-    assert.notProperty(store, 'fs')
+    afterEach(() => { sinon.restore() })
+
+    it('should require valid mod when calling enable', () => {
+      fsPlugin.enable('iast')
+
+      sinon.assert.calledOnceWithExactly(configure, true)
+    })
+
+    it('should create only one instance', () => {
+      fsPlugin.enable('iast')
+      fsPlugin.enable('iast')
+      fsPlugin.enable('rasp')
+
+      sinon.assert.calledOnceWithExactly(configure, true)
+    })
+
+    it('should discard unknown mods when enabled', () => {
+      fsPlugin.enable('unknown')
+      sinon.assert.notCalled(configure)
+
+      fsPlugin.enable()
+      sinon.assert.notCalled(configure)
+    })
+
+    it('should not disable if there are still modules using the plugin', () => {
+      fsPlugin.enable('iast')
+      fsPlugin.enable('rasp')
+
+      fsPlugin.disable('rasp')
+
+      sinon.assert.calledOnce(configure)
+    })
+
+    it('should disable only if there are no more modules using the plugin', () => {
+      fsPlugin.enable('iast')
+      fsPlugin.enable('rasp')
+
+      fsPlugin.disable('rasp')
+      fsPlugin.disable('iast')
+
+      sinon.assert.calledTwice(configure)
+      assert.strictEqual(configure.secondCall.args[0], false)
+    })
+
+    it('should discard unknown mods when disabling', () => {
+      fsPlugin.disable('unknown')
+      sinon.assert.notCalled(configure)
+
+      fsPlugin.disable()
+      sinon.assert.notCalled(configure)
+    })
   })
 
-  it('should mark fs children', () => {
-    const origStore = { orig: true }
-    storage.enterWith(origStore)
+  describe('_onFsOperationStart', () => {
+    it('should mark fs root', () => {
+      const origStore = {}
+      storage.enterWith(origStore)
 
-    plugin._onFsOperationStart()
+      appsecFsPlugin._onFsOperationStart()
 
-    const rootStore = storage.getStore()
-    assert.property(rootStore, 'fs')
-    assert.propertyVal(rootStore.fs, 'parentStore', origStore)
-    assert.propertyVal(rootStore.fs, 'root', true)
+      let store = storage.getStore()
+      assert.property(store, 'fs')
+      assert.propertyVal(store.fs, 'parentStore', origStore)
+      assert.propertyVal(store.fs, 'root', true)
 
-    plugin._onFsOperationStart()
+      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-    let store = storage.getStore()
-    assert.property(store, 'fs')
-    assert.propertyVal(store.fs, 'parentStore', rootStore)
-    assert.propertyVal(store.fs, 'root', false)
-    assert.propertyVal(store, 'orig', true)
+      store = storage.getStore()
+      assert.equal(store, origStore)
+      assert.notProperty(store, 'fs')
+    })
 
-    plugin._onFsOperationFinishOrRenderEnd()
+    it('should mark fs children', () => {
+      const origStore = { orig: true }
+      storage.enterWith(origStore)
 
-    store = storage.getStore()
-    assert.equal(store, rootStore)
+      appsecFsPlugin._onFsOperationStart()
 
-    plugin._onFsOperationFinishOrRenderEnd()
-    store = storage.getStore()
-    assert.equal(store, origStore)
+      const rootStore = storage.getStore()
+      assert.property(rootStore, 'fs')
+      assert.propertyVal(rootStore.fs, 'parentStore', origStore)
+      assert.propertyVal(rootStore.fs, 'root', true)
+
+      appsecFsPlugin._onFsOperationStart()
+
+      let store = storage.getStore()
+      assert.property(store, 'fs')
+      assert.propertyVal(store.fs, 'parentStore', rootStore)
+      assert.propertyVal(store.fs, 'root', false)
+      assert.propertyVal(store, 'orig', true)
+
+      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+
+      store = storage.getStore()
+      assert.equal(store, rootStore)
+
+      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
+      store = storage.getStore()
+      assert.equal(store, origStore)
+    })
   })
 
-  it('should mark fs ops as excluded while response rendering', () => {
-    plugin.enable()
+  describe('_onResponseRenderStart', () => {
+    it('should mark fs ops as excluded while response rendering', () => {
+      appsecFsPlugin.enable()
 
-    const origStore = {}
-    storage.enterWith(origStore)
+      const origStore = {}
+      storage.enterWith(origStore)
 
-    plugin._onResponseRenderStart()
+      appsecFsPlugin._onResponseRenderStart()
 
-    let store = storage.getStore()
-    assert.property(store, 'fs')
-    assert.propertyVal(store.fs, 'parentStore', origStore)
-    assert.propertyVal(store.fs, 'opExcluded', true)
+      let store = storage.getStore()
+      assert.property(store, 'fs')
+      assert.propertyVal(store.fs, 'parentStore', origStore)
+      assert.propertyVal(store.fs, 'opExcluded', true)
 
-    plugin._onFsOperationFinishOrRenderEnd()
+      appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-    store = storage.getStore()
-    assert.equal(store, origStore)
-    assert.notProperty(store, 'fs')
+      store = storage.getStore()
+      assert.equal(store, origStore)
+      assert.notProperty(store, 'fs')
+    })
   })
 
   describe('integration', () => {

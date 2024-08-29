@@ -41,7 +41,7 @@ class AppsecFsPlugin extends Plugin {
   _onFsOperationStart () {
     const store = storage.getStore()
     if (store) {
-      enterWith({ root: store.fs?.root === undefined }, store) // could be used opExcluded flag instead root flag?
+      enterWith({ root: store.fs?.root === undefined }, store)
     }
   }
 
@@ -58,7 +58,7 @@ class AppsecFsPlugin extends Plugin {
 }
 
 function enable (mod) {
-  if (!mod || enabledFor[mod]) return
+  if (enabledFor[mod] !== false) return
 
   enabledFor[mod] = true
 
@@ -75,9 +75,12 @@ function disable (mod) {
 
   enabledFor[mod] = false
 
-  fsPlugin?.disable()
+  const allDisabled = Object.values(enabledFor).every(val => val === false)
+  if (allDisabled) {
+    fsPlugin?.disable()
 
-  fsPlugin = undefined
+    fsPlugin = undefined
+  }
 
   log.info(`Disabled AppsecFsPlugin for ${mod}`)
 }
