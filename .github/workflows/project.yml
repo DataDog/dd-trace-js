@@ -162,3 +162,15 @@ jobs:
       - run: yarn type:test
       - run: yarn type:doc
 
+  verify-yaml:
+    strategy:
+      matrix:
+        node-version: [16, 18, 20, 22]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/install
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: node scripts/verify-yaml.js
