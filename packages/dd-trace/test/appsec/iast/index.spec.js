@@ -145,7 +145,7 @@ describe('IAST Index', () => {
     describe('enable', () => {
       it('should enable AppsecFsPlugin', () => {
         mockIast.enable(config)
-        sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'iast')
+        expect(appsecFsPlugin.enable).to.have.been.calledOnceWithExactly('iast')
       })
     })
 
@@ -153,7 +153,7 @@ describe('IAST Index', () => {
       it('should disable AppsecFsPlugin', () => {
         mockIast.enable(config)
         mockIast.disable()
-        sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, 'iast')
+        expect(appsecFsPlugin.disable).to.have.been.calledOnceWithExactly('iast')
       })
     })
 
