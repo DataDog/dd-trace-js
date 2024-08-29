@@ -4,6 +4,7 @@ const {
   addHook
 } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { NODE_MAJOR } = require('../../../version')
 
 const tracingChannel = require('dc-polyfill').tracingChannel
 const ch = tracingChannel('apm:aerospike:command')
@@ -38,12 +39,12 @@ function wrapProcess (process) {
 }
 
 const versions = (() => {
-  switch (process.versions.node.split('.')[0]) {
-    case '16':
+  switch (NODE_MAJOR) {
+    case 16:
       return ['>=4 <5.2.0']
-    case '18':
+    case 18:
       return ['5.2.0 - 5.7.0']
-    case '20':
+    case 20:
       return ['>=5.8.0']
     default:
       return []
