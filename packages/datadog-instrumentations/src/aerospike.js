@@ -37,10 +37,23 @@ function wrapProcess (process) {
   }
 }
 
+const versions = (() => {
+  switch (process.versions.node.split('.')[0]) {
+    case '16':
+      return ['>=4 <5.2.0']
+    case '18':
+      return ['5.2.0 - 5.7.0']
+    case '20':
+      return ['>=5.8.0']
+    default:
+      return []
+  }
+})()
+
 addHook({
   name: 'aerospike',
   file: 'lib/commands/command.js',
-  versions: ['^3.16.2', '4', '5']
+  versions
 },
 commandFactory => {
   return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))
