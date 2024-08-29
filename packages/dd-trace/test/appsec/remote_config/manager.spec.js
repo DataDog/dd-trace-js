@@ -3,7 +3,7 @@
 const Capabilities = require('../../../src/appsec/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../../src/appsec/remote_config/apply_states')
 
-const noop = (a, b, c, ack) => { ack() }
+const noop = () => {}
 
 describe('RemoteConfigManager', () => {
   let uuid
@@ -149,28 +149,27 @@ describe('RemoteConfigManager', () => {
     })
   })
 
-  describe('on/off', () => {
+  describe('setProductHandler/removeProductHandler', () => {
     it('should update the product list and autostart or autostop', () => {
-      expect(rc.on('ASM_FEATURES', noop)).to.equal(rc)
+      rc.setProductHandler('ASM_FEATURES', noop)
 
       expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES'])
       expect(rc.scheduler.start).to.have.been.calledOnce
 
-      rc.on('ASM_DATA', noop)
-      rc.on('ASM_DD', noop)
+      rc.setProductHandler('ASM_DATA', noop)
+      rc.setProductHandler('ASM_DD', noop)
 
       expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES', 'ASM_DATA', 'ASM_DD'])
-      expect(rc.scheduler.start).to.have.been.calledThrice
 
-      expect(rc.off('ASM_FEATURES', noop)).to.equal(rc)
+      rc.removeProductHandler('ASM_FEATURES')
 
       expect(rc.state.client.products).to.deep.equal(['ASM_DATA', 'ASM_DD'])
 
-      rc.off('ASM_DATA', noop)
+      rc.removeProductHandler('ASM_DATA')
 
       expect(rc.scheduler.stop).to.not.have.been.called
 
-      rc.off('ASM_DD', noop)
+      rc.removeProductHandler('ASM_DD')
 
       expect(rc.scheduler.stop).to.have.been.calledOnce
       expect(rc.state.client.products).to.be.empty
@@ -552,15 +551,22 @@ describe('RemoteConfigManager', () => {
   })
 
   describe('dispatch', () => {
-    beforeEach(() => {
-      sinon.stub(rc, 'emit')
-    })
+    it('should call registered handler for each config, catch errors, and update the state', (done) => {
+      const syncGoodNonAckHandler = sinon.spy()
+      const syncBadNonAckHandler = sinon.spy(() => { throw new Error('foo') })
+      const syncGoodAckHandler = sinon.spy((action, conf, ack) => { ack() })
+      const syncBadAckHandler = sinon.spy((action, conf, ack) => { ack(new Error('bar')) })
+      const asyncGoodAckHandler = sinon.spy((action, conf, ack) => { setImmediate(ack) })
+      const asyncBadAckHandler = sinon.spy((action, conf, ack) => { setImmediate(ack.bind(null, new Error('baz'))) })
+      const unackHandler = sinon.spy((action, conf, ack) => {})
 
-    it('should call emit for each config, catch errors, and update the state', () => {
-      rc.emit
-        .onCall(0).yields()
-        .onCall(1).yields(new Error('foo'))
-        .onCall(2).throws(new Error('bar'))
+      rc.setProductHandler('ASM_FEATURES', syncGoodNonAckHandler)
+      rc.setProductHandler('ASM_DATA', syncBadNonAckHandler)
+      rc.setProductHandler('ASM_DD', syncGoodAckHandler)
+      rc.setProductHandler('ASM_DD_RULES', syncBadAckHandler)
+      rc.setProductHandler('ASM_ACTIVATION', asyncGoodAckHandler)
+      rc.setProductHandler('ASM_TRUSTED_IPS', asyncBadAckHandler)
+      rc.setProductHandler('ASM_EXCLUSIONS', unackHandler)
 
       const list = [
         {
@@ -594,33 +600,87 @@ describe('RemoteConfigManager', () => {
           apply_state: UNACKNOWLEDGED,
           apply_error: '',
           file: { rules: [7, 8, 9] }
+        },
+        {
+          id: 'asm_activation',
+          path: 'datadog/42/ASM_ACTIVATION/confId/config',
+          product: 'ASM_ACTIVATION',
+          apply_state: UNACKNOWLEDGED,
+          apply_error: '',
+          file: { rules: [10, 11, 12] }
+        },
+        {
+          id: 'asm_trusted_ips',
+          path: 'datadog/42/ASM_TRUSTED_IPS/confId/config',
+          product: 'ASM_TRUSTED_IPS',
+          apply_state: UNACKNOWLEDGED,
+          apply_error: '',
+          file: { rules: [13, 14, 15] }
+        },
+        {
+          id: 'asm_exclusions',
+          path: 'datadog/42/ASM_EXCLUSIONS/confId/config',
+          product: 'ASM_EXCLUSIONS',
+          apply_state: UNACKNOWLEDGED,
+          apply_error: '',
+          file: { rules: [16, 17, 18] }
         }
       ]
 
       rc.dispatch(list, 'apply')
 
-      expect(rc.emit).to.have.callCount(4)
-      assertRCEmitCallArguments(rc.emit.getCall(0), 'ASM_FEATURES', 'apply', { asm: { enabled: true } }, 'asm_features')
-      assertRCEmitCallArguments(rc.emit.getCall(1), 'ASM_DATA', 'apply', { data: [1, 2, 3] }, 'asm_data')
-      assertRCEmitCallArguments(rc.emit.getCall(2), 'ASM_DD', 'apply', { rules: [4, 5, 6] }, 'asm_dd')
-      assertRCEmitCallArguments(rc.emit.getCall(3), 'ASM_DD_RULES', 'apply', { rules: [7, 8, 9] }, 'asm_dd_rules')
+      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', { asm: { enabled: true } })
+      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', { data: [1, 2, 3] })
+      assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', { rules: [4, 5, 6] })
+      assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', { rules: [7, 8, 9] })
+      assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', { rules: [10, 11, 12] })
+      assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', { rules: [13, 14, 15] })
+      assertAsyncHandlerCallArguments(unackHandler, 'apply', { rules: [16, 17, 18] })
 
       expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
       expect(list[0].apply_error).to.equal('')
       expect(list[1].apply_state).to.equal(ERROR)
       expect(list[1].apply_error).to.equal('Error: foo')
-      expect(list[2].apply_state).to.equal(ERROR)
-      expect(list[2].apply_error).to.equal('Error: bar')
-      expect(list[3].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[3].apply_error).to.equal('')
+      expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
+      expect(list[2].apply_error).to.equal('')
+      expect(list[3].apply_state).to.equal(ERROR)
+      expect(list[3].apply_error).to.equal('Error: bar')
+      expect(list[4].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[4].apply_error).to.equal('')
+      expect(list[5].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[5].apply_error).to.equal('')
+      expect(list[6].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[6].apply_error).to.equal('')
 
       expect(rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')).to.equal(list[0])
       expect(rc.appliedConfigs.get('datadog/42/ASM_DATA/confId/config')).to.equal(list[1])
       expect(rc.appliedConfigs.get('datadog/42/ASM_DD/confId/config')).to.equal(list[2])
       expect(rc.appliedConfigs.get('datadog/42/ASM_DD_RULES/confId/config')).to.equal(list[3])
+      expect(rc.appliedConfigs.get('datadog/42/ASM_ACTIVATION/confId/config')).to.equal(list[4])
+      expect(rc.appliedConfigs.get('datadog/42/ASM_TRUSTED_IPS/confId/config')).to.equal(list[5])
+      expect(rc.appliedConfigs.get('datadog/42/ASM_EXCLUSIONS/confId/config')).to.equal(list[6])
+
+      setImmediate(() => {
+        expect(list[4].apply_state).to.equal(ACKNOWLEDGED)
+        expect(list[4].apply_error).to.equal('')
+        expect(list[5].apply_state).to.equal(ERROR)
+        expect(list[5].apply_error).to.equal('Error: baz')
+        expect(list[6].apply_state).to.equal(UNACKNOWLEDGED)
+        expect(list[6].apply_error).to.equal('')
+        done()
+      })
+
+      function assertAsyncHandlerCallArguments (handler, ...expectedArgs) {
+        expect(handler).to.have.been.calledOnceWith(...expectedArgs)
+        expect(handler.args[0].length).to.equal(expectedArgs.length + 1)
+        expect(handler.args[0][handler.args[0].length - 1]).to.be.a('function')
+      }
     })
 
     it('should delete config from state when action is unapply', () => {
+      const handler = sinon.spy()
+      rc.setProductHandler('ASM_FEATURES', handler)
+
       rc.appliedConfigs.set('datadog/42/ASM_FEATURES/confId/config', {
         id: 'asm_data',
         path: 'datadog/42/ASM_FEATURES/confId/config',
@@ -632,15 +692,9 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
-      assertRCEmitCallArguments(rc.emit.firstCall, 'ASM_FEATURES', 'unapply', { asm: { enabled: true } }, 'asm_data')
+      expect(handler).to.have.been.calledOnceWithExactly('unapply', { asm: { enabled: true } })
       expect(rc.appliedConfigs).to.be.empty
     })
-
-    function assertRCEmitCallArguments (call, ...expectedArgs) {
-      expect(call).to.have.been.calledWith(...expectedArgs)
-      expect(call.args.length).to.equal(expectedArgs.length + 1)
-      expect(call.args[call.args.length - 1]).to.be.a('function')
-    }
   })
 })
 

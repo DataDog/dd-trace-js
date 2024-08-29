@@ -15,6 +15,7 @@ const clientId = uuid()
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
 const kPreUpdate = Symbol('kPreUpdate')
+const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
@@ -61,6 +62,7 @@ class RemoteConfigManager extends EventEmitter {
       cached_target_files: [] // updated by `parseConfig()`
     }
 
+    this._handlers = new Map()
     this.appliedConfigs = new Map()
   }
 
@@ -82,32 +84,24 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
-  on (event, listener) {
-    super.on(event, listener)
-
+  setProductHandler (product, handler) {
+    this._handlers.set(product, handler)
     this.updateProducts()
-
-    if (this.state.client.products.length) {
+    if (this.state.client.products.length === 1) {
       this.scheduler.start()
     }
-
-    return this
   }
 
-  off (event, listener) {
-    super.off(event, listener)
-
+  removeProductHandler (product) {
+    this._handlers.delete(product)
     this.updateProducts()
-
-    if (!this.state.client.products.length) {
+    if (this.state.client.products.length === 0) {
       this.scheduler.stop()
     }
-
-    return this
   }
 
   updateProducts () {
-    this.state.client.products = this.eventNames().filter(e => typeof e === 'string')
+    this.state.client.products = Array.from(this._handlers.keys())
   }
 
   getPayload () {
@@ -257,19 +251,31 @@ class RemoteConfigManager extends EventEmitter {
 
       // in case the item was already handled by kPreUpdate
       if (item.apply_state === UNACKNOWLEDGED || action === 'unapply') {
-        try {
-          // TODO: do we want to pass old and new config ?
-          this.emit(item.product, action, item.file, item.id, (err) => {
-            if (err) {
-              item.apply_state = ERROR
-              item.apply_error = err.toString()
-            } else if (item.apply_state !== ERROR) {
+        const handler = this._handlers.get(item.product)
+
+        if (handler) {
+          try {
+            if (supportsAckCallback(handler)) {
+              // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordinly
+              // TODO: do we want to pass old and new config ?
+              handler(action, item.file, (err) => {
+                if (err) {
+                  item.apply_state = ERROR
+                  item.apply_error = err.toString()
+                } else if (item.apply_state !== ERROR) {
+                  item.apply_state = ACKNOWLEDGED
+                }
+              })
+            } else {
+              // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`
+              // TODO: do we want to pass old and new config ?
+              handler(action, item.file)
               item.apply_state = ACKNOWLEDGED
             }
-          })
-        } catch (err) {
-          item.apply_state = ERROR
-          item.apply_error = err.toString()
+          } catch (err) {
+            item.apply_state = ERROR
+            item.apply_error = err.toString()
+          }
         }
       }
 
@@ -301,6 +307,24 @@ function parseConfigPath (configPath) {
     product: match[1],
     id: match[2]
   }
+}
+
+function supportsAckCallback (handler) {
+  if (kSupportsAckCallback in handler) return handler[kSupportsAckCallback]
+
+  const numOfArgs = handler.length
+  let result = false
+
+  if (numOfArgs >= 3) {
+    result = true
+  } else if (numOfArgs !== 0) {
+    const source = handler.toString()
+    result = source.slice(0, source.indexOf(')')).includes('...')
+  }
+
+  handler[kSupportsAckCallback] = result
+
+  return result
 }
 
 module.exports = RemoteConfigManager

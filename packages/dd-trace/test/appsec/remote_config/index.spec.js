@@ -22,7 +22,9 @@ describe('Remote Config index', () => {
     rc = {
       updateCapabilities: sinon.spy(),
       on: sinon.spy(),
-      off: sinon.spy()
+      off: sinon.spy(),
+      setProductHandler: sinon.spy(),
+      removeProductHandler: sinon.spy()
     }
 
     RemoteConfigManager = sinon.stub().returns(rc)
@@ -50,13 +52,6 @@ describe('Remote Config index', () => {
   })
 
   describe('enable', () => {
-    let ack
-    const id = 1
-
-    beforeEach(() => {
-      ack = sinon.spy()
-    })
-
     it('should listen to remote config when appsec is not explicitly configured', () => {
       config.appsec = { enabled: undefined }
 
@@ -64,8 +59,8 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.on).to.have.been.calledWith('ASM_FEATURES')
-      expect(rc.on.firstCall.args[1]).to.be.a('function')
+      expect(rc.setProductHandler).to.have.been.calledWith('ASM_FEATURES')
+      expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
 
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
@@ -75,8 +70,8 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
-      expect(rc.on).to.have.been.calledOnceWith('ASM_FEATURES')
-      expect(rc.on.firstCall.args[1]).to.be.a('function')
+      expect(rc.setProductHandler).to.have.been.calledOnceWith('ASM_FEATURES')
+      expect(rc.setProductHandler.firstCall.args[1]).to.be.a('function')
     })
 
     it('should not listen to remote config when appsec is explicitly configured as enabled=false', () => {
@@ -86,7 +81,7 @@ describe('Remote Config index', () => {
 
       expect(RemoteConfigManager).to.have.been.calledOnceWithExactly(config)
       expect(rc.updateCapabilities).to.not.have.been.calledWith(RemoteConfigCapabilities.ASM_ACTIVATION, true)
-      expect(rc.on).to.not.have.been.called
+      expect(rc.setProductHandler).to.not.have.been.called
     })
 
     it('should listen ASM_API_SECURITY_SAMPLE_RATE when appsec.enabled=undefined and appSecurity.enabled=true', () => {
@@ -119,36 +114,32 @@ describe('Remote Config index', () => {
 
         remoteConfig.enable(config, appsec)
 
-        listener = rc.on.firstCall.args[1]
+        listener = rc.setProductHandler.firstCall.args[1]
       })
 
       it('should enable appsec when listener is called with apply and enabled', () => {
-        listener('apply', { asm: { enabled: true } }, id, ack)
+        listener('apply', { asm: { enabled: true } })
 
         expect(appsec.enable).to.have.been.called
-        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should enable appsec when listener is called with modify and enabled', () => {
-        listener('modify', { asm: { enabled: true } }, id, ack)
+        listener('modify', { asm: { enabled: true } })
 
         expect(appsec.enable).to.have.been.called
-        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should disable appsec when listener is called with unnaply and enabled', () => {
-        listener('unnaply', { asm: { enabled: true } }, id, ack)
+        listener('unnaply', { asm: { enabled: true } })
 
         expect(appsec.disable).to.have.been.calledOnce
-        expect(ack).to.have.been.calledOnceWithExactly()
       })
 
       it('should not do anything when listener is called with apply and malformed data', () => {
-        listener('apply', {}, id, ack)
+        listener('apply', {})
 
         expect(appsec.enable).to.not.have.been.called
         expect(appsec.disable).to.not.have.been.called
-        expect(ack).to.have.been.calledOnceWithExactly()
       })
     })
 
@@ -168,7 +159,7 @@ describe('Remote Config index', () => {
 
           remoteConfig.enable(config)
 
-          listener = rc.on.firstCall.args[1]
+          listener = rc.setProductHandler.firstCall.args[1]
         })
 
         it('should update apiSecuritySampler config', () => {
@@ -176,10 +167,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0.5
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should update apiSecuritySampler config and disable it', () => {
@@ -187,10 +177,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0)
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with values greater than 1', () => {
@@ -198,10 +187,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 5
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.configure).to.not.be.called
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with values less than 0', () => {
@@ -209,10 +197,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: -0.4
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.configure).to.not.be.called
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
 
         it('should not update apiSecuritySampler config with incorrect values', () => {
@@ -220,10 +207,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 'not_a_number'
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.configure).to.not.be.called
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
       })
 
@@ -242,7 +228,7 @@ describe('Remote Config index', () => {
 
           remoteConfig.enable(config)
 
-          listener = rc.on.firstCall.args[1]
+          listener = rc.setProductHandler.firstCall.args[1]
         })
 
         it('should update config apiSecurity.requestSampling property value', () => {
@@ -250,10 +236,9 @@ describe('Remote Config index', () => {
             api_security: {
               request_sample_rate: 0.5
             }
-          }, id, ack)
+          })
 
           expect(apiSecuritySampler.setRequestSampling).to.be.calledOnceWithExactly(0.5)
-          expect(ack).to.have.been.calledOnceWithExactly()
         })
       })
     })
@@ -266,7 +251,7 @@ describe('Remote Config index', () => {
         remoteConfig.enableWafUpdate(config.appsec)
 
         expect(rc.updateCapabilities).to.not.have.been.called
-        expect(rc.on).to.not.have.been.called
+        expect(rc.setProductHandler).to.not.have.been.called
       })
 
       it('should not enable when custom appsec rules are provided', () => {
@@ -275,7 +260,7 @@ describe('Remote Config index', () => {
         remoteConfig.enableWafUpdate(config.appsec)
 
         expect(rc.updateCapabilities).to.not.have.been.calledWith('ASM_ACTIVATION')
-        expect(rc.on).to.have.been.called
+        expect(rc.setProductHandler).to.have.been.called
       })
 
       it('should enable when using default rules', () => {
@@ -302,9 +287,9 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-        expect(rc.on).to.have.been.calledWith('ASM_DATA')
-        expect(rc.on).to.have.been.calledWith('ASM_DD')
-        expect(rc.on).to.have.been.calledWith('ASM')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM')
         expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
@@ -332,9 +317,9 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-        expect(rc.on).to.have.been.calledWith('ASM_DATA')
-        expect(rc.on).to.have.been.calledWith('ASM_DD')
-        expect(rc.on).to.have.been.calledWith('ASM')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DATA')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM_DD')
+        expect(rc.setProductHandler).to.have.been.calledWith('ASM')
         expect(rc.on).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
 
@@ -391,9 +376,9 @@ describe('Remote Config index', () => {
         expect(rc.updateCapabilities)
           .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
 
-        expect(rc.off).to.have.been.calledWith('ASM_DATA')
-        expect(rc.off).to.have.been.calledWith('ASM_DD')
-        expect(rc.off).to.have.been.calledWith('ASM')
+        expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DATA')
+        expect(rc.removeProductHandler).to.have.been.calledWith('ASM_DD')
+        expect(rc.removeProductHandler).to.have.been.calledWith('ASM')
         expect(rc.off).to.have.been.calledWithExactly(kPreUpdate, RuleManager.updateWafFromRC)
       })
     })
