@@ -22,7 +22,10 @@ function copyProperties (original, wrapped) {
 
 function wrapFunction (original, wrapper) {
   if (typeof original === 'function') assertNotClass(original)
-  let delegate = wrapSafe(original, wrapper)
+  // TODO This needs to be re-done so that this and wrapMethod are distinct.
+  const target = { func: original }
+  wrapMethod(target, 'func', wrapper, typeof original !== 'function')
+  let delegate = target.func
 
   const shim = function shim () {
     return delegate.apply(this, arguments)
@@ -71,36 +74,47 @@ function setSafe (value) {
   safeMode = value
 }
 
-function wrapSafe (original, wrapper) {
-  // In this mode, we make a best-effort attempt to handle errors that are thrown
-  // by us, rather than wrapped code. With such errors, we log them, and then attempt
-  // to return the result as if no wrapping was done at all.
-  //
-  // Caveats:
-  //   * If the original function is called in a later iteration of the event loop,
-  //     and we throw _then_, then it won't be caught by this. In practice, we always call
-  //     the original function synchronously, so this is not a problem.
-  //   * While async errors are dealt with here, errors in callbacks are not. This
-  //     is because we don't necessarily know _for sure_ that any function arguments
-  //     are wrapped by us. We could wrap them all anyway and just make that assumption,
-  //     or just assume that the last argument is always a callback set by us if it's a
-  //     function, but those don't seem like things we can rely on. Instead, we now
-  //     deliberately wrap all the callbacks we add via `wrapFunction`.
+function wrapMethod (target, name, wrapper, noAssert) {
+  if (!noAssert) {
+    assertMethod(target, name)
+    assertFunction(wrapper)
+  }
 
-  // We're going to hold on to current callState in this variable in this scope,
-  // which is fine because any time we reference it, we're referencing it synchronously.
-  // We'll use it in the our wrapper (which, again, is called syncrhonously), and in the
-  // errorHandler, which will already have been bound to this callState.
-  let currentCallState
+  const original = target[name]
+  let wrapped
 
-  // Rather than calling the original function directly from the shim wrapper, we wrap
-  // it again so that we can track if it was called and if it returned. This is because
-  // we need to know if an error was thrown by the original function, or by us.
-  // We could do this inside the `wrapper` function defined below, which would simplify
-  // managing the callState, but then we'd be calling `wrapper` on each invocation, so
-  // instead -we do it here, once.
-  const innerWrapped = typeof original === 'function'
-    ? wrapper(function (...args) {
+  if (safeMode && original) {
+    // In this mode, we make a best-effort attempt to handle errors that are thrown
+    // by us, rather than wrapped code. With such errors, we log them, and then attempt
+    // to return the result as if no wrapping was done at all.
+    //
+    // Caveats:
+    //   * If the original function is called in a later iteration of the event loop,
+    //     and we throw _then_, then it won't be caught by this. In practice, we always call
+    //     the original function synchronously, so this is not a problem.
+    //   * While async errors are dealt with here, errors in callbacks are not. This
+    //     is because we don't necessarily know _for sure_ that any function arguments
+    //     are wrapped by us. We could wrap them all anyway and just make that assumption,
+    //     or just assume that the last argument is always a callback set by us if it's a
+    //     function, but those don't seem like things we can rely on. We could add a
+    //     `shimmer.markCallbackAsWrapped()` function that's a no-op outside safe-mode,
+    //     but that means modifying every instrumentation. Even then, the complexity of
+    //     this code increases because then we'd need to effectively do the reverse of
+    //     what we're doing for synchronous functions. This is a TODO.
+
+    // We're going to hold on to current callState in this variable in this scope,
+    // which is fine because any time we reference it, we're referencing it synchronously.
+    // We'll use it in the our wrapper (which, again, is called syncrhonously), and in the
+    // errorHandler, which will already have been bound to this callState.
+    let currentCallState
+
+    // Rather than calling the original function directly from the shim wrapper, we wrap
+    // it again so that we can track if it was called and if it returned. This is because
+    // we need to know if an error was thrown by the original function, or by us.
+    // We could do this inside the `wrapper` function defined below, which would simplify
+    // managing the callState, but then we'd be calling `wrapper` on each invocation, so
+    // instead we do it here, once.
+    const innerWrapped = wrapper(function (...args) {
       // We need to stash the callState here because of recursion.
       const callState = currentCallState
       callState.startCall()
@@ -112,65 +126,49 @@ function wrapSafe (original, wrapper) {
       }
       return retVal
     })
-    : wrapper(original)
 
-  // This is the crux of what we're doing in safe mode. It handles errors
-  // that _we_ cause, by logging them, and transparently providing results
-  // as if no wrapping was done at all. That means detecting (via callState)
-  // whether the function has already run or not, and if it has, returning
-  // the result, and otherwise calling the original function unwrapped.
-  const handleError = function (args, callState, e) {
-    if (callState.completed) {
-      // error was thrown after original function returned/resolved, so
-      // it was us. log it.
-      log.error(e)
-      // original ran and returned something. return it.
-      return callState.retVal
-    }
+    // This is the crux of what we're doing in safe mode. It handles errors
+    // that _we_ cause, by logging them, and transparently providing results
+    // as if no wrapping was done at all. That means detecting (via callState)
+    // whether the function has already run or not, and if it has, returning
+    // the result, and otherwise calling the original function unwrapped.
+    const handleError = function (args, callState, e) {
+      if (callState.completed) {
+        // error was thrown after original function returned/resolved, so
+        // it was us. log it.
+        log.error(e)
+        // original ran and returned something. return it.
+        return callState.retVal
+      }
 
-    if (!callState.called) {
-      // error was thrown before original function was called, so
-      // it was us. log it.
-      log.error(e)
-      // original never ran. call it unwrapped if it's real.
-      if (typeof original === 'function') {
+      if (!callState.called) {
+        // error was thrown before original function was called, so
+        // it was us. log it.
+        log.error(e)
+        // original never ran. call it unwrapped.
         return original.apply(this, args)
       }
+
+      // error was thrown during original function execution, so
+      // it was them. throw.
+      throw e
     }
 
-    // error was thrown during original function execution, so
-    // it was them. throw.
-    throw e
-  }
+    // The wrapped function is the one that will be called by the user.
+    // It calls our version of the original function, which manages the
+    // callState. That way when we use the errorHandler, it can tell where
+    // the error originated.
+    wrapped = function (...args) {
+      currentCallState = new CallState()
+      const errorHandler = handleError.bind(this, args, currentCallState)
 
-  // The wrapped function is the one that will be called by the user.
-  // It calls our version of the original function, which manages the
-  // callState. That way when we use the errorHandler, it can tell where
-  // the error originated.
-  return function (...args) {
-    currentCallState = new CallState()
-    const errorHandler = handleError.bind(this, args, currentCallState)
-
-    try {
-      const retVal = innerWrapped.apply(this, args)
-      return isPromise(retVal) ? retVal.catch(errorHandler) : retVal
-    } catch (e) {
-      return errorHandler(e)
+      try {
+        const retVal = innerWrapped.apply(this, args)
+        return isPromise(retVal) ? retVal.catch(errorHandler) : retVal
+      } catch (e) {
+        return errorHandler(e)
+      }
     }
-  }
-}
-
-function wrapMethod (target, name, wrapper, noAssert) {
-  if (!noAssert) {
-    assertMethod(target, name)
-    assertFunction(wrapper)
-  }
-
-  const original = target[name]
-  let wrapped
-
-  if (safeMode) {
-    wrapped = wrapSafe(original, wrapper)
   } else {
     // In non-safe mode, we just wrap the original function directly.
     wrapped = wrapper(original)
