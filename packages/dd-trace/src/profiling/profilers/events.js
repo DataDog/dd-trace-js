@@ -225,9 +225,10 @@ class EventSerializer {
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
 class NodeApiEventSource {
-  constructor (addEventCallback) {
+  constructor (addEventCallback, entryTypes) {
     this.addEventCallback = addEventCallback
     this._observer = undefined
+    this.entryTypes = entryTypes || Object.keys(decoratorTypes)
   }
 
   start () {
@@ -241,7 +242,7 @@ class NodeApiEventSource {
     }
 
     this._observer = new PerformanceObserver(add.bind(this))
-    this._observer.observe({ entryTypes: Object.keys(decoratorTypes) })
+    this._observer.observe({ entryTypes: this.entryTypes })
   }
 
   stop () {
@@ -249,6 +250,45 @@ class NodeApiEventSource {
       this._observer.disconnect()
       this._observer = undefined
     }
+  }
+}
+
+class DatadogInstrumentationEventSource {
+  constructor (addEventCallback) {
+    this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
+      const Plugin = require(`./event_plugins/${m}`)
+      return new Plugin(addEventCallback)
+    })
+
+    this.started = false
+  }
+
+  start () {
+    if (!this.started) {
+      this.plugins.forEach(p => p.configure({ enabled: true }))
+      this.started = true
+    }
+  }
+
+  stop () {
+    if (this.started) {
+      this.plugins.forEach(p => p.configure({ enabled: false }))
+      this.started = false
+    }
+  }
+}
+
+class CompositeEventSource {
+  constructor (sources) {
+    this.sources = sources
+  }
+
+  start () {
+    this.sources.forEach(s => s.start())
+  }
+
+  stop () {
+    this.sources.forEach(s => s.stop())
   }
 }
 
@@ -261,9 +301,21 @@ class EventsProfiler {
     this.type = 'events'
     this.eventSerializer = new EventSerializer()
 
-    const eventHandler = event => this.eventSerializer.addEvent(event)
+    const eventHandler = event => {
+      this.eventSerializer.addEvent(event)
+    }
 
-    this._eventSource = new NodeApiEventSource(eventHandler)
+    if (options.codeHotspotsEnabled) {
+      // Use Datadog instrumentation to collect events with span IDs. Still use
+      // Node API for GC events.
+      this._eventSource = new CompositeEventSource([
+        new DatadogInstrumentationEventSource(eventHandler),
+        new NodeApiEventSource(eventHandler, ['gc'])
+      ])
+    } else {
+      // Use Node API instrumentation to collect events without span IDs
+      this._eventSource = new NodeApiEventSource(eventHandler)
+    }
   }
 
   start () {
