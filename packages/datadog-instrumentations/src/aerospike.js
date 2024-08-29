@@ -39,15 +39,17 @@ function wrapProcess (process) {
 }
 
 const versions = (() => {
+
   switch (NODE_MAJOR) {
     case 16:
+    case 17:
       return ['>=4 <5.2.0']
     case 18:
+    case 19:
       return ['5.2.0 - 5.7.0']
     case 20:
-      return ['>=5.8.0']
     default:
-      return []
+      return ['>=5.8.0']
   }
 })()
 

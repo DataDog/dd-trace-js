@@ -28,6 +28,9 @@ jobs:
           - node-version: 20
             range: '>=5.8.0'
             aerospike-image: ce-6.4.0.3
+          - node-version: latest
+            range: '>=5.8.0'
+            aerospike-image: ce-6.4.0.3
     runs-on: ubuntu-latest
     services:
       aerospike:
