@@ -6,7 +6,7 @@ const addresses = require('../../src/appsec/addresses')
 const { handleUncaughtExceptionMonitor } = require('../../src/appsec/rasp')
 
 describe('RASP', () => {
-  let waf, rasp, datadogCore, stackTrace, web, blocking
+  let waf, rasp, datadogCore, stackTrace, web, blocking, appsecFsPlugin
 
   beforeEach(() => {
     datadogCore = {
@@ -30,12 +30,18 @@ describe('RASP', () => {
       block: sinon.stub()
     }
 
+    appsecFsPlugin = {
+      enable: sinon.stub(),
+      disable: sinon.stub()
+    }
+
     rasp = proxyquire('../../src/appsec/rasp', {
       '../../../datadog-core': datadogCore,
       './waf': waf,
       './stack_trace': stackTrace,
       './../plugins/util/web': web,
-      './blocking': blocking
+      './blocking': blocking,
+      './fs-plugin': appsecFsPlugin
     })
 
     const config = {
@@ -54,6 +60,19 @@ describe('RASP', () => {
   afterEach(() => {
     sinon.restore()
     rasp.disable()
+  })
+
+  describe('enable', () => {
+    it('should enable AppsecFsPlugin', () => {
+      sinon.assert.calledOnceWithExactly(appsecFsPlugin.enable, 'rasp')
+    })
+  })
+
+  describe('disable', () => {
+    it('should disable AppsecFsPlugin', () => {
+      rasp.disable()
+      sinon.assert.calledOnceWithExactly(appsecFsPlugin.disable, 'rasp')
+    })
   })
 
   describe('handleResult', () => {
