@@ -765,6 +765,7 @@ addHook({
       _ddTestModuleId,
       _ddTestSessionId,
       _ddTestCommand,
+      _ddTestSessionName,
       _ddForcedToRun,
       _ddUnskippable,
       _ddItrCorrelationId,
