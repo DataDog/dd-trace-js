@@ -84,6 +84,7 @@ versions.forEach((version) => {
             assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
             assert.include(testSessionEvent.content.resource, 'test_session.playwright test')
             assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+            assert.equal(testModuleEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
             assert.include(testModuleEvent.content.resource, 'test_module.playwright test')
             assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'browser')
@@ -105,6 +106,7 @@ versions.forEach((version) => {
             ])
 
             testSuiteEvents.forEach(testSuiteEvent => {
+              assert.equal(testSuiteEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
               if (testSuiteEvent.content.meta[TEST_STATUS] === 'fail') {
                 assert.exists(testSuiteEvent.content.meta[ERROR_MESSAGE])
               }
@@ -126,6 +128,7 @@ versions.forEach((version) => {
             ])
 
             testEvents.forEach(testEvent => {
+              assert.equal(testEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
               assert.exists(testEvent.content.metrics[TEST_SOURCE_START])
               assert.equal(
                 testEvent.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/playwright-tests/'), true
