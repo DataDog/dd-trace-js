@@ -251,10 +251,12 @@ class CypressPlugin {
     const testSuiteSpanMetadata =
       getTestSuiteCommonTags(this.command, this.frameworkVersion, suite, TEST_FRAMEWORK_NAME)
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSuiteSpanMetadata
       }
@@ -265,7 +267,8 @@ class CypressPlugin {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_COMMAND]: this.command,
-      [TEST_MODULE]: TEST_FRAMEWORK_NAME
+      [TEST_MODULE]: TEST_FRAMEWORK_NAME,
+      [TEST_SESSION_NAME]: this.testSessionName
     }
     if (this.testSuiteSpan) {
       testSuiteTags[TEST_SUITE_ID] = this.testSuiteSpan.context().toSpanId()
@@ -389,13 +392,13 @@ class CypressPlugin {
       testSessionSpanMetadata[TEST_EARLY_FLAKE_ENABLED] = 'true'
     }
 
-    const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
+    this.testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
-        [TEST_SESSION_NAME]: testSessionName,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testSessionSpanMetadata
       }
@@ -406,6 +409,7 @@ class CypressPlugin {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
+        [TEST_SESSION_NAME]: this.testSessionName,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata
       }
