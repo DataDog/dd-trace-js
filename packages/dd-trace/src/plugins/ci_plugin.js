@@ -103,6 +103,8 @@ module.exports = class CiPlugin extends Plugin {
       if (this.constructor.id === 'vitest') {
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
+        process.env.DD_CIVISIBILITY_TEST_SESSION_NAME = this.testSessionName
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')

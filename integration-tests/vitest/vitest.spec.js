@@ -15,7 +15,8 @@ const {
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
   TEST_CODE_COVERAGE_LINES_PCT,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_COMMAND
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.6.0', 'latest']
@@ -61,6 +62,7 @@ versions.forEach((version) => {
         assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
         assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
+        assert.equal(testModuleEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
         assert.equal(testModuleEvent.content.meta[TEST_STATUS], 'fail')
         assert.equal(testSessionEvent.content.meta[TEST_TYPE], 'test')
@@ -131,6 +133,16 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
           ]
         )
+
+        testEvents.forEach(test => {
+          assert.equal(test.content.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(test.content.meta[TEST_COMMAND], 'vitest run')
+        })
+
+        testSuiteEvents.forEach(testSuite => {
+          assert.equal(testSuite.content.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(testSuite.content.meta[TEST_COMMAND], 'vitest run')
+        })
         // TODO: check error messages
       }).then(() => done()).catch(done)
 
