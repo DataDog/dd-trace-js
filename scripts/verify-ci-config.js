@@ -117,7 +117,9 @@ function getRangesFromYaml (job) {
       }
       nodeVersion = nodeVersion.map(v => Number(v))
       if (nodeVersion.includes(nodeMajor)) {
-        return [possibility.range].flat()
+        if (possibility.range) {
+          return [possibility.range].flat()
+        }
       }
     }
   } else if (job.strategy && job.strategy.matrix && job.strategy.matrix.range) {

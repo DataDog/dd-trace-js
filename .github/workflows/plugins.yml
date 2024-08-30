@@ -23,13 +23,13 @@ jobs:
         aerospike-image: [ce-5.7.0.15]
         include:
           - node-version: 18
-            range: '5.2.0 - 5.7.0'
+            range: '>=5.2.0'
             aerospike-image: ce-6.4.0.3
           - node-version: 20
-            range: '>=5.8.0'
+            range: '>=5.5.0'
             aerospike-image: ce-6.4.0.3
-          - node-version: latest
-            range: '>=5.8.0'
+          - node-version: 22
+            range: '>=5.12.1'
             aerospike-image: ce-6.4.0.3
     runs-on: ubuntu-latest
     services:
