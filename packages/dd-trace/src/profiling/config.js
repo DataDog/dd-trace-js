@@ -97,6 +97,11 @@ class Config {
     const samplingContextsAvailable = process.platform !== 'win32'
     function checkOptionAllowed (option, description, condition) {
       if (option && !condition) {
+        // injection hardening: all of these can only happen if user explicitly
+        // sets an environment variable to its non-default value on the platform.
+        // In practical terms, it'd require someone explicitly turning on OOM
+        // monitoring, code hotspots, endpoint profiling, or CPU profiling on
+        // Windows, where it is not supported.
         throw new Error(`${description} not supported on ${process.platform}.`)
       }
     }
