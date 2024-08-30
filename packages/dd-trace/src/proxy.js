@@ -202,6 +202,7 @@ class Tracer extends NoopProxy {
 
   profilerStarted () {
     if (!this._profilerStarted) {
+      // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
     return this._profilerStarted
