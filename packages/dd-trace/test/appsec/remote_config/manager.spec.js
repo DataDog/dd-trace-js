@@ -553,120 +553,85 @@ describe('RemoteConfigManager', () => {
   describe('dispatch', () => {
     it('should call registered handler for each config, catch errors, and update the state', (done) => {
       const syncGoodNonAckHandler = sinon.spy()
-      const syncBadNonAckHandler = sinon.spy(() => { throw new Error('foo') })
+      const syncBadNonAckHandler = sinon.spy(() => { throw new Error('sync fn') })
+      const asyncGoodHandler = sinon.spy(async () => {})
+      const asyncBadHandler = sinon.spy(async () => { throw new Error('async fn') })
       const syncGoodAckHandler = sinon.spy((action, conf, ack) => { ack() })
-      const syncBadAckHandler = sinon.spy((action, conf, ack) => { ack(new Error('bar')) })
+      const syncBadAckHandler = sinon.spy((action, conf, ack) => { ack(new Error('sync ack fn')) })
       const asyncGoodAckHandler = sinon.spy((action, conf, ack) => { setImmediate(ack) })
-      const asyncBadAckHandler = sinon.spy((action, conf, ack) => { setImmediate(ack.bind(null, new Error('baz'))) })
+      const asyncBadAckHandler = sinon.spy((action, conf, ack) => {
+        setImmediate(ack.bind(null, new Error('async ack fn')))
+      })
       const unackHandler = sinon.spy((action, conf, ack) => {})
 
-      rc.setProductHandler('ASM_FEATURES', syncGoodNonAckHandler)
-      rc.setProductHandler('ASM_DATA', syncBadNonAckHandler)
-      rc.setProductHandler('ASM_DD', syncGoodAckHandler)
-      rc.setProductHandler('ASM_DD_RULES', syncBadAckHandler)
-      rc.setProductHandler('ASM_ACTIVATION', asyncGoodAckHandler)
-      rc.setProductHandler('ASM_TRUSTED_IPS', asyncBadAckHandler)
-      rc.setProductHandler('ASM_EXCLUSIONS', unackHandler)
+      rc.setProductHandler('PRODUCT_0', syncGoodNonAckHandler)
+      rc.setProductHandler('PRODUCT_1', syncBadNonAckHandler)
+      rc.setProductHandler('PRODUCT_2', asyncGoodHandler)
+      rc.setProductHandler('PRODUCT_3', asyncBadHandler)
+      rc.setProductHandler('PRODUCT_4', syncGoodAckHandler)
+      rc.setProductHandler('PRODUCT_5', syncBadAckHandler)
+      rc.setProductHandler('PRODUCT_6', asyncGoodAckHandler)
+      rc.setProductHandler('PRODUCT_7', asyncBadAckHandler)
+      rc.setProductHandler('PRODUCT_8', unackHandler)
 
-      const list = [
-        {
-          id: 'asm_features',
-          path: 'datadog/42/ASM_FEATURES/confId/config',
-          product: 'ASM_FEATURES',
+      const list = []
+      for (let i = 0; i < 9; i++) {
+        list[i] = {
+          id: `id_${i}`,
+          path: `datadog/42/PRODUCT_${i}/confId/config`,
+          product: `PRODUCT_${i}`,
           apply_state: UNACKNOWLEDGED,
           apply_error: '',
-          file: { asm: { enabled: true } }
-        },
-        {
-          id: 'asm_data',
-          path: 'datadog/42/ASM_DATA/confId/config',
-          product: 'ASM_DATA',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { data: [1, 2, 3] }
-        },
-        {
-          id: 'asm_dd',
-          path: 'datadog/42/ASM_DD/confId/config',
-          product: 'ASM_DD',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { rules: [4, 5, 6] }
-        },
-        {
-          id: 'asm_dd_rules',
-          path: 'datadog/42/ASM_DD_RULES/confId/config',
-          product: 'ASM_DD_RULES',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { rules: [7, 8, 9] }
-        },
-        {
-          id: 'asm_activation',
-          path: 'datadog/42/ASM_ACTIVATION/confId/config',
-          product: 'ASM_ACTIVATION',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { rules: [10, 11, 12] }
-        },
-        {
-          id: 'asm_trusted_ips',
-          path: 'datadog/42/ASM_TRUSTED_IPS/confId/config',
-          product: 'ASM_TRUSTED_IPS',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { rules: [13, 14, 15] }
-        },
-        {
-          id: 'asm_exclusions',
-          path: 'datadog/42/ASM_EXCLUSIONS/confId/config',
-          product: 'ASM_EXCLUSIONS',
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-          file: { rules: [16, 17, 18] }
+          file: { index: i }
         }
-      ]
+      }
 
       rc.dispatch(list, 'apply')
 
-      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', { asm: { enabled: true } })
-      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', { data: [1, 2, 3] })
-      assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', { rules: [4, 5, 6] })
-      assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', { rules: [7, 8, 9] })
-      assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', { rules: [10, 11, 12] })
-      assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', { rules: [13, 14, 15] })
-      assertAsyncHandlerCallArguments(unackHandler, 'apply', { rules: [16, 17, 18] })
+      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[0].file)
+      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[1].file)
+      expect(asyncGoodHandler).to.have.been.calledOnceWithExactly('apply', list[2].file)
+      expect(asyncBadHandler).to.have.been.calledOnceWithExactly('apply', list[3].file)
+      assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', list[4].file)
+      assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', list[5].file)
+      assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', list[6].file)
+      assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', list[7].file)
+      assertAsyncHandlerCallArguments(unackHandler, 'apply', list[8].file)
 
       expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
       expect(list[0].apply_error).to.equal('')
       expect(list[1].apply_state).to.equal(ERROR)
-      expect(list[1].apply_error).to.equal('Error: foo')
-      expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
+      expect(list[1].apply_error).to.equal('Error: sync fn')
+      expect(list[2].apply_state).to.equal(UNACKNOWLEDGED)
       expect(list[2].apply_error).to.equal('')
-      expect(list[3].apply_state).to.equal(ERROR)
-      expect(list[3].apply_error).to.equal('Error: bar')
-      expect(list[4].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[3].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[3].apply_error).to.equal('')
+      expect(list[4].apply_state).to.equal(ACKNOWLEDGED)
       expect(list[4].apply_error).to.equal('')
-      expect(list[5].apply_state).to.equal(UNACKNOWLEDGED)
-      expect(list[5].apply_error).to.equal('')
+      expect(list[5].apply_state).to.equal(ERROR)
+      expect(list[5].apply_error).to.equal('Error: sync ack fn')
       expect(list[6].apply_state).to.equal(UNACKNOWLEDGED)
       expect(list[6].apply_error).to.equal('')
+      expect(list[7].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[7].apply_error).to.equal('')
+      expect(list[8].apply_state).to.equal(UNACKNOWLEDGED)
+      expect(list[8].apply_error).to.equal('')
 
-      expect(rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')).to.equal(list[0])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_DATA/confId/config')).to.equal(list[1])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_DD/confId/config')).to.equal(list[2])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_DD_RULES/confId/config')).to.equal(list[3])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_ACTIVATION/confId/config')).to.equal(list[4])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_TRUSTED_IPS/confId/config')).to.equal(list[5])
-      expect(rc.appliedConfigs.get('datadog/42/ASM_EXCLUSIONS/confId/config')).to.equal(list[6])
+      for (let i = 0; i < list.length; i++) {
+        expect(rc.appliedConfigs.get(`datadog/42/PRODUCT_${i}/confId/config`)).to.equal(list[i])
+      }
 
       setImmediate(() => {
-        expect(list[4].apply_state).to.equal(ACKNOWLEDGED)
-        expect(list[4].apply_error).to.equal('')
-        expect(list[5].apply_state).to.equal(ERROR)
-        expect(list[5].apply_error).to.equal('Error: baz')
-        expect(list[6].apply_state).to.equal(UNACKNOWLEDGED)
+        expect(list[2].apply_state).to.equal(ACKNOWLEDGED)
+        expect(list[2].apply_error).to.equal('')
+        expect(list[3].apply_state).to.equal(ERROR)
+        expect(list[3].apply_error).to.equal('Error: async fn')
+        expect(list[6].apply_state).to.equal(ACKNOWLEDGED)
         expect(list[6].apply_error).to.equal('')
+        expect(list[7].apply_state).to.equal(ERROR)
+        expect(list[7].apply_error).to.equal('Error: async ack fn')
+        expect(list[8].apply_state).to.equal(UNACKNOWLEDGED)
+        expect(list[8].apply_error).to.equal('')
         done()
       })
 

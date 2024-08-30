@@ -267,10 +267,21 @@ class RemoteConfigManager extends EventEmitter {
                 }
               })
             } else {
-              // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`
+              // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
+              // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
               // TODO: do we want to pass old and new config ?
-              handler(action, item.file)
-              item.apply_state = ACKNOWLEDGED
+              const result = handler(action, item.file)
+              if (result instanceof Promise) {
+                result.then(
+                  () => { item.apply_state = ACKNOWLEDGED },
+                  (err) => {
+                    item.apply_state = ERROR
+                    item.apply_error = err.toString()
+                  }
+                )
+              } else {
+                item.apply_state = ACKNOWLEDGED
+              }
             }
           } catch (err) {
             item.apply_state = ERROR
