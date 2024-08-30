@@ -151,19 +151,22 @@ describe('mocha CommonJS', function () {
         assert.exists(sessionEventContent)
         assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
+        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
         assert.include(testOutput, extraStdout)
 
-        // Can read DD_TAGS
         tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
         })
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+        suites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
         })
 
         done()
@@ -327,6 +330,7 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
+          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)
@@ -341,6 +345,7 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
+          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)
@@ -357,7 +362,8 @@ describe('mocha CommonJS', function () {
         ...getCiVisAgentlessConfig(receiver.port),
         RUN_IN_PARALLEL: true,
         DD_TRACE_DEBUG: 1,
-        DD_TRACE_LOG_LEVEL: 'warn'
+        DD_TRACE_LOG_LEVEL: 'warn',
+        DD_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
