@@ -137,6 +137,7 @@ versions.forEach(version => {
                   assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
                   assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
+                  assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testModuleEventContent.test_session_id)
                   assert.exists(testModuleEventContent.test_module_id)
                   assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -165,6 +166,7 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
+                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
@@ -195,6 +197,7 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
+                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
