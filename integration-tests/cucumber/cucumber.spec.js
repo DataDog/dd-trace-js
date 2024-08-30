@@ -33,7 +33,8 @@ const {
   TEST_NAME,
   CUCUMBER_IS_PARALLEL,
   TEST_SUITE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -129,6 +130,7 @@ versions.forEach(version => {
                     assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
                   }
 
+                  assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testSessionEventContent.test_session_id)
                   assert.exists(testSessionEventContent.meta[TEST_COMMAND])
                   assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
@@ -219,7 +221,8 @@ versions.forEach(version => {
                   cwd,
                   env: {
                     ...envVars,
-                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                    DD_SESSION_NAME: 'my-test-session'
                   },
                   stdio: 'pipe'
                 }

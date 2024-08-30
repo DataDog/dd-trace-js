@@ -31,7 +31,8 @@ const {
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SOURCE_START,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -149,6 +150,7 @@ describe('jest CommonJS', () => {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
+        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
 
         assert.include(testOutput, expectedStdout)
@@ -171,7 +173,8 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })

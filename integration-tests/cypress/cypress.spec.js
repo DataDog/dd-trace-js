@@ -32,7 +32,8 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SUITE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
@@ -235,6 +236,7 @@ moduleTypes.forEach(({
           const { content: testSessionEventContent } = testSessionEvent
           const { content: testModuleEventContent } = testModuleEvent
 
+          assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(testSessionEventContent.test_session_id)
           assert.exists(testSessionEventContent.meta[TEST_COMMAND])
           assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
@@ -322,7 +324,8 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }

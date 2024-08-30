@@ -14,7 +14,8 @@ const {
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
-  TEST_CODE_COVERAGE_LINES_PCT
+  TEST_CODE_COVERAGE_LINES_PCT,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const versions = ['1.6.0', 'latest']
@@ -57,6 +58,7 @@ versions.forEach((version) => {
         const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
         const testEvents = events.filter(event => event.type === 'test')
 
+        assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.include(testSessionEvent.content.resource, 'test_session.vitest run')
         assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
         assert.include(testModuleEvent.content.resource, 'test_module.vitest run')
@@ -138,7 +140,8 @@ versions.forEach((version) => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            DD_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }

@@ -22,7 +22,8 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SUITE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -80,6 +81,7 @@ versions.forEach((version) => {
 
             const stepEvents = events.filter(event => event.type === 'span')
 
+            assert.equal(testSessionEvent.content.meta[TEST_SESSION_NAME], 'my-test-session')
             assert.include(testSessionEvent.content.resource, 'test_session.playwright test')
             assert.equal(testSessionEvent.content.meta[TEST_STATUS], 'fail')
             assert.include(testModuleEvent.content.resource, 'test_module.playwright test')
@@ -155,7 +157,8 @@ versions.forEach((version) => {
               env: {
                 ...envVars,
                 PW_BASE_URL: `http://localhost:${webAppPort}`,
-                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                DD_SESSION_NAME: 'my-test-session'
               },
               stdio: 'pipe'
             }
