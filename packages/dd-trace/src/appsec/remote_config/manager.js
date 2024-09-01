@@ -222,6 +222,8 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
 
+      // TODO: Possible race condition: If this property is overwritten before a product handler has time to update the
+      // `apply_state` of the previous call to `parseConfig`, the future state update will be ignored.
       this.state.client.state.config_states = []
       this.state.cached_target_files = []
 
