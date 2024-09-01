@@ -556,13 +556,13 @@ describe('RemoteConfigManager', () => {
       const syncBadNonAckHandler = sinon.spy(() => { throw new Error('sync fn') })
       const asyncGoodHandler = sinon.spy(async () => {})
       const asyncBadHandler = sinon.spy(async () => { throw new Error('async fn') })
-      const syncGoodAckHandler = sinon.spy((action, conf, ack) => { ack() })
-      const syncBadAckHandler = sinon.spy((action, conf, ack) => { ack(new Error('sync ack fn')) })
-      const asyncGoodAckHandler = sinon.spy((action, conf, ack) => { setImmediate(ack) })
-      const asyncBadAckHandler = sinon.spy((action, conf, ack) => {
+      const syncGoodAckHandler = sinon.spy((action, conf, id, ack) => { ack() })
+      const syncBadAckHandler = sinon.spy((action, conf, id, ack) => { ack(new Error('sync ack fn')) })
+      const asyncGoodAckHandler = sinon.spy((action, conf, id, ack) => { setImmediate(ack) })
+      const asyncBadAckHandler = sinon.spy((action, conf, id, ack) => {
         setImmediate(ack.bind(null, new Error('async ack fn')))
       })
-      const unackHandler = sinon.spy((action, conf, ack) => {})
+      const unackHandler = sinon.spy((action, conf, id, ack) => {})
 
       rc.setProductHandler('PRODUCT_0', syncGoodNonAckHandler)
       rc.setProductHandler('PRODUCT_1', syncBadNonAckHandler)
@@ -588,15 +588,15 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch(list, 'apply')
 
-      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[0].file)
-      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[1].file)
-      expect(asyncGoodHandler).to.have.been.calledOnceWithExactly('apply', list[2].file)
-      expect(asyncBadHandler).to.have.been.calledOnceWithExactly('apply', list[3].file)
-      assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', list[4].file)
-      assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', list[5].file)
-      assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', list[6].file)
-      assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', list[7].file)
-      assertAsyncHandlerCallArguments(unackHandler, 'apply', list[8].file)
+      expect(syncGoodNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[0].file, list[0].id)
+      expect(syncBadNonAckHandler).to.have.been.calledOnceWithExactly('apply', list[1].file, list[1].id)
+      expect(asyncGoodHandler).to.have.been.calledOnceWithExactly('apply', list[2].file, list[2].id)
+      expect(asyncBadHandler).to.have.been.calledOnceWithExactly('apply', list[3].file, list[3].id)
+      assertAsyncHandlerCallArguments(syncGoodAckHandler, 'apply', list[4].file, list[4].id)
+      assertAsyncHandlerCallArguments(syncBadAckHandler, 'apply', list[5].file, list[5].id)
+      assertAsyncHandlerCallArguments(asyncGoodAckHandler, 'apply', list[6].file, list[6].id)
+      assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', list[7].file, list[7].id)
+      assertAsyncHandlerCallArguments(unackHandler, 'apply', list[8].file, list[8].id)
 
       expect(list[0].apply_state).to.equal(ACKNOWLEDGED)
       expect(list[0].apply_error).to.equal('')
@@ -657,7 +657,7 @@ describe('RemoteConfigManager', () => {
 
       rc.dispatch([rc.appliedConfigs.get('datadog/42/ASM_FEATURES/confId/config')], 'unapply')
 
-      expect(handler).to.have.been.calledOnceWithExactly('unapply', { asm: { enabled: true } })
+      expect(handler).to.have.been.calledOnceWithExactly('unapply', { asm: { enabled: true } }, 'asm_data')
       expect(rc.appliedConfigs).to.be.empty
     })
   })
