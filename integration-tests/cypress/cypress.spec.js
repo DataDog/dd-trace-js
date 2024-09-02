@@ -32,7 +32,8 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_SUITE,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { NODE_MAJOR } = require('../../version')
@@ -235,12 +236,14 @@ moduleTypes.forEach(({
           const { content: testSessionEventContent } = testSessionEvent
           const { content: testModuleEventContent } = testModuleEvent
 
+          assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(testSessionEventContent.test_session_id)
           assert.exists(testSessionEventContent.meta[TEST_COMMAND])
           assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
           assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
           assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
+          assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(testModuleEventContent.test_session_id)
           assert.exists(testModuleEventContent.test_module_id)
           assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -271,6 +274,7 @@ moduleTypes.forEach(({
               test_session_id: testSessionId
             }
           }) => {
+            assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
             assert.exists(meta[TEST_COMMAND])
             assert.exists(meta[TEST_MODULE])
             assert.exists(testSuiteId)
@@ -298,6 +302,7 @@ moduleTypes.forEach(({
               test_session_id: testSessionId
             }
           }) => {
+            assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
             assert.exists(meta[TEST_COMMAND])
             assert.exists(meta[TEST_MODULE])
             assert.exists(testSuiteId)
@@ -322,7 +327,8 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+            DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+            DD_SESSION_NAME: 'my-test-session'
           },
           stdio: 'pipe'
         }
