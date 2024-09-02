@@ -40,7 +40,7 @@ function wrapPluginsFactory (pluginsFactory) {
 }
 
 function wrapNext (req, res, next) {
-  return function nextWithTrace (err) {
+  return shimmer.wrapFunction(next, next => function nextWithTrace (err) {
     const requestResource = requestResources.get(req)
 
     requestResource.runInAsyncScope(() => {
@@ -54,13 +54,13 @@ function wrapNext (req, res, next) {
     })
 
     return next.apply(this, arguments)
-  }
+  })
 }
 
 addHook({ name, versions, file: 'lib/config-proxy-middleware.js' }, configProxyFactory => {
-  return shimmer.wrap(configProxyFactory, wrapConfigProxyFactory(configProxyFactory))
+  return shimmer.wrapFunction(configProxyFactory, wrapConfigProxyFactory)
 })
 
 addHook({ name, versions, file: 'lib/plugins-middleware.js' }, pluginsFactory => {
-  return shimmer.wrap(pluginsFactory, wrapPluginsFactory(pluginsFactory))
+  return shimmer.wrapFunction(pluginsFactory, wrapPluginsFactory)
 })

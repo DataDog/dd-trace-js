@@ -174,7 +174,7 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrap(cb, function () {
+        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
           finish()
           return cb.apply(this, arguments)
         })

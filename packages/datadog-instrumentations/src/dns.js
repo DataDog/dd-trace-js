@@ -21,16 +21,16 @@ const rrtypeMap = new WeakMap()
 const names = ['dns', 'node:dns']
 
 addHook({ name: names }, dns => {
-  dns.lookup = wrap('apm:dns:lookup', dns.lookup, 2)
-  dns.lookupService = wrap('apm:dns:lookup_service', dns.lookupService, 3)
-  dns.resolve = wrap('apm:dns:resolve', dns.resolve, 2)
-  dns.reverse = wrap('apm:dns:reverse', dns.reverse, 2)
+  shimmer.wrap(dns, 'lookup', fn => wrap('apm:dns:lookup', fn, 2))
+  shimmer.wrap(dns, 'lookupService', fn => wrap('apm:dns:lookup_service', fn, 2))
+  shimmer.wrap(dns, 'resolve', fn => wrap('apm:dns:resolve', fn, 2))
+  shimmer.wrap(dns, 'reverse', fn => wrap('apm:dns:reverse', fn, 2))
 
   patchResolveShorthands(dns)
 
   if (dns.Resolver) {
-    dns.Resolver.prototype.resolve = wrap('apm:dns:resolve', dns.Resolver.prototype.resolve, 2)
-    dns.Resolver.prototype.reverse = wrap('apm:dns:reverse', dns.Resolver.prototype.reverse, 2)
+    shimmer.wrap(dns.Resolver.prototype, 'resolve', fn => wrap('apm:dns:resolve', fn, 2))
+    shimmer.wrap(dns.Resolver.prototype, 'reverse', fn => wrap('apm:dns:reverse', fn, 2))
 
     patchResolveShorthands(dns.Resolver.prototype)
   }
@@ -43,7 +43,7 @@ function patchResolveShorthands (prototype) {
     .filter(method => !!prototype[method])
     .forEach(method => {
       rrtypeMap.set(prototype[method], rrtypes[method])
-      prototype[method] = wrap('apm:dns:resolve', prototype[method], 2, rrtypes[method])
+      shimmer.wrap(prototype, method, fn => wrap('apm:dns:resolve', fn, 2, rrtypes[method]))
     })
 }
 
@@ -72,13 +72,13 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     return asyncResource.runInAsyncScope(() => {
       startCh.publish(startArgs)
 
-      arguments[arguments.length - 1] = asyncResource.bind(function (error, result) {
+      arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => asyncResource.bind(function (error, result) {
         if (error) {
           errorCh.publish(error)
         }
         finishCh.publish(result)
         cb.apply(this, arguments)
-      })
+      }))
 
       try {
         return fn.apply(this, arguments)
@@ -92,5 +92,5 @@ function wrap (prefix, fn, expectedArgs, rrtype) {
     })
   }
 
-  return shimmer.wrap(fn, wrapped)
+  return wrapped
 }

@@ -21,6 +21,11 @@ const { engines } = require('../package.json')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(process.versions.node, supportedRange)
 
+// These are on by default in release tests, so we'll turn them off for
+// more fine-grained control of these variables in these tests.
+delete process.env.DD_INJECTION_ENABLED
+delete process.env.DD_INJECT_FORCE
+
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
   const doTest = (file, ...args) => testFile(file, ...args)

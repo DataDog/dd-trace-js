@@ -1,7 +1,6 @@
 'use strict'
 const { createCoverageMap } = require('istanbul-lib-coverage')
 
-const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -27,6 +26,8 @@ const sessionFinishCh = channel('ci:cucumber:session:finish')
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
+
+const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const {
   getCoveredFilenamesFromCoverage,
@@ -64,6 +65,7 @@ let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isFlakyTestRetriesEnabled = false
+let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
 let isSuitesSkipped = false
@@ -186,7 +188,7 @@ function wrapRun (pl, isLatestVersion) {
       testStartCh.publish(testStartPayload)
     })
     try {
-      this.eventBroadcaster.on('envelope', (testCase) => {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -204,7 +206,7 @@ function wrapRun (pl, isLatestVersion) {
             })
           }
         }
-      })
+      }))
       let promise
 
       asyncResource.runInAsyncScope(() => {
@@ -305,6 +307,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
+    numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
 
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -342,8 +345,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    if (isFlakyTestRetriesEnabled && !this.options.retry) {
-      this.options.retry = NUM_FAILED_TEST_RETRIES
+    if (isFlakyTestRetriesEnabled && !this.options.retry && numTestRetries > 0) {
+      this.options.retry = numTestRetries
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
@@ -356,10 +359,18 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
 
     const success = await start.apply(this, arguments)
 
+    let untestedCoverage
+    if (getCodeCoverageCh.hasSubscribers) {
+      untestedCoverage = await getChannelPromise(getCodeCoverageCh)
+    }
+
     let testCodeCoverageLinesTotal
 
     if (global.__coverage__) {
       try {
+        if (untestedCoverage) {
+          originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
       } catch (e) {
         // ignore errors

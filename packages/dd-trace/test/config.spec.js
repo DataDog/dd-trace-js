@@ -312,8 +312,11 @@ describe('Config', () => {
       { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
+      { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
+      { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
+      { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
@@ -327,9 +330,7 @@ describe('Config', () => {
       { name: 'port', value: '8126', origin: 'default' },
       { name: 'profiling.enabled', value: undefined, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
-      { name: 'profiling.heuristicsEnabled', value: false, origin: 'default' },
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
-      { name: 'profiling.ssi', value: false, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
@@ -615,12 +616,11 @@ describe('Config', () => {
       { name: 'iast.requestSampling', value: '40', origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
+      { name: 'injectionEnabled', value: ['profiler'], origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'peerServiceMapping', value: process.env.DD_TRACE_PEER_SERVICE_MAPPING, origin: 'env_var' },
       { name: 'port', value: '6218', origin: 'env_var' },
-      { name: 'profiling.enabled', value: true, origin: 'env_var' },
-      { name: 'profiling.heuristicsEnabled', value: true, origin: 'env_var' },
-      { name: 'profiling.ssi', value: true, origin: 'env_var' },
+      { name: 'profiling.enabled', value: 'true', origin: 'env_var' },
       { name: 'protocolVersion', value: '0.5', origin: 'env_var' },
       { name: 'queryStringObfuscation', value: '.*', origin: 'env_var' },
       { name: 'remoteConfig.enabled', value: false, origin: 'env_var' },
@@ -638,7 +638,6 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v1', origin: 'env_var' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
       { name: 'telemetry.enabled', value: true, origin: 'env_var' },
-      { name: 'telemetry.logCollection', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
       { name: 'tracing', value: false, origin: 'env_var' },
@@ -901,7 +900,6 @@ describe('Config', () => {
       { name: 'spanComputePeerService', value: true, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'code' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
-      { name: 'telemetry.logCollection', value: true, origin: 'code' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'code' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'code' },
       { name: 'version', value: '0.1.0', origin: 'code' }
@@ -1797,6 +1795,8 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.JEST_WORKER_ID
       options = {}
     })
@@ -1852,6 +1852,34 @@ describe('Config', () => {
         process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED = 'false'
         const config = new Config(options)
         expect(config).to.have.property('isEarlyFlakeDetectionEnabled', false)
+      })
+      it('should enable flaky test retries by default', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', true)
+      })
+      it('should disable flaky test retries if isFlakyTestRetriesEnabled is false', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED = 'false'
+        const config = new Config(options)
+        expect(config).to.have.property('isFlakyTestRetriesEnabled', false)
+      })
+      it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should default DD_CIVISIBILITY_FLAKY_RETRY_COUNT to 5', () => {
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
+      })
+      it('should round non integer values of DD_CIVISIBILITY_FLAKY_RETRY_COUNT', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4.1'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 4)
+      })
+      it('should set the default to DD_CIVISIBILITY_FLAKY_RETRY_COUNT if it is not a number', () => {
+        process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = 'a'
+        const config = new Config(options)
+        expect(config).to.have.property('flakyTestRetriesCount', 5)
       })
     })
     context('ci visibility mode is not enabled', () => {

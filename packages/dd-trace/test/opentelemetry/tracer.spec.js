@@ -183,4 +183,63 @@ describe('OTel Tracer', () => {
       expect(childContext._parentId).to.not.eql(parentContext._spanId)
     })
   })
+
+  it('test otel context span parenting', () => {
+    const tracerProvider = new TracerProvider()
+    tracerProvider.register()
+    const otelTracer = new Tracer({}, {}, tracerProvider)
+    otelTracer.startActiveSpan('otel-root', async (root) => {
+      await new Promise(resolve => setTimeout(resolve, 200))
+      otelTracer.startActiveSpan('otel-parent1', async (parent1) => {
+        isChildOf(parent1._ddSpan, root._ddSpan)
+        await new Promise(resolve => setTimeout(resolve, 400))
+        otelTracer.startActiveSpan('otel-child1', async (child) => {
+          isChildOf(child._ddSpan, parent1._ddSpan)
+          await new Promise(resolve => setTimeout(resolve, 600))
+        })
+      })
+      const orphan1 = otelTracer.startSpan('orphan1')
+      isChildOf(orphan1._ddSpan, root._ddSpan)
+      const ctx = api.trace.setSpan(api.context.active(), root)
+
+      otelTracer.startActiveSpan('otel-parent2', ctx, async (parent2) => {
+        isChildOf(parent2._ddSpan, root._ddSpan)
+        await new Promise(resolve => setTimeout(resolve, 400))
+        const ctx = api.trace.setSpan(api.context.active(), root)
+        otelTracer.startActiveSpan('otel-child2', ctx, async (child) => {
+          isChildOf(child._ddSpan, parent2._ddSpan)
+          await new Promise(resolve => setTimeout(resolve, 600))
+        })
+      })
+      orphan1.end()
+    })
+  })
+
+  it('test otel context mixed span parenting', () => {
+    const tracerProvider = new TracerProvider()
+    tracerProvider.register()
+    const otelTracer = new Tracer({}, {}, tracerProvider)
+    otelTracer.startActiveSpan('otel-top-level', async (root) => {
+      tracer.trace('ddtrace-top-level', async (ddSpan) => {
+        isChildOf(ddSpan, root._ddSpan)
+        await new Promise(resolve => setTimeout(resolve, 200))
+        tracer.trace('ddtrace-child', async (ddSpanChild) => {
+          isChildOf(ddSpanChild, ddSpan)
+          await new Promise(resolve => setTimeout(resolve, 400))
+        })
+
+        otelTracer.startActiveSpan('otel-child', async (otelSpan) => {
+          isChildOf(otelSpan._ddSpan, ddSpan)
+          await new Promise(resolve => setTimeout(resolve, 200))
+          tracer.trace('ddtrace-grandchild', async (ddSpanGrandchild) => {
+            isChildOf(ddSpanGrandchild, otelSpan._ddSpan)
+            otelTracer.startActiveSpan('otel-grandchild', async (otelGrandchild) => {
+              isChildOf(otelGrandchild._ddSpan, ddSpanGrandchild)
+              await new Promise(resolve => setTimeout(resolve, 200))
+            })
+          })
+        })
+      })
+    })
+  })
 })

@@ -47,6 +47,7 @@ const config = {}
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
+let untestedCoverage
 
 // test channels
 const testStartCh = channel('ci:mocha:test:start')
@@ -65,6 +66,8 @@ const workerReportTraceCh = channel('ci:mocha:worker-report:trace')
 const testSessionStartCh = channel('ci:mocha:session:start')
 const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
+
+const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 function getFilteredSuites (originalSuites) {
   return originalSuites.reduce((acc, suite) => {
@@ -131,6 +134,9 @@ function getOnEndHandler (isParallel) {
     let testCodeCoverageLinesTotal
     if (global.__coverage__) {
       try {
+        if (untestedCoverage) {
+          originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
       } catch (e) {
         // ignore errors
@@ -153,6 +159,84 @@ function getOnEndHandler (isParallel) {
   })
 }
 
+function getExecutionConfiguration (runner, onFinishRequest) {
+  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
+
+  const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
+    if (err) {
+      suitesToSkip = []
+    } else {
+      suitesToSkip = skippableSuites
+      itrCorrelationId = responseItrCorrelationId
+    }
+    // We remove the suites that we skip through ITR
+    const filteredSuites = getFilteredSuites(runner.suite.suites)
+    const { suitesToRun } = filteredSuites
+
+    isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
+
+    log.debug(
+      () => `${suitesToRun.length} out of ${runner.suite.suites.length} suites are going to run.`
+    )
+
+    runner.suite.suites = suitesToRun
+
+    skippedSuites = Array.from(filteredSuites.skippedSuites)
+
+    onFinishRequest()
+  }
+
+  const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
+    if (err) {
+      knownTests = []
+      isEarlyFlakeDetectionEnabled = false
+    } else {
+      knownTests = receivedKnownTests
+    }
+
+    if (isSuitesSkippingEnabled) {
+      skippableSuitesCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
+    } else {
+      onFinishRequest()
+    }
+  }
+
+  const onReceivedConfiguration = ({ err, libraryConfig }) => {
+    if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
+      return onFinishRequest()
+    }
+
+    isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+    isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+    earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+    isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+
+    config.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
+    config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
+    config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
+    config.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+    config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+
+    if (isEarlyFlakeDetectionEnabled) {
+      knownTestsCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
+      })
+    } else if (isSuitesSkippingEnabled) {
+      skippableSuitesCh.publish({
+        onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+      })
+    } else {
+      onFinishRequest()
+    }
+  }
+
+  libraryConfigurationCh.publish({
+    onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
+  })
+}
+
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
@@ -161,7 +245,6 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js'
 }, (Mocha) => {
-  const mochaRunAsyncResource = new AsyncResource('bound-anonymous-fn')
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testStartCh.hasSubscribers || process.env.MOCHA_WORKER_ID || this.options.parallel) {
@@ -181,79 +264,17 @@ addHook({
       }
     })
 
-    const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
-      if (err) {
-        suitesToSkip = []
-      } else {
-        suitesToSkip = skippableSuites
-        itrCorrelationId = responseItrCorrelationId
-      }
-      // We remove the suites that we skip through ITR
-      const filteredSuites = getFilteredSuites(runner.suite.suites)
-      const { suitesToRun } = filteredSuites
-
-      isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
-
-      log.debug(
-        () => `${suitesToRun.length} out of ${runner.suite.suites.length} suites are going to run.`
-      )
-
-      runner.suite.suites = suitesToRun
-
-      skippedSuites = Array.from(filteredSuites.skippedSuites)
-
-      global.run()
-    }
-
-    const onReceivedKnownTests = ({ err, knownTests: receivedKnownTests }) => {
-      if (err) {
-        knownTests = []
-        isEarlyFlakeDetectionEnabled = false
-      } else {
-        knownTests = receivedKnownTests
-      }
-
-      if (isSuitesSkippingEnabled) {
-        skippableSuitesCh.publish({
-          onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
+    getExecutionConfiguration(runner, () => {
+      if (getCodeCoverageCh.hasSubscribers) {
+        getCodeCoverageCh.publish({
+          onDone: (receivedCodeCoverage) => {
+            untestedCoverage = receivedCodeCoverage
+            global.run()
+          }
         })
       } else {
         global.run()
       }
-    }
-
-    const onReceivedConfiguration = ({ err, libraryConfig }) => {
-      if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
-        return global.run()
-      }
-
-      isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-      isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-      earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-      isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-
-      config.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-      config.isSuitesSkippingEnabled = isSuitesSkippingEnabled
-      config.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-      config.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-
-      if (isEarlyFlakeDetectionEnabled) {
-        knownTestsCh.publish({
-          onDone: mochaRunAsyncResource.bind(onReceivedKnownTests)
-        })
-      } else if (isSuitesSkippingEnabled) {
-        skippableSuitesCh.publish({
-          onDone: mochaRunAsyncResource.bind(onReceivedSkippableSuites)
-        })
-      } else {
-        global.run()
-      }
-    }
-
-    mochaRunAsyncResource.runInAsyncScope(() => {
-      libraryConfigurationCh.publish({
-        onDone: mochaRunAsyncResource.bind(onReceivedConfiguration)
-      })
     })
 
     return runner

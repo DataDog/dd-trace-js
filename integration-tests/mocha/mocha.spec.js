@@ -1633,5 +1633,180 @@ describe('mocha CommonJS', function () {
         }).catch(done)
       })
     })
+
+    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 1)
+
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 2) // one retry
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedAttempts.length, 2)
+
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
+      })
+    })
+  })
+
+  it('takes into account untested files if "all" is passed to nyc', (done) => {
+    const linePctMatchRegex = /Lines\s*:\s*(\d+)%/
+    let linePctMatch
+    let linesPctFromNyc = 0
+    let codeCoverageWithUntestedFiles = 0
+    let codeCoverageWithoutUntestedFiles = 0
+
+    let eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        codeCoverageWithUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+      })
+
+    childProcess = exec(
+      './node_modules/nyc/bin/nyc.js -r=text-summary --all --nycrc-path ./my-nyc.config.js ' +
+      'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    childProcess.on('exit', () => {
+      linePctMatch = testOutput.match(linePctMatchRegex)
+      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+      assert.equal(
+        linesPctFromNyc,
+        codeCoverageWithUntestedFiles,
+        'nyc --all output does not match the reported coverage'
+      )
+
+      // reset test output for next test session
+      testOutput = ''
+      // we run the same tests without the all flag
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+        'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'inherit'
+        }
+      )
+
+      eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+        })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      childProcess.on('exit', () => {
+        linePctMatch = testOutput.match(linePctMatchRegex)
+        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+        assert.equal(
+          linesPctFromNyc,
+          codeCoverageWithoutUntestedFiles,
+          'nyc output does not match the reported coverage (no --all flag)'
+        )
+
+        eventsPromise.then(() => {
+          assert.isAbove(codeCoverageWithoutUntestedFiles, codeCoverageWithUntestedFiles)
+          done()
+        }).catch(done)
+      })
+    })
   })
 })

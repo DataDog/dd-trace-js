@@ -256,25 +256,25 @@
   resolved "https://registry.npmjs.org/@colors/colors/-/colors-1.5.0.tgz"
   integrity "sha1-u1BFecHK6SPmV2pPXaQ9Jfl729k= sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="
 
-"@datadog/native-appsec@8.0.1":
-  version "8.0.1"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.0.1.tgz#be06be92d79d7462aa64ee3a33108133083134fc"
-  integrity sha512-SpWkoo7K4+pwxFze1ogRF1qBaKm8sZjWfZKnQ8Ex67f6L5odLjWOoiiIAs5rp01sLKGXjxU8IJf+X9j4PvI2zQ==
+"@datadog/native-appsec@8.1.1":
+  version "8.1.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-8.1.1.tgz#76aa34697e6ecbd3d9ef7e6938d3cdcfa689b1f3"
+  integrity sha512-mf+Ym/AzET4FeUTXOs8hz0uLOSsVIUnavZPUx8YoKWK5lKgR2L+CLfEzOpjBwgFpDgbV8I1/vyoGelgGpsMKHA==
   dependencies:
     node-gyp-build "^3.9.0"
 
-"@datadog/native-iast-rewriter@2.4.0":
-  version "2.4.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.4.0.tgz#369de141ecb31118882d3339ba6e4d3487c9de97"
-  integrity sha512-vmcPM9h/jfv1vsej0tBglTah/gia4r6cwzWd4EDsSVOjuNdD+a7L2ZcCtYUxRlrETsOfuiblp6D+o921Qcb0MQ==
+"@datadog/native-iast-rewriter@2.4.1":
+  version "2.4.1"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-rewriter/-/native-iast-rewriter-2.4.1.tgz#e8211f78c818906513fb96a549374da0382c7623"
+  integrity sha512-j3auTmyyn63e2y+SL28CGNy/l+jXQyh+pxqoGTacWaY5FW/dvo5nGQepAismgJ3qJ8VhQfVWRdxBSiT7wu9clw==
   dependencies:
     lru-cache "^7.14.0"
     node-gyp-build "^4.5.0"
 
-"@datadog/native-iast-taint-tracking@3.0.0":
-  version "3.0.0"
-  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.0.0.tgz#a0be16f49f49c2a5917d08e5986c0fc6c877ed13"
-  integrity sha512-V+25+edlNCQSNRUvL45IajN+CFEjii9NbjfSMG6HRHbH/zeLL9FCNE+GU88dwB1bqXKNpBdrIxsfgTN65Yq9tA==
+"@datadog/native-iast-taint-tracking@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/native-iast-taint-tracking/-/native-iast-taint-tracking-3.1.0.tgz#7b2ed7f8fad212d65e5ab03bcdea8b42a3051b2e"
+  integrity sha512-rw6qSjmxmu1yFHVvZLXFt/rVq2tUZXocNogPLB8n7MPpA0jijNGb109WokWw5ITImiW91GcGDuBW6elJDVKouQ==
   dependencies:
     node-gyp-build "^3.9.0"
 
@@ -966,10 +966,10 @@ aws-sdk@^2.1446.0:
     uuid "8.0.0"
     xml2js "0.5.0"
 
-axios@^1.6.7:
-  version "1.6.8"
-  resolved "https://registry.yarnpkg.com/axios/-/axios-1.6.8.tgz#66d294951f5d988a00e87a0ffb955316a619ea66"
-  integrity sha512-v/ZHtJDU39mDpyBoFVkETcd/uNdxrWRrg3bKpOKzXFA6Bvqopts6ALSMU3y6ijYxbw2B+wPrIv46egTzJXCLGQ==
+axios@^1.7.4:
+  version "1.7.4"
+  resolved "https://registry.yarnpkg.com/axios/-/axios-1.7.4.tgz#4c8ded1b43683c8dd362973c393f3ede24052aa2"
+  integrity sha512-DukmaFRnY6AzAALSH4J2M3k6PkaC+MfaAGdEERRWcC9q3/TWQwLpHR8ZRLKTdQ3aBDL64EdluRDjJqKw+BPZEw==
   dependencies:
     follow-redirects "^1.15.6"
     form-data "^4.0.0"

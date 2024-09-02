@@ -5,6 +5,7 @@ const { fork } = require('child_process')
 const { join } = require('path')
 const { assert } = require('chai')
 const { satisfies } = require('semver')
+const axios = require('axios')
 
 function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -56,7 +57,11 @@ describe('opentelemetry', () => {
 
   before(async () => {
     const dependencies = [
-      '@opentelemetry/api@1.8.0'
+      '@opentelemetry/api@1.8.0',
+      '@opentelemetry/instrumentation',
+      '@opentelemetry/instrumentation-http',
+      '@opentelemetry/instrumentation-express',
+      'express'
     ]
     if (satisfies(process.version.slice(1), '>=14')) {
       dependencies.push('@opentelemetry/sdk-node')
@@ -371,6 +376,56 @@ describe('opentelemetry', () => {
     })
   })
 
+  it('should work with otel express & http auto instrumentation', async () => {
+    const SERVER_PORT = 6666
+    proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
+      cwd,
+      env: {
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_OTEL_ENABLED: 1,
+        SERVER_PORT,
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net'
+      }
+    })
+    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
+    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+
+    return check(agent, proc, 10000, ({ payload }) => {
+      assert.strictEqual(payload.length, 2)
+      // combine the traces
+      const trace = payload.flat()
+      assert.strictEqual(trace.length, 9)
+
+      // Should have expected span names and ordering
+      assert.isTrue(eachEqual(trace, [
+        'GET /second-endpoint',
+        'middleware - query',
+        'middleware - expressInit',
+        'request handler - /second-endpoint',
+        'GET /first-endpoint',
+        'middleware - query',
+        'middleware - expressInit',
+        'request handler - /first-endpoint',
+        'GET'
+      ],
+      (span) => span.name))
+
+      assert.isTrue(allEqual(trace, (span) => {
+        span.trace_id.toString()
+      }))
+
+      const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
+      isChildOf(query1, get1)
+      isChildOf(init1, get1)
+      isChildOf(handler1, get1)
+      isChildOf(get2, get1)
+      isChildOf(get3, get2)
+      isChildOf(query2, get3)
+      isChildOf(init2, get3)
+      isChildOf(handler2, get3)
+    })
+  })
+
   if (satisfies(process.version.slice(1), '>=14')) {
     it('should auto-instrument @opentelemetry/sdk-node', async () => {
       proc = fork(join(cwd, 'opentelemetry/env-var.js'), {
@@ -392,3 +447,9 @@ describe('opentelemetry', () => {
     })
   }
 })
+
+function isChildOf (childSpan, parentSpan) {
+  assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
+  assert.notStrictEqual(childSpan.span_id.toString(), parentSpan.span_id.toString())
+  assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
+}

@@ -1,6 +1,5 @@
 const { addHook, channel, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-const { NUM_FAILED_TEST_RETRIES } = require('../../dd-trace/src/plugins/util/test')
 
 // test hooks
 const testStartCh = channel('ci:vitest:test:start')
@@ -30,6 +29,10 @@ function isReporterPackage (vitestPackage) {
 // from 2.0.0
 function isReporterPackageNew (vitestPackage) {
   return vitestPackage.e?.name === 'BaseSequencer'
+}
+
+function isReporterPackageNewest (vitestPackage) {
+  return vitestPackage.h?.name === 'BaseSequencer'
 }
 
 function getChannelPromise (channelToPublishTo) {
@@ -104,17 +107,34 @@ function getSortWrapper (sort) {
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
     let isFlakyTestRetriesEnabled = false
+    let flakyTestRetriesCount = 0
 
     try {
       const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
       if (!err) {
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
       }
     } catch (e) {
       isFlakyTestRetriesEnabled = false
     }
-    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry) {
-      this.ctx.config.retry = NUM_FAILED_TEST_RETRIES
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
+      this.ctx.config.retry = flakyTestRetriesCount
+    }
+
+    let testCodeCoverageLinesTotal
+
+    if (this.ctx.coverageProvider?.generateCoverage) {
+      shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
+        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
+
+        try {
+          testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
+        } catch (e) {
+          // ignore errors
+        }
+        return totalCodeCoverage
+      })
     }
 
     shimmer.wrap(this.ctx, 'exit', exit => async function () {
@@ -132,8 +152,9 @@ function getSortWrapper (sort) {
       sessionAsyncResource.runInAsyncScope(() => {
         testSessionFinishCh.publish({
           status: getSessionStatus(this.state),
-          onFinish,
-          error
+          testCodeCoverageLinesTotal,
+          error,
+          onFinish
         })
       })
 
@@ -144,6 +165,21 @@ function getSortWrapper (sort) {
 
     return sort.apply(this, arguments)
   }
+}
+
+function getCreateCliWrapper (vitestPackage, frameworkVersion) {
+  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
+    if (!testSessionStartCh.hasSubscribers) {
+      return oldCreateCli.apply(this, arguments)
+    }
+    sessionAsyncResource.runInAsyncScope(() => {
+      const processArgv = process.argv.slice(2).join(' ')
+      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
+    })
+    return oldCreateCli.apply(this, arguments)
+  })
+
+  return vitestPackage
 }
 
 addHook({
@@ -206,12 +242,25 @@ addHook({
   return vitestPackage
 })
 
+// There are multiple index* files across different versions of vitest,
+// so we check for the existence of BaseSequencer to determine if we are in the right file
 addHook({
   name: 'vitest',
-  versions: ['>=2.0.0'],
+  versions: ['>=1.6.0 <2.0.0'],
   filePattern: 'dist/vendor/index.*'
 }, (vitestPackage) => {
-  // there are multiple index* files so we have to check the exported values
+  if (isReporterPackage(vitestPackage)) {
+    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
+  }
+
+  return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.0 <2.0.5'],
+  filePattern: 'dist/vendor/index.*'
+}, (vitestPackage) => {
   if (isReporterPackageNew(vitestPackage)) {
     shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
   }
@@ -221,12 +270,11 @@ addHook({
 
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
-  filePattern: 'dist/vendor/index.*'
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/index.*'
 }, (vitestPackage) => {
-  // there are multiple index* files so we have to check the exported values
-  if (isReporterPackage(vitestPackage)) {
-    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
+  if (isReporterPackageNewest(vitestPackage)) {
+    shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
   }
 
   return vitestPackage
@@ -235,22 +283,15 @@ addHook({
 // Can't specify file because compiled vitest includes hashes in their files
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.0.5'],
   filePattern: 'dist/vendor/cac.*'
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
-    }
-    sessionAsyncResource.runInAsyncScope(() => {
-      const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    })
-    return oldCreateCli.apply(this, arguments)
-  })
+}, getCreateCliWrapper)
 
-  return vitestPackage
-})
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/cac.*'
+}, getCreateCliWrapper)
 
 // test suite start and finish
 // only relevant for workers
@@ -258,7 +299,7 @@ addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
-}, vitestPackage => {
+}, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
@@ -267,7 +308,7 @@ addHook({
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish(testPath[0])
+      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 

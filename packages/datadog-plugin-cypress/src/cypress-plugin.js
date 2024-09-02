@@ -28,8 +28,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED,
-  NUM_FAILED_TEST_RETRIES
+  TEST_EARLY_FLAKE_ENABLED
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -44,7 +43,9 @@ const {
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   incrementCountMetric,
-  distributionMetric
+  distributionMetric,
+  TELEMETRY_ITR_SKIPPED,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const {
@@ -179,7 +180,7 @@ class CypressPlugin {
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
     this.testConfiguration = {
@@ -227,16 +228,16 @@ class CypressPlugin {
               isCodeCoverageEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
-              isFlakyTestRetriesEnabled
+              isFlakyTestRetriesEnabled,
+              flakyTestRetriesCount
             }
           } = libraryConfigurationResponse
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
-          this.isFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-          if (this.isFlakyTestRetriesEnabled) {
-            this.cypressConfig.retries.runMode = NUM_FAILED_TEST_RETRIES
+          if (isFlakyTestRetriesEnabled) {
+            this.cypressConfig.retries.runMode = flakyTestRetriesCount
           }
         }
         return this.cypressConfig
@@ -321,7 +322,7 @@ class CypressPlugin {
     incrementCountMetric(name, {
       testLevel,
       testFramework: 'cypress',
-      isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+      isUnsupportedCIProvider: !this.ciProviderName,
       ...tags
     })
   }
@@ -363,6 +364,7 @@ class CypressPlugin {
         const { skippableTests, correlationId } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
         this.itrCorrelationId = correlationId
+        incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
     }
 
@@ -436,6 +438,9 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      incrementCountMetric(TELEMETRY_TEST_SESSION, {
+        provider: this.ciProviderName
+      })
 
       finishAllTraceSpans(this.testSessionSpan)
     }
@@ -668,8 +673,14 @@ class CypressPlugin {
           }
           // test spans are finished at after:spec
         }
+        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
+          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          isNew,
+          isRum: isRUMActive,
+          browserDriver: 'cypress'
+        })
         this.activeTestSpan = null
-        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test')
+
         return null
       },
       'dd:addTags': (tags) => {

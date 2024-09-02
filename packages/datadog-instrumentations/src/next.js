@@ -188,7 +188,7 @@ function finish (ctx, result, err) {
 // however, it is not provided as a class function or exported property
 addHook({
   name: 'next',
-  versions: ['>=13.3.0'],
+  versions: ['>=13.3.0 <14.2.7'],
   file: 'dist/server/web/spec-extension/adapters/next-request.js'
 }, NextRequestAdapter => {
   shimmer.wrap(NextRequestAdapter.NextRequestAdapter, 'fromNodeNextRequest', fromNodeNextRequest => {
@@ -203,7 +203,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=11.1'],
+  versions: ['>=11.1 <14.2.7'],
   file: 'dist/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
@@ -213,7 +213,7 @@ addHook({
   file: 'dist/next-server/server/serve-static.js'
 }, serveStatic => shimmer.wrap(serveStatic, 'serveStatic', wrapServeStatic))
 
-addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=11.1 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
 
   shimmer.wrap(Server.prototype, 'handleRequest', wrapHandleRequest)
@@ -230,7 +230,7 @@ addHook({ name: 'next', versions: ['>=11.1'], file: 'dist/server/next-server.js'
 })
 
 // `handleApiRequest` changes parameters/implementation at 13.2.0
-addHook({ name: 'next', versions: ['>=13.2'], file: 'dist/server/next-server.js' }, nextServer => {
+addHook({ name: 'next', versions: ['>=13.2 <14.2.7'], file: 'dist/server/next-server.js' }, nextServer => {
   const Server = nextServer.default
   shimmer.wrap(Server.prototype, 'handleApiRequest', wrapHandleApiRequestWithMatch)
   return nextServer
@@ -264,7 +264,7 @@ addHook({
 
 addHook({
   name: 'next',
-  versions: ['>=13'],
+  versions: ['>=13 <14.2.7'],
   file: 'dist/server/web/spec-extension/request.js'
 }, request => {
   const nextUrlDescriptor = Object.getOwnPropertyDescriptor(request.NextRequest.prototype, 'nextUrl')
