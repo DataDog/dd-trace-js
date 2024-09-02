@@ -31,7 +31,8 @@ const {
   JEST_DISPLAY_NAME,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_SOURCE_START,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -149,19 +150,23 @@ describe('jest CommonJS', () => {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
+        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
+        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
 
-        // Can read DD_TAGS
         tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
         })
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+        suites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
         })
 
         done()
@@ -171,7 +176,8 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -428,17 +434,29 @@ describe('jest CommonJS', () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          RUN_IN_PARALLEL: true
+          RUN_IN_PARALLEL: true,
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
 
       receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
-        const eventTypes = eventsRequests.map(({ payload }) => payload)
+        const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
-          .map(event => event.type)
+        const eventTypes = events.map(event => event.type)
 
         assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+
+        // it propagates test session name to the test and test suite events in parallel mode
+        tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+        })
+        testSuites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
+        })
+
         done()
       }).catch(done)
     })
