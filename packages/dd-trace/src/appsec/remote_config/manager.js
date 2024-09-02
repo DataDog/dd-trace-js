@@ -37,10 +37,19 @@ class RemoteConfigManager extends EventEmitter {
 
     this.state = {
       client: {
-        state: { // updated by `parseConfig()`
+        state: { // updated by `parseConfig()` and `poll()`
           root_version: 1,
           targets_version: 0,
-          config_states: [],
+          // Use getter so `apply_*` can be updated async and still affect the content of `config_states`
+          get config_states () {
+            return Array.from(appliedConfigs.values()).map((conf) => ({
+              id: conf.id,
+              version: conf.version,
+              product: conf.product,
+              apply_state: conf.apply_state,
+              apply_error: conf.apply_error
+            }))
+          },
           has_error: false,
           error: '',
           backend_client_state: ''
@@ -63,7 +72,7 @@ class RemoteConfigManager extends EventEmitter {
     }
 
     this._handlers = new Map()
-    this.appliedConfigs = new Map()
+    const appliedConfigs = this.appliedConfigs = new Map()
   }
 
   updateCapabilities (mask, value) {
@@ -222,21 +231,9 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
 
-      // TODO: Possible race condition: If this property is overwritten before a product handler has time to update the
-      // `apply_state` of the previous call to `parseConfig`, the future state update will be ignored.
-      this.state.client.state.config_states = []
       this.state.cached_target_files = []
 
       for (const conf of this.appliedConfigs.values()) {
-        this.state.client.state.config_states.push({
-          id: conf.id,
-          version: conf.version,
-          product: conf.product,
-          // Use getters so `conf.apply_*` can be updated async and still affect the new object pushed to config_states
-          get apply_state () { return conf.apply_state },
-          get apply_error () { return conf.apply_error }
-        })
-
         this.state.cached_target_files.push({
           path: conf.path,
           length: conf.length,
