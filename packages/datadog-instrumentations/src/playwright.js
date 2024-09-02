@@ -512,6 +512,37 @@ addHook({
   versions: ['>=1.38.0']
 }, runnerHook)
 
+// we can use this to modify WorkerHost#runTestGroup, which sends work to do
+// to workerMain: we can add info about the running test
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/workerHost.js',
+  versions: ['>=1.38.0']
+}, (workerHostPackage) => {
+  // debugger
+  shimmer.wrap(workerHostPackage.WorkerHost.prototype, 'runTestGroup', runTestGroup => function (runPayload) {
+    // might not be possible because testGroup is possibly multiple tests, so we don't know
+    // their trace ids here
+    console.log('sending test to workerMain', runPayload)
+    return runTestGroup.apply(this, arguments)
+  })
+  return workerHostPackage
+})
+
+// only for workers!!!!!!!!
+addHook({
+  name: 'playwright',
+  file: 'lib/worker/workerMain.js',
+  versions: ['>=1.38.0']
+}, (workerMainPackage) => {
+  // console.log('workerMainPackage', workerMainPackage)
+  shimmer.wrap(workerMainPackage.WorkerMain.prototype, '_runTest', _runTest => function (test) {
+    console.log('running _runTest!!!!!!!!!!!!!!', test)
+    return _runTest.apply(this, arguments)
+  })
+  return workerMainPackage
+})
+
 addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
