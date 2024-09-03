@@ -7,15 +7,13 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
   static get operation () { return 'consume-batch' }
 
   start ({ topic, partition, messages, groupId }) {
-    if (this.config.dsmEnabled) {
-      for (const message of messages) {
-        if (message?.headers && DsmPathwayCodec.contextExists(message.headers)) {
-          const payloadSize = getMessageSize(message)
-          this.tracer.decodeDataStreamsContext(message.headers)
-          this.tracer
-            .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], null, payloadSize)
-        }
-      }
+    if (!this.config.dsmEnabled) return
+    for (const message of messages) {
+      if (!message || !message.headers || !DsmPathwayCodec.contextExists(message.headers)) continue
+      const payloadSize = getMessageSize(message)
+      this.tracer.decodeDataStreamsContext(message.headers)
+      this.tracer
+        .setCheckpoint(['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka'], null, payloadSize)
     }
   }
 }

@@ -100,6 +100,17 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
       return createConsumer.apply(this, arguments)
     }
 
+    const eachMessageExtractor = (args) => {
+      const { topic, partition, message } = args[0]
+      return { topic, partition, message, groupId }
+    }
+
+    const eachBatchExtractor = (args) => {
+      const { batch } = args[0]
+      const { topic, partition, messages } = batch
+      return { topic, partition, messages, groupId }
+    }
+
     const consumer = createConsumer.apply(this, arguments)
 
     consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
@@ -108,75 +119,63 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const groupId = arguments[0].groupId
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
+      eachMessage = wrapFunction(
+        eachMessage,
+        consumerStartCh,
+        consumerFinishCh,
+        consumerErrorCh,
+        eachMessageExtractor
+      )
+
+      eachBatch = wrapFunction(
+        eachBatch,
+        batchConsumerStartCh,
+        batchConsumerFinishCh,
+        batchConsumerErrorCh,
+        eachBatchExtractor
+      )
+
       return run({
-        eachMessage: typeof eachMessage === 'function'
-          ? function (...eachMessageArgs) {
-            const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-            return innerAsyncResource.runInAsyncScope(() => {
-              const { topic, partition, message } = eachMessageArgs[0]
-              consumerStartCh.publish({ topic, partition, message, groupId })
-              try {
-                const result = eachMessage.apply(this, eachMessageArgs)
-                if (result && typeof result.then === 'function') {
-                  result.then(
-                    innerAsyncResource.bind(() => consumerFinishCh.publish(undefined)),
-                    innerAsyncResource.bind(err => {
-                      if (err) {
-                        consumerErrorCh.publish(err)
-                      }
-                      consumerFinishCh.publish(undefined)
-                    })
-                  )
-                } else {
-                  consumerFinishCh.publish(undefined)
-                }
-
-                return result
-              } catch (e) {
-                consumerErrorCh.publish(e)
-                consumerFinishCh.publish(undefined)
-                throw e
-              }
-            })
-          }
-          : eachMessage,
-        eachBatch:
-          typeof eachBatch === 'function'
-            ? function (...eachBatchArgs) {
-              const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
-              return innerAsyncResource.runInAsyncScope(() => {
-                const { batch } = eachBatchArgs[0]
-                const { topic, partition, messages } = batch
-                batchConsumerStartCh.publish({ topic, partition, messages, groupId })
-                try {
-                  const result = eachBatch.apply(this, eachBatchArgs)
-                  if (result && typeof result.then === 'function') {
-                    result.then(
-                      innerAsyncResource.bind(() => batchConsumerFinishCh.publish()),
-                      innerAsyncResource.bind((err) => {
-                        if (err) {
-                          batchConsumerErrorCh.publish(err)
-                        }
-                        batchConsumerFinishCh.publish()
-                      })
-                    )
-                  } else {
-                    batchConsumerFinishCh.publish()
-                  }
-
-                  return result
-                } catch (error) {
-                  batchConsumerErrorCh.publish(error)
-                  batchConsumerFinishCh.publish()
-                  throw error
-                }
-              })
-            }
-            : eachBatch,
+        eachMessage,
+        eachBatch,
         ...runArgs
       })
     }
+
     return consumer
   })
   return Kafka
 })
+
+const wrapFunction = (fn, startCh, finishCh, errorCh, extractArgs) => {
+  return typeof fn === 'function'
+    ? function (...args) {
+      const innerAsyncResource = new AsyncResource('bound-anonymous-fn')
+      return innerAsyncResource.runInAsyncScope(() => {
+        const extractedArgs = extractArgs(args)
+        startCh.publish(extractedArgs)
+        try {
+          const result = fn.apply(this, args)
+          if (result && typeof result.then === 'function') {
+            result.then(
+              innerAsyncResource.bind(() => finishCh.publish(undefined)),
+              innerAsyncResource.bind(err => {
+                if (err) {
+                  errorCh.publish(err)
+                }
+                finishCh.publish(undefined)
+              })
+            )
+          } else {
+            finishCh.publish(undefined)
+          }
+          return result
+        } catch (e) {
+          errorCh.publish(e)
+          finishCh.publish(undefined)
+          throw e
+        }
+      })
+    }
+    : fn
+}
