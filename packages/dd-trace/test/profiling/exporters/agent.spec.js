@@ -270,7 +270,7 @@ describe('exporters/agent', function () {
       try {
         await exporter.export({ profiles, start, end, tags })
       } catch (err) {
-        expect(err.message).to.match(/^Profiler agent export back-off period expired$/)
+        expect(err.message).to.match(/^HTTP Error 500$/)
         failed = true
       }
       expect(failed).to.be.true
