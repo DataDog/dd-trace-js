@@ -76,6 +76,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
+    // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
     rc.setProductHandler('ASM_DATA', noop)
     rc.setProductHandler('ASM_DD', noop)
     rc.setProductHandler('ASM', noop)
