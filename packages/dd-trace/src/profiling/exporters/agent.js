@@ -199,7 +199,7 @@ class AgentExporter {
             this._logger.error(`Error from the agent: ${err.message}`)
             return
           } else if (err) {
-            reject(new Error('Profiler agent export back-off period expired'))
+            reject(err)
             return
           }
 
