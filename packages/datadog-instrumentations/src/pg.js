@@ -71,14 +71,17 @@ function wrapQuery (query) {
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
+
+        // eslint-disable-next-line max-len
+        // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
         const callback = arguments[arguments.length - 1]
 
         finish(error)
 
         if (reusingQuery) {
-          if (typeof callback === 'function') {
-            pgQuery.callback = pgQuery.callback || callback
+          if (!pgQuery.callback && typeof callback === 'function') {
+            pgQuery.callback = callback
           }
 
           if (pgQuery.callback) {
@@ -96,9 +99,9 @@ function wrapQuery (query) {
           callback(error)
 
           return
-        } else {
-          return Promise.reject(error)
         }
+
+        return Promise.reject(error)
       }
 
       arguments[0] = pgQuery

@@ -29,7 +29,7 @@ function analyzePgSqlInjection (ctx) {
   const store = storage.getStore()
   if (!store) return
 
-  const { raspSqlAnalyzed, req } = store
+  const { raspSqlAnalyzed, req, res } = store
 
   if (!req || raspSqlAnalyzed) return
 
@@ -40,7 +40,6 @@ function analyzePgSqlInjection (ctx) {
 
   const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
 
-  const res = store?.res
   handleResult(result, req, res, ctx.abortController, config)
 }
 

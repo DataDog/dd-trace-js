@@ -3,8 +3,13 @@
 const web = require('../../plugins/util/web')
 const { reportStackTrace } = require('../stack_trace')
 const { getBlockingAction } = require('../blocking')
+const log = require('../../log')
 
-let abortOnUncaughtException = false
+const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
+
+if (abortOnUncaughtException) {
+  log.warn('The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
+}
 
 const RULE_TYPES = {
   SSRF: 'ssrf',
@@ -55,13 +60,8 @@ function handleResult (actions, req, res, abortController, config) {
   }
 }
 
-function setAbortOnUncaughtException (newAbortOnUncaughtException) {
-  abortOnUncaughtException = newAbortOnUncaughtException
-}
-
 module.exports = {
   handleResult,
-  setAbortOnUncaughtException,
   RULE_TYPES,
   DatadogRaspAbortError
 }

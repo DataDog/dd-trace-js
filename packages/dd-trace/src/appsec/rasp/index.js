@@ -3,11 +3,10 @@
 const web = require('../../plugins/util/web')
 const { setUncaughtExceptionCaptureCallbackStart } = require('../channels')
 const { block } = require('../blocking')
-const log = require('../../log')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 
-const { setAbortOnUncaughtException, DatadogRaspAbortError } = require('./utils')
+const { DatadogRaspAbortError } = require('./utils')
 
 function removeAllListeners (emitter, event) {
   const listeners = emitter.listeners(event)
@@ -88,13 +87,6 @@ function enable (config) {
   sqli.enable(config)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
-
-  const abortOnUncaughtException = process.execArgv?.includes('--abort-on-uncaught-exception')
-  setAbortOnUncaughtException(abortOnUncaughtException)
-
-  if (abortOnUncaughtException) {
-    log.warn('The --abort-on-uncaught-exception flag is enabled. The RASP module will not block operations.')
-  }
 }
 
 function disable () {
