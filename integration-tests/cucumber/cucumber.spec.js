@@ -115,14 +115,14 @@ versions.forEach(version => {
 
               const receiverPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-                  const events = payloads.flatMap(({ payload }) => payload.events)
                   const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
-
                   metadataDicts.forEach(metadata => {
                     for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
                       assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
                     }
                   })
+
+                  const events = payloads.flatMap(({ payload }) => payload.events)
 
                   const testSessionEvent = events.find(event => event.type === 'test_session_end')
                   const testModuleEvent = events.find(event => event.type === 'test_module_end')
