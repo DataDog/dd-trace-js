@@ -3616,7 +3616,7 @@ describe('Plugin', () => {
               await checkTraces
             })
 
-            it.only('makes a successful chat completion call with tools and content', async () => {
+            it('makes a successful chat completion call with tools and content', async () => {
               nock('https://api.openai.com:443')
                 .post('/v1/chat/completions')
                 .reply(200, function () {
