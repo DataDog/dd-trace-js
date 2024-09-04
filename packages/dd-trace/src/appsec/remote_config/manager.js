@@ -244,13 +244,56 @@ class RemoteConfigManager extends EventEmitter {
       // TODO: we need a way to tell if unapply configs were handled by kPreUpdate or not, because they're always
       // emitted unlike the apply and modify configs
 
-      callHandlerFor.call(this, action, item)
+      this._callHandlerFor(action, item)
 
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
       } else {
         this.appliedConfigs.set(item.path, item)
       }
+    }
+  }
+
+  _callHandlerFor (action, item) {
+    // in case the item was already handled by kPreUpdate
+    if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
+
+    const handler = this._handlers.get(item.product)
+
+    if (!handler) return
+
+    try {
+      if (supportsAckCallback(handler)) {
+        // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordinly
+        // TODO: do we want to pass old and new config ?
+        handler(action, item.file, item.id, (err) => {
+          if (err) {
+            item.apply_state = ERROR
+            item.apply_error = err.toString()
+          } else if (item.apply_state !== ERROR) {
+            item.apply_state = ACKNOWLEDGED
+          }
+        })
+      } else {
+        // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
+        // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
+        // TODO: do we want to pass old and new config ?
+        const result = handler(action, item.file, item.id)
+        if (result instanceof Promise) {
+          result.then(
+            () => { item.apply_state = ACKNOWLEDGED },
+            (err) => {
+              item.apply_state = ERROR
+              item.apply_error = err.toString()
+            }
+          )
+        } else {
+          item.apply_state = ACKNOWLEDGED
+        }
+      }
+    } catch (err) {
+      item.apply_state = ERROR
+      item.apply_error = err.toString()
     }
   }
 }
@@ -273,49 +316,6 @@ function parseConfigPath (configPath) {
   return {
     product: match[1],
     id: match[2]
-  }
-}
-
-function callHandlerFor (action, item) {
-  // in case the item was already handled by kPreUpdate
-  if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
-
-  const handler = this._handlers.get(item.product)
-
-  if (!handler) return
-
-  try {
-    if (supportsAckCallback(handler)) {
-      // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordinly
-      // TODO: do we want to pass old and new config ?
-      handler(action, item.file, item.id, (err) => {
-        if (err) {
-          item.apply_state = ERROR
-          item.apply_error = err.toString()
-        } else if (item.apply_state !== ERROR) {
-          item.apply_state = ACKNOWLEDGED
-        }
-      })
-    } else {
-      // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
-      // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
-      // TODO: do we want to pass old and new config ?
-      const result = handler(action, item.file, item.id)
-      if (result instanceof Promise) {
-        result.then(
-          () => { item.apply_state = ACKNOWLEDGED },
-          (err) => {
-            item.apply_state = ERROR
-            item.apply_error = err.toString()
-          }
-        )
-      } else {
-        item.apply_state = ACKNOWLEDGED
-      }
-    }
-  } catch (err) {
-    item.apply_state = ERROR
-    item.apply_error = err.toString()
   }
 }
 
