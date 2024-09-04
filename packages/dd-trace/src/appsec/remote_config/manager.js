@@ -244,7 +244,7 @@ class RemoteConfigManager extends EventEmitter {
       // TODO: we need a way to tell if unapply configs were handled by kPreUpdate or not, because they're always
       // emitted unlike the apply and modify configs
 
-      callHandlerFor(action, item)
+      callHandlerFor.call(this, action, item)
 
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
