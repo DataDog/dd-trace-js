@@ -43,7 +43,13 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     // length of `payload.events` when calling `makePayload`
     this._eventCount = 0
 
+    this.metadataTags = {}
+
     this.reset()
+  }
+
+  setMetadataTags (tags) {
+    this.metadataTags = tags
   }
 
   _encodeTestSuite (bytes, content) {
@@ -330,7 +336,8 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         '*': {
           language: 'javascript',
           library_version: ddTraceVersion
-        }
+        },
+        ...this.metadataTags
       },
       events: []
     }

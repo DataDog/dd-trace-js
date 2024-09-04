@@ -9,8 +9,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
-  TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_CODE_OWNERS
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -134,7 +133,6 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         'vitest'
       )
-      testSuiteMetadata[TEST_SESSION_NAME] = process.env.DD_CIVISIBILITY_TEST_SESSION_NAME
 
       const testSuiteSpan = this.tracer.startSpan('vitest.test_suite', {
         childOf: testSessionSpanContext,
