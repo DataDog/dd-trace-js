@@ -86,7 +86,10 @@ module.exports = class CiPlugin extends Plugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      this.tracer._exporter.setMetadataTags(metadataTags)
+      // tracer might not be initialized correctly
+      if (this.tracer._exporter.setMetadataTags) {
+        this.tracer._exporter.setMetadataTags(metadataTags)
+      }
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,

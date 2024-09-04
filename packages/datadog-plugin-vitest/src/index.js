@@ -138,7 +138,9 @@ class VitestPlugin extends CiPlugin {
           [TEST_SESSION_NAME]: testSessionName
         }
       }
-      this.tracer._exporter.setMetadataTags(metadataTags)
+      if (this.tracer._exporter.setMetadataTags) {
+        this.tracer._exporter.setMetadataTags(metadataTags)
+      }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSuiteMetadata = getTestSuiteCommonTags(

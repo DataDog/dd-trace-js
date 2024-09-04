@@ -22,8 +22,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
-  TEST_SESSION_NAME
+  TEST_BROWSER_DRIVER
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
