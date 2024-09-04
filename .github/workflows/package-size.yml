@@ -12,6 +12,8 @@ concurrency:
 jobs:
   package-size-report:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - name: Setup Node.js
