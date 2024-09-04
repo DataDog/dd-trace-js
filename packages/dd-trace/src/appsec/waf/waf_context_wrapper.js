@@ -51,6 +51,11 @@ class WAFContextWrapper {
 
     if (!payloadHasData) return
 
+    if (this.ddwafContext.disposed) {
+      log.warn('Calling run on a disposed context')
+      return
+    }
+
     try {
       const start = process.hrtime.bigint()
 
