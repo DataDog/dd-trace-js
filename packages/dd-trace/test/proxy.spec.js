@@ -1,7 +1,5 @@
 'use strict'
 
-const EventEmitter = require('events')
-
 require('./setup/tap')
 
 describe('TracerProxy', () => {
@@ -28,6 +26,7 @@ describe('TracerProxy', () => {
   let pluginManager
   let flare
   let remoteConfig
+  let handlers
   let rc
   let dogStatsD
   let noopDogStatsDClient
@@ -170,7 +169,11 @@ describe('TracerProxy', () => {
       enable: sinon.stub()
     }
 
-    rc = new EventEmitter()
+    handlers = new Map()
+    rc = {
+      setProductHandler (product, handler) { handlers.set(product, handler) },
+      removeProductHandler (product) { handlers.delete(product) }
+    }
 
     remoteConfig.enable.returns(rc)
 
@@ -253,7 +256,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
 
         expect(config.configure).to.have.been.calledWith(conf)
         expect(tracer.configure).to.have.been.calledWith(config)
@@ -265,7 +268,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        rc.emit('AGENT_CONFIG', 'apply', {
+        handlers.get('AGENT_CONFIG')('apply', {
           config: {
             log_level: logLevel
           },
@@ -285,7 +288,7 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        rc.emit('AGENT_TASK', 'apply', {
+        handlers.get('AGENT_TASK')('apply', {
           args: task,
           task_type: 'tracer_flare',
           uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
@@ -305,8 +308,8 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        rc.emit('AGENT_CONFIG', 'apply', conf)
-        rc.emit('AGENT_CONFIG', 'unapply', conf)
+        handlers.get('AGENT_CONFIG')('apply', conf)
+        handlers.get('AGENT_CONFIG')('unapply', conf)
 
         expect(flare.disable).to.have.been.called
       })
@@ -328,12 +331,12 @@ describe('TracerProxy', () => {
         expect(iast.enable).to.not.have.been.called
 
         let conf = { tracing_enabled: false }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(appsec.disable).to.not.have.been.called
         expect(iast.disable).to.not.have.been.called
 
         conf = { tracing_enabled: true }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(DatadogTracer).to.have.been.calledOnce
         expect(AppsecSdk).to.have.been.calledOnce
         expect(appsec.enable).to.not.have.been.called
@@ -364,12 +367,12 @@ describe('TracerProxy', () => {
         expect(iast.enable).to.have.been.calledOnceWithExactly(config, tracer)
 
         let conf = { tracing_enabled: false }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(appsec.disable).to.have.been.called
         expect(iast.disable).to.have.been.called
 
         conf = { tracing_enabled: true }
-        rc.emit('APM_TRACING', 'apply', { lib_config: conf })
+        handlers.get('APM_TRACING')('apply', { lib_config: conf })
         expect(appsec.enable).to.have.been.calledTwice
         expect(appsec.enable.secondCall).to.have.been.calledWithExactly(config)
         expect(iast.enable).to.have.been.calledTwice
