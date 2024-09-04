@@ -3615,6 +3615,61 @@ describe('Plugin', () => {
 
               await checkTraces
             })
+
+            it.only('makes a successful chat completion call with tools and content', async () => {
+              nock('https://api.openai.com:443')
+                .post('/v1/chat/completions')
+                .reply(200, function () {
+                  return fs.createReadStream(
+                    Path.join(__dirname, 'streamed-responses/chat.completions.tool.and.content.txt')
+                  )
+                }, {
+                  'Content-Type': 'text/plain',
+                  'openai-organization': 'kill-9'
+                })
+
+              const checkTraces = agent
+                .use(traces => {
+                  const span = traces[0][0]
+
+                  expect(span).to.have.property('name', 'openai.request')
+                  expect(span).to.have.property('type', 'openai')
+                  expect(span).to.have.property('error', 0)
+                  expect(span.meta).to.have.property('openai.organization.name', 'kill-9')
+                  expect(span.meta).to.have.property('openai.request.method', 'POST')
+                  expect(span.meta).to.have.property('openai.request.endpoint', '/v1/chat/completions')
+                  expect(span.meta).to.have.property('openai.request.model', 'gpt-4')
+                  expect(span.meta).to.have.property('openai.request.messages.0.content', 'Hello, OpenAI!')
+                  expect(span.meta).to.have.property('openai.request.messages.0.role', 'user')
+                  expect(span.meta).to.have.property('openai.request.messages.0.name', 'hunter2')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.role', 'assistant')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.content',
+                    'THOUGHT: Hi')
+                  expect(span.meta).to.have.property('openai.response.choices.0.finish_reason', 'tool_calls')
+                  expect(span.meta).to.have.property('openai.response.choices.0.logprobs', 'returned')
+                  expect(span.meta).to.have.property('openai.response.choices.0.message.tool_calls.0.function.name',
+                    'finish')
+                  expect(span.meta).to.have.property(
+                    'openai.response.choices.0.message.tool_calls.0.function.arguments',
+                    '{\n"answer": "5"\n}'
+                  )
+                })
+
+              const stream = await openai.chat.completions.create({
+                model: 'gpt-4',
+                messages: [{ role: 'user', content: 'Hello, OpenAI!', name: 'hunter2' }],
+                temperature: 0.5,
+                tools: [], // dummy tools, the response is hardcoded
+                stream: true
+              })
+
+              for await (const part of stream) {
+                expect(part).to.have.property('choices')
+                expect(part.choices[0]).to.have.property('delta')
+              }
+
+              await checkTraces
+            })
           }
         })
       }
