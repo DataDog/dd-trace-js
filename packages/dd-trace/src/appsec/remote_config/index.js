@@ -28,7 +28,7 @@ function enable (config, appsec) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_API_SECURITY_SAMPLE_RATE, true)
     }
 
-    rc.on('ASM_FEATURES', (action, rcConfig) => {
+    rc.setProductHandler('ASM_FEATURES', (action, rcConfig) => {
       if (!rcConfig) return
 
       if (activation === Activation.ONECLICK) {
@@ -76,9 +76,10 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
-    rc.on('ASM_DATA', noop)
-    rc.on('ASM_DD', noop)
-    rc.on('ASM', noop)
+    // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
+    rc.setProductHandler('ASM_DATA', noop)
+    rc.setProductHandler('ASM_DD', noop)
+    rc.setProductHandler('ASM', noop)
 
     rc.on(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }
@@ -98,9 +99,9 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
 
-    rc.off('ASM_DATA', noop)
-    rc.off('ASM_DD', noop)
-    rc.off('ASM', noop)
+    rc.removeProductHandler('ASM_DATA')
+    rc.removeProductHandler('ASM_DD')
+    rc.removeProductHandler('ASM')
 
     rc.off(RemoteConfigManager.kPreUpdate, RuleManager.updateWafFromRC)
   }

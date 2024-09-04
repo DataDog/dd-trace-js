@@ -83,7 +83,7 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config, this._modules.appsec)
 
-        rc.on('APM_TRACING', (action, conf) => {
+        rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
           } else {
@@ -92,7 +92,7 @@ class Tracer extends NoopProxy {
           this._enableOrDisableTracing(config)
         })
 
-        rc.on('AGENT_CONFIG', (action, conf) => {
+        rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
           if (action === 'unapply') {
@@ -103,7 +103,7 @@ class Tracer extends NoopProxy {
           }
         })
 
-        rc.on('AGENT_TASK', (action, conf) => {
+        rc.setProductHandler('AGENT_TASK', (action, conf) => {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
