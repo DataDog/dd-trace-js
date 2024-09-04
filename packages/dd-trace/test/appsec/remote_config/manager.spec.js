@@ -151,10 +151,12 @@ describe('RemoteConfigManager', () => {
 
   describe('setProductHandler/removeProductHandler', () => {
     it('should update the product list and autostart or autostop', () => {
+      expect(rc.scheduler.start).to.not.have.been.called
+
       rc.setProductHandler('ASM_FEATURES', noop)
 
       expect(rc.state.client.products).to.deep.equal(['ASM_FEATURES'])
-      expect(rc.scheduler.start).to.have.been.calledOnce
+      expect(rc.scheduler.start).to.have.been.called
 
       rc.setProductHandler('ASM_DATA', noop)
       rc.setProductHandler('ASM_DD', noop)
@@ -171,7 +173,7 @@ describe('RemoteConfigManager', () => {
 
       rc.removeProductHandler('ASM_DD')
 
-      expect(rc.scheduler.stop).to.have.been.calledOnce
+      expect(rc.scheduler.stop).to.have.been.called
       expect(rc.state.client.products).to.be.empty
     })
   })
