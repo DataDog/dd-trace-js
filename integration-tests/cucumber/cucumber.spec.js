@@ -34,7 +34,8 @@ const {
   CUCUMBER_IS_PARALLEL,
   TEST_SUITE,
   TEST_CODE_OWNERS,
-  TEST_SESSION_NAME
+  TEST_SESSION_NAME,
+  TEST_LEVEL_EVENT_TYPES
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
@@ -115,6 +116,13 @@ versions.forEach(version => {
               const receiverPromise = receiver
                 .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                   const events = payloads.flatMap(({ payload }) => payload.events)
+                  const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+                  metadataDicts.forEach(metadata => {
+                    for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+                      assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                    }
+                  })
 
                   const testSessionEvent = events.find(event => event.type === 'test_session_end')
                   const testModuleEvent = events.find(event => event.type === 'test_module_end')
@@ -130,14 +138,12 @@ versions.forEach(version => {
                     assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
                   }
 
-                  assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testSessionEventContent.test_session_id)
                   assert.exists(testSessionEventContent.meta[TEST_COMMAND])
                   assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
                   assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
                   assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
-                  assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testModuleEventContent.test_session_id)
                   assert.exists(testModuleEventContent.test_module_id)
                   assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -166,7 +172,6 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
-                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
@@ -197,7 +202,6 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
-                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)

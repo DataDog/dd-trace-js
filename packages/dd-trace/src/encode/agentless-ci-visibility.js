@@ -283,6 +283,10 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
+    if (this._isReset) {
+      this._encodePayloadStart(bytes)
+      this._isReset = false
+    }
     const startTime = Date.now()
 
     const rawEvents = trace.map(formatSpan)
@@ -356,6 +360,22 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMapPrefix(bytes, Object.keys(payload.metadata).length)
     this._encodeString(bytes, '*')
     this._encodeMap(bytes, payload.metadata['*'])
+    if (payload.metadata.test) {
+      this._encodeString(bytes, 'test')
+      this._encodeMap(bytes, payload.metadata.test)
+    }
+    if (payload.metadata.test_suite_end) {
+      this._encodeString(bytes, 'test_suite_end')
+      this._encodeMap(bytes, payload.metadata.test_suite_end)
+    }
+    if (payload.metadata.test_module_end) {
+      this._encodeString(bytes, 'test_module_end')
+      this._encodeMap(bytes, payload.metadata.test_module_end)
+    }
+    if (payload.metadata.test_session_end) {
+      this._encodeString(bytes, 'test_session_end')
+      this._encodeMap(bytes, payload.metadata.test_session_end)
+    }
     this._encodeString(bytes, 'events')
     // Get offset of the events list to update the length of the array when calling `makePayload`
     this._eventsOffset = bytes.length
@@ -366,7 +386,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   reset () {
     this._reset()
     this._eventCount = 0
-    this._encodePayloadStart(this._traceBytes)
+    this._isReset = true
   }
 }
 
