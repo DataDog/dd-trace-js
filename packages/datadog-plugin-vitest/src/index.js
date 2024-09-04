@@ -6,10 +6,13 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
+  getTestSessionName,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
-  TEST_CODE_OWNERS
+  TEST_CODE_OWNERS,
+  TEST_LEVEL_EVENT_TYPES,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -120,15 +123,26 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addSub('ci:vitest:test-suite:start', ({ testSuiteAbsolutePath, frameworkVersion }) => {
+      this.command = process.env.DD_CIVISIBILITY_TEST_COMMAND
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': process.env.DD_CIVISIBILITY_TEST_SESSION_ID,
         'x-datadog-parent-id': process.env.DD_CIVISIBILITY_TEST_MODULE_ID
       })
 
+      // test suites run in a different process, so they also need to init the metadata dictionary
+      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
+      }
+      this.tracer._exporter.setMetadataTags(metadataTags)
+
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSuiteMetadata = getTestSuiteCommonTags(
-        process.env.DD_CIVISIBILITY_TEST_COMMAND,
+        this.command,
         this.frameworkVersion,
         testSuite,
         'vitest'
