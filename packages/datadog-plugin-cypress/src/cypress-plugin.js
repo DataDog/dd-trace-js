@@ -393,13 +393,15 @@ class CypressPlugin {
 
     const testSessionName = getTestSessionName(this.tracer._tracer._config, this.command, this.testEnvironmentMetadata)
 
-    const metadataTags = {}
-    for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-      metadataTags[testLevel] = {
-        [TEST_SESSION_NAME]: testSessionName
+    if (this.tracer._tracer._exporter?.setMetadataTags) {
+      const metadataTags = {}
+      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+        metadataTags[testLevel] = {
+          [TEST_SESSION_NAME]: testSessionName
+        }
       }
+      this.tracer._tracer._exporter.setMetadataTags(metadataTags)
     }
-    this.tracer._exporter.setMetadataTags(metadataTags)
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
