@@ -443,21 +443,19 @@ describe('jest CommonJS', () => {
       })
 
       receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+        const metadataDicts = eventsRequests.flatMap(({ payload }) => payload.metadata)
+
+        // it propagates test session name to the test and test suite events in parallel mode
+        metadataDicts.forEach(metadata => {
+          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+            assert.equal(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+          }
+        })
+
         const events = eventsRequests.map(({ payload }) => payload)
           .flatMap(({ events }) => events)
         const eventTypes = events.map(event => event.type)
-
         assert.includeMembers(eventTypes, ['test', 'test_suite_end', 'test_module_end', 'test_session_end'])
-        const tests = events.filter(event => event.type === 'test').map(event => event.content)
-        const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
-
-        // it propagates test session name to the test and test suite events in parallel mode
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
-        })
-        testSuites.forEach(testSuite => {
-          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
-        })
 
         done()
       }).catch(done)
