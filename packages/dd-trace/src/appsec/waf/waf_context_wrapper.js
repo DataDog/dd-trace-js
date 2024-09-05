@@ -20,6 +20,11 @@ class WAFContextWrapper {
   }
 
   run ({ persistent, ephemeral }, raspRuleType) {
+    if (this.ddwafContext.disposed) {
+      log.warn('Calling run on a disposed context')
+      return
+    }
+
     const payload = {}
     let payloadHasData = false
     const inputs = {}
@@ -50,11 +55,6 @@ class WAFContextWrapper {
     }
 
     if (!payloadHasData) return
-
-    if (this.ddwafContext.disposed) {
-      log.warn('Calling run on a disposed context')
-      return
-    }
 
     try {
       const start = process.hrtime.bigint()
