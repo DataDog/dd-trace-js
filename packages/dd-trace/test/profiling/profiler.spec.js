@@ -373,6 +373,18 @@ describe('profiler', function () {
       sinon.assert.notCalled(exporter.export)
     })
 
+    it('calls the profiler.profile() methods once per interval', async () => {
+      await profiler._start({ profilers, exporters })
+
+      for (let i = 0; i < flushAfterIntervals + 1; i++) {
+        clock.tick(interval)
+      }
+
+      for (const configuredProfiler of profilers) {
+        sinon.assert.callCount(configuredProfiler.profile, flushAfterIntervals);
+      }
+    });
+
     it('should flush when flush after intervals is reached', async () => {
       await profiler._start({ profilers, exporters })
 
