@@ -91,7 +91,7 @@ describe('WAFContextWrapper', () => {
       sinon.assert.calledOnce(ddwafContext.run)
     })
 
-    it('Should not call run if context is disposed', () => {
+    it('Should not call run and log a warn if context is disposed', () => {
       ddwafContext.disposed = true
 
       const payload = {
@@ -103,19 +103,6 @@ describe('WAFContextWrapper', () => {
       wafContextWrapper.run(payload)
 
       sinon.assert.notCalled(ddwafContext.run)
-    })
-
-    it('Should log a warn when attempting to call run on a disposed context', () => {
-      ddwafContext.disposed = true
-
-      const payload = {
-        persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
-      }
-
-      wafContextWrapper.run(payload)
-
       sinon.assert.calledOnceWithExactly(log.warn, 'Calling run on a disposed context')
     })
   })
