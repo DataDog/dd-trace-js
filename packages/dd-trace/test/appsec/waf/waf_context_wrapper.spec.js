@@ -1,5 +1,6 @@
 'use strict'
 
+const proxyquire = require('proxyquire')
 const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
 const addresses = require('../../../src/appsec/addresses')
 
@@ -49,5 +50,60 @@ describe('WAFContextWrapper', () => {
         }
       }
     }, 1000)
+  })
+
+  describe('Disposal context check', () => {
+    let log
+    let ddwafContext
+    let wafContextWrapper
+
+    beforeEach(() => {
+      log = {
+        warn: sinon.stub()
+      }
+
+      ddwafContext = {
+        run: sinon.stub()
+      }
+
+      const ProxiedWafContextWrapper = proxyquire('../../../src/appsec/waf/waf_context_wrapper', {
+        '../../log': log
+      })
+
+      wafContextWrapper = new ProxiedWafContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
+    })
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    it('Should call run if context is not disposed', () => {
+      ddwafContext.disposed = false
+
+      const payload = {
+        persistent: {
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        }
+      }
+
+      wafContextWrapper.run(payload)
+
+      sinon.assert.calledOnce(ddwafContext.run)
+    })
+
+    it('Should not call run and log a warn if context is disposed', () => {
+      ddwafContext.disposed = true
+
+      const payload = {
+        persistent: {
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        }
+      }
+
+      wafContextWrapper.run(payload)
+
+      sinon.assert.notCalled(ddwafContext.run)
+      sinon.assert.calledOnceWithExactly(log.warn, 'Calling run on a disposed context')
+    })
   })
 })
