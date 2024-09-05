@@ -23,6 +23,6 @@ module.exports = {
   responseSetHeader: dc.channel('datadog:http:server:response:set-header:start'),
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
   pgQueryStart: dc.channel('apm:pg:query:start'),
-  pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start')
-
+  pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
+  wafRunFinished: dc.channel('datadog:waf:run:finish')
 }

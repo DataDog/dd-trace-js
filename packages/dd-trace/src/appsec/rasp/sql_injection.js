@@ -1,6 +1,6 @@
 'use strict'
 
-const { pgQueryStart, pgPoolQueryStart } = require('../channels')
+const { pgQueryStart, pgPoolQueryStart, wafRunFinished } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
@@ -13,11 +13,13 @@ function enable (_config) {
 
   pgQueryStart.subscribe(analyzePgSqlInjection)
   pgPoolQueryStart.subscribe(analyzePgSqlInjection)
+  wafRunFinished.subscribe(clearQuerySet)
 }
 
 function disable () {
   if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
-  if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.subscribe(analyzePgSqlInjection)
+  if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.unsubscribe(analyzePgSqlInjection)
+  if (wafRunFinished.hasSubscribers) wafRunFinished.unsubscribe(clearQuerySet)
 }
 
 function analyzePgSqlInjection (ctx) {
@@ -50,6 +52,35 @@ function analyzePgSqlInjection (ctx) {
   const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
 
   handleResult(result, req, res, ctx.abortController, config)
+}
+
+function hasInputAddress (payload) {
+  let appliedAddresses = []
+  if (payload.ephemeral) {
+    appliedAddresses = appliedAddresses.concat(Object.keys(payload.ephemeral))
+  }
+  if (payload.persistent) {
+    appliedAddresses = appliedAddresses.concat(Object.keys(payload.persistent))
+  }
+  return !!appliedAddresses
+    .find(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
+}
+
+function clearQuerySet ({ payload }) {
+  if (!payload) return
+
+  const store = storage.getStore()
+  if (!store) return
+
+  const { req } = store
+  if (!req) return
+
+  const executedQueries = reqQueryMap.get(req)
+  if (!executedQueries) return
+
+  if (hasInputAddress(payload)) {
+    executedQueries.clear()
+  }
 }
 
 module.exports = { enable, disable }

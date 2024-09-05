@@ -26,12 +26,8 @@ class DatadogRaspAbortError extends Error {
   }
 }
 
-function getGenerateStackTraceAction (actions) {
-  return actions?.generate_stack
-}
-
 function handleResult (actions, req, res, abortController, config) {
-  const generateStackTraceAction = getGenerateStackTraceAction(actions)
+  const generateStackTraceAction = actions?.generate_stack
   if (generateStackTraceAction && config.appsec.stackTrace.enabled) {
     const rootSpan = web.root(req)
     reportStackTrace(

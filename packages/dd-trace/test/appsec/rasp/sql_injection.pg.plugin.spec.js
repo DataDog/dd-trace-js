@@ -2,6 +2,8 @@
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
+const { wafRunFinished } = require('../../../src/appsec/channels')
+const addresses = require('../../../src/appsec/addresses')
 const Config = require('../../../src/config')
 const path = require('path')
 const Axios = require('axios')
@@ -201,46 +203,80 @@ describe('RASP - sql_injection', () => {
               sinon.restore()
             })
 
+            async function runQueryAndIgnoreError (query) {
+              try {
+                await pool.query(query)
+              } catch (err) {
+                // do nothing
+              }
+            }
+
             it('should call to waf only once for sql injection using pg Pool', async () => {
               app = async (req, res) => {
-                try {
-                  await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
-                } catch (err) {
-                  if (err?.name === 'DatadogRaspAbortError') {
-                    res.statusCode = 500
-                  }
-                }
+                await runQueryAndIgnoreError('SELECT 1')
                 res.end()
               }
 
-              await axios.get('/?param=123')
+              await axios.get('/')
 
               assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 1)
             })
 
             it('should call to waf twice for sql injection with two different queries in pg Pool', async () => {
               app = async (req, res) => {
-                try {
-                  await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
-                } catch (err) {
-                  if (err?.name === 'DatadogRaspAbortError') {
-                    res.statusCode = 500
-                  }
-                }
+                await runQueryAndIgnoreError('SELECT 1')
+                await runQueryAndIgnoreError('SELECT 2')
 
-                try {
-                  await pool.query(`SELECT * FROM users2 WHERE id = '${req.query.param}'`)
-                } catch (err) {
-                  if (err?.name === 'DatadogRaspAbortError') {
-                    res.statusCode = 500
-                  }
-                }
                 res.end()
               }
 
-              await axios.get('/?param=123')
+              await axios.get('/')
 
               assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 2)
+            })
+
+            it('should call to waf twice for sql injection and same query when input address is updated', async () => {
+              app = async (req, res) => {
+                await runQueryAndIgnoreError('SELECT 1')
+
+                wafRunFinished.publish({
+                  payload: {
+                    persistent: {
+                      [addresses.HTTP_INCOMING_URL]: 'test'
+                    }
+                  }
+                })
+
+                await runQueryAndIgnoreError('SELECT 1')
+
+                res.end()
+              }
+
+              await axios.get('/')
+
+              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 2)
+            })
+
+            it('should call to waf once for sql injection and same query when input address is updated', async () => {
+              app = async (req, res) => {
+                await runQueryAndIgnoreError('SELECT 1')
+
+                wafRunFinished.publish({
+                  payload: {
+                    persistent: {
+                      'not-an-input': 'test'
+                    }
+                  }
+                })
+
+                await runQueryAndIgnoreError('SELECT 1')
+
+                res.end()
+              }
+
+              await axios.get('/')
+
+              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 1)
             })
           })
         })
