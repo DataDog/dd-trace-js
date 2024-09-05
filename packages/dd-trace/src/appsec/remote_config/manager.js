@@ -15,6 +15,7 @@ const clientId = uuid()
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
 const kPreUpdate = Symbol('kPreUpdate')
+const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
@@ -32,14 +33,26 @@ class RemoteConfigManager extends EventEmitter {
       port: config.port
     }))
 
+    this._handlers = new Map()
+    const appliedConfigs = this.appliedConfigs = new Map()
+
     this.scheduler = new Scheduler((cb) => this.poll(cb), pollInterval)
 
     this.state = {
       client: {
-        state: { // updated by `parseConfig()`
+        state: { // updated by `parseConfig()` and `poll()`
           root_version: 1,
           targets_version: 0,
-          config_states: [],
+          // Use getter so `apply_*` can be updated async and still affect the content of `config_states`
+          get config_states () {
+            return Array.from(appliedConfigs.values()).map((conf) => ({
+              id: conf.id,
+              version: conf.version,
+              product: conf.product,
+              apply_state: conf.apply_state,
+              apply_error: conf.apply_error
+            }))
+          },
           has_error: false,
           error: '',
           backend_client_state: ''
@@ -60,8 +73,6 @@ class RemoteConfigManager extends EventEmitter {
       },
       cached_target_files: [] // updated by `parseConfig()`
     }
-
-    this.appliedConfigs = new Map()
   }
 
   updateCapabilities (mask, value) {
@@ -82,32 +93,24 @@ class RemoteConfigManager extends EventEmitter {
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
   }
 
-  on (event, listener) {
-    super.on(event, listener)
-
+  setProductHandler (product, handler) {
+    this._handlers.set(product, handler)
     this.updateProducts()
-
-    if (this.state.client.products.length) {
+    if (this.state.client.products.length === 1) {
       this.scheduler.start()
     }
-
-    return this
   }
 
-  off (event, listener) {
-    super.off(event, listener)
-
+  removeProductHandler (product) {
+    this._handlers.delete(product)
     this.updateProducts()
-
-    if (!this.state.client.products.length) {
+    if (this.state.client.products.length === 0) {
       this.scheduler.stop()
     }
-
-    return this
   }
 
   updateProducts () {
-    this.state.client.products = this.eventNames().filter(e => typeof e === 'string')
+    this.state.client.products = Array.from(this._handlers.keys())
   }
 
   getPayload () {
@@ -228,24 +231,11 @@ class RemoteConfigManager extends EventEmitter {
       this.dispatch(toApply, 'apply')
       this.dispatch(toModify, 'modify')
 
-      this.state.client.state.config_states = []
-      this.state.cached_target_files = []
-
-      for (const conf of this.appliedConfigs.values()) {
-        this.state.client.state.config_states.push({
-          id: conf.id,
-          version: conf.version,
-          product: conf.product,
-          apply_state: conf.apply_state,
-          apply_error: conf.apply_error
-        })
-
-        this.state.cached_target_files.push({
-          path: conf.path,
-          length: conf.length,
-          hashes: Object.entries(conf.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
-        })
-      }
+      this.state.cached_target_files = Array.from(this.appliedConfigs.values()).map((conf) => ({
+        path: conf.path,
+        length: conf.length,
+        hashes: Object.entries(conf.hashes).map((entry) => ({ algorithm: entry[0], hash: entry[1] }))
+      }))
     }
   }
 
@@ -254,26 +244,56 @@ class RemoteConfigManager extends EventEmitter {
       // TODO: we need a way to tell if unapply configs were handled by kPreUpdate or not, because they're always
       // emitted unlike the apply and modify configs
 
-      // in case the item was already handled by kPreUpdate
-      if (item.apply_state === UNACKNOWLEDGED || action === 'unapply') {
-        try {
-          // TODO: do we want to pass old and new config ?
-          const hadListeners = this.emit(item.product, action, item.file, item.id)
-
-          if (hadListeners) {
-            item.apply_state = ACKNOWLEDGED
-          }
-        } catch (err) {
-          item.apply_state = ERROR
-          item.apply_error = err.toString()
-        }
-      }
+      this._callHandlerFor(action, item)
 
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
       } else {
         this.appliedConfigs.set(item.path, item)
       }
+    }
+  }
+
+  _callHandlerFor (action, item) {
+    // in case the item was already handled by kPreUpdate
+    if (item.apply_state !== UNACKNOWLEDGED && action !== 'unapply') return
+
+    const handler = this._handlers.get(item.product)
+
+    if (!handler) return
+
+    try {
+      if (supportsAckCallback(handler)) {
+        // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordinly
+        // TODO: do we want to pass old and new config ?
+        handler(action, item.file, item.id, (err) => {
+          if (err) {
+            item.apply_state = ERROR
+            item.apply_error = err.toString()
+          } else if (item.apply_state !== ERROR) {
+            item.apply_state = ACKNOWLEDGED
+          }
+        })
+      } else {
+        // If the handler doesn't accept an `ack` callback, assume `apply_state` is `ACKNOWLEDGED`,
+        // unless it returns a promise, in which case we wait for the promise to be resolved or rejected.
+        // TODO: do we want to pass old and new config ?
+        const result = handler(action, item.file, item.id)
+        if (result instanceof Promise) {
+          result.then(
+            () => { item.apply_state = ACKNOWLEDGED },
+            (err) => {
+              item.apply_state = ERROR
+              item.apply_error = err.toString()
+            }
+          )
+        } else {
+          item.apply_state = ACKNOWLEDGED
+        }
+      }
+    } catch (err) {
+      item.apply_state = ERROR
+      item.apply_error = err.toString()
     }
   }
 }
@@ -297,6 +317,24 @@ function parseConfigPath (configPath) {
     product: match[1],
     id: match[2]
   }
+}
+
+function supportsAckCallback (handler) {
+  if (kSupportsAckCallback in handler) return handler[kSupportsAckCallback]
+
+  const numOfArgs = handler.length
+  let result = false
+
+  if (numOfArgs >= 4) {
+    result = true
+  } else if (numOfArgs !== 0) {
+    const source = handler.toString()
+    result = source.slice(0, source.indexOf(')')).includes('...')
+  }
+
+  handler[kSupportsAckCallback] = result
+
+  return result
 }
 
 module.exports = RemoteConfigManager

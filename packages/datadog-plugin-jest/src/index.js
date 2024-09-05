@@ -22,7 +22,8 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER
+  TEST_BROWSER_DRIVER,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -149,6 +150,7 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestSessionName = this.testSessionName
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
@@ -162,6 +164,7 @@ class JestPlugin extends CiPlugin {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
+        _ddTestSessionName: testSessionName,
         _ddTestModuleId: testModuleId,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
@@ -195,6 +198,9 @@ class JestPlugin extends CiPlugin {
       }
       if (displayName) {
         testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
+      }
+      if (testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = testSessionName
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {

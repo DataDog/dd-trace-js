@@ -18,6 +18,7 @@ const { updateConfig } = require('./telemetry')
 const telemetryMetrics = require('./telemetry/metrics')
 const { getIsGCPFunction, getIsAzureFunction } = require('./serverless')
 const { ORIGIN_KEY } = require('./constants')
+const { appendRules } = require('./payload-tagging/config')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -173,6 +174,21 @@ function validateNamingVersion (versionString) {
   return versionString
 }
 
+/**
+ * Given a string of comma-separated paths, return the array of paths.
+ * If a blank path is provided a null is returned to signal that the feature is disabled.
+ * An empty array means the feature is enabled but that no rules need to be applied.
+ *
+ * @param {string} input
+ * @returns {[string]|null}
+ */
+function splitJSONPathRules (input) {
+  if (!input) return null
+  if (Array.isArray(input)) return input
+  if (input === 'all') return []
+  return input.split(',')
+}
+
 // Shallow clone with property name remapping
 function remapify (input, mappings) {
   if (!input) return
@@ -281,6 +297,26 @@ class Config {
       null
     )
 
+    const DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.request,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING = splitJSONPathRules(
+      coalesce(
+        process.env.DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+        options.cloudPayloadTagging?.response,
+        ''
+      ))
+
+    const DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH = coalesce(
+      process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      options.cloudPayloadTagging?.maxDepth,
+      10
+    )
+
     // TODO: refactor
     this.apiKey = DD_API_KEY
 
@@ -289,6 +325,15 @@ class Config {
       id: DD_INSTRUMENTATION_INSTALL_ID,
       time: DD_INSTRUMENTATION_INSTALL_TIME,
       type: DD_INSTRUMENTATION_INSTALL_TYPE
+    }
+
+    this.cloudPayloadTagging = {
+      requestsEnabled: !!DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING,
+      responsesEnabled: !!DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING,
+      maxDepth: DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH,
+      rules: appendRules(
+        DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING, DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+      )
     }
 
     this._applyDefaults()
@@ -451,6 +496,7 @@ class Config {
     this._setValue(defaults, 'isGitUploadEnabled', false)
     this._setValue(defaults, 'isIntelligentTestRunnerEnabled', false)
     this._setValue(defaults, 'isManualApiEnabled', false)
+    this._setValue(defaults, 'ciVisibilitySessionName', '')
     this._setValue(defaults, 'logInjection', false)
     this._setValue(defaults, 'lookup', undefined)
     this._setValue(defaults, 'memcachedCommandEnabled', false)
@@ -985,7 +1031,8 @@ class Config {
       DD_CIVISIBILITY_AGENTLESS_URL,
       DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
-      DD_CIVISIBILITY_FLAKY_RETRY_COUNT
+      DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
+      DD_SESSION_NAME
     } = process.env
 
     if (DD_CIVISIBILITY_AGENTLESS_URL) {
@@ -1001,6 +1048,7 @@ class Config {
       this._setValue(calc, 'flakyTestRetriesCount', coalesce(maybeInt(DD_CIVISIBILITY_FLAKY_RETRY_COUNT), 5))
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
+      this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
