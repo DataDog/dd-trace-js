@@ -38,7 +38,8 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+// TODO: change 10 to `latest` when fix is released
+const versions = ['7.0.0', isOldNode ? '9' : '10']
 
 const moduleType = [
   {
