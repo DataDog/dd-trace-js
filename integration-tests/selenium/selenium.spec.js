@@ -18,7 +18,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
-const cucumberVersion = NODE_MAJOR <= 16 ? '9' : 'latest'
+const cucumberVersion = NODE_MAJOR <= 16 ? '9' : '10'
 
 const webAppServer = require('../ci-visibility/web-app-server')
 
