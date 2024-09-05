@@ -1,25 +1,23 @@
 'use strict'
 
-const { pgQueryStart, pgPoolQueryStart, pgPoolQueryFinish } = require('../channels')
+const { pgQueryStart, pgPoolQueryStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
-
+const reqQueryMap = new WeakMap() // WeakMap<Request, Set<querystring>>
 function enable (_config) {
   config = _config
 
   pgQueryStart.subscribe(analyzePgSqlInjection)
-  pgPoolQueryStart.subscribe(analyzePgSqlInjectionInPool)
-  pgPoolQueryFinish.subscribe(pgPoolFinish)
+  pgPoolQueryStart.subscribe(analyzePgSqlInjection)
 }
 
 function disable () {
   if (pgQueryStart.hasSubscribers) pgQueryStart.unsubscribe(analyzePgSqlInjection)
-  if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.subscribe(analyzePgSqlInjectionInPool)
-  if (pgPoolQueryFinish.hasSubscribers) pgPoolQueryFinish.subscribe(pgPoolFinish)
+  if (pgPoolQueryStart.hasSubscribers) pgPoolQueryStart.subscribe(analyzePgSqlInjection)
 }
 
 function analyzePgSqlInjection (ctx) {
@@ -33,6 +31,17 @@ function analyzePgSqlInjection (ctx) {
 
   if (!req || raspSqlAnalyzed) return
 
+  let executedQueries = reqQueryMap.get(req)
+  if (executedQueries?.has(query)) return
+
+  // Do not waste time executing same query twice
+  // This also will prevent double calls in pg.Pool internal queries
+  if (!executedQueries) {
+    executedQueries = new Set()
+    reqQueryMap.set(req, executedQueries)
+  }
+  executedQueries.add(query)
+
   const persistent = {
     [addresses.DB_STATEMENT]: query,
     [addresses.DB_SYSTEM]: 'postgresql' // TODO: Extract to constant
@@ -41,23 +50,6 @@ function analyzePgSqlInjection (ctx) {
   const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
 
   handleResult(result, req, res, ctx.abortController, config)
-}
-
-function analyzePgSqlInjectionInPool (ctx) {
-  const parentStore = storage.getStore()
-  if (!parentStore) return
-
-  analyzePgSqlInjection(ctx)
-
-  storage.enterWith({ ...parentStore, raspSqlAnalyzed: true, raspSqlParentStore: parentStore })
-}
-
-function pgPoolFinish () {
-  const store = storage.getStore()
-  if (!store) return
-  if (!store.raspSqlParentStore) return
-
-  storage.enterWith(store.raspSqlParentStore)
 }
 
 module.exports = { enable, disable }

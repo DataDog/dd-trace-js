@@ -188,6 +188,61 @@ describe('RASP - sql_injection', () => {
 
             assert.fail('Request should be blocked')
           })
+
+          describe('double calls', () => {
+            const WAFContextWrapper = require('../../../src/appsec/waf/waf_context_wrapper')
+            let run
+
+            beforeEach(() => {
+              run = sinon.spy(WAFContextWrapper.prototype, 'run')
+            })
+
+            afterEach(() => {
+              sinon.restore()
+            })
+
+            it('should call to waf only once for sql injection using pg Pool', async () => {
+              app = async (req, res) => {
+                try {
+                  await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
+                } catch (err) {
+                  if (err?.name === 'DatadogRaspAbortError') {
+                    res.statusCode = 500
+                  }
+                }
+                res.end()
+              }
+
+              await axios.get('/?param=123')
+
+              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 1)
+            })
+
+            it('should call to waf twice for sql injection with two different queries in pg Pool', async () => {
+              app = async (req, res) => {
+                try {
+                  await pool.query(`SELECT * FROM users WHERE id = '${req.query.param}'`)
+                } catch (err) {
+                  if (err?.name === 'DatadogRaspAbortError') {
+                    res.statusCode = 500
+                  }
+                }
+
+                try {
+                  await pool.query(`SELECT * FROM users2 WHERE id = '${req.query.param}'`)
+                } catch (err) {
+                  if (err?.name === 'DatadogRaspAbortError') {
+                    res.statusCode = 500
+                  }
+                }
+                res.end()
+              }
+
+              await axios.get('/?param=123')
+
+              assert.equal(run.args.filter(arg => arg[1] === 'sql_injection').length, 2)
+            })
+          })
         })
       })
     })
