@@ -550,7 +550,7 @@ addHook({
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
+  versions: ['>=7.3.0 <11.0.0'],
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
@@ -559,7 +559,7 @@ addHook({
 // `getWrappedRunTest` generates suite start and finish events
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
+  versions: ['>=7.3.0 <11.0.0'],
   file: 'lib/runtime/index.js'
 }, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
@@ -588,7 +588,7 @@ addHook({
 // `getWrappedParseWorkerMessage` generates suite finish events
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=8.0.0'],
+  versions: ['>=8.0.0 <11.0.0'],
   file: 'lib/runtime/parallel/coordinator.js'
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
