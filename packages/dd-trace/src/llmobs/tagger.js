@@ -98,7 +98,7 @@ class LLMObsTagger {
 
   tagSpanTags (span, tags) {
     try {
-      const currentTags = span.context().tags[TAGS]
+      const currentTags = span.context()._tags[TAGS]
       if (currentTags) {
         Object.assign(tags, currentTags)
       }
