@@ -11,12 +11,13 @@ const preventDuplicateAddresses = new Set([
 ])
 
 class WAFContextWrapper {
-  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion) {
+  constructor (ddwafContext, wafTimeout, wafVersion, rulesVersion, knownAddresses) {
     this.ddwafContext = ddwafContext
     this.wafTimeout = wafTimeout
     this.wafVersion = wafVersion
     this.rulesVersion = rulesVersion
     this.addressesToSkip = new Set()
+    this.knownAddresses = knownAddresses
   }
 
   run ({ persistent, ephemeral }, raspRuleType) {
@@ -27,7 +28,8 @@ class WAFContextWrapper {
 
     const payload = {}
     let payloadHasData = false
-    const inputs = {}
+    const persistentInputs = {}
+    const ephemeralInputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
 
     if (persistent !== null && typeof persistent === 'object') {
@@ -35,8 +37,8 @@ class WAFContextWrapper {
       for (const key of Object.keys(persistent)) {
         // TODO: requiredAddresses is no longer used due to processor addresses are not included in the list. Check on
         // future versions when the actual addresses are included in the 'loaded' section inside diagnostics.
-        if (!this.addressesToSkip.has(key)) {
-          inputs[key] = persistent[key]
+        if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
+          persistentInputs[key] = persistent[key]
           if (preventDuplicateAddresses.has(key)) {
             newAddressesToSkip.add(key)
           }
@@ -44,13 +46,21 @@ class WAFContextWrapper {
       }
     }
 
-    if (Object.keys(inputs).length) {
-      payload.persistent = inputs
+    if (ephemeral !== null && typeof ephemeral === 'object') {
+      for (const key of Object.keys(ephemeral)) {
+        if (this.knownAddresses.has(key)) {
+          ephemeralInputs[key] = ephemeral[key]
+        }
+      }
+    }
+
+    if (Object.keys(persistentInputs).length) {
+      payload.persistent = persistentInputs
       payloadHasData = true
     }
 
-    if (ephemeral && Object.keys(ephemeral).length) {
-      payload.ephemeral = ephemeral
+    if (Object.keys(ephemeralInputs).length) {
+      payload.ephemeral = ephemeralInputs
       payloadHasData = true
     }
 
