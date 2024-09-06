@@ -135,7 +135,7 @@ class LLMObsSpanProcessor {
     const errType = span.context()._tags[ERROR_TYPE]
     if (errType) tags.error_type = errType
     if (sessionId) tags.session_id = sessionId
-    const existingTags = JSON.parse(tags[TAGS] || '{}')
+    const existingTags = JSON.parse(span.context()._tags[TAGS] || '{}')
     if (existingTags) tags = { ...tags, ...existingTags }
     return Object.entries(tags).map(([key, value]) => `${key}:${value}`)
   }
