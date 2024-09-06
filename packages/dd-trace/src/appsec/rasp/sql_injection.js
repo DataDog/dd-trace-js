@@ -6,8 +6,11 @@ const addresses = require('../addresses')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
-let config
+const DB_SYSTEM_POSTGRES = 'postgresql'
 const reqQueryMap = new WeakMap() // WeakMap<Request, Set<querystring>>
+
+let config
+
 function enable (_config) {
   config = _config
 
@@ -46,7 +49,7 @@ function analyzePgSqlInjection (ctx) {
 
   const persistent = {
     [addresses.DB_STATEMENT]: query,
-    [addresses.DB_SYSTEM]: 'postgresql' // TODO: Extract to constant
+    [addresses.DB_SYSTEM]: DB_SYSTEM_POSTGRES
   }
 
   const result = waf.run({ persistent }, req, RULE_TYPES.SQL_INJECTION)
@@ -62,6 +65,7 @@ function hasInputAddress (payload) {
   if (payload.persistent) {
     appliedAddresses = appliedAddresses.concat(Object.keys(payload.persistent))
   }
+
   return !!appliedAddresses
     .find(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
 }
