@@ -1074,7 +1074,6 @@ class Config {
     const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
     const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
     const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
-    debugger
     if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
       this._setBoolean(calc, 'telemetry.logCollection', true)
     }
