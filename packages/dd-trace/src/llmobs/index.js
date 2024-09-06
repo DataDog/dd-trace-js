@@ -25,7 +25,7 @@ function enable (config) {
 }
 
 function disable () {
-  if (llmobsSpanStartCh.hasSubscribers) llmobsSpanStartCh.ubsubscribe(handleSpanStart)
+  if (llmobsSpanStartCh.hasSubscribers) llmobsSpanStartCh.unsubscribe(handleSpanStart)
   if (llmobsSpanEndCh.hasSubscribers) llmobsSpanEndCh.unsubscribe(handleSpanEnd)
   if (llmobsSpanErrorCh.hasSubscribers) llmobsSpanErrorCh.unsubscribe(handleSpanError)
 
