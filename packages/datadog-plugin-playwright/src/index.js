@@ -15,8 +15,7 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
-  TELEMETRY_TEST_SESSION,
-  TEST_SESSION_NAME
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -77,9 +76,6 @@ class PlaywrightPlugin extends CiPlugin {
         testSuite,
         'playwright'
       )
-      if (this.testSessionName) {
-        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
-      }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
