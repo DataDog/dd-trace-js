@@ -310,7 +310,7 @@ describe('Dynamic Instrumentation', function () {
         assert.isNumber(payload.logger.thread_id)
         assert.isTrue(payload.logger.thread_name.endsWith('node'))
         assertUUID(payload['debugger.snapshot'].id)
-        assert.typeOf(payload['debugger.snapshot'].timestamp, 'number')
+        assert.isNumber(payload['debugger.snapshot'].timestamp)
         assert.isTrue(payload['debugger.snapshot'].timestamp > Date.now() - 1000 * 60)
         assert.isTrue(payload['debugger.snapshot'].timestamp <= Date.now())
 
