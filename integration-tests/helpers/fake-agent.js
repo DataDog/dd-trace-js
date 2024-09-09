@@ -219,8 +219,8 @@ function buildExpressServer (agent) {
     for (const cs of state.config_states) {
       const uniqueState = `${cs.id}-${cs.version}-${cs.apply_state}`
       if (!agent._rcSeenStates.has(uniqueState)) {
-        agent.emit('remote-config-ack-update', cs.id, cs.version, cs.apply_state, cs.apply_error)
         agent._rcSeenStates.add(uniqueState)
+        agent.emit('remote-config-ack-update', cs.id, cs.version, cs.apply_state, cs.apply_error)
       }
 
       if (cs.apply_error) {
