@@ -28,11 +28,11 @@ class WAFContextWrapper {
 
     const payload = {}
     let payloadHasData = false
-    const persistentInputs = {}
-    const ephemeralInputs = {}
     const newAddressesToSkip = new Set(this.addressesToSkip)
 
     if (persistent !== null && typeof persistent === 'object') {
+      const persistentInputs = {}
+
       for (const key of Object.keys(persistent)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
           persistentInputs[key] = persistent[key]
@@ -49,6 +49,8 @@ class WAFContextWrapper {
     }
 
     if (ephemeral !== null && typeof ephemeral === 'object') {
+      const ephemeralInputs = {}
+
       for (const key of Object.keys(ephemeral)) {
         if (this.knownAddresses.has(key)) {
           ephemeralInputs[key] = ephemeral[key]
