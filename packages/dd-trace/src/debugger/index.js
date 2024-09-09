@@ -49,13 +49,8 @@ function start (config, rc) {
 
   worker.on('error', (err) => log.error(err))
 
-  // TODO: How should we handle exits?
   worker.on('exit', (code) => {
-    if (code === 0) {
-      log.debug(`Dynamic Instrumentation worker thread exited with code ${code}`)
-    } else {
-      log.error(`Dynamic Instrumentation worker thread exited with unexpected code: ${code}`)
-    }
+    log.error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
   })
 }
 
