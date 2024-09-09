@@ -1,5 +1,8 @@
+'use strict'
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const dc = require('dc-polyfill')
+const assert = require('assert')
 
 const clients = {
   pg: pg => pg.Client
