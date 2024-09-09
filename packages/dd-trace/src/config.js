@@ -535,7 +535,7 @@ class Config {
     this._setValue(defaults, 'telemetry.dependencyCollection', true)
     this._setValue(defaults, 'telemetry.enabled', true)
     this._setValue(defaults, 'telemetry.heartbeatInterval', 60000)
-    this._setValue(defaults, 'telemetry.logCollection', false)
+    this._setValue(defaults, 'telemetry.logCollection', true)
     this._setValue(defaults, 'telemetry.metrics', true)
     this._setValue(defaults, 'traceId128BitGenerationEnabled', true)
     this._setValue(defaults, 'traceId128BitLoggingEnabled', false)
@@ -1049,8 +1049,6 @@ class Config {
       this._setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(this._isCiVisibilityItrEnabled()))
       this._setBoolean(calc, 'isManualApiEnabled', this._isCiVisibilityManualApiEnabled())
       this._setString(calc, 'ciVisibilitySessionName', DD_SESSION_NAME)
-      // enable log collection
-      this._setBoolean(calc, 'telemetry.logCollection', true)
     }
     this._setString(calc, 'dogstatsd.hostname', this._getHostname())
     this._setBoolean(calc, 'isGitUploadEnabled',
@@ -1069,13 +1067,6 @@ class Config {
     if (defaultPropagationStyle.length > 2) {
       calc['tracePropagationStyle.inject'] = calc['tracePropagationStyle.inject'] || defaultPropagationStyle
       calc['tracePropagationStyle.extract'] = calc['tracePropagationStyle.extract'] || defaultPropagationStyle
-    }
-
-    const iastEnabled = coalesce(this._options['iast.enabled'], this._env['iast.enabled'])
-    const profilingEnabled = coalesce(this._options['profiling.enabled'], this._env['profiling.enabled'])
-    const injectionIncludesProfiler = (this._env.injectionEnabled || []).includes('profiler')
-    if (iastEnabled || ['auto', 'true'].includes(profilingEnabled) || injectionIncludesProfiler) {
-      this._setBoolean(calc, 'telemetry.logCollection', true)
     }
   }
 
