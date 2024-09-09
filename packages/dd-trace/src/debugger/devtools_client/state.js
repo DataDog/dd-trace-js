@@ -39,6 +39,7 @@ module.exports = {
 // Unknown params.url values:
 // - `structured-stack` - Not sure what this is, but should just be ignored
 // - `` - Not sure what this is, but should just be ignored
+// TODO: Event fired for all files, every time debugger is enabled. So when we disable it, we need to reset the state
 session.on('Debugger.scriptParsed', ({ params }) => {
   if (params.url.startsWith('file:')) {
     scripts.push([params.url, params.scriptId])

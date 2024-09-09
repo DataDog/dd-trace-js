@@ -99,6 +99,9 @@ async function addBreakpoint (probe) {
   probe.location = { file, lines: [line] }
   delete probe.where
 
+  // TODO: Inbetween `await session.post('Debugger.enable')` and here, the scripts are parsed and cached.
+  // Maybe there's a race condition here or maybe we're guraenteed that `await session.post('Debugger.enable')` will
+  // not continue untill all scripts have been parsed?
   const script = getScript(file)
   if (!script) throw new Error(`No loaded script found for ${file} (probe: ${probe.id}, version: ${probe.version})`)
   const [path, scriptId] = script
