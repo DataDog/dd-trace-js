@@ -1,11 +1,13 @@
 'use strict'
 
 const { workerData: { rcPort } } = require('node:worker_threads')
+const mutexify = require('mutexify/promise')
 const { getScript, probes, breakpoints } = require('./state')
 const session = require('./session')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('../../log')
 
+const lock = mutexify()
 let sessionStarted = false
 
 // Example log line probe (simplified):
@@ -70,6 +72,8 @@ async function processMsg (action, probe) {
     )
   }
 
+  const release = await lock()
+
   switch (action) {
     case 'unapply':
       await removeBreakpoint(probe)
@@ -87,6 +91,8 @@ async function processMsg (action, probe) {
         `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
       )
   }
+
+  release()
 }
 
 async function addBreakpoint (probe) {
