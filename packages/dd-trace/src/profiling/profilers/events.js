@@ -225,39 +225,39 @@ class EventSerializer {
  * Class that sources timeline events through Node.js performance measurement APIs.
  */
 class NodeApiEventSource {
-  constructor (addEventCallback, entryTypes) {
-    this.addEventCallback = addEventCallback
-    this._observer = undefined
+  constructor (eventHandler, entryTypes) {
+    this.eventHandler = eventHandler
+    this.observer = undefined
     this.entryTypes = entryTypes || Object.keys(decoratorTypes)
   }
 
   start () {
     // if already started, do nothing
-    if (this._observer) return
+    if (this.observer) return
 
     function add (items) {
       for (const item of items.getEntries()) {
-        this.addEventCallback(item)
+        this.eventHandler(item)
       }
     }
 
-    this._observer = new PerformanceObserver(add.bind(this))
-    this._observer.observe({ entryTypes: this.entryTypes })
+    this.observer = new PerformanceObserver(add.bind(this))
+    this.observer.observe({ entryTypes: this.entryTypes })
   }
 
   stop () {
-    if (this._observer) {
-      this._observer.disconnect()
-      this._observer = undefined
+    if (this.observer) {
+      this.observer.disconnect()
+      this.observer = undefined
     }
   }
 }
 
 class DatadogInstrumentationEventSource {
-  constructor (addEventCallback) {
+  constructor (eventHandler) {
     this.plugins = ['dns_lookup', 'dns_lookupservice', 'dns_resolve', 'dns_reverse', 'net'].map(m => {
       const Plugin = require(`./event_plugins/${m}`)
-      return new Plugin(addEventCallback)
+      return new Plugin(eventHandler)
     })
 
     this.started = false
@@ -308,22 +308,22 @@ class EventsProfiler {
     if (options.codeHotspotsEnabled) {
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
-      this._eventSource = new CompositeEventSource([
+      this.eventSource = new CompositeEventSource([
         new DatadogInstrumentationEventSource(eventHandler),
         new NodeApiEventSource(eventHandler, ['gc'])
       ])
     } else {
       // Use Node API instrumentation to collect events without span IDs
-      this._eventSource = new NodeApiEventSource(eventHandler)
+      this.eventSource = new NodeApiEventSource(eventHandler)
     }
   }
 
   start () {
-    this._eventSource.start()
+    this.eventSource.start()
   }
 
   stop () {
-    this._eventSource.stop()
+    this.eventSource.stop()
   }
 
   profile (restart, startDate, endDate) {
