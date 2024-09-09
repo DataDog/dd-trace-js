@@ -2,7 +2,7 @@
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const dc = require('dc-polyfill')
-const assert = require('assert')
+const { assert } = require('chai')
 
 const clients = {
   pg: pg => pg.Client
@@ -93,9 +93,7 @@ describe('pg instrumentation', () => {
                 try {
                   await client.query('SELECT 1')
                 } catch (err) {
-                  if (!err || err.message !== 'Test') {
-                    throw err
-                  }
+                  assert.propertyVal(err, 'message', 'Test')
 
                   return
                 }
@@ -124,11 +122,8 @@ describe('pg instrumentation', () => {
                   client.query(query)
 
                   query.on('error', err => {
-                    if (err && err.message === 'Test') {
-                      done()
-                      return
-                    }
-                    done(err || new Error('Query was not aborted'))
+                    assert.propertyVal(err, 'message', 'Test')
+                    done()
                   })
 
                   query.on('end', () => {
@@ -152,12 +147,8 @@ describe('pg instrumentation', () => {
 
                   const query = new Query('SELECT 1')
                   query.callback = err => {
-                    if (err && err.message === 'Test') {
-                      done()
-                      return
-                    }
-
-                    done(err || new Error('Query was not aborted'))
+                    assert.propertyVal(err, 'message', 'Test')
+                    done()
                   }
 
                   client.query(query)
@@ -179,12 +170,8 @@ describe('pg instrumentation', () => {
                   const query = new Query('SELECT 1')
 
                   client.query(query, err => {
-                    if (err && err.message === 'Test') {
-                      done()
-                      return
-                    }
-
-                    done(err || new Error('Query was not aborted'))
+                    assert.propertyVal(err, 'message', 'Test')
+                    done()
                   })
                 })
               })
@@ -244,10 +231,7 @@ describe('pg instrumentation', () => {
             try {
               await pool.query('SELECT 1')
             } catch (err) {
-              if (!err || err.message !== 'Test') {
-                throw err
-              }
-
+              assert.propertyVal(err, 'message', 'Test')
               return
             }
 

@@ -7,7 +7,7 @@ const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 const DB_SYSTEM_POSTGRES = 'postgresql'
-const reqQueryMap = new WeakMap() // WeakMap<Request, Set<querystring>>
+const reqQueryMap = new WeakMap() // WeakMap<Request, Set<querytext>>
 
 let config
 
@@ -32,9 +32,9 @@ function analyzePgSqlInjection (ctx) {
   const store = storage.getStore()
   if (!store) return
 
-  const { raspSqlAnalyzed, req, res } = store
+  const { req, res } = store
 
-  if (!req || raspSqlAnalyzed) return
+  if (!req) return
 
   let executedQueries = reqQueryMap.get(req)
   if (executedQueries?.has(query)) return
@@ -63,7 +63,7 @@ function hasInputAddress (payload) {
 
 function hasAddressesObjectInputAddress (addressesObject) {
   return addressesObject && Object.keys(addressesObject)
-    .find(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
+    .some(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
 }
 
 function clearQuerySet ({ payload }) {
