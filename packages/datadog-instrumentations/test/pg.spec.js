@@ -73,12 +73,8 @@ describe('pg instrumentation', () => {
                 queryClientStartChannel.subscribe(abortQuery)
 
                 client.query('SELECT 1', (err) => {
-                  if (err && err.message === 'Test') {
-                    done()
-                    return
-                  }
-
-                  done(new Error('Query was not aborted'))
+                  assert.propertyVal(err, 'message', 'Test')
+                  done()
                 })
               })
             })
@@ -228,12 +224,8 @@ describe('pg instrumentation', () => {
             queryPoolStartChannel.subscribe(abortQuery)
 
             pool.query('SELECT 1', (err) => {
-              if (err && err.message === 'Test') {
-                done()
-                return
-              }
-
-              done(new Error('Query was not aborted'))
+              assert.propertyVal(err, 'message', 'Test')
+              done()
             })
           })
         })
