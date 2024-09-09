@@ -11,24 +11,27 @@ const {
 const { storage } = require('../../../datadog-core')
 const { isTrue } = require('../util')
 
-const NoopLLMObs = require('./noop')
 const Span = require('../opentracing/span')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsSpanTagger = require('./tagger')
 
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const AgentlessWriter = require('./writers/spans/agentless')
+const AgentProxyWriter = require('./writers/spans/agentProxy')
 
-class LLMObs extends NoopLLMObs {
+const NoopSpan = require('../noop/span')
+
+class LLMObs {
   constructor (tracer, llmobsModule, config) {
-    super()
-
     this._config = config
     this._tracer = tracer
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsSpanTagger(config)
 
-    this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
+    if (this.enabled) {
+      this._evaluationWriter = new LLMObsEvalMetricsWriter(config)
+    }
   }
 
   get enabled () {
@@ -60,6 +63,12 @@ class LLMObs extends NoopLLMObs {
     this._config.llmobs.enabled = !DD_LLMOBS_ENABLED || isTrue(DD_LLMOBS_ENABLED)
     this._config.configure({ ...this._config, llmobs: llmobsConfig })
     this._llmobsModule.enable(this._config)
+
+    // (re)-create writers
+    this._evaluationWriter = new LLMObsEvalMetricsWriter(this._config)
+
+    const SpanWriter = this._config.llmobs.agentlessEnabled ? AgentlessWriter : AgentProxyWriter
+    this._tracer._processor._llmobs._writer = new SpanWriter(this._config)
   }
 
   disable () {
@@ -72,6 +81,12 @@ class LLMObs extends NoopLLMObs {
 
     this._config.llmobs.enabled = false
     this._llmobsModule.disable()
+
+    this._evaluationWriter.destroy()
+    this._tracer._processor._llmobs._writer.destroy()
+
+    this._evaluationWriter = null
+    this._tracer._processor._llmobs._writer = null
   }
 
   annotate (span, options) {
@@ -226,8 +241,8 @@ class LLMObs extends NoopLLMObs {
     })
   }
 
-  startSpan (kind, options) {
-    if (!this.enabled) return
+  startSpan (kind, options = {}) {
+    if (!this.enabled) return new NoopSpan(this._tracer)
     if (!validKind(kind)) return
 
     const name = getName(kind, options)
@@ -254,7 +269,7 @@ class LLMObs extends NoopLLMObs {
         if (key === 'finish') {
           return function () {
             storage.enterWith(oldStore) // restore context
-            return span.finish.apply(this, arguments)
+            return span.finish.apply(span, arguments)
           }
         }
 
@@ -264,15 +279,15 @@ class LLMObs extends NoopLLMObs {
   }
 
   trace (kind, options, fn) {
-    if (!this.enabled) return
-    if (!validKind(kind)) return
-
-    const name = getName(kind, options)
-
     if (typeof options === 'function') {
       fn = options
       options = {}
     }
+
+    if (!this.enabled) return fn(new NoopSpan(this._tracer), () => {})
+    if (!validKind(kind)) return fn(new NoopSpan(this._tracer), () => {})
+
+    const name = getName(kind, options)
 
     const {
       spanOptions,
@@ -293,57 +308,57 @@ class LLMObs extends NoopLLMObs {
   }
 
   wrap (kind, options, fn) {
-    if (!this.enabled) return fn
-    if (!validKind(kind)) return fn
-
-    const name = getName(kind, options, fn)
-
     if (typeof options === 'function') {
       fn = options
       options = {}
     }
+
+    if (!this.enabled) return fn
+    if (!validKind(kind)) return fn
+
+    const name = getName(kind, options, fn)
 
     const {
       spanOptions,
       ...llmobsOptions
     } = this._extractOptions(options)
 
-    const llmobsThis = this
+    const llmobs = this
 
     function wrapped () {
-      const span = llmobsThis._tracer.scope().active()
+      const span = llmobs._tracer.scope().active()
 
-      llmobsThis._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
-      llmobsThis.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
+      llmobs._tagger.setLLMObsSpanTags(span, kind, llmobsOptions)
+      llmobs.annotate(span, { inputData: getFunctionArguments(fn, arguments) })
 
       const result = fn.apply(this, arguments)
 
       if (result && typeof result.then === 'function') {
         return result.then(value => {
-          if (kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
-            llmobsThis.annotate(span, { outputData: value })
+          if (value && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
+            llmobs.annotate(span, { outputData: value })
           }
           return value
         })
       }
 
       if (result && kind !== 'retrieval' && !span.context()._tags[OUTPUT_VALUE]) {
-        llmobsThis.annotate(span, { outputData: result })
+        llmobs.annotate(span, { outputData: result })
       }
 
       return result
     }
 
-    return this._tracer.wrap(name, spanOptions, wrapped)
+    return this._tracer.wrap(name, spanOptions, wrapped) // try and have it call `startSpan` for this class
   }
 
   decorate (kind, options) {
-    const llmobsThis = this
+    const llmobs = this
     return function (target, ctx) {
-      if (!llmobsThis.enabled || ctx.kind !== 'method') return target
+      if (!llmobs.enabled || ctx.kind !== 'method') return target
 
       // override name if specified on options
-      return llmobsThis.wrap(kind, { name: ctx.name, ...options }, target)
+      return llmobs.wrap(kind, { name: ctx.name, ...options }, target)
     }
   }
 
