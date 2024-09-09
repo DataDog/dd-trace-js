@@ -14,11 +14,11 @@ module.exports = {
    * Algorithm: Find the sortest url that ends in the requested path.
    *
    * Will identify the correct script as long as Node.js doesn't load a module from a `node_modules` folder outside the
-   * project root. If so, there's a risk that this path is sorter than the expected path inside the project root.
+   * project root. If so, there's a risk that this path is shorter than the expected path inside the project root.
    * Example of mismatch where path = `index.js`:
    *
-   * Expected match:      /www/code/my-projects/demo-project1/index.js
-   * Actual sorter match: /www/node_modules/dd-trace/index.js
+   * Expected match:       /www/code/my-projects/demo-project1/index.js
+   * Actual shorter match: /www/node_modules/dd-trace/index.js
    *
    * To fix this, specify a more unique file path, e.g `demo-project1/index.js` instead of `index.js`
    *
@@ -35,7 +35,7 @@ module.exports = {
 // Known params.url protocols:
 // - `node:` - Ignored, as we don't want to instrument Node.js internals
 // - `wasm:` - Ignored, as we don't support instrumenting WebAssembly
-// - `file:` - Regular on disk file
+// - `file:` - Regular on-disk file
 // Unknown params.url values:
 // - `structured-stack` - Not sure what this is, but should just be ignored
 // - `` - Not sure what this is, but should just be ignored
