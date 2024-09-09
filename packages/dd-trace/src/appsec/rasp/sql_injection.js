@@ -58,15 +58,11 @@ function analyzePgSqlInjection (ctx) {
 }
 
 function hasInputAddress (payload) {
-  let appliedAddresses = []
-  if (payload.ephemeral) {
-    appliedAddresses = appliedAddresses.concat(Object.keys(payload.ephemeral))
-  }
-  if (payload.persistent) {
-    appliedAddresses = appliedAddresses.concat(Object.keys(payload.persistent))
-  }
+  return hasAddressesObjectInputAddress(payload.ephemeral) || hasAddressesObjectInputAddress(payload.persistent)
+}
 
-  return !!appliedAddresses
+function hasAddressesObjectInputAddress (addressesObject) {
+  return addressesObject && Object.keys(addressesObject)
     .find(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
 }
 
