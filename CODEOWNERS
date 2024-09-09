@@ -5,6 +5,7 @@
 
 /integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 /packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws

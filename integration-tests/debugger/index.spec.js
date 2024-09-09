@@ -325,6 +325,7 @@ describe('Dynamic Instrumentation', function () {
       const triggers = [
         async () => {
           await axios.get('/foo')
+          probeConfig.config.version++
           probeConfig.config.template = 'Hello Updated World!'
           agent.updateRemoteConfig(probeConfig.id, probeConfig.config)
         },

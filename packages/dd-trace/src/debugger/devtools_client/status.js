@@ -1,5 +1,6 @@
 'use strict'
 
+const LRUCache = require('lru-cache')
 const config = require('./config')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
@@ -16,6 +17,14 @@ const ddsource = 'dd_debugger'
 const service = config.service
 const runtimeId = config.runtimeId
 
+const cache = new LRUCache({
+  ttl: 1000 * 60 * 60, // 1 hour
+  // Unfortunate requirement when using LRUCache:
+  // It will emit a warning unless `ttlAutopurge`, `max`, or `maxSize` is set when using `ttl`.
+  // TODO: Consider alternative as this is NOT performant :(
+  ttlAutopurge: true
+})
+
 const STATUSES = {
   RECEIVED: 'RECEIVED',
   INSTALLED: 'INSTALLED',
@@ -25,29 +34,40 @@ const STATUSES = {
 }
 
 function ackReceived ({ id: probeId, version }) {
-  send(statusPayload(probeId, version, STATUSES.RECEIVED))
+  onlyUniqueUpdates(
+    STATUSES.RECEIVED, probeId, version,
+    () => send(statusPayload(probeId, version, STATUSES.RECEIVED))
+  )
 }
 
 function ackInstalled ({ id: probeId, version }) {
-  send(statusPayload(probeId, version, STATUSES.INSTALLED))
+  onlyUniqueUpdates(
+    STATUSES.INSTALLED, probeId, version,
+    () => send(statusPayload(probeId, version, STATUSES.INSTALLED))
+  )
 }
 
 function ackEmitting ({ id: probeId, version }) {
-  send(statusPayload(probeId, version, STATUSES.EMITTING))
+  onlyUniqueUpdates(
+    STATUSES.EMITTING, probeId, version,
+    () => send(statusPayload(probeId, version, STATUSES.EMITTING))
+  )
 }
 
 function ackError (err, { id: probeId, version }) {
   log.error(err)
 
-  const payload = statusPayload(probeId, version, STATUSES.ERROR)
+  onlyUniqueUpdates(STATUSES.ERROR, probeId, version, () => {
+    const payload = statusPayload(probeId, version, STATUSES.ERROR)
 
-  payload.debugger.diagnostics.exception = {
-    type: err.code,
-    message: err.message,
-    stacktrace: err.stack
-  }
+    payload.debugger.diagnostics.exception = {
+      type: err.code,
+      message: err.message,
+      stacktrace: err.stack
+    }
 
-  send(payload)
+    send(payload)
+  })
 }
 
 function send (payload) {
@@ -79,4 +99,11 @@ function statusPayload (probeId, version, status) {
       diagnostics: { probeId, runtimeId, version, status }
     }
   }
+}
+
+function onlyUniqueUpdates (type, id, version, fn) {
+  const key = `${type}-${id}-${version}`
+  if (cache.has(key)) return
+  fn()
+  cache.set(key)
 }
