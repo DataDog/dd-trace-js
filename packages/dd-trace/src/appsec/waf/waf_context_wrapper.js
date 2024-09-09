@@ -41,6 +41,11 @@ class WAFContextWrapper {
           }
         }
       }
+
+      if (Object.keys(persistentInputs).length) {
+        payload.persistent = persistentInputs
+        payloadHasData = true
+      }
     }
 
     if (ephemeral !== null && typeof ephemeral === 'object') {
@@ -49,16 +54,11 @@ class WAFContextWrapper {
           ephemeralInputs[key] = ephemeral[key]
         }
       }
-    }
 
-    if (Object.keys(persistentInputs).length) {
-      payload.persistent = persistentInputs
-      payloadHasData = true
-    }
-
-    if (Object.keys(ephemeralInputs).length) {
-      payload.ephemeral = ephemeralInputs
-      payloadHasData = true
+      if (Object.keys(ephemeralInputs).length) {
+        payload.ephemeral = ephemeralInputs
+        payloadHasData = true
+      }
     }
 
     if (!payloadHasData) return
