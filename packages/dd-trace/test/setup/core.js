@@ -3,7 +3,7 @@
 const sinon = require('sinon')
 const chai = require('chai')
 const sinonChai = require('sinon-chai')
-const proxyquire = require('../proxyquire')
+const proxyquire = require('proxyquire')
 
 {
   // get-port can often return a port that is already in use, thanks to a race
