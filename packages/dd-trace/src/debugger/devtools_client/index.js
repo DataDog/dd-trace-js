@@ -8,6 +8,8 @@ const { ackEmitting } = require('./status')
 require('./remote_config')
 const log = require('../../log')
 
+// TODO: What happens if there's no Debugger.paused listener? Will the main thread still pause?
+// TODO: What happens if the worker thread crashes before Debugger.paused? Will the main thread resume?
 session.on('Debugger.paused', async ({ params }) => {
   const start = process.hrtime.bigint()
   const timestamp = Date.now()
