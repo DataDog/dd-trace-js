@@ -3,8 +3,8 @@
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
-/packages/dd-trace/src/debugger/ @DataDog/debugger
-/integration-tests/debugger/ @DataDog/debugger
+/integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger
+/packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger
 
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws
