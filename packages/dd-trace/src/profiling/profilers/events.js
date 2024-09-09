@@ -259,7 +259,6 @@ class NodeApiEventSource {
 class EventsProfiler {
   constructor (options = {}) {
     this.type = 'events'
-    this._flushIntervalNanos = (options.flushInterval || 60000) * 1e6 // 60 sec
     this.eventSerializer = new EventSerializer()
 
     const eventHandler = event => this.eventSerializer.addEvent(event)
