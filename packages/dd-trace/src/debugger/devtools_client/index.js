@@ -27,9 +27,8 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: process.title // name of the current thread emitting the snapshot
   }
 
-  // TODO: Is this the correct way of handling multiple breakpoints hit at the same time?
-  for (const probe of probes) {
-    await send(
+  await Promise.allSettled(probes.map((probe) => new Promise((resolve) => {
+    send(
       probe.template, // TODO: Process template
       logger,
       {
@@ -42,8 +41,9 @@ session.on('Debugger.paused', async ({ params }) => {
         },
         language: 'javascript'
       }
-    )
-
-    ackEmitting(probe)
-  }
+    ).then(() => {
+      ackEmitting(probe)
+      resolve()
+    })
+  })))
 })
