@@ -198,29 +198,6 @@ class Profiler extends EventEmitter {
   }
 }
 
-class ServerlessProfiler extends Profiler {
-  constructor () {
-    super()
-    this._profiledIntervals = 0
-    this._interval = 1
-    this._flushAfterIntervals = undefined
-  }
-
-  _setInterval () {
-    this._timeoutInterval = this._interval * 1000
-    this._flushAfterIntervals = this._config.flushInterval / 1000
-  }
-
-  async _collect (snapshotKind, restart = true) {
-    if (this._profiledIntervals >= this._flushAfterIntervals || !restart) {
-      this._profiledIntervals = 0
-      await super._collect(snapshotKind, restart)
-    } else {
-      this._profiledIntervals += 1
-      this._capture(this._timeoutInterval, new Date())
-      // Don't submit profile until 65 (flushAfterIntervals) intervals have elapsed
-    }
-  }
-}
+const ServerlessProfiler = Profiler
 
 module.exports = { Profiler, ServerlessProfiler }
