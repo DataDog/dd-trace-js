@@ -29,6 +29,7 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: process.title // name of the current thread emitting the snapshot
   }
 
+  // TODO: Send multiple probes in one HTTP request as an array
   await Promise.allSettled(probes.map((probe) => send(
     probe.template, // TODO: Process template
     logger,
