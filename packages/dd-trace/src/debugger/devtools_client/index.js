@@ -30,7 +30,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Send multiple probes in one HTTP request as an array
-  await Promise.allSettled(probes.map((probe) => send(
+  const results = await Promise.allSettled(probes.map((probe) => send(
     probe.template, // TODO: Process template
     logger,
     {
@@ -44,4 +44,8 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript'
     }
   ).then(() => ackEmitting(probe))))
+
+  results
+    .filter(({ status }) => status === 'rejected')
+    .forEach(({ reason }) => log.error(reason))
 })
