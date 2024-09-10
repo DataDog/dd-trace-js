@@ -50,12 +50,12 @@ rcPort.on('messageerror', (err) => log.error(err))
 
 async function start () {
   sessionStarted = true
-  await session.post('Debugger.enable')
+  return session.post('Debugger.enable') // return instead of wait to reduce number of promises created
 }
 
 async function stop () {
   sessionStarted = false
-  await session.post('Debugger.disable')
+  return session.post('Debugger.disable') // return instead of wait to reduce number of promises created
 }
 
 async function processMsg (action, probe) {

@@ -27,23 +27,18 @@ session.on('Debugger.paused', async ({ params }) => {
     thread_name: process.title // name of the current thread emitting the snapshot
   }
 
-  await Promise.allSettled(probes.map((probe) => new Promise((resolve) => {
-    send(
-      probe.template, // TODO: Process template
-      logger,
-      {
-        id: randomUUID(),
-        timestamp,
-        probe: {
-          id: probe.id,
-          version: probe.version,
-          location: probe.location
-        },
-        language: 'javascript'
-      }
-    ).then(() => {
-      ackEmitting(probe)
-      resolve()
-    })
-  })))
+  await Promise.allSettled(probes.map((probe) => send(
+    probe.template, // TODO: Process template
+    logger,
+    {
+      id: randomUUID(),
+      timestamp,
+      probe: {
+        id: probe.id,
+        version: probe.version,
+        location: probe.location
+      },
+      language: 'javascript'
+    }
+  ).then(() => ackEmitting(probe))))
 })
