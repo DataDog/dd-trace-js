@@ -291,19 +291,6 @@ class CiVisibilityExporter extends AgentInfoExporter {
   _getApiUrl () {
     return this._url
   }
-
-  // By the time setMetadataTags is called, the agent info request might not have finished
-  setMetadataTags (tags) {
-    if (this._writer?.setMetadataTags) {
-      this._writer.setMetadataTags(tags)
-    } else {
-      this._canUseCiVisProtocolPromise.then(() => {
-        if (this._writer?.setMetadataTags) {
-          this._writer.setMetadataTags(tags)
-        }
-      })
-    }
-  }
 }
 
 module.exports = CiVisibilityExporter
