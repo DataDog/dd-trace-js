@@ -266,7 +266,7 @@ jobs:
         with:
           node-version: 16
       - run: yarn config set ignore-engines true
-      - run: yarn test:plugins:ci
+      - run: yarn test:plugins:ci --ignore-engines
       - uses: codecov/codecov-action@v3
 
   couchbase-node-18:
