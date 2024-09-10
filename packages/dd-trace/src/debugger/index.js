@@ -7,6 +7,8 @@ const log = require('../log')
 let worker = null
 let configChannel = null
 
+const { NODE_OPTIONS, ...env } = process.env
+
 module.exports = {
   start,
   configure
@@ -37,6 +39,7 @@ function start (config, rc) {
     join(__dirname, 'devtools_client', 'index.js'),
     {
       execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
+      env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
       workerData: { config, rcPort: rcChannel.port1, configPort: configChannel.port1 },
       transferList: [rcChannel.port1, configChannel.port1]
     }
