@@ -242,10 +242,34 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: codecov/codecov-action@v2
 
-  couchbase:
+  couchbase-node-16:
     strategy:
       matrix:
-        range: ['^2.6.12', '^3.0.7', '>=4.2.0']
+        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+    runs-on: ubuntu-latest
+    services:
+      couchbase:
+        image: ghcr.io/datadog/couchbase-server-sandbox:latest
+        ports:
+          - 8091-8095:8091-8095
+          - 11210:11210
+    env:
+      PLUGINS: couchbase
+      SERVICES: couchbase
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/testagent/start
+      - uses: ./.github/actions/node/setup
+      - uses: ./.github/actions/install
+      - uses: ./.github/actions/node/oldest
+      - run: yarn test:plugins:ci
+      - uses: codecov/codecov-action@v3
+
+  couchbase-node-18:
+    strategy:
+      matrix:
+        range: ['>=4.2.0']
     runs-on: ubuntu-latest
     services:
       couchbase:
