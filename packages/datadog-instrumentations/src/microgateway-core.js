@@ -9,7 +9,7 @@ const errorChannel = channel('apm:microgateway-core:request:error')
 
 const name = 'microgateway-core'
 
-// TODO Figure out what is wrong with 3.3.4 and add support
+// TODO Remove " <=3.0.0" when "volos-util-apigee" module is fixed
 const versions = ['>=2.1 <=3.0.0']
 const requestResources = new WeakMap()
 
