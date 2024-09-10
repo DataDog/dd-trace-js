@@ -21,7 +21,7 @@
     "test:appsec:plugins": "mocha -r \"packages/dd-trace/test/setup/mocha.js\" \"packages/dd-trace/test/appsec/**/*.@($(echo $PLUGINS)).plugin.spec.js\"",
     "test:appsec:plugins:ci": "yarn services && nyc --no-clean --include \"packages/dd-trace/src/appsec/**/*.js\" -- npm run test:appsec:plugins",
     "test:debugger": "tap packages/dd-trace/test/debugger/**/*.spec.js",
-    "test:debugger:ci": "npm run test:debugger:ci -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/debugger/**/*.js\"",
+    "test:debugger:ci": "npm run test:debugger -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/debugger/**/*.js\"",
     "test:trace:core": "tap packages/dd-trace/test/*.spec.js \"packages/dd-trace/test/{ci-visibility,datastreams,encode,exporters,opentelemetry,opentracing,plugins,service-naming,telemetry}/**/*.spec.js\"",
     "test:trace:core:ci": "npm run test:trace:core -- --coverage --nyc-arg=--include=\"packages/dd-trace/src/**/*.js\"",
     "test:instrumentations": "mocha -r 'packages/dd-trace/test/setup/mocha.js' 'packages/datadog-instrumentations/test/**/*.spec.js'",
