@@ -7,6 +7,14 @@ const Reporter = require('../../../src/appsec/reporter')
 const web = require('../../../src/plugins/util/web')
 
 describe('WAF Manager', () => {
+  const knownAddresses = new Set([
+    'server.io.net.url',
+    'server.request.headers.no_cookies',
+    'server.request.uri.raw',
+    'processor.address',
+    'server.request.body',
+    'waf.context.processor'
+  ])
   let waf, WAFManager
   let DDWAF
   let config
@@ -26,6 +34,7 @@ describe('WAF Manager', () => {
         loaded: ['rule_1'], failed: []
       }
     }
+    DDWAF.prototype.knownAddresses = knownAddresses
 
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       '@datadog/native-appsec': { DDWAF }
