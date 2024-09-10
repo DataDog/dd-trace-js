@@ -52,7 +52,18 @@ function start (config, rc) {
   worker.on('messageerror', (err) => log.error(err))
 
   worker.on('exit', (code) => {
-    log.error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
+    const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
+
+    log.error(error)
+
+    // Be nice, clean up now that the worker thread encounted an issue and we can't continue
+    rc.removeProductHandler('LIVE_DEBUGGING')
+    worker.removeAllListeners()
+    configChannel = null
+    for (const ackId of rcAckCallbacks.keys()) {
+      rcAckCallbacks.get(ackId)(error)
+      rcAckCallbacks.delete(ackId)
+    }
   })
 }
 
