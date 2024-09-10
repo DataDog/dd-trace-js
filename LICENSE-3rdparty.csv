@@ -21,6 +21,7 @@ require,lodash.sortby,MIT,Copyright JS Foundation and other contributors
 require,lru-cache,ISC,Copyright (c) 2010-2022 Isaac Z. Schlueter and Contributors
 require,module-details-from-path,MIT,Copyright 2016 Thomas Watson Steen
 require,msgpack-lite,MIT,Copyright 2015 Yusuke Kawasaki
+require,mutexify,MIT,Copyright (c) 2014 Mathias Buus
 require,opentracing,MIT,Copyright 2016 Resonance Labs Inc
 require,path-to-regexp,MIT,Copyright 2014 Blake Embrey
 require,pprof-format,MIT,Copyright 2022 Stephen Belanger
