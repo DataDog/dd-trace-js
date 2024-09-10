@@ -19,8 +19,7 @@ const {
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE,
-  TEST_LEVEL_EVENT_TYPES
+  TEST_SOURCE_FILE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -78,23 +77,13 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
-      const testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
-
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName
-        }
-      }
-      // tracer might not be initialized correctly
-      if (this.tracer._exporter.setMetadataTags) {
-        this.tracer._exporter.setMetadataTags(metadataTags)
-      }
+      this.testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
 
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
           [COMPONENT]: this.constructor.id,
+          [TEST_SESSION_NAME]: this.testSessionName,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
@@ -104,6 +93,7 @@ module.exports = class CiPlugin extends Plugin {
         childOf: this.testSessionSpan,
         tags: {
           [COMPONENT]: this.constructor.id,
+          [TEST_SESSION_NAME]: this.testSessionName,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
         }
@@ -114,6 +104,7 @@ module.exports = class CiPlugin extends Plugin {
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
         process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
+        process.env.DD_CIVISIBILITY_TEST_SESSION_NAME = this.testSessionName
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -225,6 +216,11 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
+    // this.testSessionName might be empty for parallel workers
+    if (this.testSessionName) {
+      testTags[TEST_SESSION_NAME] = this.testSessionName
+    }
+
     const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
     // We'll try with the test source file if available (it could be different from the test suite)
     let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
@@ -246,7 +242,8 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_MODULE]: this.constructor.id
+        [TEST_MODULE]: this.constructor.id,
+        [TEST_SESSION_NAME]: testSuiteSpan.context()._tags[TEST_SESSION_NAME]
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
