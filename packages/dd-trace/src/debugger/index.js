@@ -31,6 +31,7 @@ function start (config, rc) {
     rcAckCallbacks.get(ackId)(error)
     rcAckCallbacks.delete(ackId)
   })
+  rcChannel.port2.on('messageerror', (err) => log.error(err))
 
   worker = new Worker(
     join(__dirname, 'devtools_client', 'index.js'),
@@ -48,6 +49,7 @@ function start (config, rc) {
   })
 
   worker.on('error', (err) => log.error(err))
+  worker.on('messageerror', (err) => log.error(err))
 
   worker.on('exit', (code) => {
     log.error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)

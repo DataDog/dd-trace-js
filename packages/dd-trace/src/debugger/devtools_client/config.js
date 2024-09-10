@@ -2,6 +2,7 @@
 
 const { workerData: { config: parentConfig, configPort } } = require('node:worker_threads')
 const { URL, format } = require('node:url')
+const log = require('../../log')
 
 const config = module.exports = {
   runtimeId: parentConfig.tags['runtime-id'],
@@ -11,6 +12,7 @@ const config = module.exports = {
 updateUrl(parentConfig)
 
 configPort.on('message', updateUrl)
+configPort.on('messageerror', (err) => log.error(err))
 
 function updateUrl (updates) {
   const url = updates.url || new URL(format({
