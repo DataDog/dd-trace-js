@@ -137,6 +137,7 @@ function appClosing () {
   sendData(config, application, host, reqType, payload)
   // We flush before shutting down.
   metricsManager.send(config, application, host)
+  telemetryLogger.send(config, application, host)
 }
 
 function onBeforeExit () {
