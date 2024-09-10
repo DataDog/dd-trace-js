@@ -75,25 +75,28 @@ async function processMsg (action, probe) {
 
   const release = await lock()
 
-  switch (action) {
-    case 'unapply':
-      await removeBreakpoint(probe)
-      break
-    case 'apply':
-      await addBreakpoint(probe)
-      break
-    case 'modify':
-      // TODO: Can we modify in place?
-      await removeBreakpoint(probe)
-      await addBreakpoint(probe)
-      break
-    default:
-      throw new Error(
-        `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-      )
+  try {
+    switch (action) {
+      case 'unapply':
+        await removeBreakpoint(probe)
+        break
+      case 'apply':
+        await addBreakpoint(probe)
+        break
+      case 'modify':
+        // TODO: Can we modify in place?
+        await removeBreakpoint(probe)
+        await addBreakpoint(probe)
+        break
+      default:
+        throw new Error(
+          // eslint-disable-next-line max-len
+          `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
+        )
+    }
+  } finally {
+    release()
   }
-
-  release()
 }
 
 async function addBreakpoint (probe) {
