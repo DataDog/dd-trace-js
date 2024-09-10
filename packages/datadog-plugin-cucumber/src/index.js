@@ -25,7 +25,8 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -51,7 +52,8 @@ function getTestSuiteTags (testSuiteSpan) {
     [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
     [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'cucumber'
+    [TEST_MODULE]: 'cucumber',
+    [TEST_SESSION_NAME]: testSuiteSpan.context()._tags[TEST_SESSION_NAME]
   }
   if (testSuiteSpan.context()._parentId) {
     suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
@@ -133,6 +135,9 @@ class CucumberPlugin extends CiPlugin {
       }
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (this.testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
       }
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,

@@ -72,10 +72,6 @@ class Writer extends BaseWriter {
       done()
     })
   }
-
-  setMetadataTags (tags) {
-    this._encoder.setMetadataTags(tags)
-  }
 }
 
 module.exports = Writer
