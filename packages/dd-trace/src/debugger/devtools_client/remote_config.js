@@ -73,6 +73,16 @@ async function processMsg (action, probe) {
     )
   }
 
+  // This lock is to ensure that we don't get the following race condition:
+  //
+  // When a breakpoint is being removed and there are no other breakpoints, we disable the debugger by calling
+  // `Debugger.disable` to free resources. However, if a new breakpoint is being added around the same time, we might
+  // have a race condition where the new breakpoint thinks that the debugger is already enabled because the removal of
+  // the other breakpoint hasn't had a chance to call `Debugger.disable` yet. Then once the code that's adding the new
+  // breakpoints tries to call `Debugger.setBreakpoint` it fails because in the meantime `Debugger.disable` was called.
+  //
+  // If the code is ever refactored to not tear down the debugger if there's no active breakpoints, we can safely remove
+  // this lock.
   const release = await lock()
 
   try {
