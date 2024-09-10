@@ -1,6 +1,6 @@
 'use strict'
 
-const uuid = require('crypto-randomuuid')
+const { randomUUID } = require('crypto')
 const { breakpoints } = require('./state')
 const session = require('./session')
 const send = require('./send')
@@ -33,7 +33,7 @@ session.on('Debugger.paused', async ({ params }) => {
       probe.template, // TODO: Process template
       logger,
       {
-        id: uuid(),
+        id: randomUUID(),
         timestamp,
         probe: {
           id: probe.id,

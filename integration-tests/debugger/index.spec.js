@@ -1,7 +1,7 @@
 'use strict'
 
 const path = require('path')
-const uuid = require('crypto-randomuuid')
+const { randomUUID } = require('crypto')
 const getPort = require('get-port')
 const Axios = require('axios')
 const { assert } = require('chai')
@@ -26,7 +26,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   beforeEach(async function () {
-    const probeId = uuid()
+    const probeId = randomUUID()
     probeConfig = {
       product: 'LIVE_DEBUGGING',
       id: `logProbe_${probeId}`,
@@ -390,7 +390,7 @@ describe('Dynamic Instrumentation', function () {
 
 function generateProbeConfig (overrides) {
   return {
-    id: uuid(),
+    id: randomUUID(),
     version: 0,
     type: 'LOG_PROBE',
     language: 'javascript',
