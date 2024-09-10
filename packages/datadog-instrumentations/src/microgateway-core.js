@@ -10,7 +10,7 @@ const errorChannel = channel('apm:microgateway-core:request:error')
 const name = 'microgateway-core'
 
 // TODO Figure out what is wrong with 3.3.4 and add support
-const versions = ['>=2.1', '<3.3.4']
+const versions = ['>=2.1 <=3.0.0']
 const requestResources = new WeakMap()
 
 function wrapConfigProxyFactory (configProxyFactory) {
