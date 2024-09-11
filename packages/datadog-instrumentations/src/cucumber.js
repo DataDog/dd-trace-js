@@ -641,7 +641,6 @@ addHook({
 
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
 
-// still works for >=11.0.0
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
@@ -650,9 +649,9 @@ addHook({
 
 // From 7.3.0 onwards, runPickle becomes runTestCase. Not executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
-// `getWrappedRunTest` generates suite start and finish events. Also EFD
-// there is a lib/runtime/index in 11.0.0, but we don't instrument it because it's not useful for us
-// this causes a log warning "incompatibility detected". TODO: fix this
+// `getWrappedRunTestCase` generates suite start and finish events and handles EFD.
+// TODO (fix): there is a lib/runtime/index in >=11.0.0, but we don't instrument it because it's not useful for us
+// This causes a info log saying "Found incompatible integration version".
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0 <11.0.0'],
@@ -665,33 +664,9 @@ addHook({
   return runtimePackage
 })
 
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
-  file: 'lib/runtime/worker.js'
-}, (workerPackage) => {
-  if (!process.env.CUCUMBER_WORKER_ID) {
-    shimmer.wrap(workerPackage.Worker.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase, true))
-  }
-  return workerPackage
-})
-
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
-  file: 'lib/runtime/coordinator.js'
-}, (coordinatorPackage, frameworkVersion) => {
-  shimmer.wrap(
-    coordinatorPackage.Coordinator.prototype,
-    'run',
-    run => getWrappedStart(run, frameworkVersion, false, true)
-  )
-  return coordinatorPackage
-})
-
 // Not executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
-// `getWrappedRunTest` generates suite start and finish events
+// `getWrappedRunTestCase` generates suite start and finish events and handles EFD.
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0 <7.3.0'],
@@ -705,8 +680,7 @@ addHook({
 
 // Only executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
-// `getWrappedGiveWork` generates suite start events and sets pickleResultByFile (used by suite finish events)
-// `getWrappedParseWorkerMessage` generates suite finish events
+// `getWrappedParseWorkerMessage` generates suite start and finish events
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=8.0.0 <11.0.0'],
@@ -721,10 +695,48 @@ addHook({
   return coordinatorPackage
 })
 
-// Only executed in parallel mode.
+// >=11.0.0 hooks
+// `getWrappedRunTestCase` generates suite start and finish events and handles EFD.
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/worker.js'
+}, (workerPackage) => {
+  if (!process.env.CUCUMBER_WORKER_ID) {
+    shimmer.wrap(workerPackage.Worker.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase, true))
+  }
+  return workerPackage
+})
+
 // `getWrappedStart` generates session start and finish events
-// `getWrappedGiveWork` generates suite start events and sets pickleResultByFile (used by suite finish events)
-// `getWrappedParseWorkerMessage` generates suite finish events
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/coordinator.js'
+}, (coordinatorPackage, frameworkVersion) => {
+  shimmer.wrap(
+    coordinatorPackage.Coordinator.prototype,
+    'run',
+    run => getWrappedStart(run, frameworkVersion, false, true)
+  )
+  return coordinatorPackage
+})
+
+// Necessary because `eventDataCollector` is no longer available in the runtime instance
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/formatter/helpers/event_data_collector.js'
+}, (eventDataCollectorPackage) => {
+  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
+    eventDataCollector = this
+    return parseEnvelope.apply(this, arguments)
+  })
+  return eventDataCollectorPackage
+})
+
+// Only executed in parallel mode for >=11.
+// `getWrappedParseWorkerMessage` generates suite start and finish events
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
@@ -736,16 +748,4 @@ addHook({
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
   )
   return adapterPackage
-})
-
-addHook({
-  name: '@cucumber/cucumber',
-  versions: ['>=11.0.0'],
-  file: 'lib/formatter/helpers/event_data_collector.js'
-}, (eventDataCollectorPackage) => {
-  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
-    eventDataCollector = this
-    return parseEnvelope.apply(this, arguments)
-  })
-  return eventDataCollectorPackage
 })
