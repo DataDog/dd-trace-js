@@ -236,7 +236,11 @@ jobs:
   couchbase:
     strategy:
       matrix:
-        range: ['^2.6.12', '^3.0.7', '>=4.2.0']
+        node-version: [16]
+        range: ['^2.6.12', '^3.0.7', '>=4.0.0 <4.2.0']
+        include:
+          - node-version: 18
+            range: '>=4.2.0'
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -253,8 +257,11 @@ jobs:
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/setup
       - uses: ./.github/actions/install
-      - uses: ./.github/actions/node/oldest
-      - run: yarn test:plugins:ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: yarn config set ignore-engines true
+      - run: yarn test:plugins:ci --ignore-engines
       - uses: codecov/codecov-action@v3
 
   connect:
