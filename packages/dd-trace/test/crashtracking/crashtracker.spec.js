@@ -75,7 +75,7 @@ describe('crashtracking', () => {
       })
 
       it('should handle unix sockets', () => {
-        config.url = new URL('unix:///var/datadog/apm/test.socket')
+        config.url = 'unix:///var/datadog/apm/test.socket'
 
         crashtracker.start(config)
 

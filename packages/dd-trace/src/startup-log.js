@@ -1,5 +1,6 @@
 'use strict'
 
+const { format } = require('url')
 const { info, warn } = require('./log/writer')
 
 const os = require('os')
@@ -50,7 +51,11 @@ function startupLog ({ agentError } = {}) {
 }
 
 function tracerInfo () {
-  const url = config.url || `http://${config.hostname || 'localhost'}:${config.port}`
+  const url = config.url || format({
+    protocol: 'http:',
+    hostname: config.hostname || 'localhost',
+    port: config.port
+  })
 
   const out = {
     [inspect.custom] () {

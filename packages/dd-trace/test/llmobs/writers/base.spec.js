@@ -62,7 +62,7 @@ describe('BaseLLMObsWriter', () => {
 
   describe('with config url', () => {
     beforeEach(() => {
-      options.config.url = new URL('http://test-agent:12345')
+      options.config.url = 'http://test-agent:12345'
     })
 
     afterEach(() => {
@@ -79,7 +79,7 @@ describe('BaseLLMObsWriter', () => {
 
   describe('with unix socket', () => {
     beforeEach(() => {
-      options.config.url = new URL('unix:///var/run/datadog/apm.socket/')
+      options.config.url = 'unix:///var/run/datadog/apm.socket/'
     })
 
     afterEach(() => {
@@ -102,7 +102,7 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('unix:///var/run/datadog/apm.socket/')
+      expect(requestOptions.url).to.equal('unix:///var/run/datadog/apm.socket/')
       expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
     })
   })
@@ -164,7 +164,7 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('https://intake.site.com/')
+      expect(requestOptions.url).to.equal('https://intake.site.com')
       expect(requestOptions.path).to.equal('/endpoint')
       expect(requestOptions.headers['Content-Type']).to.equal('application/json')
       expect(requestOptions.headers['DD-API-KEY']).to.equal('test')
@@ -179,7 +179,7 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      expect(requestOptions.url.href).to.equal('http://localhost:8126/')
+      expect(requestOptions.url).to.equal('http://localhost:8126')
       expect(requestOptions.path).to.equal('/evp_proxy/v2/endpoint')
       expect(requestOptions.headers['Content-Type']).to.equal('application/json')
       expect(requestOptions.headers['X-Datadog-EVP-Subdomain']).to.equal('intake')

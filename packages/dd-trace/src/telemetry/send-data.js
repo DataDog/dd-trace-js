@@ -34,7 +34,7 @@ let seqId = 0
 
 function getPayload (payload) {
   // Some telemetry endpoints payloads accept collections of elements such as the 'logs' endpoint.
-  // 'logs' request type payload is meant to send library logs to Datadog’s backend.
+  // 'logs' request type payload is meant to send library logs to Datadog's backend.
   if (Array.isArray(payload)) {
     return payload
   }
@@ -56,7 +56,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   if (isCiVisibilityAgentlessMode) {
     try {
-      url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
+      url = url || getAgentlessTelemetryEndpoint(config.site)
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid

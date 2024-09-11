@@ -1315,9 +1315,7 @@ class Config {
       DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED
     } = getEnvironmentVariables()
 
-    calc.url = DD_CIVISIBILITY_AGENTLESS_URL
-      ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
-      : getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
+    calc.url = DD_CIVISIBILITY_AGENTLESS_URL || getAgentUrl(this._getTraceAgentUrl(), this._optionsArg)
     if (this._isCiVisibility()) {
       this._setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         coalesce(DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED, true))
@@ -1544,22 +1542,6 @@ class Config {
       }
     }
   }
-
-  // TODO: Refactor the Config class so it never produces any config objects that are incompatible with MessageChannel
-  /**
-   * Serializes the config object so it can be passed over a Worker Thread MessageChannel.
-   * @returns {Object} The serialized config object.
-   */
-  serialize () {
-    // URL objects cannot be serialized over the MessageChannel, so we need to convert them to strings first
-    if (this.url instanceof URL) {
-      const config = { ...this }
-      config.url = this.url.toString()
-      return config
-    }
-
-    return this
-  }
 }
 
 function handleOtel (tagString) {
@@ -1588,7 +1570,10 @@ function maybeFloat (number) {
 }
 
 function getAgentUrl (url, options) {
-  if (url) return new URL(url)
+  if (url) {
+    if (typeof url === 'string') return url
+    if (url instanceof URL) return url.toString()
+  }
 
   if (os.type() === 'Windows_NT') return
 
@@ -1599,7 +1584,7 @@ function getAgentUrl (url, options) {
     !getEnvironmentVariable('DD_TRACE_AGENT_PORT') &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
-    return new URL('unix:///var/run/datadog/apm.socket')
+    return 'unix:///var/run/datadog/apm.socket'
   }
 }
 

@@ -82,7 +82,7 @@ class TestVisDynamicInstrumentation {
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
         },
         workerData: {
-          config: this._config.serialize(),
+          config: this._config,
           parentThreadId,
           rcPort: rcChannel.port1,
           configPort: configChannel.port1,

@@ -914,9 +914,7 @@ describe('Config', () => {
 
     expect(config).to.have.property('tracing', false)
     expect(config).to.have.nested.property('dogstatsd.hostname', 'agent')
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('url', 'https://agent2:7777')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
@@ -1233,9 +1231,7 @@ describe('Config', () => {
       plugins: false
     })
 
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '7777')
+    expect(config).to.have.property('url', 'https://agent2:7777')
     expect(config).to.have.property('site', 'datadoghq.eu')
     expect(config).to.have.property('service', 'service')
     expect(config).to.have.property('env', 'test')
@@ -1602,9 +1598,7 @@ describe('Config', () => {
     expect(config).to.have.property('traceId128BitLoggingEnabled', false)
     expect(config).to.have.nested.deep.property('tracePropagationStyle.extract', [])
     expect(config).to.have.nested.deep.property('tracePropagationStyle.inject', [])
-    expect(config).to.have.nested.property('url.hostname', 'agent2')
-    expect(config).to.have.nested.property('url.port', '6218')
-    expect(config).to.have.nested.property('url.protocol', 'https:')
+    expect(config).to.have.property('url', 'https://agent2:6218')
     expect(config).to.have.property('version', '1.0.0')
   })
 
@@ -1766,9 +1760,7 @@ describe('Config', () => {
       env: 'development'
     })
 
-    expect(config).to.have.nested.property('url.protocol', 'https:')
-    expect(config).to.have.nested.property('url.hostname', 'agent3')
-    expect(config).to.have.nested.property('url.port', '7778')
+    expect(config).to.have.property('url', 'https://agent3:7778')
     expect(config).to.have.property('service', 'test')
     expect(config).to.have.property('env', 'development')
   })
@@ -2155,7 +2147,7 @@ describe('Config', () => {
         const config = new Config()
 
         expect(existsSyncParam).to.equal('/var/run/datadog/apm.socket')
-        expect(config.url.toString()).to.equal('unix:///var/run/datadog/apm.socket')
+        expect(config.url).to.equal('unix:///var/run/datadog/apm.socket')
       })
 
       it('should not be used when DD_TRACE_AGENT_URL provided', () => {
@@ -2163,7 +2155,7 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when DD_TRACE_URL provided', () => {
@@ -2171,13 +2163,13 @@ describe('Config', () => {
 
         const config = new Config()
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when options.url provided', () => {
         const config = new Config({ url: 'https://example.com/' })
 
-        expect(config.url.toString()).to.equal('https://example.com/')
+        expect(config.url).to.equal('https://example.com/')
       })
 
       it('should not be used when DD_TRACE_AGENT_PORT provided', () => {
