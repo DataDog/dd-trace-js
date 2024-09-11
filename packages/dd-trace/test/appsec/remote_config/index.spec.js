@@ -384,7 +384,6 @@ describe('Remote Config index', () => {
     })
   })
 
-
   describe('enableRaspCapabilities', () => {
     describe('enable', () => {
       it('should not fail if remote config is not enabled before', () => {

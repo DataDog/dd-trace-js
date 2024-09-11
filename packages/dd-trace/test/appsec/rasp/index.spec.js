@@ -32,7 +32,6 @@ describe('RASP', () => {
 
   describe('disable', () => {
     it('should call to disableRaspCapabilities', () => {
-      const config = { appsec: {} }
       rasp.disable()
 
       sinon.assert.calledOnce(remoteConfig.disableRaspCapabilities)
