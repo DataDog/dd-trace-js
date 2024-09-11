@@ -1,26 +1,42 @@
 'use strict'
 
-const rasp = require('../../../src/appsec/rasp')
+const proxyquire = require('proxyquire')
 const { handleUncaughtExceptionMonitor } = require('../../../src/appsec/rasp')
 
 describe('RASP', () => {
+  let rasp, remoteConfig
+
   beforeEach(() => {
-    const config = {
-      appsec: {
-        stackTrace: {
-          enabled: true,
-          maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+    remoteConfig = {
+      enableRaspCapabilities: sinon.stub(),
+      disableRaspCapabilities: sinon.stub()
     }
 
-    rasp.enable(config)
+    rasp = proxyquire('../../../src/appsec/rasp', {
+      '../remote_config': remoteConfig
+    })
   })
 
   afterEach(() => {
-    sinon.restore()
     rasp.disable()
+  })
+
+  describe('enable', () => {
+    it('should call to enableRaspCapabilities', () => {
+      const config = { appsec: {} }
+      rasp.enable(config)
+
+      sinon.assert.calledOnceWithExactly(remoteConfig.enableRaspCapabilities, config.appsec)
+    })
+  })
+
+  describe('disable', () => {
+    it('should call to disableRaspCapabilities', () => {
+      const config = { appsec: {} }
+      rasp.disable()
+
+      sinon.assert.calledOnce(remoteConfig.disableRaspCapabilities)
+    })
   })
 
   describe('handleUncaughtExceptionMonitor', () => {

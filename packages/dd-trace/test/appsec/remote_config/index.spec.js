@@ -383,4 +383,45 @@ describe('Remote Config index', () => {
       })
     })
   })
+
+
+  describe('enableRaspCapabilities', () => {
+    describe('enable', () => {
+      it('should not fail if remote config is not enabled before', () => {
+        config.appsec = { rasp: { enabled: true } }
+        remoteConfig.enableRaspCapabilities(config.appsec)
+
+        expect(rc.updateCapabilities).to.not.have.been.called
+        expect(rc.setProductHandler).to.not.have.been.called
+      })
+
+      it('should enable when using default rules', () => {
+        config.appsec = { enabled: true, rules: null }
+        remoteConfig.enable(config)
+        sinon.resetHistory()
+
+        remoteConfig.enableRaspCapabilities(config.appsec)
+
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
+      })
+    })
+
+    describe('disable', () => {
+      it('should update capabilities', () => {
+        config.appsec = { enabled: true, rules: null }
+        remoteConfig.enable(config)
+        sinon.resetHistory()
+
+        remoteConfig.disableRaspCapabilities(config.appsec)
+
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
+        expect(rc.updateCapabilities)
+          .to.have.been.calledWithExactly(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
+      })
+    })
+  })
 })
