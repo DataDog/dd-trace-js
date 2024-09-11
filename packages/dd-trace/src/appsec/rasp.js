@@ -8,6 +8,7 @@ const { reportStackTrace } = require('./stack_trace')
 const waf = require('./waf')
 const { getBlockingAction, block } = require('./blocking')
 const log = require('../log')
+const remoteConfig = require('./remote_config')
 
 const RULE_TYPES = {
   SSRF: 'ssrf'
@@ -101,6 +102,9 @@ function handleUncaughtExceptionMonitor (err) {
 
 function enable (_config) {
   config = _config
+
+  remoteConfig.enableRaspCapabilities(_config.appsec)
+
   httpClientRequestStart.subscribe(analyzeSsrf)
 
   process.on('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)
@@ -112,6 +116,8 @@ function enable (_config) {
 }
 
 function disable () {
+  remoteConfig.disableRaspCapabilities()
+
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
 
   process.off('uncaughtExceptionMonitor', handleUncaughtExceptionMonitor)

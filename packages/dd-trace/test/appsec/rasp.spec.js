@@ -6,7 +6,7 @@ const addresses = require('../../src/appsec/addresses')
 const { handleUncaughtExceptionMonitor } = require('../../src/appsec/rasp')
 
 describe('RASP', () => {
-  let waf, rasp, datadogCore, stackTrace, web
+  let waf, rasp, datadogCore, stackTrace, web, config, remoteConfig
 
   beforeEach(() => {
     datadogCore = {
@@ -26,14 +26,20 @@ describe('RASP', () => {
       root: sinon.stub()
     }
 
+    remoteConfig = {
+      enableRaspCapabilities: sinon.stub(),
+      disableRaspCapabilities: sinon.stub()
+    }
+
     rasp = proxyquire('../../src/appsec/rasp', {
       '../../../datadog-core': datadogCore,
       './waf': waf,
       './stack_trace': stackTrace,
-      './../plugins/util/web': web
+      './../plugins/util/web': web,
+      './remote_config': remoteConfig
     })
 
-    const config = {
+    config = {
       appsec: {
         stackTrace: {
           enabled: true,
@@ -42,8 +48,6 @@ describe('RASP', () => {
         }
       }
     }
-
-    rasp.enable(config)
   })
 
   afterEach(() => {
@@ -51,7 +55,27 @@ describe('RASP', () => {
     rasp.disable()
   })
 
+  describe('enable', () => {
+    it('should enable rasp capabilities in remote config', () => {
+      rasp.enable(config)
+
+      sinon.assert.calledOnceWithExactly(remoteConfig.enableRaspCapabilities, config.appsec)
+    })
+  })
+
+  describe('disable', () => {
+    it('should disable rasp capabilities in remote config', () => {
+      rasp.disable()
+
+      sinon.assert.calledOnce(remoteConfig.disableRaspCapabilities)
+    })
+  })
+
   describe('handleResult', () => {
+    beforeEach(() => {
+      rasp.enable(config)
+    })
+
     it('should report stack trace when generate_stack action is present in waf result', () => {
       const req = {}
       const rootSpan = {}
@@ -101,6 +125,10 @@ describe('RASP', () => {
   })
 
   describe('analyzeSsrf', () => {
+    beforeEach(() => {
+      rasp.enable(config)
+    })
+
     it('should analyze ssrf', () => {
       const ctx = {
         args: {

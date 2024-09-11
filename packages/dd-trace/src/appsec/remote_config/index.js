@@ -107,10 +107,24 @@ function disableWafUpdate () {
   }
 }
 
+function enableRaspCapabilities (appsecConfig) {
+  if (rc && !appsecConfig.rules) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
+  }
+}
+
+function disableRaspCapabilities () {
+  if (rc) {
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
+  }
+}
+
 function noop () {}
 
 module.exports = {
   enable,
   enableWafUpdate,
-  disableWafUpdate
+  disableWafUpdate,
+  enableRaspCapabilities,
+  disableRaspCapabilities
 }
