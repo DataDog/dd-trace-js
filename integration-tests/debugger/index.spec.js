@@ -386,6 +386,48 @@ describe('Dynamic Instrumentation', function () {
       agent.addRemoteConfig(probeConfig)
     })
   })
+
+  describe('race conditions', () => {
+    it('should remove the last breakpoint completely before trying to add a new one', (done) => {
+      const probeId1 = probeConfig.config.id
+      const probeId2 = randomUUID()
+      const probeConfig2 = {
+        product: 'LIVE_DEBUGGING',
+        id: `logProbe_${probeId2}`,
+        config: generateProbeConfig({ id: probeId2 })
+      }
+
+      agent.on('debugger-diagnostics', ({ payload: { debugger: { diagnostics: { status, probeId } } } }) => {
+        if (status !== 'INSTALLED') return
+
+        if (probeId === probeId1) {
+          // First INSTALLED payload: Try to trigger the race condition.
+          agent.removeRemoteConfig(probeConfig.id)
+          agent.addRemoteConfig(probeConfig2)
+        } else {
+          // Second INSTALLED payload: Perform an HTTP request to see if we successfully handled the race condition.
+
+          // If the race condition occurred, the debugger will have been detached from the main thread and the new
+          // probe will never trigger. If that's the case, the following timer will fire:
+          const timer = setTimeout(() => {
+            done(new Error('Race condition occurred!'))
+          }, 1000)
+
+          // If we successfully handled the race condition, the probe will trigger, we'll get a probe result and the
+          // following event listener will be called:
+          agent.once('debugger-input', () => {
+            clearTimeout(timer)
+            done()
+          })
+
+          // Perform HTTP request to try and trigger the probe
+          axios.get('/foo').catch(done)
+        }
+      })
+
+      agent.addRemoteConfig(probeConfig)
+    })
+  })
 })
 
 function generateProbeConfig (overrides) {
