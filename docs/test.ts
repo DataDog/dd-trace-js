@@ -534,3 +534,89 @@ const otelTraceId: string = spanContext.traceId
 const otelSpanId: string = spanContext.spanId
 const otelTraceFlags: number = spanContext.traceFlags
 const otelTraceState: opentelemetry.TraceState = spanContext.traceState!
+
+// -- LLM Observability --
+tracer.init({
+  llmobs: {
+    apiKey: 'dd-api-key',
+    mlApp: 'mlApp',
+    agentlessEnabled: true
+  }
+})
+const llmobs = tracer.llmobs
+const enabled = llmobs.enabled
+
+// manually enable
+llmobs.enable({
+  apiKey: 'dd-api-key',
+  mlApp: 'mlApp',
+  agentlessEnabled: true
+})
+
+// manually disable
+llmobs.disable()
+
+// start span in current context
+llmobs.startSpan('llm')
+llmobs.startSpan('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+
+llmobs.startSpan('agent')
+llmobs.startSpan('embedding')
+llmobs.startSpan('retrieval')
+llmobs.startSpan('task')
+llmobs.startSpan('tool')
+llmobs.startSpan('workflow')
+
+// trace block of code
+llmobs.trace('llm', () => {})
+llmobs.trace('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+
+// wrap a function
+llmobs.wrap('llm', function myLLM () {})()
+llmobs.wrap('llm', { name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myLLM () {})()
+
+// decorate a function
+class MyClass {
+  @llmobs.decorate('llm')
+  myLLM () {}
+
+  @llmobs.decorate('llm', { name: 'myOtherLLM', modelName: 'myModel', modelProvider: 'myProvider' })
+  myOtherLLM () {}
+}
+
+const cls = new MyClass()
+cls.myLLM()
+cls.myOtherLLM()
+
+// export a span
+llmobs.exportSpan()
+const llmobsSpanCtx = llmobs.exportSpan(span)
+
+// annotate a span
+llmobs.annotate({
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+llmobs.annotate(span, {
+  inputData: 'input',
+  outputData: 'output',
+  metadata: {},
+  metrics: {},
+  tags: {}
+})
+
+// submit evaluation
+llmobs.submitEvaluation(llmobsSpanCtx, {
+  label: 'my-eval-metric',
+  metricType: 'categorical',
+  value: 'good',
+  mlApp: 'myApp',
+  tags: {},
+  timestampMs: Date.now()
+})
+
+// flush
+llmobs.flush()
