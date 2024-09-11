@@ -52,6 +52,7 @@ const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToAsyncResource = new Map()
 
+let eventDataCollector = null
 let pickleByFile = {}
 const pickleResultByFile = {}
 
@@ -129,9 +130,25 @@ function getChannelPromise (channelToPublishTo) {
   })
 }
 
-function getFilteredPickles (runtime, suitesToSkip) {
-  return runtime.pickleIds.reduce((acc, pickleId) => {
-    const test = runtime.eventDataCollector.getPickle(pickleId)
+function getFilteredPickles (runtimeOrCoodinator, suitesToSkip) {
+  if (runtimeOrCoodinator.sourcedPickles) {
+    return runtimeOrCoodinator.sourcedPickles.reduce((acc, sourcedPickle) => {
+      const { pickle } = sourcedPickle
+      const testSuitePath = getTestSuitePath(pickle.uri, process.cwd())
+
+      const isUnskippable = isMarkedAsUnskippable(pickle)
+      const isSkipped = suitesToSkip.includes(testSuitePath)
+
+      if (isSkipped && !isUnskippable) {
+        acc.skippedSuites.add(testSuitePath)
+      } else {
+        acc.picklesToRun.push(sourcedPickle)
+      }
+      return acc
+    }, { skippedSuites: new Set(), picklesToRun: [] })
+  }
+  return runtimeOrCoodinator.pickleIds.reduce((acc, pickleId) => {
+    const test = runtimeOrCoodinator.eventDataCollector.getPickle(pickleId)
     const testSuitePath = getTestSuitePath(test.uri, process.cwd())
 
     const isUnskippable = isMarkedAsUnskippable(test)
@@ -146,9 +163,21 @@ function getFilteredPickles (runtime, suitesToSkip) {
   }, { skippedSuites: new Set(), picklesToRun: [] })
 }
 
-function getPickleByFile (runtime) {
-  return runtime.pickleIds.reduce((acc, pickleId) => {
-    const test = runtime.eventDataCollector.getPickle(pickleId)
+function getPickleByFile (runtimeOrCoodinator) {
+  // new version
+  if (runtimeOrCoodinator.sourcedPickles) {
+    return runtimeOrCoodinator.sourcedPickles.reduce((acc, { pickle }) => {
+      if (acc[pickle.uri]) {
+        acc[pickle.uri].push(pickle)
+      } else {
+        acc[pickle.uri] = [pickle]
+      }
+      return acc
+    }, {})
+  }
+
+  return runtimeOrCoodinator.pickleIds.reduce((acc, pickleId) => {
+    const test = runtimeOrCoodinator.eventDataCollector.getPickle(pickleId)
     if (acc[test.uri]) {
       acc[test.uri].push(test)
     } else {
@@ -294,10 +323,22 @@ function testCaseHook (TestCaseRunner) {
   return TestCaseRunner
 }
 
-function getWrappedStart (start, frameworkVersion, isParallel = false) {
+function getOptions (adapterOrCoordinator) {
+  if (adapterOrCoordinator.adapter) {
+    return adapterOrCoordinator.adapter.worker?.options || adapterOrCoordinator.adapter.options
+  }
+  return adapterOrCoordinator.options
+}
+
+function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordinator = false) {
   return async function () {
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
+    }
+    const options = getOptions(this)
+
+    if (!isParallel && this.adapter?.options) {
+      isParallel = options.parallel > 0
     }
     let errorSkippableRequest
 
@@ -327,13 +368,19 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
       if (!errorSkippableRequest) {
         const filteredPickles = getFilteredPickles(this, skippableSuites)
         const { picklesToRun } = filteredPickles
-        isSuitesSkipped = picklesToRun.length !== this.pickleIds.length
+        const oldPickles = isCoordinator ? this.sourcedPickles : this.pickleIds
+
+        isSuitesSkipped = picklesToRun.length !== oldPickles.length
 
         log.debug(
-          () => `${picklesToRun.length} out of ${this.pickleIds.length} suites are going to run.`
+          () => `${picklesToRun.length} out of ${oldPickles.length} suites are going to run.`
         )
 
-        this.pickleIds = picklesToRun
+        if (isCoordinator) {
+          this.sourcedPickles = picklesToRun
+        } else {
+          this.pickleIds = picklesToRun
+        }
 
         skippedSuites = Array.from(filteredPickles.skippedSuites)
         itrCorrelationId = skippableResponse.itrCorrelationId
@@ -345,8 +392,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
-    if (isFlakyTestRetriesEnabled && !this.options.retry && numTestRetries > 0) {
-      this.options.retry = numTestRetries
+    if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
+      options.retry = numTestRetries
     }
 
     sessionAsyncResource.runInAsyncScope(() => {
@@ -391,19 +438,25 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
         isParallel
       })
     })
+    eventDataCollector = null
     return success
   }
 }
 
-function getWrappedRunTest (runTestFunction) {
-  return async function (pickleId) {
-    const test = this.eventDataCollector.getPickle(pickleId)
+function getWrappedRunTestCase (runTestCaseFunction, isNewerVersion) {
+  return async function () {
+    let pickle
+    if (isNewerVersion) {
+      pickle = arguments[0].pickle
+    } else {
+      pickle = this.eventDataCollector.getPickle(arguments[0])
+    }
 
-    const testFileAbsolutePath = test.uri
+    const testFileAbsolutePath = pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
     if (!pickleResultByFile[testFileAbsolutePath]) { // first test in suite
-      isUnskippable = isMarkedAsUnskippable(test)
+      isUnskippable = isMarkedAsUnskippable(pickle)
       isForcedToRun = isUnskippable && skippableSuites.includes(testSuitePath)
 
       testSuiteStartCh.publish({ testSuitePath, isUnskippable, isForcedToRun, itrCorrelationId })
@@ -412,20 +465,20 @@ function getWrappedRunTest (runTestFunction) {
     let isNew = false
 
     if (isEarlyFlakeDetectionEnabled) {
-      isNew = isNewTest(testSuitePath, test.name)
+      isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
-        numRetriesByPickleId.set(pickleId, 0)
+        numRetriesByPickleId.set(pickle.id, 0)
       }
     }
-    const runTestCaseResult = await runTestFunction.apply(this, arguments)
+    const runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
 
-    const testStatuses = lastStatusByPickleId.get(pickleId)
+    const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses[testStatuses.length - 1]
     // If it's a new test and it hasn't been skipped, we run it again
     if (isEarlyFlakeDetectionEnabled && lastTestStatus !== 'skip' && isNew) {
       for (let retryIndex = 0; retryIndex < earlyFlakeDetectionNumRetries; retryIndex++) {
-        numRetriesByPickleId.set(pickleId, retryIndex + 1)
-        await runTestFunction.apply(this, arguments)
+        numRetriesByPickleId.set(pickle.id, retryIndex + 1)
+        await runTestCaseFunction.apply(this, arguments)
       }
     }
     let testStatus = lastTestStatus
@@ -439,7 +492,7 @@ function getWrappedRunTest (runTestFunction) {
        */
       testStatus = getTestStatusFromRetries(testStatuses)
       if (testStatus === 'pass') {
-        this.success = true
+        this.success = true // MIGHT NOT BE COMPATIBLE WITH >=11
       }
     }
 
@@ -473,7 +526,7 @@ function getWrappedRunTest (runTestFunction) {
   }
 }
 
-function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
+function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion) {
   return function (worker, message) {
     // If the message is an array, it's a dd-trace message, so we need to stop cucumber processing,
     // or cucumber will throw an error
@@ -488,23 +541,37 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
       }
     }
 
-    const { jsonEnvelope } = message
-    if (!jsonEnvelope) {
+    let envelope
+
+    if (isNewVersion) {
+      envelope = message.envelope
+    } else {
+      envelope = message.jsonEnvelope
+    }
+
+    if (!envelope) {
       return parseWorkerMessageFunction.apply(this, arguments)
     }
-    let parsed = jsonEnvelope
+    let parsed = envelope
 
     if (typeof parsed === 'string') {
       try {
-        parsed = JSON.parse(jsonEnvelope)
+        parsed = JSON.parse(envelope)
       } catch (e) {
         // ignore errors and continue
         return parseWorkerMessageFunction.apply(this, arguments)
       }
     }
+    let pickle
+
     if (parsed.testCaseStarted) {
-      const { pickleId } = this.eventDataCollector.testCaseMap[parsed.testCaseStarted.testCaseId]
-      const pickle = this.eventDataCollector.getPickle(pickleId)
+      if (isNewVersion) {
+        pickle = this.inProgress[worker.id].pickle
+      } else {
+        const { pickleId } = this.eventDataCollector.testCaseMap[parsed.testCaseStarted.testCaseId]
+        pickle = this.eventDataCollector.getPickle(pickleId)
+      }
+      // THIS FAILS IN PARALLEL MODE
       const testFileAbsolutePath = pickle.uri
       // First test in suite
       if (!pickleResultByFile[testFileAbsolutePath]) {
@@ -519,9 +586,18 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
 
     // after calling `parseWorkerMessageFunction`, the test status can already be read
     if (parsed.testCaseFinished) {
-      const { pickle, worstTestStepResult } =
-        this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
+      let worstTestStepResult
+      if (isNewVersion && eventDataCollector) {
+        pickle = this.inProgress[worker.id].pickle
+        worstTestStepResult =
+          eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId).worstTestStepResult
+      } else {
+        const testCase = this.eventDataCollector.getTestCaseAttempt(parsed.testCaseFinished.testCaseStartedId)
+        worstTestStepResult = testCase.worstTestStepResult
+        pickle = testCase.pickle
+      }
 
+      // TODO: can we get error message?
       const { status } = getStatusFromResultLatest(worstTestStepResult)
 
       const testFileAbsolutePath = pickle.uri
@@ -530,7 +606,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction) {
 
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
         testSuiteFinishCh.publish({
-          status: getSuiteStatusFromTestStatuses(finished),
+          status: getSuiteStatusFromTestStatuses(finished), // maybe tests themselves can add to this list
           testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
         })
       }
@@ -548,24 +624,53 @@ addHook({
 }, pickleHook)
 
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
+
+// still works for >=11.0.0
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0 <11.0.0'],
+  versions: ['>=7.3.0'],
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
 // From 7.3.0 onwards, runPickle becomes runTestCase. Not executed in parallel mode.
 // `getWrappedStart` generates session start and finish events
-// `getWrappedRunTest` generates suite start and finish events
+// `getWrappedRunTest` generates suite start and finish events. Also EFD
+// there is a lib/runtime/index in 11.0.0, but we don't instrument it because it's not useful for us
+// this causes a log warning "incompatibility detected". TODO: fix this
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0 <11.0.0'],
   file: 'lib/runtime/index.js'
 }, (runtimePackage, frameworkVersion) => {
-  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
+  shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase))
+
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
 
   return runtimePackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/worker.js'
+}, (workerPackage) => {
+  if (!process.env.CUCUMBER_WORKER_ID) {
+    shimmer.wrap(workerPackage.Worker.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase, true))
+  }
+  return workerPackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/coordinator.js'
+}, (coordinatorPackage, frameworkVersion) => {
+  shimmer.wrap(
+    coordinatorPackage.Coordinator.prototype,
+    'run',
+    run => getWrappedStart(run, frameworkVersion, false, true)
+  )
+  return coordinatorPackage
 })
 
 // Not executed in parallel mode.
@@ -576,7 +681,7 @@ addHook({
   versions: ['>=7.0.0 <7.3.0'],
   file: 'lib/runtime/index.js'
 }, (runtimePackage, frameworkVersion) => {
-  shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTest(runPickle))
+  shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTestCase(runPickle))
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
 
   return runtimePackage
@@ -598,4 +703,33 @@ addHook({
     parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage)
   )
   return coordinatorPackage
+})
+
+// Only executed in parallel mode.
+// `getWrappedStart` generates session start and finish events
+// `getWrappedGiveWork` generates suite start events and sets pickleResultByFile (used by suite finish events)
+// `getWrappedParseWorkerMessage` generates suite finish events
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/runtime/parallel/adapter.js'
+}, (adapterPackage) => {
+  shimmer.wrap(
+    adapterPackage.ChildProcessAdapter.prototype,
+    'parseWorkerMessage',
+    parseWorkerMessage => getWrappedParseWorkerMessage(parseWorkerMessage, true)
+  )
+  return adapterPackage
+})
+
+addHook({
+  name: '@cucumber/cucumber',
+  versions: ['>=11.0.0'],
+  file: 'lib/formatter/helpers/event_data_collector.js'
+}, (eventDataCollectorPackage) => {
+  shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
+    eventDataCollector = this
+    return parseEnvelope.apply(this, arguments)
+  })
+  return eventDataCollectorPackage
 })
