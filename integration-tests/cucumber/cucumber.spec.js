@@ -31,11 +31,15 @@ const {
   TEST_IS_NEW,
   TEST_IS_RETRY,
   TEST_NAME,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_SUITE,
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const isOldNode = semver.satisfies(process.version, '<=16')
-const versions = ['7.0.0', isOldNode ? '9' : 'latest']
+// TODO: change 10 to `latest` when fix is released
+const versions = ['7.0.0', isOldNode ? '9' : '10']
 
 const moduleType = [
   {
@@ -62,7 +66,8 @@ versions.forEach(version => {
   }) => {
     // TODO: add esm tests
     describe(`cucumber@${version} ${type}`, () => {
-      let sandbox, cwd, receiver, childProcess
+      let sandbox, cwd, receiver, childProcess, testOutput
+
       before(async function () {
         // add an explicit timeout to make tests less flaky
         this.timeout(50000)
@@ -84,6 +89,7 @@ versions.forEach(version => {
       })
 
       afterEach(async () => {
+        testOutput = ''
         childProcess.kill()
         await receiver.stop()
       })
@@ -125,12 +131,14 @@ versions.forEach(version => {
                     assert.equal(testSessionEventContent.meta[CUCUMBER_IS_PARALLEL], 'true')
                   }
 
+                  assert.equal(testSessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testSessionEventContent.test_session_id)
                   assert.exists(testSessionEventContent.meta[TEST_COMMAND])
                   assert.exists(testSessionEventContent.meta[TEST_TOOLCHAIN])
                   assert.equal(testSessionEventContent.resource.startsWith('test_session.'), true)
                   assert.equal(testSessionEventContent.meta[TEST_STATUS], 'fail')
 
+                  assert.equal(testModuleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
                   assert.exists(testModuleEventContent.test_session_id)
                   assert.exists(testModuleEventContent.test_module_id)
                   assert.exists(testModuleEventContent.meta[TEST_COMMAND])
@@ -159,6 +167,7 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
+                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
@@ -189,6 +198,7 @@ versions.forEach(version => {
                       test_session_id: testSessionId
                     }
                   }) => {
+                    assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
                     assert.exists(meta[TEST_COMMAND])
                     assert.exists(meta[TEST_MODULE])
                     assert.exists(testSuiteId)
@@ -215,7 +225,8 @@ versions.forEach(version => {
                   cwd,
                   env: {
                     ...envVars,
-                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+                    DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+                    DD_SESSION_NAME: 'my-test-session'
                   },
                   stdio: 'pipe'
                 }
@@ -268,7 +279,6 @@ versions.forEach(version => {
               )
             })
             it('can report code coverage', (done) => {
-              let testOutput
               const libraryConfigRequestPromise = receiver.payloadReceived(
                 ({ url }) => url.endsWith('/api/v2/libraries/tests/services/setting')
               )
@@ -777,6 +787,7 @@ versions.forEach(version => {
               })
             })
           })
+
           context('early flake detection', () => {
             it('retries new tests', (done) => {
               const NUM_RETRIES_EFD = 3
@@ -1032,6 +1043,278 @@ versions.forEach(version => {
                 }).catch(done)
               })
             })
+          })
+
+          if (version === 'latest') { // flaky test retries only supported from >=8.0.0
+            context('flaky test retries', () => {
+              it('can retry failed tests', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    // 2 failures and 1 passed attempt
+                    assert.equal(tests.length, 3)
+
+                    const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                    assert.equal(failedTests.length, 2)
+                    const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                    assert.equal(passedTests.length, 1)
+
+                    // All but the first one are retries
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 2)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: envVars,
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+
+              it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    assert.equal(tests.length, 1)
+
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 0)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: {
+                      ...envVars,
+                      DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+                    },
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+
+              it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+                receiver.setSettings({
+                  itr_enabled: false,
+                  code_coverage: false,
+                  tests_skipping: false,
+                  flaky_test_retries_enabled: true,
+                  early_flake_detection: {
+                    enabled: false
+                  }
+                })
+
+                const eventsPromise = receiver
+                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+                    const events = payloads.flatMap(({ payload }) => payload.events)
+
+                    const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+                    // 2 failures
+                    assert.equal(tests.length, 2)
+
+                    const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+                    assert.equal(failedTests.length, 2)
+                    const passedTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+                    assert.equal(passedTests.length, 0)
+
+                    // All but the first one are retries
+                    const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                    assert.equal(retriedTests.length, 1)
+                  })
+
+                childProcess = exec(
+                  './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+                  {
+                    cwd,
+                    env: {
+                      ...envVars,
+                      DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+                    },
+                    stdio: 'pipe'
+                  }
+                )
+
+                childProcess.on('exit', () => {
+                  eventsPromise.then(() => {
+                    done()
+                  }).catch(done)
+                })
+              })
+            })
+          }
+        })
+      })
+
+      it('correctly calculates test code owners when working directory is not repository root', (done) => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const test = events.find(event => event.type === 'test').content
+            // The test is in a subproject
+            assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+            assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+          })
+
+        childProcess = exec(
+          'node ../../node_modules/.bin/cucumber-js features/*.feature',
+          {
+            cwd: `${cwd}/ci-visibility/subproject`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port)
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => {
+            done()
+          }).catch(done)
+        })
+      })
+
+      it('takes into account untested files if "all" is passed to nyc', (done) => {
+        const linesPctMatchRegex = /Lines\s*:\s*([\d.]+)%/
+        let linesPctMatch
+        let linesPctFromNyc = 0
+        let codeCoverageWithUntestedFiles = 0
+        let codeCoverageWithoutUntestedFiles = 0
+
+        let eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            codeCoverageWithUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+          })
+
+        childProcess = exec(
+          './node_modules/nyc/bin/nyc.js --all -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+          'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NYC_INCLUDE: JSON.stringify(
+                [
+                  'ci-visibility/features/**',
+                  'ci-visibility/features-esm/**'
+                ]
+              )
+            },
+            stdio: 'inherit'
+          }
+        )
+
+        childProcess.stdout.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+        childProcess.stderr.on('data', (chunk) => {
+          testOutput += chunk.toString()
+        })
+
+        childProcess.on('exit', () => {
+          linesPctMatch = testOutput.match(linesPctMatchRegex)
+          linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+
+          assert.equal(
+            linesPctFromNyc,
+            codeCoverageWithUntestedFiles,
+            'nyc --all output does not match the reported coverage'
+          )
+
+          // reset test output for next test session
+          testOutput = ''
+          // we run the same tests without the all flag
+          childProcess = exec(
+            './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+            'node ./node_modules/.bin/cucumber-js ci-visibility/features/*.feature',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NYC_INCLUDE: JSON.stringify(
+                  [
+                    'ci-visibility/features/**',
+                    'ci-visibility/features-esm/**'
+                  ]
+                )
+              },
+              stdio: 'inherit'
+            }
+          )
+
+          eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+            })
+
+          childProcess.stdout.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          childProcess.on('exit', () => {
+            linesPctMatch = testOutput.match(linesPctMatchRegex)
+            linesPctFromNyc = linesPctMatch ? Number(linesPctMatch[1]) : null
+
+            assert.equal(
+              linesPctFromNyc,
+              codeCoverageWithoutUntestedFiles,
+              'nyc output does not match the reported coverage (no --all flag)'
+            )
+
+            eventsPromise.then(() => {
+              assert.isAbove(codeCoverageWithoutUntestedFiles, codeCoverageWithUntestedFiles)
+              done()
+            }).catch(done)
           })
         })
       })

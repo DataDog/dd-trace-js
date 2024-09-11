@@ -7,10 +7,10 @@ const PROCESS_DENYLIST = ['md5']
 
 const VARNAMES_REGEX = /\$([\w\d_]*)(?:[^\w\d_]|$)/gmi
 // eslint-disable-next-line max-len
-const PARAM_PATTERN = '^-{0,2}(?:p(?:ass(?:w(?:or)?d)?)?|api_?key|secret|a(?:ccess|uth)_token|mysql_pwd|credentials|(?:stripe)?token)$'
+const PARAM_PATTERN = '^-{0,2}(?:p(?:ass(?:w(?:or)?d)?)?|address|api[-_]?key|e?mail|secret(?:[-_]?key)?|a(?:ccess|uth)[-_]?token|mysql_pwd|credentials|(?:stripe)?token)$'
 const regexParam = new RegExp(PARAM_PATTERN, 'i')
 const ENV_PATTERN = '^(\\w+=\\w+;)*\\w+=\\w+;?$'
-const envvarRegex = new RegExp(ENV_PATTERN)
+const envVarRegex = new RegExp(ENV_PATTERN)
 const REDACTED = '?'
 
 function extractVarNames (expression) {
@@ -61,7 +61,9 @@ function scrubChildProcessCmd (expression) {
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
 
-      if (typeof token === 'object') {
+      if (token === null) {
+        continue
+      } else if (typeof token === 'object') {
         if (token.pattern) {
           result.push(token.pattern)
         } else if (token.op) {
@@ -70,7 +72,7 @@ function scrubChildProcessCmd (expression) {
           result.push(`#${token.comment}`)
         }
       } else if (!foundBinary) {
-        if (envvarRegex.test(token)) {
+        if (envVarRegex.test(token)) {
           const envSplit = token.split('=')
 
           if (!ALLOWED_ENV_VARIABLES.includes(envSplit[0])) {

@@ -89,7 +89,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: config.profiling.enabled
+      enabled: profilingEnabledToBoolean(config.profiling.enabled)
     }
   }
   if (errors.profilingError) {
@@ -137,6 +137,7 @@ function appClosing () {
   sendData(config, application, host, reqType, payload)
   // We flush before shutting down.
   metricsManager.send(config, application, host)
+  telemetryLogger.send(config, application, host)
 }
 
 function onBeforeExit () {
@@ -317,7 +318,7 @@ function updateConfig (changes, config) {
     'sampler.rules': 'DD_TRACE_SAMPLING_RULES'
   }
 
-  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping'])
+  const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
 
   const configuration = []
   const names = [] // list of config names whose values have been changed
@@ -329,13 +330,17 @@ function updateConfig (changes, config) {
     const { origin, value } = change
     const entry = { name, value, origin }
 
-    if (namesNeedFormatting.has(entry.name)) entry.value = formatMapForTelemetry(entry.value)
-    if (entry.name === 'url' && entry.value) entry.value = entry.value.toString()
-    if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
+    if (namesNeedFormatting.has(entry.name)) {
+      entry.value = formatMapForTelemetry(entry.value)
+    } else if (entry.name === 'url') {
+      if (entry.value) {
+        entry.value = entry.value.toString()
+      }
+    } else if (entry.name === 'DD_TRACE_SAMPLING_RULES') {
       entry.value = JSON.stringify(entry.value)
+    } else if (Array.isArray(entry.value)) {
+      entry.value = value.join(',')
     }
-    if (Array.isArray(entry.value)) entry.value = value.join(',')
-
     configuration.push(entry)
   }
 
@@ -352,6 +357,19 @@ function updateConfig (changes, config) {
     const { reqType, payload } = createPayload('app-client-configuration-change', { configuration })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+}
+
+function profilingEnabledToBoolean (profilingEnabled) {
+  if (typeof profilingEnabled === 'boolean') {
+    return profilingEnabled
+  }
+  if (['auto', 'true'].includes(profilingEnabled)) {
+    return true
+  }
+  if (profilingEnabled === 'false') {
+    return false
+  }
+  return undefined
 }
 
 module.exports = {

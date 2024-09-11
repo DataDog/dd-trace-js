@@ -3,11 +3,16 @@
 const pick = require('../../../../datadog-core/src/utils/src/pick')
 const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
+const OtelSpanContext = require('../../opentelemetry/span_context')
 const log = require('../../log')
 const TraceState = require('./tracestate')
 const tags = require('../../../../../ext/tags')
+const { channel } = require('dc-polyfill')
 
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+
+const injectCh = channel('dd-trace:span:inject')
+const extractCh = channel('dd-trace:span:extract')
 
 const traceKey = 'x-datadog-trace-id'
 const spanKey = 'x-datadog-parent-id'
@@ -54,6 +59,10 @@ class TextMapPropagator {
     this._injectB3SingleHeader(spanContext, carrier)
     this._injectTraceparent(spanContext, carrier)
 
+    if (injectCh.hasSubscribers) {
+      injectCh.publish({ spanContext, carrier })
+    }
+
     log.debug(() => `Inject into carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
@@ -61,6 +70,10 @@ class TextMapPropagator {
     const spanContext = this._extractSpanContext(carrier)
 
     if (!spanContext) return spanContext
+
+    if (extractCh.hasSubscribers) {
+      extractCh.publish({ spanContext, carrier })
+    }
 
     log.debug(() => `Extract from carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
@@ -223,8 +236,7 @@ class TextMapPropagator {
   }
 
   _hasParentIdInTags (spanContext) {
-    return tags.DD_PARENT_ID in spanContext._trace.tags &&
-      spanContext._trace.tags[tags.DD_PARENT_ID] !== zeroTraceId
+    return tags.DD_PARENT_ID in spanContext._trace.tags
   }
 
   _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
@@ -432,10 +444,6 @@ class TextMapPropagator {
         }
       })
 
-      if (!spanContext._trace.tags[tags.DD_PARENT_ID]) {
-        spanContext._trace.tags[tags.DD_PARENT_ID] = zeroTraceId
-      }
-
       this._extractBaggageItems(carrier, spanContext)
       return spanContext
     }
@@ -605,6 +613,65 @@ class TextMapPropagator {
     }
 
     return spanContext._traceId.toString(16)
+  }
+
+  static _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
+    const origin = null
+    let samplingPriority = traceFlag
+
+    ts = ts?.traceparent || null
+
+    if (ts) {
+      // Use TraceState.fromString to parse the tracestate header
+      const traceState = TraceState.fromString(ts)
+      let ddTraceStateData = null
+
+      // Extract Datadog specific trace state data
+      traceState.forVendor('dd', (state) => {
+        ddTraceStateData = state
+        return state // You might need to adjust this part based on actual logic needed
+      })
+
+      if (ddTraceStateData) {
+        // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
+        // Extract values as needed, similar to the original logic
+        const samplingPriorityTs = ddTraceStateData.get('s')
+        const origin = ddTraceStateData.get('o')
+        // Convert Map to object for meta
+        const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
+
+        // Update meta and samplingPriority based on extracted values
+        Object.assign(meta, otherPropagatedTags)
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, parseInt(samplingPriorityTs, 10), origin)
+      } else {
+        log.debug(`no dd list member in tracestate from incoming request: ${ts}`)
+      }
+    }
+
+    const spanContext = new OtelSpanContext({
+      traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16)
+    })
+
+    spanContext._sampling = { priority: samplingPriority }
+    spanContext._trace = { origin }
+    return spanContext
+  }
+
+  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
+    const fromRumWithoutPriority = !tracestateSamplingPriority && origin === 'rum'
+
+    let samplingPriority
+    if (!fromRumWithoutPriority && traceparentSampled === 0 &&
+    (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+      samplingPriority = 0
+    } else if (!fromRumWithoutPriority && traceparentSampled === 1 &&
+    (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+      samplingPriority = 1
+    } else {
+      samplingPriority = tracestateSamplingPriority
+    }
+
+    return samplingPriority
   }
 }
 

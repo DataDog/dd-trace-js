@@ -444,8 +444,7 @@ describe('reporter', () => {
         'http.request.headers.akamai-user-risk': 'h',
         'http.request.headers.content-type': 'i',
         'http.request.headers.accept': 'j',
-        'http.request.headers.user-agent': 'k',
-        'http.useragent': 'k'
+        'http.request.headers.user-agent': 'k'
       })
     })
 
@@ -523,8 +522,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni'
+        'http.request.headers.user-agent': 'arachni'
       })
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
@@ -549,8 +547,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni'
+        'http.request.headers.user-agent': 'arachni'
       })
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
@@ -575,8 +572,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni'
+        'http.request.headers.user-agent': 'arachni'
       })
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)
@@ -601,8 +597,7 @@ describe('reporter', () => {
       Reporter.finishRequest(req, res)
 
       expect(span.addTags).to.have.been.calledWithExactly({
-        'http.request.headers.user-agent': 'arachni',
-        'http.useragent': 'arachni'
+        'http.request.headers.user-agent': 'arachni'
       })
 
       expect(span.addTags).to.have.been.calledWithExactly(expectedRequestTagsToTrackOnEvent)

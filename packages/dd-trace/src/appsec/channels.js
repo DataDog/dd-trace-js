@@ -19,5 +19,10 @@ module.exports = {
   nextQueryParsed: dc.channel('apm:next:query-parsed'),
   responseBody: dc.channel('datadog:express:response:json:start'),
   responseWriteHead: dc.channel('apm:http:server:response:writeHead:start'),
-  httpClientRequestStart: dc.channel('apm:http:client:request:start')
+  httpClientRequestStart: dc.channel('apm:http:client:request:start'),
+  responseSetHeader: dc.channel('datadog:http:server:response:set-header:start'),
+  setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
+  pgQueryStart: dc.channel('apm:pg:query:start'),
+  pgPoolQueryStart: dc.channel('datadog:pg:pool:query:start'),
+  wafRunFinished: dc.channel('datadog:waf:run:finish')
 }

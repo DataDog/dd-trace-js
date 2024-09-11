@@ -1,9 +1,19 @@
 import { defineConfig } from 'vite'
 
-export default defineConfig({
+const config = {
   test: {
     include: [
-      'ci-visibility/vitest-tests/test-visibility*'
+      process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*'
     ]
   }
-})
+}
+
+if (process.env.COVERAGE_PROVIDER) {
+  config.test.coverage = {
+    provider: process.env.COVERAGE_PROVIDER || 'v8',
+    include: ['ci-visibility/vitest-tests/**'],
+    reporter: ['text-summary']
+  }
+}
+
+export default defineConfig(config)

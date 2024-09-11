@@ -12,12 +12,12 @@ const externals = require('../packages/dd-trace/test/plugins/externals')
 
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 
+// Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase <= 3.2.0
-const excludeList = os.arch() === 'arm64' ? ['couchbase', 'grpc', 'oracledb'] : []
+const excludeList = os.arch() === 'arm64' ? ['aerospike', 'couchbase', 'grpc', 'oracledb'] : []
 const workspaces = new Set()
 const versionLists = {}
 const deps = {}
-const names = []
 const filter = process.env.hasOwnProperty('PLUGINS') && process.env.PLUGINS.split('|')
 
 Object.keys(externals).forEach(external => externals[external].forEach(thing => {
@@ -29,15 +29,10 @@ Object.keys(externals).forEach(external => externals[external].forEach(thing => 
   }
 }))
 
-fs.readdirSync(path.join(__dirname, '../packages/datadog-instrumentations/src'))
-  .filter(file => file.endsWith('js'))
-  .forEach(file => {
-    file = file.replace('.js', '')
-
-    if (!filter || filter.includes(file)) {
-      names.push(file)
-    }
-  })
+const names = fs.readdirSync(path.join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
+  .filter(file => file.endsWith('.js'))
+  .map(file => file.slice(0, -3))
+  .filter(file => !filter || filter.includes(file))
 
 run()
 
@@ -86,7 +81,10 @@ async function assertInstrumentation (instrumentation, external) {
 
   for (const version of versions) {
     if (version) {
-      await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      if (version !== '*') {
+        await assertModules(instrumentation.name, semver.coerce(version).version, external)
+      }
+
       await assertModules(instrumentation.name, version, external)
     }
   }
@@ -208,7 +206,11 @@ function assertWorkspace () {
 }
 
 function install () {
-  exec('yarn --ignore-engines', { cwd: folder() })
+  try {
+    exec('yarn --ignore-engines', { cwd: folder() })
+  } catch (e) { // retry in case of server error from registry
+    exec('yarn --ignore-engines', { cwd: folder() })
+  }
 }
 
 function addFolder (name, version) {

@@ -13,7 +13,7 @@ const regexSdkEvent = new RegExp(SDK_USER_EVENT_PATTERN, 'i')
 function isSdkCalled (tags) {
   let called = false
 
-  if (tags && typeof tags === 'object') {
+  if (tags !== null && typeof tags === 'object') {
     called = Object.entries(tags).some(([key, value]) => regexSdkEvent.test(key) && value === 'true')
   }
 

@@ -85,7 +85,7 @@ describe('Plugin', function () {
       }
 
       before(async function () {
-        this.timeout(120 * 1000) // Webpack is very slow and builds on every test run
+        this.timeout(240 * 1000) // Webpack is very slow and builds on every test run
 
         const cwd = __dirname
         const pkg = require(`../../../versions/next@${version}/package.json`)
@@ -103,7 +103,11 @@ describe('Plugin', function () {
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
-        execSync('yarn install', { cwd })
+        try {
+          execSync('yarn install', { cwd })
+        } catch (e) { // retry in case of error from registry
+          execSync('yarn install', { cwd })
+        }
 
         // building in-process makes tests fail for an unknown reason
         execSync(BUILD_COMMAND, {

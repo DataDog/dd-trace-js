@@ -156,7 +156,7 @@ class Kinesis extends BaseAwsSdkPlugin {
             span,
             params.Records[i],
             stream,
-            i === 0 || (this.config.kinesis && this.config.kinesis.batchPropagationEnabled)
+            i === 0 || (this.config.batchPropagationEnabled)
           )
         }
     }

@@ -10,6 +10,7 @@ const { isDebugAllowed } = require('../telemetry/verbosity')
 const { taintObject } = require('./operations-taint-object')
 
 const mathRandomCallCh = dc.channel('datadog:random:call')
+const evalCallCh = dc.channel('datadog:eval:call')
 
 const JSON_VALUE = 'json.value'
 
@@ -18,6 +19,7 @@ function noop (res) { return res }
 // Otherwise you may end up rewriting a method and not providing its rewritten implementation
 const TaintTrackingNoop = {
   concat: noop,
+  eval: noop,
   join: noop,
   parse: noop,
   plusOperator: noop,
@@ -133,6 +135,15 @@ function csiMethodsOverrides (getContext) {
       if (mathRandomCallCh.hasSubscribers) {
         mathRandomCallCh.publish({ fn })
       }
+      return res
+    },
+
+    eval: function (res, fn, target, script) {
+      // eslint-disable-next-line no-eval
+      if (evalCallCh.hasSubscribers && fn === globalThis.eval) {
+        evalCallCh.publish({ script })
+      }
+
       return res
     },
 

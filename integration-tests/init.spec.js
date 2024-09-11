@@ -7,6 +7,7 @@ const {
 } = require('./helpers')
 const path = require('path')
 const fs = require('fs')
+const { DD_MAJOR } = require('../version')
 
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_INJECT_FORCE = 'true'
@@ -19,6 +20,11 @@ const telemetryGood = ['complete', 'injection_forced:false']
 const { engines } = require('../package.json')
 const supportedRange = engines.node
 const currentVersionIsSupported = semver.satisfies(process.versions.node, supportedRange)
+
+// These are on by default in release tests, so we'll turn them off for
+// more fine-grained control of these variables in these tests.
+delete process.env.DD_INJECTION_ENABLED
+delete process.env.DD_INJECT_FORCE
 
 function testInjectionScenarios (arg, filename, esmWorks = false) {
   if (!currentVersionIsSupported) return
@@ -95,12 +101,14 @@ function testRuntimeVersionChecks (arg, filename) {
 
             it('should not initialize the tracer', () =>
               doTest(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs >=18.
+Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
+>=${DD_MAJOR === 4 ? '16' : '18'}.
 false
 `, ...telemetryAbort))
             it('should initialize the tracer, if DD_INJECT_FORCE', () =>
               doTestForced(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs >=18.
+Found incompatible runtime nodejs ${process.versions.node}, Supported runtimes: nodejs \
+>=${DD_MAJOR === 4 ? '16' : '18'}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true

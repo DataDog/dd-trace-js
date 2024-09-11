@@ -103,6 +103,14 @@ describe('Tracer', () => {
     expect(SpanProcessor).to.have.been.calledWith(agentExporter, prioritySampler, config)
   })
 
+  it('should allow to configure an alternative prioritySampler', () => {
+    const sampler = {}
+    tracer = new Tracer(config, sampler)
+
+    expect(AgentExporter).to.have.been.calledWith(config, sampler)
+    expect(SpanProcessor).to.have.been.calledWith(agentExporter, sampler, config)
+  })
+
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }

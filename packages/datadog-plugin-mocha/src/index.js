@@ -27,7 +27,10 @@ const {
   TEST_SUITE_ID,
   TEST_COMMAND,
   TEST_SUITE,
-  MOCHA_IS_PARALLEL
+  MOCHA_IS_PARALLEL,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -38,7 +41,8 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
@@ -49,7 +53,8 @@ function getTestSuiteLevelVisibilityTags (testSuiteSpan) {
     [TEST_SUITE_ID]: testSuiteSpanContext.toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpanContext.toTraceId(),
     [TEST_COMMAND]: testSuiteSpanContext._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'mocha'
+    [TEST_MODULE]: 'mocha',
+    [TEST_SESSION_NAME]: testSuiteSpanContext._tags[TEST_SESSION_NAME]
   }
   if (testSuiteSpanContext._parentId) {
     suiteTags[TEST_MODULE_ID] = testSuiteSpanContext._parentId.toString(10)
@@ -121,6 +126,9 @@ class MochaPlugin extends CiPlugin {
         testSuiteMetadata[TEST_ITR_FORCED_RUN] = 'true'
         this.telemetry.count(TELEMETRY_ITR_FORCED_TO_RUN, { testLevel: 'suite' })
       }
+      if (this.testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
+      }
 
       const testSuiteSpan = this.tracer.startSpan('mocha.test_suite', {
         childOf: this.testModuleSpan,
@@ -175,19 +183,29 @@ class MochaPlugin extends CiPlugin {
       this.tracer._exporter.flush()
     })
 
-    this.addSub('ci:mocha:test:finish', (status) => {
+    this.addSub('ci:mocha:test:finish', ({ status, hasBeenRetried }) => {
       const store = storage.getStore()
       const span = store?.span
 
       if (span) {
         span.setTag(TEST_STATUS, status)
+        if (hasBeenRetried) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
 
-        span.finish()
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
+
+        span.finish()
         finishAllTraceSpans(span)
       }
     })
@@ -204,14 +222,40 @@ class MochaPlugin extends CiPlugin {
 
     this.addSub('ci:mocha:test:error', (err) => {
       const store = storage.getStore()
-      if (err && store && store.span) {
-        const span = store.span
+      const span = store?.span
+      if (err && span) {
         if (err.constructor.name === 'Pending' && !this.forbidPending) {
           span.setTag(TEST_STATUS, 'skip')
         } else {
           span.setTag(TEST_STATUS, 'fail')
           span.setTag('error', err)
         }
+      }
+    })
+
+    this.addSub('ci:mocha:test:retry', (isFirstAttempt) => {
+      const store = storage.getStore()
+      const span = store?.span
+      if (span) {
+        span.setTag(TEST_STATUS, 'fail')
+        if (!isFirstAttempt) {
+          span.setTag(TEST_IS_RETRY, 'true')
+        }
+
+        const spanTags = span.context()._tags
+        this.telemetry.ciVisEvent(
+          TELEMETRY_EVENT_FINISHED,
+          'test',
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew: spanTags[TEST_IS_NEW] === 'true',
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
+        )
+
+        span.finish()
+        finishAllTraceSpans(span)
       }
     })
 
@@ -268,6 +312,7 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
         finishAllTraceSpans(this.testSessionSpan)
+        this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       }
       this.libraryConfig = null
       this.tracer._exporter.flush()

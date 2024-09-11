@@ -71,6 +71,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2/']
         }))
     })
+
     it('should initialise AgentlessWriter and CoverageWriter', async () => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
@@ -93,6 +94,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(mockWriter.append).to.have.been.calledWith(testSuiteTrace)
       expect(mockWriter.append).to.have.been.calledWith(testSessionTrace)
     })
+
     it('should process coverages', async () => {
       const mockWriter = {
         append: sinon.spy(),
@@ -121,12 +123,14 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/v0.4/traces']
         }))
     })
+
     it('should initialise AgentWriter', async () => {
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       expect(agentProxyCiVisibilityExporter._writer).to.be.instanceOf(AgentWriter)
       expect(agentProxyCiVisibilityExporter._coverageWriter).to.be.undefined
     })
+
     it('should not process test suite level visibility spans', async () => {
       const mockWriter = {
         append: sinon.spy(),
@@ -268,6 +272,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(agentProxyCiVisibilityExporter._isGzipCompatible).to.be.true
       expect(scope.isDone()).to.be.true
     })
+
     it('should set _isGzipCompatible to false if the newest version is v3 or older', async () => {
       const scope = nock('http://localhost:8126')
         .get('/info')
@@ -303,6 +308,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       expect(agentProxyCiVisibilityExporter.evpProxyPrefix).to.equal('/evp_proxy/v2')
       expect(scope.isDone()).to.be.true
     })
+
     it('should set evpProxyPrefix to v4 if the newest version is v4', async () => {
       const scope = nock('http://localhost:8126')
         .get('/info')

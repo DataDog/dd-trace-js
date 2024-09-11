@@ -49,3 +49,4 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/runnable.js'
 }, runnableWrapper)
+// TODO: parallel mode does not support flaky test retries, so no library config is passed.

@@ -37,20 +37,34 @@ function ciVisRequestHandler (request, response) {
   })
 }
 
-function dsmStatsExist (agent, expectedHash) {
+function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
   let hashFound = false
   if (dsmStats.length !== 0) {
-    dsmStats.forEach((statsTimeBucket) => {
-      statsTimeBucket.Stats.forEach((statsBucket) => {
-        statsBucket.Stats.forEach((stats) => {
+    for (const statsTimeBucket of dsmStats) {
+      for (const statsBucket of statsTimeBucket.Stats) {
+        for (const stats of statsBucket.Stats) {
           if (stats.Hash.toString() === expectedHash) {
+            if (expectedEdgeTags) {
+              if (expectedEdgeTags.length !== stats.EdgeTags.length) {
+                return false
+              }
+
+              const expected = expectedEdgeTags.slice().sort()
+              const actual = stats.EdgeTags.slice().sort()
+
+              for (let i = 0; i < expected.length; i++) {
+                if (expected[i] !== actual[i]) {
+                  return false
+                }
+              }
+            }
             hashFound = true
             return hashFound
           }
-        })
-      })
-    })
+        }
+      }
+    }
   }
   return hashFound
 }
@@ -160,7 +174,6 @@ function getDsmStats () {
 }
 
 const DEFAULT_AVAILABLE_ENDPOINTS = ['/evp_proxy/v2']
-
 let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
 
 /**
@@ -184,7 +197,7 @@ function runCallback (callback, options, handlers) {
     deferred.reject = reject
   })
 
-  const timeoutMs = options && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
+  const timeoutMs = options !== null && typeof options === 'object' && options.timeoutMs ? options.timeoutMs : 1000
 
   const timeout = setTimeout(() => {
     if (error) {

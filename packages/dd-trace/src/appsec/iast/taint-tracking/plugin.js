@@ -45,7 +45,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'apm:express:middleware:next', tag: HTTP_REQUEST_BODY },
       ({ req }) => {
-        if (req && req.body && typeof req.body === 'object') {
+        if (req && req.body !== null && typeof req.body === 'object') {
           const iastContext = getIastContext(storage.getStore())
           if (iastContext && iastContext.body !== req.body) {
             this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
@@ -63,7 +63,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.addSub(
       { channelName: 'datadog:express:process_params:start', tag: HTTP_REQUEST_PATH_PARAM },
       ({ req }) => {
-        if (req && req.params && typeof req.params === 'object') {
+        if (req && req.params !== null && typeof req.params === 'object') {
           this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
         }
       }

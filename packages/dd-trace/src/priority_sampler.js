@@ -4,6 +4,7 @@ const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
 const { setSamplingRules } = require('./startup-log')
 const SamplingRule = require('./sampling_rule')
+const { hasOwn } = require('./util')
 
 const {
   SAMPLING_MECHANISM_DEFAULT,
@@ -66,7 +67,7 @@ class PrioritySampler {
     if (context._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    const tag = this._getPriorityFromTags(context._tags)
+    const tag = this._getPriorityFromTags(context._tags, context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -200,10 +201,6 @@ class PrioritySampler {
       if (rule.match(span)) return rule
     }
   }
-}
-
-function hasOwn (object, prop) {
-  return Object.prototype.hasOwnProperty.call(object, prop)
 }
 
 module.exports = PrioritySampler

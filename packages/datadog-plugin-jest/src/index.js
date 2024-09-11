@@ -20,7 +20,10 @@ const {
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
-  JEST_DISPLAY_NAME
+  JEST_DISPLAY_NAME,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -32,7 +35,8 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isJestWorker = !!process.env.JEST_WORKER_ID
@@ -129,6 +133,8 @@ class JestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
 
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
+
       this.tracer._exporter.flush(() => {
         if (onDone) {
           onDone()
@@ -144,10 +150,13 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddTestSessionName = this.testSessionName
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
         config._ddRepositoryRoot = this.repositoryRoot
+        config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
+        config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
       })
     })
 
@@ -155,6 +164,7 @@ class JestPlugin extends CiPlugin {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
+        _ddTestSessionName: testSessionName,
         _ddTestModuleId: testModuleId,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
@@ -188,6 +198,9 @@ class JestPlugin extends CiPlugin {
       }
       if (displayName) {
         testSuiteMetadata[JEST_DISPLAY_NAME] = displayName
+      }
+      if (testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = testSessionName
       }
 
       this.testSuiteSpan = this.tracer.startSpan('jest.test_suite', {
@@ -286,12 +299,20 @@ class JestPlugin extends CiPlugin {
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
-      span.finish()
+
+      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+          isNew: spanTags[TEST_IS_NEW] === 'true',
+          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+          browserDriver: spanTags[TEST_BROWSER_DRIVER]
+        }
       )
+
+      span.finish()
       finishAllTraceSpans(span)
     })
 
@@ -324,7 +345,8 @@ class JestPlugin extends CiPlugin {
       testStartLine,
       testSourceFile,
       isNew,
-      isEfdRetry
+      isEfdRetry,
+      isJestRetry
     } = test
 
     const extraTags = {
@@ -347,6 +369,10 @@ class JestPlugin extends CiPlugin {
       if (isEfdRetry) {
         extraTags[TEST_IS_RETRY] = 'true'
       }
+    }
+
+    if (isJestRetry) {
+      extraTags[TEST_IS_RETRY] = 'true'
     }
 
     return super.startTestSpan(name, suite, this.testSuiteSpan, extraTags)

@@ -25,7 +25,8 @@ const {
   TEST_MODULE,
   TEST_MODULE_ID,
   TEST_SUITE,
-  CUCUMBER_IS_PARALLEL
+  CUCUMBER_IS_PARALLEL,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -37,7 +38,10 @@ const {
   TELEMETRY_ITR_FORCED_TO_RUN,
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TEST_IS_RUM_ACTIVE,
+  TEST_BROWSER_DRIVER,
+  TELEMETRY_TEST_SESSION
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const id = require('../../dd-trace/src/id')
 
@@ -48,7 +52,8 @@ function getTestSuiteTags (testSuiteSpan) {
     [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
     [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
     [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-    [TEST_MODULE]: 'cucumber'
+    [TEST_MODULE]: 'cucumber',
+    [TEST_SESSION_NAME]: testSuiteSpan.context()._tags[TEST_SESSION_NAME]
   }
   if (testSuiteSpan.context()._parentId) {
     suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)
@@ -107,6 +112,7 @@ class CucumberPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
 
       this.libraryConfig = null
       this.tracer._exporter.flush()
@@ -129,6 +135,9 @@ class CucumberPlugin extends CiPlugin {
       }
       if (itrCorrelationId) {
         testSuiteMetadata[ITR_CORRELATION_ID] = itrCorrelationId
+      }
+      if (this.testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
       }
       const testSuiteSpan = this.tracer.startSpan('cucumber.test_suite', {
         childOf: this.testModuleSpan,
@@ -195,6 +204,17 @@ class CucumberPlugin extends CiPlugin {
       this.enter(testSpan, store)
     })
 
+    this.addSub('ci:cucumber:test:retry', (isFlakyRetry) => {
+      const store = storage.getStore()
+      const span = store.span
+      if (isFlakyRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+      }
+      span.setTag(TEST_STATUS, 'fail')
+      span.finish()
+      finishAllTraceSpans(span)
+    })
+
     this.addSub('ci:cucumber:test-step:start', ({ resource }) => {
       const store = storage.getStore()
       const childOf = store ? store.span : store
@@ -239,7 +259,15 @@ class CucumberPlugin extends CiPlugin {
       })
     })
 
-    this.addSub('ci:cucumber:test:finish', ({ isStep, status, skipReason, errorMessage, isNew, isEfdRetry }) => {
+    this.addSub('ci:cucumber:test:finish', ({
+      isStep,
+      status,
+      skipReason,
+      errorMessage,
+      isNew,
+      isEfdRetry,
+      isFlakyRetry
+    }) => {
       const span = storage.getStore().span
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -260,12 +288,22 @@ class CucumberPlugin extends CiPlugin {
         span.setTag(ERROR_MESSAGE, errorMessage)
       }
 
+      if (isFlakyRetry > 0) {
+        span.setTag(TEST_IS_RETRY, 'true')
+      }
+
       span.finish()
       if (!isStep) {
+        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+          {
+            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
+            isNew,
+            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
+            browserDriver: spanTags[TEST_BROWSER_DRIVER]
+          }
         )
         finishAllTraceSpans(span)
         // If it's a worker, flushing is cheap, as it's just sending data to the main process

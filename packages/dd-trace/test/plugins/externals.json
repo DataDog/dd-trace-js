@@ -55,6 +55,10 @@
   ],
   "express": [
     {
+      "name": "axios",
+      "versions": [">=1.0.0"]
+    },
+    {
       "name": "loopback",
       "versions": [">=2.38.1"]
     },
@@ -333,6 +337,10 @@
     {
       "name": "pg-native",
       "versions": ["3.0.0"]
+    },
+    {
+      "name": "express",
+      "versions": [">=4"]
     }
   ],
   "pino": [

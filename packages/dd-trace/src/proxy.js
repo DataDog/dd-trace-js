@@ -14,7 +14,6 @@ const dogstatsd = require('./dogstatsd')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const spanleak = require('./spanleak')
 const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-const telemetryLog = require('dc-polyfill').channel('datadog:telemetry:log')
 const appsecStandalone = require('./appsec/standalone')
 
 class LazyModule {
@@ -84,7 +83,7 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const rc = remoteConfig.enable(config, this._modules.appsec)
 
-        rc.on('APM_TRACING', (action, conf) => {
+        rc.setProductHandler('APM_TRACING', (action, conf) => {
           if (action === 'unapply') {
             config.configure({}, true)
           } else {
@@ -93,7 +92,7 @@ class Tracer extends NoopProxy {
           this._enableOrDisableTracing(config)
         })
 
-        rc.on('AGENT_CONFIG', (action, conf) => {
+        rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
           if (action === 'unapply') {
@@ -104,7 +103,7 @@ class Tracer extends NoopProxy {
           }
         })
 
-        rc.on('AGENT_TASK', (action, conf) => {
+        rc.setProductHandler('AGENT_TASK', (action, conf) => {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
@@ -117,24 +116,32 @@ class Tracer extends NoopProxy {
         require('./serverless').maybeStartServerlessMiniAgent(config)
       }
 
-      const ssiHeuristics = new SSIHeuristics(config.profiling)
-      ssiHeuristics.start()
-      if (config.profiling.enabled) {
-        this._profilerStarted = this._startProfiler(config)
-      } else if (config.profiling.ssi) {
-        const mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
-        mockProfiler.start(config)
+      if (config.profiling.enabled !== 'false') {
+        const ssiHeuristics = new SSIHeuristics(config)
+        ssiHeuristics.start()
+        let mockProfiler = null
+        if (config.profiling.enabled === 'true') {
+          this._profilerStarted = this._startProfiler(config)
+        } else if (ssiHeuristics.emitsTelemetry) {
+          // Start a mock profiler that emits mock profile-submitted events for the telemetry.
+          // It will be stopped if the real profiler is started by the heuristics.
+          mockProfiler = require('./profiling/ssi-telemetry-mock-profiler')
+          mockProfiler.start(config)
+        }
 
-        if (config.profiling.heuristicsEnabled) {
+        if (ssiHeuristics.heuristicsActive) {
           ssiHeuristics.onTriggered(() => {
-            mockProfiler.stop()
+            if (mockProfiler) {
+              mockProfiler.stop()
+            }
             this._startProfiler(config)
-            ssiHeuristics.onTriggered()
+            ssiHeuristics.onTriggered() // deregister this callback
           })
         }
-      }
-      if (!this._profilerStarted) {
-        this._profilerStarted = Promise.resolve(false)
+
+        if (!this._profilerStarted) {
+          this._profilerStarted = Promise.resolve(false)
+        }
       }
 
       if (config.runtimeMetrics) {
@@ -163,13 +170,6 @@ class Tracer extends NoopProxy {
       return require('./profiler').start(config)
     } catch (e) {
       log.error(e)
-      if (telemetryLog.hasSubscribers) {
-        telemetryLog.publish({
-          message: e.message,
-          level: 'ERROR',
-          stack_trace: e.stack
-        })
-      }
     }
   }
 
@@ -179,9 +179,10 @@ class Tracer extends NoopProxy {
         this._modules.appsec.enable(config)
       }
       if (!this._tracingInitialized) {
-        this._tracer = new DatadogTracer(config)
+        const prioritySampler = appsecStandalone.configure(config)
+        this._tracer = new DatadogTracer(config, prioritySampler)
+        this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         this.appsec = new AppsecSdk(this._tracer, config)
-        appsecStandalone.configure(config)
         this._tracingInitialized = true
       }
       if (config.iast.enabled) {
@@ -201,6 +202,7 @@ class Tracer extends NoopProxy {
 
   profilerStarted () {
     if (!this._profilerStarted) {
+      // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
     return this._profilerStarted

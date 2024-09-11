@@ -9,7 +9,7 @@ addHook({
   file: 'lib/strategy.js',
   versions: ['>=1.0.0']
 }, Strategy => {
-  return shimmer.wrap(Strategy, function () {
+  return shimmer.wrapFunction(Strategy, Strategy => function () {
     const type = 'local'
 
     if (typeof arguments[0] === 'function') {

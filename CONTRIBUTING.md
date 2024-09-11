@@ -86,6 +86,13 @@ $ yarn
 
 ## Testing
 
+### Prerequisites
+
+The `pg-native` package requires `pg_config` to be in your `$PATH` to be able to install.
+Please refer to [the "Install" section](https://github.com/brianc/node-postgres/tree/master/packages/pg-native#install) of the `pg-native` documentation for how to ensure your environment is configured correctly.
+
+### Setup
+
 Before running _plugin_ tests, the data stores need to be running.
 The easiest way to start all of them is to use the provided
 docker-compose configuration:
@@ -96,9 +103,9 @@ $ yarn services
 ```
 
 > **Note**
-> The `couchbase`, `grpc` and `oracledb` instrumentations rely on native modules
-> that do not compile on ARM64 devices (for example M1/M2 Mac) - their tests
-> cannot be run locally on these devices.
+> The `aerospike`, `couchbase`, `grpc` and `oracledb` instrumentations rely on
+> native modules that do not compile on ARM64 devices (for example M1/M2 Mac)
+> - their tests cannot be run locally on these devices.
 
 ### Unit Tests
 
@@ -125,19 +132,6 @@ example testing the `express` and `bluebird` plugins:
 
 ```sh
 PLUGINS="express|bluebird" yarn test:plugins
-```
-
-
-### Memory Leaks
-
-To run the memory leak tests, use:
-
-```sh
-$ yarn leak:core
-
-# or
-
-$ yarn leak:plugins
 ```
 
 

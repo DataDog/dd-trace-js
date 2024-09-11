@@ -14,7 +14,9 @@ const {
   TEST_CONFIGURATION_BROWSER_NAME,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED
+  TEST_EARLY_FLAKE_ENABLED,
+  TELEMETRY_TEST_SESSION,
+  TEST_SESSION_NAME
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -59,6 +61,7 @@ class PlaywrightPlugin extends CiPlugin {
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       finishAllTraceSpans(this.testSessionSpan)
+      this.telemetry.count(TELEMETRY_TEST_SESSION, { provider: this.ciProviderName })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
@@ -74,6 +77,9 @@ class PlaywrightPlugin extends CiPlugin {
         testSuite,
         'playwright'
       )
+      if (this.testSessionName) {
+        testSuiteMetadata[TEST_SESSION_NAME] = this.testSessionName
+      }
 
       const testSuiteSpan = this.tracer.startSpan('playwright.test_suite', {
         childOf: this.testModuleSpan,
@@ -116,7 +122,7 @@ class PlaywrightPlugin extends CiPlugin {
 
       this.enter(span, store)
     })
-    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry }) => {
+    this.addSub('ci:playwright:test:finish', ({ testStatus, steps, error, extraTags, isNew, isEfdRetry, isRetry }) => {
       const store = storage.getStore()
       const span = store && store.span
       if (!span) return
@@ -134,6 +140,9 @@ class PlaywrightPlugin extends CiPlugin {
         if (isEfdRetry) {
           span.setTag(TEST_IS_RETRY, 'true')
         }
+      }
+      if (isRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
       }
 
       steps.forEach(step => {
@@ -157,8 +166,6 @@ class PlaywrightPlugin extends CiPlugin {
         stepSpan.finish(stepStartTime + stepDuration)
       })
 
-      span.finish()
-
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -166,8 +173,13 @@ class PlaywrightPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        { hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS] }
+        {
+          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          isNew,
+          browserDriver: 'playwright'
+        }
       )
+      span.finish()
 
       finishAllTraceSpans(span)
     })

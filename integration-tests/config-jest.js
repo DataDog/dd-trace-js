@@ -1,5 +1,5 @@
 module.exports = {
-  projects: [__dirname],
+  projects: process.env.PROJECTS ? JSON.parse(process.env.PROJECTS) : [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   testMatch: [

@@ -39,10 +39,10 @@ function normalizeArgs (args, shell) {
 
   if (Array.isArray(args[1])) {
     childProcessInfo.command = childProcessInfo.command + ' ' + args[1].join(' ')
-    if (args[2] != null && typeof args[2] === 'object') {
+    if (args[2] !== null && typeof args[2] === 'object') {
       childProcessInfo.options = args[2]
     }
-  } else if (args[1] != null && typeof args[1] === 'object') {
+  } else if (args[1] !== null && typeof args[1] === 'object') {
     childProcessInfo.options = args[1]
   }
   childProcessInfo.shell = shell ||
@@ -133,8 +133,8 @@ function wrapChildProcessAsyncMethod (shell = false) {
 
     if (childProcessMethod[util.promisify.custom]) {
       const wrapedChildProcessCustomPromisifyMethod =
-        shimmer.wrap(childProcessMethod[util.promisify.custom],
-          wrapChildProcessCustomPromisifyMethod(childProcessMethod[util.promisify.custom]), shell)
+        shimmer.wrapFunction(childProcessMethod[util.promisify.custom],
+          promisify => wrapChildProcessCustomPromisifyMethod(promisify, shell))
 
       // should do it in this way because the original property is readonly
       const descriptor = Object.getOwnPropertyDescriptor(childProcessMethod, util.promisify.custom)

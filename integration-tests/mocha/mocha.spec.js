@@ -31,7 +31,9 @@ const {
   TEST_COMMAND,
   TEST_MODULE,
   MOCHA_IS_PARALLEL,
-  TEST_SOURCE_START
+  TEST_SOURCE_START,
+  TEST_CODE_OWNERS,
+  TEST_SESSION_NAME
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
@@ -147,20 +149,24 @@ describe('mocha CommonJS', function () {
         )
         assert.equal(suites.length, 2)
         assert.exists(sessionEventContent)
+        assert.equal(sessionEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
         assert.exists(moduleEventContent)
+        assert.equal(moduleEventContent.meta[TEST_SESSION_NAME], 'my-test-session')
 
         assert.include(testOutput, expectedStdout)
         assert.include(testOutput, extraStdout)
 
-        // Can read DD_TAGS
         tests.forEach(testEvent => {
+          assert.equal(testEvent.meta[TEST_SESSION_NAME], 'my-test-session')
+          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
+          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+          // Can read DD_TAGS
           assert.propertyVal(testEvent.meta, 'test.customtag', 'customvalue')
           assert.propertyVal(testEvent.meta, 'test.customtag2', 'customvalue2')
         })
 
-        tests.forEach(testEvent => {
-          assert.equal(testEvent.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/test/ci-visibility-test'), true)
-          assert.exists(testEvent.metrics[TEST_SOURCE_START])
+        suites.forEach(testSuite => {
+          assert.equal(testSuite.meta[TEST_SESSION_NAME], 'my-test-session')
         })
 
         done()
@@ -170,7 +176,8 @@ describe('mocha CommonJS', function () {
         cwd,
         env: {
           ...envVars,
-          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2'
+          DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
+          DD_SESSION_NAME: 'my-test-session'
         },
         stdio: 'pipe'
       })
@@ -240,6 +247,35 @@ describe('mocha CommonJS', function () {
     })
   })
 
+  it('correctly calculates test code owners when working directory is not repository root', (done) => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const test = events.find(event => event.type === 'test').content
+        // The test is in a subproject
+        assert.notEqual(test.meta[TEST_SOURCE_FILE], test.meta[TEST_SUITE])
+        assert.equal(test.meta[TEST_CODE_OWNERS], JSON.stringify(['@datadog-dd-trace-js']))
+      })
+
+    childProcess = exec(
+      'node ../../node_modules/mocha/bin/mocha subproject-test.js',
+      {
+        cwd: `${cwd}/ci-visibility/subproject`,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port)
+        },
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.on('exit', () => {
+      eventsPromise.then(() => {
+        done()
+      }).catch(done)
+    })
+  })
+
   it('does not change mocha config if CI Visibility fails to init', (done) => {
     receiver.assertPayloadReceived(() => {
       const error = new Error('it should not report tests')
@@ -294,6 +330,7 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
+          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)
@@ -308,6 +345,7 @@ describe('mocha CommonJS', function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId
         }) => {
+          assert.equal(meta[TEST_SESSION_NAME], 'my-test-session')
           assert.exists(meta[TEST_COMMAND])
           assert.exists(meta[TEST_MODULE])
           assert.exists(testSuiteId)
@@ -324,7 +362,8 @@ describe('mocha CommonJS', function () {
         ...getCiVisAgentlessConfig(receiver.port),
         RUN_IN_PARALLEL: true,
         DD_TRACE_DEBUG: 1,
-        DD_TRACE_LOG_LEVEL: 'warn'
+        DD_TRACE_LOG_LEVEL: 'warn',
+        DD_SESSION_NAME: 'my-test-session'
       },
       stdio: 'pipe'
     })
@@ -1547,6 +1586,233 @@ describe('mocha CommonJS', function () {
         assert.include(testOutput, '2 failing')
         assert.equal(exitCode, 0)
         eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+  })
+
+  context('flaky test retries', () => {
+    it('retries failed tests automatically', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ])
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 3) // two failed retries and then the pass
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedAttempts.length, 2)
+
+          // The first attempt is not marked as a retry
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+
+          const passedAttempt = tests.find(test => test.meta[TEST_STATUS] === 'pass')
+          assert.equal(passedAttempt.meta[TEST_IS_RETRY], 'true')
+        })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 1)
+
+          const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retries.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false'
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false
+        }
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          assert.equal(tests.length, 2) // one retry
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.equal(failedAttempts.length, 2)
+
+          const retriedFailure = failedAttempts.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.equal(retriedFailure.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsWithCoverageCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-flaky-test-retries/eventually-passing-test.js'
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: 1
+          },
+          stdio: 'inherit'
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
+      })
+    })
+  })
+
+  it('takes into account untested files if "all" is passed to nyc', (done) => {
+    const linePctMatchRegex = /Lines\s*:\s*(\d+)%/
+    let linePctMatch
+    let linesPctFromNyc = 0
+    let codeCoverageWithUntestedFiles = 0
+    let codeCoverageWithoutUntestedFiles = 0
+
+    let eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end').content
+        codeCoverageWithUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+      })
+
+    childProcess = exec(
+      './node_modules/nyc/bin/nyc.js -r=text-summary --all --nycrc-path ./my-nyc.config.js ' +
+      'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+        stdio: 'inherit'
+      }
+    )
+
+    childProcess.stdout.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    childProcess.on('exit', () => {
+      linePctMatch = testOutput.match(linePctMatchRegex)
+      linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+      assert.equal(
+        linesPctFromNyc,
+        codeCoverageWithUntestedFiles,
+        'nyc --all output does not match the reported coverage'
+      )
+
+      // reset test output for next test session
+      testOutput = ''
+      // we run the same tests without the all flag
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary --nycrc-path ./my-nyc.config.js ' +
+        'node ./node_modules/mocha/bin/mocha.js ./ci-visibility/test/ci-visibility-test.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+          stdio: 'inherit'
+        }
+      )
+
+      eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          codeCoverageWithoutUntestedFiles = testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT]
+        })
+
+      childProcess.stdout.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      childProcess.on('exit', () => {
+        linePctMatch = testOutput.match(linePctMatchRegex)
+        linesPctFromNyc = linePctMatch ? Number(linePctMatch[1]) : null
+
+        assert.equal(
+          linesPctFromNyc,
+          codeCoverageWithoutUntestedFiles,
+          'nyc output does not match the reported coverage (no --all flag)'
+        )
+
+        eventsPromise.then(() => {
+          assert.isAbove(codeCoverageWithoutUntestedFiles, codeCoverageWithUntestedFiles)
           done()
         }).catch(done)
       })

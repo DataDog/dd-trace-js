@@ -49,6 +49,7 @@ describe('Plugin', function () {
 
     describe('cypress', function () {
       this.timeout(testTimeout)
+
       it('instruments tests', function (done) {
         process.env.DD_TRACE_AGENT_PORT = agentListenPort
         const testSuiteFolder = semver.intersects(version, '>=10')

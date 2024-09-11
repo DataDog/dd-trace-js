@@ -6,6 +6,7 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 
 const testStartCh = channel('ci:cucumber:test:start')
+const testRetryCh = channel('ci:cucumber:test:retry')
 const testFinishCh = channel('ci:cucumber:test:finish') // used for test steps too
 
 const testStepStartCh = channel('ci:cucumber:test-step:start')
@@ -25,6 +26,8 @@ const sessionFinishCh = channel('ci:cucumber:session:finish')
 const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
+
+const getCodeCoverageCh = channel('ci:nyc:get-coverage')
 
 const {
   getCoveredFilenamesFromCoverage,
@@ -47,6 +50,7 @@ const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
 const numRetriesByPickleId = new Map()
+const numAttemptToAsyncResource = new Map()
 
 let pickleByFile = {}
 const pickleResultByFile = {}
@@ -60,6 +64,8 @@ let isUnskippable = false
 let isSuitesSkippingEnabled = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let isFlakyTestRetriesEnabled = false
+let numTestRetries = 0
 let knownTests = []
 let skippedSuites = []
 let isSuitesSkipped = false
@@ -162,47 +168,80 @@ function wrapRun (pl, isLatestVersion) {
       return run.apply(this, arguments)
     }
 
+    let numAttempt = 0
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
-    return asyncResource.runInAsyncScope(() => {
-      const testFileAbsolutePath = this.pickle.uri
 
-      const testSourceLine = this.gherkinDocument?.feature?.location?.line
+    numAttemptToAsyncResource.set(numAttempt, asyncResource)
 
-      testStartCh.publish({
-        testName: this.pickle.name,
-        testFileAbsolutePath,
-        testSourceLine,
-        isParallel: !!process.env.CUCUMBER_WORKER_ID
-      })
-      try {
-        const promise = run.apply(this, arguments)
-        promise.finally(() => {
-          const result = this.getWorstStepResult()
-          const { status, skipReason, errorMessage } = isLatestVersion
-            ? getStatusFromResultLatest(result)
-            : getStatusFromResult(result)
+    const testFileAbsolutePath = this.pickle.uri
 
-          if (lastStatusByPickleId.has(this.pickle.id)) {
-            lastStatusByPickleId.get(this.pickle.id).push(status)
-          } else {
-            lastStatusByPickleId.set(this.pickle.id, [status])
-          }
-          let isNew = false
-          let isEfdRetry = false
-          if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
-            const numRetries = numRetriesByPickleId.get(this.pickle.id)
+    const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
-            isNew = numRetries !== undefined
-            isEfdRetry = numRetries > 0
-          }
-          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry })
-        })
-        return promise
-      } catch (err) {
-        errorCh.publish(err)
-        throw err
-      }
+    const testStartPayload = {
+      testName: this.pickle.name,
+      testFileAbsolutePath,
+      testSourceLine,
+      isParallel: !!process.env.CUCUMBER_WORKER_ID
+    }
+    asyncResource.runInAsyncScope(() => {
+      testStartCh.publish(testStartPayload)
     })
+    try {
+      this.eventBroadcaster.on('envelope', shimmer.wrapFunction(null, () => (testCase) => {
+        // Only supported from >=8.0.0
+        if (testCase?.testCaseFinished) {
+          const { testCaseFinished: { willBeRetried } } = testCase
+          if (willBeRetried) { // test case failed and will be retried
+            const failedAttemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+            failedAttemptAsyncResource.runInAsyncScope(() => {
+              testRetryCh.publish(numAttempt++ > 0) // the current span will be finished and a new one will be created
+            })
+
+            const newAsyncResource = new AsyncResource('bound-anonymous-fn')
+            numAttemptToAsyncResource.set(numAttempt, newAsyncResource)
+
+            newAsyncResource.runInAsyncScope(() => {
+              testStartCh.publish(testStartPayload) // a new span will be created
+            })
+          }
+        }
+      }))
+      let promise
+
+      asyncResource.runInAsyncScope(() => {
+        promise = run.apply(this, arguments)
+      })
+      promise.finally(() => {
+        const result = this.getWorstStepResult()
+        const { status, skipReason, errorMessage } = isLatestVersion
+          ? getStatusFromResultLatest(result)
+          : getStatusFromResult(result)
+
+        if (lastStatusByPickleId.has(this.pickle.id)) {
+          lastStatusByPickleId.get(this.pickle.id).push(status)
+        } else {
+          lastStatusByPickleId.set(this.pickle.id, [status])
+        }
+        let isNew = false
+        let isEfdRetry = false
+        if (isEarlyFlakeDetectionEnabled && status !== 'skip') {
+          const numRetries = numRetriesByPickleId.get(this.pickle.id)
+
+          isNew = numRetries !== undefined
+          isEfdRetry = numRetries > 0
+        }
+        const attemptAsyncResource = numAttemptToAsyncResource.get(numAttempt)
+
+        attemptAsyncResource.runInAsyncScope(() => {
+          testFinishCh.publish({ status, skipReason, errorMessage, isNew, isEfdRetry, isFlakyRetry: numAttempt > 0 })
+        })
+      })
+      return promise
+    } catch (err) {
+      errorCh.publish(err)
+      throw err
+    }
   })
   shimmer.wrap(pl.prototype, 'runStep', runStep => function () {
     if (!testStepStartCh.hasSubscribers) {
@@ -267,6 +306,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
+    isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
+    numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
 
     if (isEarlyFlakeDetectionEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
@@ -304,6 +345,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = process.env.npm_lifecycle_script || `cucumber-js ${processArgv}`
 
+    if (isFlakyTestRetriesEnabled && !this.options.retry && numTestRetries > 0) {
+      this.options.retry = numTestRetries
+    }
+
     sessionAsyncResource.runInAsyncScope(() => {
       sessionStartCh.publish({ command, frameworkVersion })
     })
@@ -314,10 +359,18 @@ function getWrappedStart (start, frameworkVersion, isParallel = false) {
 
     const success = await start.apply(this, arguments)
 
+    let untestedCoverage
+    if (getCodeCoverageCh.hasSubscribers) {
+      untestedCoverage = await getChannelPromise(getCodeCoverageCh)
+    }
+
     let testCodeCoverageLinesTotal
 
     if (global.__coverage__) {
       try {
+        if (untestedCoverage) {
+          originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
         testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
       } catch (e) {
         // ignore errors
@@ -497,7 +550,7 @@ addHook({
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
+  versions: ['>=7.3.0 <11.0.0'],
   file: 'lib/runtime/test_case_runner.js'
 }, testCaseHook)
 
@@ -506,7 +559,7 @@ addHook({
 // `getWrappedRunTest` generates suite start and finish events
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=7.3.0'],
+  versions: ['>=7.3.0 <11.0.0'],
   file: 'lib/runtime/index.js'
 }, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTest(runTestCase))
@@ -535,7 +588,7 @@ addHook({
 // `getWrappedParseWorkerMessage` generates suite finish events
 addHook({
   name: '@cucumber/cucumber',
-  versions: ['>=8.0.0'],
+  versions: ['>=8.0.0 <11.0.0'],
   file: 'lib/runtime/parallel/coordinator.js'
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))

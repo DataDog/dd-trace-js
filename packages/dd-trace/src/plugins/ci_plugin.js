@@ -1,5 +1,6 @@
 const {
   getTestEnvironmentMetadata,
+  getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
   getTestCommonTags,
@@ -13,10 +14,12 @@ const {
   TEST_SESSION_ID,
   TEST_COMMAND,
   TEST_MODULE,
+  TEST_SESSION_NAME,
   getTestSuiteCommonTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
-  ITR_CORRELATION_ID
+  ITR_CORRELATION_ID,
+  TEST_SOURCE_FILE
 } = require('./util/test')
 const Plugin = require('./plugin')
 const { COMPONENT } = require('../constants')
@@ -74,10 +77,13 @@ module.exports = class CiPlugin extends Plugin {
       // only for playwright
       this.rootDir = rootDir
 
+      this.testSessionName = getTestSessionName(this.config, this.command, this.testEnvironmentMetadata)
+
       this.testSessionSpan = this.tracer.startSpan(`${this.constructor.id}.test_session`, {
         childOf,
         tags: {
           [COMPONENT]: this.constructor.id,
+          [TEST_SESSION_NAME]: this.testSessionName,
           ...this.testEnvironmentMetadata,
           ...testSessionSpanMetadata
         }
@@ -87,6 +93,7 @@ module.exports = class CiPlugin extends Plugin {
         childOf: this.testSessionSpan,
         tags: {
           [COMPONENT]: this.constructor.id,
+          [TEST_SESSION_NAME]: this.testSessionName,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata
         }
@@ -96,6 +103,8 @@ module.exports = class CiPlugin extends Plugin {
       if (this.constructor.id === 'vitest') {
         process.env.DD_CIVISIBILITY_TEST_SESSION_ID = this.testSessionSpan.context().toTraceId()
         process.env.DD_CIVISIBILITY_TEST_MODULE_ID = this.testModuleSpan.context().toSpanId()
+        process.env.DD_CIVISIBILITY_TEST_COMMAND = this.command
+        process.env.DD_CIVISIBILITY_TEST_SESSION_NAME = this.testSessionName
       }
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'module')
@@ -144,7 +153,7 @@ module.exports = class CiPlugin extends Plugin {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: this.isUnsupportedCIProvider,
+          isUnsupportedCIProvider: !this.ciProviderName,
           ...tags
         })
       },
@@ -178,7 +187,7 @@ module.exports = class CiPlugin extends Plugin {
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(repositoryRoot)
 
-    this.isUnsupportedCIProvider = !ciProviderName
+    this.ciProviderName = ciProviderName
 
     this.testConfiguration = {
       repositoryUrl,
@@ -207,7 +216,18 @@ module.exports = class CiPlugin extends Plugin {
       ...extraTags
     }
 
-    const codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    // this.testSessionName might be empty for parallel workers
+    if (this.testSessionName) {
+      testTags[TEST_SESSION_NAME] = this.testSessionName
+    }
+
+    const { [TEST_SOURCE_FILE]: testSourceFile } = extraTags
+    // We'll try with the test source file if available (it could be different from the test suite)
+    let codeOwners = getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
+    if (!codeOwners) {
+      codeOwners = getCodeOwnersForFilename(testSuite, this.codeOwnersEntries)
+    }
+
     if (codeOwners) {
       testTags[TEST_CODE_OWNERS] = codeOwners
     }
@@ -222,7 +242,8 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SUITE_ID]: testSuiteSpan.context().toSpanId(),
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
-        [TEST_MODULE]: this.constructor.id
+        [TEST_MODULE]: this.constructor.id,
+        [TEST_SESSION_NAME]: testSuiteSpan.context()._tags[TEST_SESSION_NAME]
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)

@@ -16,6 +16,7 @@ const testSuiteErrorCh = channel('ci:vitest:test-suite:error')
 // test session hooks
 const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
+const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 
 const taskToAsync = new WeakMap()
 
@@ -23,6 +24,23 @@ const sessionAsyncResource = new AsyncResource('bound-anonymous-fn')
 
 function isReporterPackage (vitestPackage) {
   return vitestPackage.B?.name === 'BaseSequencer'
+}
+
+// from 2.0.0
+function isReporterPackageNew (vitestPackage) {
+  return vitestPackage.e?.name === 'BaseSequencer'
+}
+
+function isReporterPackageNewest (vitestPackage) {
+  return vitestPackage.h?.name === 'BaseSequencer'
+}
+
+function getChannelPromise (channelToPublishTo) {
+  return new Promise(resolve => {
+    sessionAsyncResource.runInAsyncScope(() => {
+      channelToPublishTo.publish({ onDone: resolve })
+    })
+  })
 }
 
 function getSessionStatus (state) {
@@ -80,6 +98,90 @@ function getTestName (task) {
   return testName
 }
 
+function getSortWrapper (sort) {
+  return async function () {
+    if (!testSessionFinishCh.hasSubscribers) {
+      return sort.apply(this, arguments)
+    }
+    // There isn't any other async function that we seem to be able to hook into
+    // So we will use the sort from BaseSequencer. This means that a custom sequencer
+    // will not work. This will be a known limitation.
+    let isFlakyTestRetriesEnabled = false
+    let flakyTestRetriesCount = 0
+
+    try {
+      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh)
+      if (!err) {
+        isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+      }
+    } catch (e) {
+      isFlakyTestRetriesEnabled = false
+    }
+    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
+      this.ctx.config.retry = flakyTestRetriesCount
+    }
+
+    let testCodeCoverageLinesTotal
+
+    if (this.ctx.coverageProvider?.generateCoverage) {
+      shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
+        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
+
+        try {
+          testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
+        } catch (e) {
+          // ignore errors
+        }
+        return totalCodeCoverage
+      })
+    }
+
+    shimmer.wrap(this.ctx, 'exit', exit => async function () {
+      let onFinish
+
+      const flushPromise = new Promise(resolve => {
+        onFinish = resolve
+      })
+      const failedSuites = this.state.getFailedFilepaths()
+      let error
+      if (failedSuites.length) {
+        error = new Error(`Test suites failed: ${failedSuites.length}.`)
+      }
+
+      sessionAsyncResource.runInAsyncScope(() => {
+        testSessionFinishCh.publish({
+          status: getSessionStatus(this.state),
+          testCodeCoverageLinesTotal,
+          error,
+          onFinish
+        })
+      })
+
+      await flushPromise
+
+      return exit.apply(this, arguments)
+    })
+
+    return sort.apply(this, arguments)
+  }
+}
+
+function getCreateCliWrapper (vitestPackage, frameworkVersion) {
+  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
+    if (!testSessionStartCh.hasSubscribers) {
+      return oldCreateCli.apply(this, arguments)
+    }
+    sessionAsyncResource.runInAsyncScope(() => {
+      const processArgv = process.argv.slice(2).join(' ')
+      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
+    })
+    return oldCreateCli.apply(this, arguments)
+  })
+
+  return vitestPackage
+}
+
 addHook({
   name: 'vitest',
   versions: ['>=1.6.0'],
@@ -87,15 +189,31 @@ addHook({
 }, (vitestPackage) => {
   const { VitestTestRunner } = vitestPackage
   // test start (only tests that are not marked as skip or todo)
-  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task) {
+  shimmer.wrap(VitestTestRunner.prototype, 'onBeforeTryTask', onBeforeTryTask => async function (task, retryInfo) {
     if (!testStartCh.hasSubscribers) {
       return onBeforeTryTask.apply(this, arguments)
     }
+    const { retry: numAttempt } = retryInfo
+    // We finish the previous test here because we know it has failed already
+    if (numAttempt > 0) {
+      const asyncResource = taskToAsync.get(task)
+      const testError = task.result?.errors?.[0]
+      if (asyncResource) {
+        asyncResource.runInAsyncScope(() => {
+          testErrorCh.publish({ error: testError })
+        })
+      }
+    }
+
     const asyncResource = new AsyncResource('bound-anonymous-fn')
     taskToAsync.set(task, asyncResource)
 
     asyncResource.runInAsyncScope(() => {
-      testStartCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+      testStartCh.publish({
+        testName: getTestName(task),
+        testSuiteAbsolutePath: task.file.filepath,
+        isRetry: numAttempt > 0
+      })
     })
     return onBeforeTryTask.apply(this, arguments)
   })
@@ -124,46 +242,40 @@ addHook({
   return vitestPackage
 })
 
+// There are multiple index* files across different versions of vitest,
+// so we check for the existence of BaseSequencer to determine if we are in the right file
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.0.0'],
   filePattern: 'dist/vendor/index.*'
 }, (vitestPackage) => {
-  // there are multiple index* files so we have to check the exported values
-  if (!isReporterPackage(vitestPackage)) {
-    return vitestPackage
+  if (isReporterPackage(vitestPackage)) {
+    shimmer.wrap(vitestPackage.B.prototype, 'sort', getSortWrapper)
   }
-  shimmer.wrap(vitestPackage.B.prototype, 'sort', sort => async function () {
-    if (!testSessionFinishCh.hasSubscribers) {
-      return sort.apply(this, arguments)
-    }
-    shimmer.wrap(this.ctx, 'exit', exit => async function () {
-      let onFinish
 
-      const flushPromise = new Promise(resolve => {
-        onFinish = resolve
-      })
-      const failedSuites = this.state.getFailedFilepaths()
-      let error
-      if (failedSuites.length) {
-        error = new Error(`Test suites failed: ${failedSuites.length}.`)
-      }
+  return vitestPackage
+})
 
-      sessionAsyncResource.runInAsyncScope(() => {
-        testSessionFinishCh.publish({
-          status: getSessionStatus(this.state),
-          onFinish,
-          error
-        })
-      })
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.0 <2.0.5'],
+  filePattern: 'dist/vendor/index.*'
+}, (vitestPackage) => {
+  if (isReporterPackageNew(vitestPackage)) {
+    shimmer.wrap(vitestPackage.e.prototype, 'sort', getSortWrapper)
+  }
 
-      await flushPromise
+  return vitestPackage
+})
 
-      return exit.apply(this, arguments)
-    })
-
-    return sort.apply(this, arguments)
-  })
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/index.*'
+}, (vitestPackage) => {
+  if (isReporterPackageNewest(vitestPackage)) {
+    shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
+  }
 
   return vitestPackage
 })
@@ -171,22 +283,15 @@ addHook({
 // Can't specify file because compiled vitest includes hashes in their files
 addHook({
   name: 'vitest',
-  versions: ['>=1.6.0'],
+  versions: ['>=1.6.0 <2.0.5'],
   filePattern: 'dist/vendor/cac.*'
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'c', oldCreateCli => function () {
-    if (!testSessionStartCh.hasSubscribers) {
-      return oldCreateCli.apply(this, arguments)
-    }
-    sessionAsyncResource.runInAsyncScope(() => {
-      const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `vitest ${processArgv}`, frameworkVersion })
-    })
-    return oldCreateCli.apply(this, arguments)
-  })
+}, getCreateCliWrapper)
 
-  return vitestPackage
-})
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5'],
+  filePattern: 'dist/chunks/cac.*'
+}, getCreateCliWrapper)
 
 // test suite start and finish
 // only relevant for workers
@@ -194,7 +299,7 @@ addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
   file: 'dist/index.js'
-}, vitestPackage => {
+}, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPath) {
     let testSuiteError = null
     if (!testSuiteStartCh.hasSubscribers) {
@@ -203,7 +308,7 @@ addHook({
 
     const testSuiteAsyncResource = new AsyncResource('bound-anonymous-fn')
     testSuiteAsyncResource.runInAsyncScope(() => {
-      testSuiteStartCh.publish(testPath[0])
+      testSuiteStartCh.publish({ testSuiteAbsolutePath: testPath[0], frameworkVersion })
     })
     const startTestsResponse = await startTests.apply(this, arguments)
 
@@ -214,6 +319,7 @@ addHook({
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
 
+    // Only one test task per test, even if there are retries
     testTasks.forEach(task => {
       const testAsyncResource = taskToAsync.get(task)
       const { result } = task
@@ -221,7 +327,7 @@ addHook({
       if (result) {
         const { state, duration, errors } = result
         if (state === 'skip') { // programmatic skip
-          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+          testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
         } else if (state === 'pass') {
           if (testAsyncResource) {
             testAsyncResource.runInAsyncScope(() => {
@@ -237,8 +343,10 @@ addHook({
           }
 
           if (testAsyncResource) {
+            const isRetry = task.result?.retryCount > 0
+            // `duration` is the duration of all the retries, so it can't be used if there are retries
             testAsyncResource.runInAsyncScope(() => {
-              testErrorCh.publish({ duration, error: testError })
+              testErrorCh.publish({ duration: !isRetry ? duration : undefined, error: testError })
             })
           }
           if (errors?.length) {
@@ -246,7 +354,7 @@ addHook({
           }
         }
       } else { // test.skip or test.todo
-        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.suite.file.filepath })
+        testSkipCh.publish({ testName: getTestName(task), testSuiteAbsolutePath: task.file.filepath })
       }
     })
 

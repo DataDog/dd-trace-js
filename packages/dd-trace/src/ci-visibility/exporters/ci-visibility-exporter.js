@@ -190,7 +190,8 @@ class CiVisibilityExporter extends AgentInfoExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionFaultyThreshold
+      earlyFlakeDetectionFaultyThreshold,
+      isFlakyTestRetriesEnabled
     } = remoteConfiguration
     return {
       isCodeCoverageEnabled,
@@ -199,7 +200,9 @@ class CiVisibilityExporter extends AgentInfoExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
-      earlyFlakeDetectionFaultyThreshold
+      earlyFlakeDetectionFaultyThreshold,
+      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
+      flakyTestRetriesCount: this._config.flakyTestRetriesCount
     }
   }
 

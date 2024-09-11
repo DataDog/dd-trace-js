@@ -132,7 +132,7 @@ function getSizeOrZero (obj) {
     })
     return payloadSize
   }
-  if (typeof obj === 'object') {
+  if (obj !== null && typeof obj === 'object') {
     try {
       return getHeadersSize(obj)
     } catch {
@@ -211,7 +211,8 @@ class DataStreamsProcessor {
       Stats,
       TracerVersion: pkg.version,
       Version: this.version,
-      Lang: 'javascript'
+      Lang: 'javascript',
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
     }
     this.writer.flush(payload)
   }

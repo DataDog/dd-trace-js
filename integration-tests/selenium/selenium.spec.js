@@ -18,7 +18,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
-const cucumberVersion = NODE_MAJOR <= 16 ? '9' : 'latest'
+const cucumberVersion = NODE_MAJOR <= 16 ? '9' : '10'
 
 const webAppServer = require('../ci-visibility/web-app-server')
 
@@ -84,7 +84,7 @@ versionRange.forEach(version => {
               const seleniumTest = events.find(event => event.type === 'test').content
               assert.include(seleniumTest.meta, {
                 [TEST_BROWSER_DRIVER]: 'selenium',
-                [TEST_BROWSER_NAME]: 'chrome-headless-shell',
+                [TEST_BROWSER_NAME]: 'chrome',
                 [TEST_TYPE]: 'browser',
                 [TEST_IS_RUM_ACTIVE]: 'true'
               })

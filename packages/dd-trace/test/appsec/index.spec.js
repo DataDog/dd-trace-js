@@ -13,7 +13,8 @@ const {
   queryParser,
   passportVerify,
   responseBody,
-  responseWriteHead
+  responseWriteHead,
+  responseSetHeader
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
@@ -169,6 +170,7 @@ describe('AppSec Index', function () {
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
 
       AppSec.enable(config)
 
@@ -177,6 +179,7 @@ describe('AppSec Index', function () {
       expect(queryParser.hasSubscribers).to.be.true
       expect(passportVerify.hasSubscribers).to.be.true
       expect(responseWriteHead.hasSubscribers).to.be.true
+      expect(responseSetHeader.hasSubscribers).to.be.true
     })
 
     it('should not subscribe to passportVerify if eventTracking is disabled', () => {
@@ -254,6 +257,7 @@ describe('AppSec Index', function () {
       expect(queryParser.hasSubscribers).to.be.false
       expect(passportVerify.hasSubscribers).to.be.false
       expect(responseWriteHead.hasSubscribers).to.be.false
+      expect(responseSetHeader.hasSubscribers).to.be.false
     })
 
     it('should call appsec telemetry disable', () => {
@@ -917,6 +921,34 @@ describe('AppSec Index', function () {
         expect(res.end).to.have.been.calledOnce
       })
     })
+
+    describe('onResponseSetHeader', () => {
+      it('should call abortController if response was already blocked', () => {
+        // First block the request
+        sinon.stub(waf, 'run').returns(resultActions)
+
+        const responseHeaders = {
+          'content-type': 'application/json',
+          'content-lenght': 42,
+          'set-cookie': 'a=1;b=2'
+        }
+        responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
+
+        expect(abortController.abort).to.have.been.calledOnce
+
+        abortController.abort.reset()
+
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.been.calledOnce
+      })
+
+      it('should not call abortController if response was not blocked', () => {
+        responseSetHeader.publish({ res, abortController })
+
+        expect(abortController.abort).to.have.not.been.calledOnce
+      })
+    })
   })
 
   describe('Metrics', () => {
@@ -1003,12 +1035,14 @@ describe('IP blocking', function () {
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
+
   before(() => {
     return agent.load('http')
       .then(() => {
         http = require('http')
       })
   })
+
   before(done => {
     const server = new http.Server((req, res) => {
       res.writeHead(200)
@@ -1148,6 +1182,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(jsonDefaultContent)
         })
@@ -1162,6 +1197,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not expected')
           expect(err.response.status).to.be.equal(500)
           expect(err.response.data).to.deep.equal(htmlDefaultContent)
         })
@@ -1207,6 +1243,7 @@ describe('IP blocking', function () {
         }).then(() => {
           throw new Error('Not resolve expected')
         }).catch((err) => {
+          expect(err.message).to.not.equal('Not resolve expected')
           expect(err.response.status).to.be.equal(301)
           expect(err.response.headers.location).to.be.equal('/error')
         })
