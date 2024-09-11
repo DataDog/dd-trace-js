@@ -55,9 +55,8 @@ describe('WAFContextWrapper', () => {
 
   it('should publish the payload in the dc channel', () => {
     const ddwafContext = {
-      run: sinon.stub()
+      run: sinon.stub().returns([])
     }
-    ddwafContext.run.returns([])
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0')
     const payload = {
       persistent: {
