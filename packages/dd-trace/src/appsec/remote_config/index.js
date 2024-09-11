@@ -76,6 +76,11 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, true)
 
+    if (appsecConfig.rasp?.enabled) {
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
+      rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
+    }
+
     // TODO: delete noop handlers and kPreUpdate and replace with batched handlers
     rc.setProductHandler('ASM_DATA', noop)
     rc.setProductHandler('ASM_DD', noop)
@@ -99,6 +104,9 @@ function disableWafUpdate () {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_CUSTOM_BLOCKING_RESPONSE, false)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRUSTED_IPS, false)
 
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
+    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
+
     rc.removeProductHandler('ASM_DATA')
     rc.removeProductHandler('ASM_DD')
     rc.removeProductHandler('ASM')
@@ -107,26 +115,10 @@ function disableWafUpdate () {
   }
 }
 
-function enableRaspCapabilities (appsecConfig) {
-  if (rc && !appsecConfig.rules) {
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
-  }
-}
-
-function disableRaspCapabilities () {
-  if (rc) {
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, false)
-    rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, false)
-  }
-}
-
 function noop () {}
 
 module.exports = {
   enable,
   enableWafUpdate,
-  disableWafUpdate,
-  enableRaspCapabilities,
-  disableRaspCapabilities
+  disableWafUpdate
 }

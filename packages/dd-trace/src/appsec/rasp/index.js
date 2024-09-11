@@ -3,8 +3,6 @@
 const web = require('../../plugins/util/web')
 const { setUncaughtExceptionCaptureCallbackStart } = require('../channels')
 const { block } = require('../blocking')
-const remoteConfig = require('../remote_config')
-
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 
@@ -85,8 +83,6 @@ function handleUncaughtExceptionMonitor (err) {
 }
 
 function enable (config) {
-  remoteConfig.enableRaspCapabilities(config.appsec)
-
   ssrf.enable(config)
   sqli.enable(config)
 
@@ -94,8 +90,6 @@ function enable (config) {
 }
 
 function disable () {
-  remoteConfig.disableRaspCapabilities()
-
   ssrf.disable()
   sqli.disable()
 
